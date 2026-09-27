@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime
 
 import pytest
 from portfolio_common.database_models import OutboxEvent, Portfolio, ProcessedEvent, Transaction
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.services.persistence_service.app.consumers import base_consumer as base_consumer_module
@@ -66,6 +66,7 @@ async def _seed_portfolio(async_db_session: AsyncSession) -> None:
     async_db_session.add(
         Portfolio(
             tenant_id=TEST_TENANT_ID,
+            legal_book_id="BOOK_BOUNDARY_01",
             portfolio_id="PORT_BOUNDARY_01",
             base_currency="USD",
             open_date=date(2024, 1, 1),
@@ -169,3 +170,30 @@ async def test_transaction_consumer_boundary_persists_transaction_outbox_and_ide
         )
     ).scalar_one()
     assert outbox_count_after_replay == 1
+
+    # Retention can remove the short-lived processed-event claim while the
+    # immutable transaction row remains.  The durable ledger replay must still
+    # be a complete no-op, including outbox publication.
+    await async_db_session.execute(
+        delete(ProcessedEvent).where(
+            ProcessedEvent.event_id == "TXN_BOUNDARY_01",
+            ProcessedEvent.service_name == "persistence-transactions",
+        )
+    )
+    await async_db_session.commit()
+
+    await consumer.process_message(_FakeMessage(_transaction_payload(), offset=3))
+
+    outbox_count_after_expired_claim_replay = (
+        await async_db_session.execute(
+            select(func.count()).select_from(
+                select(OutboxEvent)
+                .where(
+                    OutboxEvent.aggregate_id == "PORT_BOUNDARY_01",
+                    OutboxEvent.event_type == "RawTransactionPersisted",
+                )
+                .subquery()
+            )
+        )
+    ).scalar_one()
+    assert outbox_count_after_expired_claim_replay == 1

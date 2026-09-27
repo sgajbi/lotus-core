@@ -6,8 +6,12 @@ from typing import Any, Dict, Optional, Type
 
 from confluent_kafka import Message
 from portfolio_common.db import get_async_db_session
-from portfolio_common.exceptions import RetryableConsumerError
-from portfolio_common.idempotency_repository import IdempotencyRepository
+from portfolio_common.domain.transaction import TransactionPayloadIdentity
+from portfolio_common.exceptions import RetryableConsumerError, TransactionSemanticConflictError
+from portfolio_common.idempotency_repository import (
+    IdempotencyRepository,
+    SemanticEventClaimOutcome,
+)
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.outbox_repository import OutboxRepository
 from pydantic import BaseModel, ValidationError
@@ -63,6 +67,14 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
 
         return event
 
+    def semantic_idempotency_identity(
+        self,
+        event: BaseModel,
+    ) -> TransactionPayloadIdentity | None:
+        """Return a semantic claim for consumers with durable payload identity."""
+
+        return None
+
     def get_outbox_event(self, persisted_object: Any) -> Optional[Dict[str, Any]]:
         """
         Subclasses can override this to create an outbox event upon successful persistence.
@@ -95,13 +107,47 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
                         tenant_scope: dict[str, str | None] = {}
                         if self.tenant_scoped_idempotency:
                             tenant_scope["tenant_id"] = getattr(event, "tenant_id", None)
-                        if not await idempotency_repo.claim_event_processing(
-                            envelope.idempotency_key,
-                            envelope.portfolio_id,
-                            self.service_name,
-                            correlation_id,
-                            **tenant_scope,
-                        ):
+                        semantic_identity = self.semantic_idempotency_identity(event)
+                        if semantic_identity is None:
+                            claimed = await idempotency_repo.claim_event_processing(
+                                envelope.idempotency_key,
+                                envelope.portfolio_id,
+                                self.service_name,
+                                correlation_id,
+                                **tenant_scope,
+                            )
+                            duplicate = not claimed
+                        else:
+                            outcome = await idempotency_repo.claim_semantic_event_processing(
+                                event_id=envelope.idempotency_key,
+                                portfolio_id=envelope.portfolio_id,
+                                service_name=self.service_name,
+                                semantic_key=semantic_identity.semantic_key,
+                                payload_fingerprint=semantic_identity.payload_fingerprint,
+                                correlation_id=correlation_id,
+                                **tenant_scope,
+                            )
+                            if outcome is SemanticEventClaimOutcome.SEMANTIC_CONFLICT:
+                                existing_fingerprint = (
+                                    await idempotency_repo.resolve_semantic_payload_fingerprint(
+                                        event_id=envelope.idempotency_key,
+                                        service_name=self.service_name,
+                                        semantic_key=semantic_identity.semantic_key,
+                                        **tenant_scope,
+                                    )
+                                )
+                                raise TransactionSemanticConflictError(
+                                    semantic_key=semantic_identity.semantic_key,
+                                    existing_payload_fingerprint=existing_fingerprint,
+                                    incoming_payload_fingerprint=(
+                                        semantic_identity.payload_fingerprint
+                                    ),
+                                )
+                            duplicate = outcome in {
+                                SemanticEventClaimOutcome.PHYSICAL_DUPLICATE,
+                                SemanticEventClaimOutcome.SEMANTIC_DUPLICATE,
+                            }
+                        if duplicate:
                             logger.warning(
                                 f"Event {envelope.idempotency_key} already processed. Skipping."
                             )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import runpy
 import subprocess
@@ -286,12 +287,14 @@ def _seed_legacy_source(connection) -> None:
                 INSERT INTO transactions (
                     transaction_id, portfolio_id, instrument_id, security_id,
                     transaction_type, quantity, price, gross_transaction_amount,
-                    trade_currency, currency, transaction_date, settlement_date
+                    trade_currency, currency, transaction_date, settlement_date,
+                    payload_fingerprint
                 ) VALUES (
                     :transaction_id, :portfolio_id, :transaction_id, :transaction_id,
                     'DEPOSIT', 1, 1, :amount, 'USD', 'USD',
                     TIMESTAMPTZ '2026-01-01 08:00:00+00',
-                    TIMESTAMPTZ '2026-01-02 08:00:00+00'
+                    TIMESTAMPTZ '2026-01-02 08:00:00+00',
+                    'sha256:' || repeat('1', 64)
                 )
                 """
             ),
@@ -299,6 +302,41 @@ def _seed_legacy_source(connection) -> None:
                 "transaction_id": transaction_id,
                 "portfolio_id": PORTFOLIO_ID,
                 "amount": amount,
+            },
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO outbox_events (
+                    aggregate_type, aggregate_id, partition_key, event_type,
+                    payload, topic, status, retry_count, created_at
+                ) VALUES (
+                    'RawTransaction', :portfolio_id, :transaction_id,
+                    'RawTransactionPersisted', CAST(:payload AS JSON),
+                    'transactions.persisted', 'PROCESSED', 0,
+                    TIMESTAMPTZ '2026-01-01 08:01:00+00'
+                )
+                """
+            ),
+            {
+                "portfolio_id": PORTFOLIO_ID,
+                "transaction_id": transaction_id,
+                "payload": json.dumps(
+                    {
+                        "transaction_id": transaction_id,
+                        "portfolio_id": PORTFOLIO_ID,
+                        "instrument_id": transaction_id,
+                        "security_id": transaction_id,
+                        "transaction_type": "DEPOSIT",
+                        "quantity": "1",
+                        "price": "1",
+                        "gross_transaction_amount": amount,
+                        "trade_currency": "USD",
+                        "currency": "USD",
+                        "transaction_date": "2026-01-01T08:00:00+00:00",
+                        "settlement_date": "2026-01-02T08:00:00+00:00",
+                    }
+                ),
             },
         )
         connection.execute(
@@ -478,12 +516,14 @@ def test_cashflow_source_cut_backfill_is_timestamp_stable_and_fences_late_writer
                 INSERT INTO transactions (
                     transaction_id, portfolio_id, instrument_id, security_id,
                     transaction_type, quantity, price, gross_transaction_amount,
-                    trade_currency, currency, transaction_date, settlement_date
+                    trade_currency, currency, transaction_date, settlement_date,
+                    payload_fingerprint
                 ) VALUES (
                     'CUT-UNRELATED-BUY', :portfolio_id, 'CUT-UNRELATED-BUY',
                     'CUT-UNRELATED-BUY', 'BUY', 1, 1, 1, 'EUR', 'EUR',
                     TIMESTAMPTZ '2026-01-03 08:00:00+00',
-                    TIMESTAMPTZ '2026-01-04 08:00:00+00'
+                    TIMESTAMPTZ '2026-01-04 08:00:00+00',
+                    'sha256:' || repeat('2', 64)
                 )
                 """
             ),
@@ -677,12 +717,14 @@ def _assert_fk_insert_refresh_uses_a_key_share_compatible_lock(db_engine) -> Non
                         INSERT INTO transactions (
                             transaction_id, portfolio_id, instrument_id, security_id,
                             transaction_type, quantity, price, gross_transaction_amount,
-                            trade_currency, currency, transaction_date, settlement_date
+                            trade_currency, currency, transaction_date, settlement_date,
+                            payload_fingerprint
                         ) VALUES (
                             'CUT-KEY-SHARE', :portfolio_id, 'CUT-KEY-SHARE', 'CUT-KEY-SHARE',
                             'DEPOSIT', 1, 1, 1, 'USD', 'USD',
                             TIMESTAMPTZ '2026-01-03 08:00:00+00',
-                            TIMESTAMPTZ '2026-01-04 08:00:00+00'
+                            TIMESTAMPTZ '2026-01-04 08:00:00+00',
+                            'sha256:' || repeat('3', 64)
                         )
                         """
                     ),
@@ -789,12 +831,14 @@ def _insert_transaction_cashflow_source(
             INSERT INTO transactions (
                 transaction_id, portfolio_id, instrument_id, security_id,
                 transaction_type, quantity, price, gross_transaction_amount,
-                trade_currency, currency, transaction_date, settlement_date
+                trade_currency, currency, transaction_date, settlement_date,
+                payload_fingerprint
             ) VALUES (
                 :transaction_id, :portfolio_id, :transaction_id, :transaction_id,
                 'DEPOSIT', 1, 1, :amount, 'USD', 'USD',
                 TIMESTAMPTZ '2026-01-05 08:00:00+00',
-                TIMESTAMPTZ '2026-01-06 08:00:00+00'
+                TIMESTAMPTZ '2026-01-06 08:00:00+00',
+                'sha256:' || repeat('4', 64)
             )
             """
         ),

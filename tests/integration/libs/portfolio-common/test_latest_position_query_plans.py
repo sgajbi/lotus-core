@@ -112,7 +112,7 @@ async def _seed_representative_latest_row_history(
             INSERT INTO transactions (
                 transaction_id, portfolio_id, instrument_id, security_id,
                 transaction_type, quantity, price, gross_transaction_amount,
-                trade_currency, currency, transaction_date
+                trade_currency, currency, transaction_date, payload_fingerprint
             )
             SELECT
                 'LATEST-TXN-' || row_no::text,
@@ -129,7 +129,8 @@ async def _seed_representative_latest_row_history(
                 END,
                 'BUY', 100, 10, 1000, 'USD', 'USD',
                 TIMESTAMPTZ '2026-08-21 00:00:00+00'
-                    - ((row_no - 1) % 5) * INTERVAL '1 day'
+                    - ((row_no - 1) % 5) * INTERVAL '1 day',
+                'sha256:' || lpad(to_hex(row_no), 64, '0')
             FROM generate_series(1, :seed_cardinality) AS row_no
             """
         ),

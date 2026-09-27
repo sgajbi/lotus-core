@@ -2107,7 +2107,8 @@ async def _seed_transactions(
                 gross_transaction_amount,
                 trade_currency,
                 currency,
-                transaction_date
+                transaction_date,
+                payload_fingerprint
             ) VALUES (
                 :transaction_id,
                 'CA-PORT-001',
@@ -2119,7 +2120,8 @@ async def _seed_transactions(
                 1,
                 'USD',
                 'USD',
-                TIMESTAMPTZ '2026-08-09 01:00:00+00'
+                TIMESTAMPTZ '2026-08-09 01:00:00+00',
+                'sha256:' || repeat('f', 64)
             )
             """
         ),
@@ -2226,7 +2228,8 @@ async def _seed_other_portfolio_and_transaction(session: AsyncSession) -> None:
                 gross_transaction_amount,
                 trade_currency,
                 currency,
-                transaction_date
+                transaction_date,
+                payload_fingerprint
             ) VALUES (
                 'CA-FOREIGN-001',
                 'CA-PORT-OTHER',
@@ -2238,7 +2241,8 @@ async def _seed_other_portfolio_and_transaction(session: AsyncSession) -> None:
                 1,
                 'USD',
                 'USD',
-                TIMESTAMPTZ '2026-08-09 01:00:00+00'
+                TIMESTAMPTZ '2026-08-09 01:00:00+00',
+                'sha256:' || repeat('0', 64)
             )
             """
         )

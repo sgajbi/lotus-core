@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from portfolio_common.database_models import Instrument, Portfolio, TransactionCost
 from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.domain.transaction import build_transaction_payload_identity
 from portfolio_common.events import TransactionEvent
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -121,8 +122,12 @@ def booked_transaction_event(
 
 
 def canonical_transaction_record(event: TransactionEvent) -> DBTransaction:
+    identity = build_transaction_payload_identity(
+        event.model_dump(mode="python"), tenant_id=event.tenant_id
+    )
     return DBTransaction(
         **transaction_event_to_record_values(event),
+        payload_fingerprint=identity.payload_fingerprint,
         costs=[TransactionCost(**row) for row in transaction_event_fee_component_values(event)],
     )
 

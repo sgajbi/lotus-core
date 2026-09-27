@@ -396,14 +396,17 @@ def _seed_portfolio_and_transactions(connection) -> None:
             INSERT INTO transactions (
                 transaction_id, portfolio_id, instrument_id, security_id,
                 transaction_type, quantity, price, gross_transaction_amount,
-                trade_currency, currency, transaction_date, trade_fee
+                trade_currency, currency, transaction_date, trade_fee,
+                payload_fingerprint
             ) VALUES
             ('CA-SOURCE-LEGACY', 'CA-PORT-UPGRADE', 'SOURCE-SEC', 'SOURCE-SEC',
              'DEMERGER_OUT', 10, 100, 1000, 'USD', 'USD',
-             TIMESTAMPTZ '2026-08-09 01:00:00+00', 0),
+             TIMESTAMPTZ '2026-08-09 01:00:00+00', 0,
+             'sha256:' || repeat('9', 64)),
             ('CA-TARGET-LEGACY', 'CA-PORT-UPGRADE', 'TARGET-SEC', 'TARGET-SEC',
              'DEMERGER_IN', 10, 100, 1000, 'USD', 'USD',
-             TIMESTAMPTZ '2026-08-09 01:00:00+00', 0);
+             TIMESTAMPTZ '2026-08-09 01:00:00+00', 0,
+             'sha256:' || repeat('a', 64));
             """
         )
     )

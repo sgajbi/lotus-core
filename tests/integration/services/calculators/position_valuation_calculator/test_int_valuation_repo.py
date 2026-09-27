@@ -141,6 +141,7 @@ def setup_holdings_data(db_engine):
                 Portfolio(
                     tenant_id=TEST_TENANT_ID,
                     portfolio_id="P1",
+                    legal_book_id="BOOK-P1",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
                     risk_exposure="a",
@@ -148,11 +149,12 @@ def setup_holdings_data(db_engine):
                     portfolio_type="c",
                     booking_center_code="d",
                     client_id="e",
-                    status="f",
+                    status="ACTIVE",
                 ),
                 Portfolio(
                     tenant_id=TEST_TENANT_ID,
                     portfolio_id="P2",
+                    legal_book_id="BOOK-P2",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
                     risk_exposure="a",
@@ -160,11 +162,12 @@ def setup_holdings_data(db_engine):
                     portfolio_type="c",
                     booking_center_code="d",
                     client_id="e",
-                    status="f",
+                    status="ACTIVE",
                 ),
                 Portfolio(
                     tenant_id=TEST_TENANT_ID,
                     portfolio_id="P3",
+                    legal_book_id="BOOK-P3",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
                     risk_exposure="a",
@@ -172,11 +175,12 @@ def setup_holdings_data(db_engine):
                     portfolio_type="c",
                     booking_center_code="d",
                     client_id="e",
-                    status="f",
+                    status="ACTIVE",
                 ),
                 Portfolio(
                     tenant_id=TEST_TENANT_ID,
                     portfolio_id="P4",
+                    legal_book_id="BOOK-P4",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
                     risk_exposure="a",
@@ -184,7 +188,7 @@ def setup_holdings_data(db_engine):
                     portfolio_type="c",
                     booking_center_code="d",
                     client_id="e",
-                    status="f",
+                    status="ACTIVE",
                 ),
             ]
         )
@@ -335,6 +339,7 @@ def setup_snapshot_data(db_engine):
             Portfolio(
                 tenant_id=TEST_TENANT_ID,
                 portfolio_id=f"P{i}",
+                legal_book_id=f"BOOK-P{i}",
                 base_currency="USD",
                 open_date=date(2024, 1, 1),
                 risk_exposure="a",
@@ -342,7 +347,7 @@ def setup_snapshot_data(db_engine):
                 portfolio_type="c",
                 booking_center_code="d",
                 client_id=f"e{i}",
-                status="f",
+                status="ACTIVE",
             )
             for i in range(1, 5)
         ]
@@ -446,6 +451,7 @@ def setup_first_open_date_data(db_engine):
                 Portfolio(
                     tenant_id=TEST_TENANT_ID,
                     portfolio_id="P1",
+                    legal_book_id="BOOK-P1",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
                     risk_exposure="a",
@@ -453,11 +459,12 @@ def setup_first_open_date_data(db_engine):
                     portfolio_type="c",
                     booking_center_code="d",
                     client_id="e",
-                    status="f",
+                    status="ACTIVE",
                 ),
                 Portfolio(
                     tenant_id=TEST_TENANT_ID,
                     portfolio_id="P2",
+                    legal_book_id="BOOK-P2",
                     base_currency="USD",
                     open_date=date(2024, 1, 1),
                     risk_exposure="a",
@@ -465,7 +472,7 @@ def setup_first_open_date_data(db_engine):
                     portfolio_type="c",
                     booking_center_code="d",
                     client_id="e",
-                    status="f",
+                    status="ACTIVE",
                 ),
             ]
         )
@@ -1109,6 +1116,7 @@ async def test_find_contiguous_snapshot_dates_skips_non_business_dates(
         Portfolio(
             tenant_id=TEST_TENANT_ID,
             portfolio_id="P-CONTIG",
+            legal_book_id="BOOK-P-CONTIG",
             base_currency="USD",
             open_date=date(2025, 1, 1),
             risk_exposure="a",
@@ -1116,7 +1124,7 @@ async def test_find_contiguous_snapshot_dates_skips_non_business_dates(
             portfolio_type="c",
             booking_center_code="d",
             client_id="e",
-            status="f",
+            status="ACTIVE",
         )
     )
     await async_db_session.commit()
@@ -1220,6 +1228,7 @@ async def test_find_contiguous_snapshot_dates_stops_at_unreconciled_snapshot(
         Portfolio(
             tenant_id=TEST_TENANT_ID,
             portfolio_id="P-STALE-SNAPSHOT",
+            legal_book_id="BOOK-P-STALE-SNAPSHOT",
             base_currency="USD",
             open_date=date(2026, 1, 1),
             risk_exposure="a",
@@ -1227,7 +1236,7 @@ async def test_find_contiguous_snapshot_dates_stops_at_unreconciled_snapshot(
             portfolio_type="c",
             booking_center_code="d",
             client_id="e",
-            status="f",
+            status="ACTIVE",
         )
     )
     await async_db_session.commit()

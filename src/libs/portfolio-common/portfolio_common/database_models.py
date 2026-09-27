@@ -33,7 +33,13 @@ from .domain.portfolio_party_roles import (
     PortfolioPartyRoleScope,
     PortfolioPartyRoleType,
 )
-from .financial_numeric import ExactNumeric
+from .domain.transaction.payload_identity import transaction_payload_fingerprint_default
+from .financial_numeric import (
+    ExactNumeric,
+)
+from .financial_numeric import (
+    finite_numeric_check_constraint as _finite_numeric_check_constraint,
+)
 from .ingestion_job_schema import ingestion_job_table_args
 from .processed_event_schema import processed_event_table_args
 from .source_lifecycle_predicates import (
@@ -67,25 +73,6 @@ _FX_CONTENT_HASH_TEXT_VALID = _normalized_replay_text_sql("payload->>'content_ha
 _FX_EARLIEST_DATE_TEXT_VALID = _normalized_replay_text_sql("payload->>'earliest_impacted_date'")
 _FX_GENERATED_AT_TEXT_VALID = _normalized_replay_text_sql("payload->>'generated_at'")
 _RESET_SECURITY_ID_TEXT_VALID = _normalized_replay_text_sql("payload->>'security_id'")
-
-_POSTGRESQL_SPECIAL_NUMERIC_VALUES = ("NaN", "Infinity", "-Infinity")
-
-
-def _finite_numeric_check_constraint(
-    name: str,
-    *column_names: str,
-) -> CheckConstraint:
-    """Build one explicit PostgreSQL finite-value check for numeric columns."""
-
-    if not column_names:
-        raise ValueError("at least one numeric column is required")
-    if any(not column_name.isidentifier() for column_name in column_names):
-        raise ValueError("numeric column names must be identifiers")
-    special_values = ", ".join(f"'{value}'" for value in _POSTGRESQL_SPECIAL_NUMERIC_VALUES)
-    condition = " AND ".join(
-        f"CAST({column_name} AS TEXT) NOT IN ({special_values})" for column_name in column_names
-    )
-    return CheckConstraint(condition, name=name)
 
 
 class BusinessDate(Base):
@@ -2048,6 +2035,11 @@ class Transaction(Base):
     synthetic_flow_price_source = Column(String, nullable=True)
     synthetic_flow_fx_source = Column(String, nullable=True)
     synthetic_flow_source = Column(String, nullable=True)
+    payload_fingerprint = Column(
+        String(71),
+        nullable=False,
+        default=transaction_payload_fingerprint_default,
+    )
 
     costs = relationship(
         "TransactionCost", back_populates="transaction", cascade="all, delete-orphan"
@@ -2057,6 +2049,10 @@ class Transaction(Base):
     )
 
     __table_args__ = (
+        CheckConstraint(
+            "payload_fingerprint ~ '^sha256:[0-9a-f]{64}$'",
+            name="ck_transactions_payload_fingerprint",
+        ),
         CheckConstraint(
             "CAST(quantity AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity')",
             name="ck_transactions_quantity_finite",

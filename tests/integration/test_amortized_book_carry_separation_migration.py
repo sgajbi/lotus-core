@@ -153,12 +153,14 @@ def _seed_legacy_carry_row(connection, *, source_transaction_type: str = "BUY") 
             INSERT INTO transactions (
                 transaction_id, portfolio_id, instrument_id, security_id,
                 transaction_type, quantity, price, gross_transaction_amount,
-                trade_currency, currency, transaction_date, net_cost_local, net_cost
+                trade_currency, currency, transaction_date, net_cost_local, net_cost,
+                payload_fingerprint
             ) VALUES (
                 'AMORT_SEPARATION_BUY', 'AMORT_SEPARATION_PORTFOLIO',
                 'AMORT_SEPARATION_BOND', 'AMORT_SEPARATION_BOND',
                 :source_transaction_type, 100, 97, 9700, 'SGD', 'SGD',
-                TIMESTAMPTZ '2026-01-01 08:00:00+00', 9700, 9800
+                TIMESTAMPTZ '2026-01-01 08:00:00+00', 9700, 9800,
+                'sha256:' || repeat('7', 64)
             )
             """
         ),
@@ -226,12 +228,13 @@ def _seed_basis_mutation(connection) -> None:
             INSERT INTO transactions (
                 transaction_id, portfolio_id, instrument_id, security_id,
                 transaction_type, quantity, price, gross_transaction_amount,
-                trade_currency, currency, transaction_date
+                trade_currency, currency, transaction_date, payload_fingerprint
             ) VALUES (
                 'AMORT_SEPARATION_DEMERGER', 'AMORT_SEPARATION_PORTFOLIO',
                 'AMORT_SEPARATION_BOND', 'AMORT_SEPARATION_BOND',
                 'DEMERGER_OUT', 0, 0, 300, 'SGD', 'SGD',
-                TIMESTAMPTZ '2026-03-01 08:00:00+00'
+                TIMESTAMPTZ '2026-03-01 08:00:00+00',
+                'sha256:' || repeat('8', 64)
             )
             """
         )

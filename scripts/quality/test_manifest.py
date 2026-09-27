@@ -57,6 +57,12 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/test_ingestion_dlq_job_ownership_migration.py",
         "tests/integration/test_ingestion_failure_outcome_migration.py",
         "tests/integration/test_portfolio_tenant_cutover_migration.py",
+        "tests/integration/test_transaction_payload_fingerprint_migration.py",
+        "tests/integration/services/persistence_service/repositories/"
+        "test_transaction_payload_conflict.py",
+        "tests/integration/services/persistence_service/consumers/"
+        "test_transaction_consumer_boundary.py::"
+        "test_transaction_consumer_boundary_persists_transaction_outbox_and_idempotency",
     ],
     "critical-db-coverage": [
         "tests/integration/libs/portfolio-common/test_database_runtime_identity.py",
@@ -66,6 +72,9 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/test_valuation_job_hot_path_migration.py",
         "tests/integration/test_portfolio_valuation_book_scope_migration.py",
         "tests/integration/test_transaction_event_fence_tenant_migration.py",
+        "tests/integration/test_transaction_payload_fingerprint_migration.py",
+        "tests/integration/services/persistence_service/repositories/"
+        "test_transaction_payload_conflict.py",
         "tests/integration/test_aggregation_job_tenant_migration.py",
         "tests/integration/test_portfolio_cashflow_source_cut_migration.py",
         "tests/integration/test_selected_history_sweep_migration.py::"

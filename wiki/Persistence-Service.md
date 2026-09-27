@@ -75,10 +75,30 @@ If persistence is wrong or stalled:
 
 - consumer retry behavior
 - idempotent processing through `processed_events`
+- a versioned economic-payload fingerprint on each durable source transaction: identical replay is
+  a no-op with no repeated outbox publication, while changed economics for the same admitted
+  transaction identity fail closed as `TRANSACTION_SEMANTIC_CONFLICT` even after processed-event
+  retention expires; historical ordinary-source backfill requires unambiguous immutable
+  `RawTransactionPersisted` evidence, while canonical processor-generated children retain their
+  separately identified generated-row authority and hash a raw post-upsert ledger snapshot in the
+  same transaction, never a pre-upsert object cached in the writer session. A source
+  replay moved between two portfolios of
+  the same admitted tenant is a semantic conflict; foreign-tenant ID reuse and generated-child
+  ownership mismatch remain identity collisions
 - durable event publication through `outbox_events`
 - shared dispatcher publication and monitoring
 
 This keeps canonical writes and continuation signals auditable instead of best-effort.
+Ordinary replay cannot replace a booked transaction; corrections require their separately governed
+source transition and lineage contract.
+
+The c173 schema change is a quiesced compatibility-set cutover. Operators stop and drain both the
+persistence and portfolio-transaction-processing consumers, retain both offset/lag snapshots, apply
+the migration, deploy both new writer images, and only then resume either group. A predecessor
+transaction processor cannot safely insert or refresh the new generated-child fingerprint, so it
+must not remain live across the cutover or rollback. Its ordinary-source backfill scans retained
+immutable outbox evidence once into an indexed temporary relation and then performs bounded ledger
+batches; it does not repeat a full outbox scan while the writer fence is held.
 
 ## Operational hints
 

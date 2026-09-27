@@ -216,11 +216,12 @@ def _seed_source_lot(connection) -> None:
             INSERT INTO transactions (
                 transaction_id, portfolio_id, instrument_id, security_id,
                 transaction_type, quantity, price, gross_transaction_amount,
-                trade_currency, currency, transaction_date
+                trade_currency, currency, transaction_date, payload_fingerprint
             ) VALUES (
                 'AMORT_BUY_001', 'AMORT_PORTFOLIO', 'AMORT_BOND_001',
                 'AMORT_BOND_001', 'BUY', 100, 97, 9700, 'SGD', 'SGD',
-                TIMESTAMPTZ '2026-01-01 08:00:00+00'
+                TIMESTAMPTZ '2026-01-01 08:00:00+00',
+                'sha256:' || repeat('4', 64)
             )
             """
         )

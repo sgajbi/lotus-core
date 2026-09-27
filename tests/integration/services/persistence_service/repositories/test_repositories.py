@@ -13,6 +13,7 @@ from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.db import get_async_db_session
 from portfolio_common.domain.tenant import TenantId
 from portfolio_common.events import InstrumentEvent, PortfolioEvent, TransactionEvent
+from portfolio_common.exceptions import TransactionSemanticConflictError
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -642,40 +643,32 @@ async def test_transaction_repository_persists_named_fee_source_authority(
             "other_fees": Decimal(0),
         }
     )
-    await repo.create_or_update_transaction(zero_named_fees)
-    await async_db_session.commit()
-    await repo.create_or_update_transaction(zero_named_fees)
-    await async_db_session.commit()
-
-    assert (
-        await async_db_session.scalar(
-            select(func.count(TransactionCost.id)).where(
-                TransactionCost.transaction_id == event.transaction_id
+    with pytest.raises(TransactionSemanticConflictError):
+        await repo.create_or_update_transaction(zero_named_fees)
+    await async_db_session.rollback()
+    costs_after_conflict = list(
+        (
+            await async_db_session.scalars(
+                select(TransactionCost)
+                .where(TransactionCost.transaction_id == event.transaction_id)
+                .order_by(TransactionCost.fee_type)
             )
-        )
-        == 0
+        ).all()
     )
+    assert [(row.fee_type, row.amount, row.currency) for row in costs_after_conflict] == [
+        ("brokerage", Decimal("1.25"), "USD"),
+        ("stamp_duty", Decimal("0.75"), "USD"),
+    ]
     assert await async_db_session.scalar(
         select(DBTransaction.trade_fee).where(DBTransaction.transaction_id == event.transaction_id)
-    ) == Decimal(0)
-
-    await repo.create_or_update_transaction(event)
-    await async_db_session.rollback()
-    assert (
-        await async_db_session.scalar(
-            select(func.count(TransactionCost.id)).where(
-                TransactionCost.transaction_id == event.transaction_id
-            )
-        )
-        == 0
-    )
+    ) == Decimal("2.00")
 
 
 async def test_transaction_repository_persists_linkage_and_policy_metadata(
     clean_db, async_db_session: AsyncSession
 ):
     """
-    BUY metadata required by RFC-059 Slice 2 must persist and remain updateable via UPSERT.
+    BUY metadata required by RFC-059 Slice 2 persists and changed replay fails closed.
     """
     repo = TransactionDBRepository(async_db_session)
 
@@ -737,22 +730,23 @@ async def test_transaction_repository_persists_linkage_and_policy_metadata(
             "external_cash_transaction_id": "CASH-ENTRY-2026-0001",
         }
     )
-    await repo.create_or_update_transaction(updated)
-    await async_db_session.commit()
+    with pytest.raises(TransactionSemanticConflictError):
+        await repo.create_or_update_transaction(updated)
+    await async_db_session.rollback()
     async_db_session.expire_all()
 
-    persisted_after_upsert = (await async_db_session.execute(stmt)).scalar_one()
-    assert persisted_after_upsert.calculation_policy_version == "1.0.1"
-    assert persisted_after_upsert.source_system == "OMS_FALLBACK"
-    assert persisted_after_upsert.cash_entry_mode == "UPSTREAM_PROVIDED"
-    assert persisted_after_upsert.external_cash_transaction_id == "CASH-ENTRY-2026-0001"
+    persisted_after_conflict = (await async_db_session.execute(stmt)).scalar_one()
+    assert persisted_after_conflict.calculation_policy_version == "1.0.0"
+    assert persisted_after_conflict.source_system == "OMS_PRIMARY"
+    assert persisted_after_conflict.cash_entry_mode == "AUTO_GENERATE"
+    assert persisted_after_conflict.external_cash_transaction_id is None
 
 
 async def test_transaction_repository_persists_interest_linkage_and_policy_metadata(
     clean_db, async_db_session: AsyncSession
 ):
     """
-    INTEREST metadata required by RFC-070 Slice 2 must persist and remain updateable via UPSERT.
+    INTEREST metadata required by RFC-070 Slice 2 persists and changed replay fails closed.
     """
     repo = TransactionDBRepository(async_db_session)
 
@@ -826,19 +820,20 @@ async def test_transaction_repository_persists_interest_linkage_and_policy_metad
             "net_interest_amount": Decimal("73"),
         }
     )
-    await repo.create_or_update_transaction(updated)
-    await async_db_session.commit()
+    with pytest.raises(TransactionSemanticConflictError):
+        await repo.create_or_update_transaction(updated)
+    await async_db_session.rollback()
     async_db_session.expire_all()
 
-    persisted_after_upsert = (await async_db_session.execute(stmt)).scalar_one()
-    assert persisted_after_upsert.calculation_policy_version == "1.0.1"
-    assert persisted_after_upsert.source_system == "OMS_FALLBACK"
-    assert persisted_after_upsert.cash_entry_mode == "UPSTREAM_PROVIDED"
-    assert persisted_after_upsert.external_cash_transaction_id == "CASH-INT-2026-0001"
-    assert persisted_after_upsert.interest_direction == "EXPENSE"
-    assert persisted_after_upsert.withholding_tax_amount == Decimal("0")
-    assert persisted_after_upsert.other_interest_deductions_amount == Decimal("2")
-    assert persisted_after_upsert.net_interest_amount == Decimal("73")
+    persisted_after_conflict = (await async_db_session.execute(stmt)).scalar_one()
+    assert persisted_after_conflict.calculation_policy_version == "1.0.0"
+    assert persisted_after_conflict.source_system == "OMS_PRIMARY"
+    assert persisted_after_conflict.cash_entry_mode == "AUTO_GENERATE"
+    assert persisted_after_conflict.external_cash_transaction_id is None
+    assert persisted_after_conflict.interest_direction == "INCOME"
+    assert persisted_after_conflict.withholding_tax_amount == Decimal("10")
+    assert persisted_after_conflict.other_interest_deductions_amount == Decimal("5")
+    assert persisted_after_conflict.net_interest_amount == Decimal("60")
 
 
 async def test_transaction_repository_persists_dual_leg_adjustment_metadata(
@@ -1006,17 +1001,21 @@ async def test_transaction_repository_persists_fx_metadata(
             "realized_total_pnl_local": Decimal("1400"),
         }
     )
-    await repo.create_or_update_transaction(updated)
-    await async_db_session.commit()
+    with pytest.raises(TransactionSemanticConflictError):
+        await repo.create_or_update_transaction(updated)
+    await async_db_session.rollback()
     async_db_session.expire_all()
 
-    persisted_after_upsert = (await async_db_session.execute(stmt)).scalar_one()
-    assert persisted_after_upsert.component_type == "FX_CONTRACT_CLOSE"
-    assert persisted_after_upsert.linked_component_ids == ["FX-COMP-BUY-002", "FX-COMP-SELL-002"]
-    assert persisted_after_upsert.fx_contract_close_transaction_id == "FX-CLOSE-0001"
-    assert persisted_after_upsert.settlement_status == "SETTLED"
-    assert persisted_after_upsert.realized_fx_pnl_local == Decimal("1400")
-    assert persisted_after_upsert.realized_total_pnl_local == Decimal("1400")
+    persisted_after_conflict = (await async_db_session.execute(stmt)).scalar_one()
+    assert persisted_after_conflict.component_type == "FX_CONTRACT_OPEN"
+    assert persisted_after_conflict.linked_component_ids == [
+        "FX-COMP-BUY-001",
+        "FX-COMP-SELL-001",
+    ]
+    assert persisted_after_conflict.fx_contract_close_transaction_id is None
+    assert persisted_after_conflict.settlement_status is None
+    assert persisted_after_conflict.realized_fx_pnl_local == Decimal("1250")
+    assert persisted_after_conflict.realized_total_pnl_local == Decimal("1250")
 
 
 @pytest.mark.asyncio

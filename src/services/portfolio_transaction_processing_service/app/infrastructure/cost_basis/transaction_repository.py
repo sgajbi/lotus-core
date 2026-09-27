@@ -14,10 +14,12 @@ from portfolio_common.domain.calculation_lineage import (
 )
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.domain.transaction import (
+    TRANSACTION_PAYLOAD_MATERIAL_FIELDS,
     TransactionIdentityOwnership,
     canonical_transaction_identity_record_values,
     require_generated_transaction_identity,
     transaction_identity_ownership,
+    transaction_payload_fingerprint,
 )
 from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
 from portfolio_common.identifiers import normalize_lookup_identifier
@@ -157,6 +159,20 @@ def _booked_transaction_payload(
         payload["calculation_lineage"] = calculation_lineage.lineage_payload()
     payload.update(dict.fromkeys(fields_to_clear))
     return payload
+
+
+def _persisted_transaction_payload_fingerprint(transaction: DBTransaction) -> str:
+    """Hash the final ledger values after PostgreSQL has merged an upsert."""
+
+    return str(
+        transaction_payload_fingerprint(
+            {
+                field_name: getattr(transaction, field_name)
+                for field_name in TRANSACTION_PAYLOAD_MATERIAL_FIELDS
+                if field_name in TRANSACTION_TABLE_FIELDS
+            }
+        )
+    )
 
 
 def _to_persisted_booked_transaction(
@@ -425,6 +441,7 @@ class SqlAlchemyCostBasisTransactionRepository:
             transaction,
             ownership=transaction_identity_ownership(transaction),
             fields_to_clear=fields_to_clear,
+            refresh_payload_fingerprint=False,
         )
 
     @async_timed(
@@ -443,6 +460,7 @@ class SqlAlchemyCostBasisTransactionRepository:
             transaction,
             ownership=require_generated_transaction_identity(transaction),
             fields_to_clear=fields_to_clear,
+            refresh_payload_fingerprint=True,
         )
 
     async def _upsert_booked_transaction(
@@ -451,6 +469,7 @@ class SqlAlchemyCostBasisTransactionRepository:
         *,
         ownership: TransactionIdentityOwnership,
         fields_to_clear: frozenset[str],
+        refresh_payload_fingerprint: bool,
     ) -> BookedTransaction:
         transaction_values = canonical_transaction_identity_record_values(
             _booked_transaction_payload(
@@ -459,6 +478,10 @@ class SqlAlchemyCostBasisTransactionRepository:
             ),
             ownership,
         )
+        if refresh_payload_fingerprint:
+            transaction_values["payload_fingerprint"] = transaction_payload_fingerprint(
+                transaction_values
+            )
         stmt = pg_insert(DBTransaction).values(**transaction_values)
         update_fields = [
             field_name
@@ -466,26 +489,53 @@ class SqlAlchemyCostBasisTransactionRepository:
             if field_name not in {"id", "transaction_id"}
         ]
         update_dict = {field: getattr(stmt.excluded, field) for field in update_fields}
-        persisted = (
+        upsert_statement = stmt.on_conflict_do_update(
+            index_elements=["transaction_id"],
+            set_=update_dict,
+            where=transaction_identity_update_allowed(
+                DBTransaction,
+                ownership,
+                excluded=stmt.excluded,
+                updated_fields=transaction_values,
+            ),
+        )
+        if not refresh_payload_fingerprint:
+            persisted = (
+                (await self.db.execute(upsert_statement.returning(DBTransaction)))
+                .scalars()
+                .one_or_none()
+            )
+            if persisted is None:
+                raise GeneratedTransactionIdentityCollisionError(transaction.transaction_id)
+            return _to_persisted_booked_transaction(
+                persisted,
+                tenant_id=transaction.tenant_id,
+            )
+        persisted_transaction_id = (
+            await self.db.execute(upsert_statement.returning(DBTransaction.transaction_id))
+        ).scalar_one_or_none()
+        if persisted_transaction_id is None:
+            raise GeneratedTransactionIdentityCollisionError(transaction.transaction_id)
+        persisted_row = (
             (
                 await self.db.execute(
-                    stmt.on_conflict_do_update(
-                        index_elements=["transaction_id"],
-                        set_=update_dict,
-                        where=transaction_identity_update_allowed(
-                            DBTransaction,
-                            ownership,
-                            excluded=stmt.excluded,
-                            updated_fields=transaction_values,
-                        ),
-                    ).returning(DBTransaction)
+                    select(*DBTransaction.__table__.columns).where(
+                        DBTransaction.transaction_id == persisted_transaction_id
+                    )
                 )
             )
-            .scalars()
-            .one_or_none()
+            .mappings()
+            .one()
         )
-        if persisted is None:
-            raise GeneratedTransactionIdentityCollisionError(transaction.transaction_id)
+        persisted = DBTransaction(**dict(persisted_row))
+        final_payload_fingerprint = _persisted_transaction_payload_fingerprint(persisted)
+        if persisted.payload_fingerprint != final_payload_fingerprint:
+            await self.db.execute(
+                update(DBTransaction)
+                .where(DBTransaction.transaction_id == persisted.transaction_id)
+                .values(payload_fingerprint=final_payload_fingerprint)
+            )
+            persisted.payload_fingerprint = final_payload_fingerprint
         return _to_persisted_booked_transaction(
             persisted,
             tenant_id=transaction.tenant_id,
