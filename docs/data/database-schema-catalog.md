@@ -901,7 +901,7 @@ section shape and derive the usage line from a fresh scan rather than copying a 
 - **Description**: Ingested transactions enriched with cost and policy metadata.
 - **Relationships**: `portfolio_id` -> `portfolios.portfolio_id`; ORM relationship `costs` -> `TransactionCost`; ORM relationship `cashflow` -> `Cashflow`
 - **Usage (modules/features)**: `src/services/portfolio_transaction_processing_service/app/domain/cost_basis`, `src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/execution.py`, `src/services/portfolio_transaction_processing_service/app/infrastructure/cost_basis/transaction_repository.py`, `src/services/query_service/app/repositories/transaction_repository.py`, `src/services/ingestion_service/app/routers/transactions.py`
-- **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
+- **Typical access patterns**: As-of/date-range reads; insert-once source persistence with durable semantic replay comparison; canonical processor-generated child upserts that atomically refresh generated payload identity.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
   - `transaction_id` (String): Canonical transaction identifier.
@@ -938,6 +938,7 @@ section shape and derive the usage line from a fresh scan rather than copying a 
   - `calculation_policy_id` (String): Identifier for calculation policy.
   - `calculation_policy_version` (String): Domain attribute used by the owning module.
   - `source_system` (String): Domain attribute used by the owning module.
+  - `payload_fingerprint` (String): Versioned SHA-256 identity of the admitted source economic payload, or of the canonical processor-generated child row. Ordinary source backfill is derived only from immutable `RawTransactionPersisted` evidence.
 
 ## `transaction_costs`
 

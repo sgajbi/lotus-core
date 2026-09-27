@@ -12,15 +12,19 @@ from portfolio_common.database_models import (
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.domain.tenant import TenantId
 from portfolio_common.domain.transaction import (
+    TransactionIdentityFamily,
+    TransactionIdentityOwnership,
+    TransactionPayloadIdentity,
+    build_transaction_payload_identity,
     canonical_transaction_identity_record_values,
     transaction_identity_ownership,
 )
 from portfolio_common.events import TransactionEvent
+from portfolio_common.exceptions import TransactionSemanticConflictError
 from portfolio_common.infrastructure.persistence.transaction_identity_guard import (
     GeneratedTransactionIdentityCollisionError,
-    transaction_identity_update_allowed,
 )
-from sqlalchemy import delete, exists, func, literal, or_, select
+from sqlalchemy import exists, func, literal, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,6 +44,14 @@ class TransactionReferenceAvailability:
     portfolio_exists: bool
     instrument_exists: bool
     cash_account_exists: bool | None
+
+
+@dataclass(frozen=True, slots=True)
+class TransactionWriteOutcome:
+    """Result of staging one immutable raw-ledger transaction."""
+
+    transaction: DBTransaction
+    inserted: bool
 
 
 class TransactionDBRepository:
@@ -115,59 +127,102 @@ class TransactionDBRepository:
             ),
         )
 
-    async def create_or_update_transaction(self, event: TransactionEvent) -> DBTransaction:
+    async def _require_identical_durable_replay(
+        self,
+        *,
+        existing: DBTransaction,
+        incoming_ownership: TransactionIdentityOwnership,
+        incoming_tenant_id: str,
+        incoming_payload_identity: TransactionPayloadIdentity,
+    ) -> None:
+        existing_ownership = transaction_identity_ownership(existing)
+        if existing_ownership != incoming_ownership:
+            same_tenant_source_replay = (
+                existing_ownership.family is TransactionIdentityFamily.SOURCE
+                and incoming_ownership.family is TransactionIdentityFamily.SOURCE
+                and await self.resolve_portfolio_tenant(existing.portfolio_id)
+                == TenantId(incoming_tenant_id).value
+            )
+            if not same_tenant_source_replay:
+                raise GeneratedTransactionIdentityCollisionError(incoming_ownership.transaction_id)
+        if existing.payload_fingerprint != incoming_payload_identity.payload_fingerprint:
+            raise TransactionSemanticConflictError(
+                semantic_key=incoming_payload_identity.semantic_key,
+                existing_payload_fingerprint=existing.payload_fingerprint,
+                incoming_payload_fingerprint=incoming_payload_identity.payload_fingerprint,
+            )
+
+    async def create_or_update_transaction(
+        self,
+        event: TransactionEvent,
+    ) -> TransactionWriteOutcome:
         """
-        Idempotently creates or updates a transaction using a native PostgreSQL
-        UPSERT (INSERT ... ON CONFLICT DO UPDATE) for high performance and concurrency safety.
+        Insert one immutable source transaction or prove an identical durable replay.
+
+        A materially changed payload is never an upsert. Approved correction commands are
+        intentionally owned by #452 and do not pass through this raw persistence method.
         """
         try:
             ownership = transaction_identity_ownership(event)
+            if event.tenant_id is None:
+                raise ValueError("Transaction persistence requires an admitted tenant")
+            payload_identity = build_transaction_payload_identity(
+                event.model_dump(mode="python"),
+                tenant_id=event.tenant_id,
+            )
             event_dict = canonical_transaction_identity_record_values(
                 transaction_event_to_record_values(event),
                 ownership,
             )
+            event_dict["payload_fingerprint"] = payload_identity.payload_fingerprint
 
-            # The statement to execute.
-            stmt = pg_insert(DBTransaction).values(**event_dict)
-
-            # Update only fields supplied by the event payload to avoid touching
-            # unrelated columns during partial contract rollout.
-            update_fields = [k for k in event_dict.keys() if k not in {"id", "transaction_id"}]
-            update_dict = {field: getattr(stmt.excluded, field) for field in update_fields}
-
-            # The final UPSERT statement with the conflict resolution.
-            final_stmt = stmt.on_conflict_do_update(
-                index_elements=["transaction_id"],
-                set_=update_dict,
-                where=transaction_identity_update_allowed(
-                    DBTransaction,
-                    ownership,
-                    excluded=stmt.excluded,
-                    updated_fields=event_dict,
-                ),
-            ).returning(DBTransaction.transaction_id)
-
-            persisted_id = (await self.db.execute(final_stmt)).scalar_one_or_none()
-            if persisted_id is None:
-                raise GeneratedTransactionIdentityCollisionError(ownership.transaction_id)
-            fee_components = transaction_event_fee_component_values(event)
-            if transaction_event_has_named_fee_authority(event):
-                await self.db.execute(
-                    delete(TransactionCost).where(TransactionCost.transaction_id == persisted_id)
+            insert_stmt = (
+                pg_insert(DBTransaction)
+                .values(**event_dict)
+                .on_conflict_do_nothing(index_elements=["transaction_id"])
+                .returning(DBTransaction.transaction_id)
+            )
+            persisted_id = (await self.db.execute(insert_stmt)).scalar_one_or_none()
+            inserted = persisted_id is not None
+            persisted_transaction: DBTransaction
+            if not inserted:
+                existing = (
+                    await self.db.execute(
+                        select(DBTransaction)
+                        .where(DBTransaction.transaction_id == ownership.transaction_id)
+                        .with_for_update()
+                    )
+                ).scalar_one_or_none()
+                if existing is None:
+                    raise GeneratedTransactionIdentityCollisionError(ownership.transaction_id)
+                await self._require_identical_durable_replay(
+                    existing=existing,
+                    incoming_ownership=ownership,
+                    incoming_tenant_id=event.tenant_id,
+                    incoming_payload_identity=payload_identity,
                 )
-                self.db.add_all([TransactionCost(**component) for component in fee_components])
+                persisted_id = existing.transaction_id
+                persisted_transaction = existing
+            else:
+                persisted_transaction = DBTransaction(**event_dict)
+            fee_components = transaction_event_fee_component_values(event)
+            if inserted and transaction_event_has_named_fee_authority(event) and fee_components:
+                await self.db.execute(
+                    pg_insert(TransactionCost).values(fee_components).on_conflict_do_nothing()
+                )
             logger.debug(
-                "Transaction upsert staged.",
-                extra={"transaction_id": ownership.transaction_id},
+                "Transaction insert or identical replay staged.",
+                extra={"transaction_id": ownership.transaction_id, "inserted": inserted},
             )
 
-            # Note: Since UPSERT doesn't easily return the model, we can assume success.
-            # The calling consumer logic doesn't depend on the returned object.
-            return DBTransaction(**event_dict)
+            return TransactionWriteOutcome(
+                transaction=persisted_transaction,
+                inserted=inserted,
+            )
 
         except Exception:
             logger.error(
-                "Failed to stage transaction upsert.",
+                "Failed to stage transaction insert or replay.",
                 extra={"transaction_id": event.transaction_id},
                 exc_info=True,
             )

@@ -7,6 +7,10 @@ from decimal import Decimal
 import pytest
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.domain.calculation_lineage import calculation_lineage_binds_output
+from portfolio_common.domain.transaction import (
+    TRANSACTION_PAYLOAD_MATERIAL_FIELDS,
+    transaction_payload_fingerprint,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -93,20 +97,111 @@ async def test_fx_reprocessing_receipt_binds_optional_value_retained_by_conflict
         transaction_persistence=SqlAlchemyCostBasisTransactionRepository(async_db_session),
     )
     durable_row = (
-        await async_db_session.execute(
-            select(DBTransaction).where(
-                DBTransaction.transaction_id == result.transaction.transaction_id
+        (
+            await async_db_session.execute(
+                select(*DBTransaction.__table__.columns).where(
+                    DBTransaction.transaction_id == result.transaction.transaction_id
+                )
             )
         )
-    ).scalar_one()
+        .mappings()
+        .one()
+    )
 
-    assert durable_row.source_system == "EXISTING_BOOKING_LEDGER"
-    assert result.transaction.source_system == durable_row.source_system
+    assert durable_row["source_system"] == "EXISTING_BOOKING_LEDGER"
+    assert result.transaction.source_system == durable_row["source_system"]
+    assert durable_row["payload_fingerprint"] == transaction_payload_fingerprint(
+        {
+            field_name: durable_row[field_name]
+            for field_name in TRANSACTION_PAYLOAD_MATERIAL_FIELDS
+            if field_name in DBTransaction.__table__.columns
+        }
+    )
     assert result.transaction.calculation_lineage is not None
-    assert durable_row.calculation_lineage == (
+    assert durable_row["calculation_lineage"] == (
         result.transaction.calculation_lineage.lineage_payload()
     )
     assert calculation_lineage_binds_output(
         result.transaction.calculation_lineage,
         output_payload=fx_booked_transaction_output_payload(result.transaction),
+    )
+
+
+def _generated_cash_leg(
+    *,
+    source_system: str | None,
+    gross_transaction_amount: Decimal,
+) -> BookedTransaction:
+    return BookedTransaction(
+        transaction_id="BUY-LINEAGE-001-CASHLEG",
+        portfolio_id="PORT-FX-LINEAGE-001",
+        tenant_id="tenant-test",
+        instrument_id="CASH-USD",
+        security_id="CASH-USD",
+        transaction_type="ADJUSTMENT",
+        transaction_date=datetime(2026, 4, 1, 9, 0, tzinfo=UTC),
+        quantity=Decimal(0),
+        price=Decimal(1),
+        gross_transaction_amount=gross_transaction_amount,
+        trade_currency="USD",
+        currency="USD",
+        cash_entry_mode="AUTO_GENERATE",
+        originating_transaction_id="BUY-LINEAGE-001",
+        originating_transaction_type="BUY",
+        link_type="BUY_TO_CASH",
+        source_system=source_system,
+    )
+
+
+async def test_generated_child_fingerprint_uses_post_upsert_durable_economics(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    existing = _generated_cash_leg(
+        source_system="EXISTING_BOOKING_LEDGER",
+        gross_transaction_amount=Decimal("1080000"),
+    )
+    async_db_session.add(portfolio_record(existing.portfolio_id))
+    preloaded_record = DBTransaction(
+        **{
+            field.name: value
+            for field in fields(existing)
+            if field.name in DBTransaction.__table__.columns
+            and field.name != "calculation_lineage"
+            and (value := getattr(existing, field.name)) is not None
+        }
+    )
+    async_db_session.add(preloaded_record)
+    await async_db_session.commit()
+
+    result = await SqlAlchemyCostBasisTransactionRepository(
+        async_db_session
+    ).upsert_generated_booked_transaction(
+        _generated_cash_leg(
+            source_system=None,
+            gross_transaction_amount=Decimal("1095000"),
+        )
+    )
+    durable_row = (
+        (
+            await async_db_session.execute(
+                select(*DBTransaction.__table__.columns).where(
+                    DBTransaction.transaction_id == result.transaction_id
+                )
+            )
+        )
+        .mappings()
+        .one()
+    )
+
+    assert durable_row["source_system"] == "EXISTING_BOOKING_LEDGER"
+    assert durable_row["gross_transaction_amount"] == Decimal("1095000")
+    assert result.source_system == durable_row["source_system"]
+    assert result.gross_transaction_amount == durable_row["gross_transaction_amount"]
+    assert durable_row["payload_fingerprint"] == transaction_payload_fingerprint(
+        {
+            field_name: durable_row[field_name]
+            for field_name in TRANSACTION_PAYLOAD_MATERIAL_FIELDS
+            if field_name in DBTransaction.__table__.columns
+        }
     )

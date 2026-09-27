@@ -51,9 +51,6 @@ TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
     "src/services/persistence_service/app/repositories/portfolio_repository.py:create_or_update_portfolio": (
         "Portfolio",
     ),
-    "src/services/persistence_service/app/repositories/transaction_db_repo.py:create_or_update_transaction": (
-        "Transaction",
-    ),
     "src/services/query_service/app/repositories/buy_state_repository.py:get_accrued_offsets": (
         "AccruedIncomeOffsetState",
     ),

@@ -218,11 +218,12 @@ def _seed_valid_cost_ledger(connection) -> None:
             INSERT INTO transactions (
                 transaction_id, portfolio_id, instrument_id, security_id,
                 transaction_type, quantity, price, gross_transaction_amount,
-                trade_currency, currency, transaction_date
+                trade_currency, currency, transaction_date, payload_fingerprint
             ) VALUES (
                 'FINITE-TXN-001', 'FINITE-PORT-001', 'FINITE-BOND-001',
                 'FINITE-BOND-001', 'BUY', 10, 100, 1000, 'USD', 'USD',
-                TIMESTAMPTZ '2026-07-23 09:00:00+00'
+                TIMESTAMPTZ '2026-07-23 09:00:00+00',
+                'sha256:' || repeat('6', 64)
             )
             """
         )

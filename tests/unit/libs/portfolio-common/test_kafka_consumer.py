@@ -5,6 +5,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
 import pytest
 from portfolio_common.events import TransactionEvent
+from portfolio_common.exceptions import TransactionSemanticConflictError
 from portfolio_common.ingestion_lineage import ingestion_job_id_var
 from portfolio_common.kafka_consumer import (
     BaseConsumer,
@@ -1980,6 +1981,20 @@ async def test_classify_dlq_reason_code_timeout():
         classify_dlq_reason_code(RuntimeError("downstream timeout while reading response"))
         == "DOWNSTREAM_TIMEOUT"
     )
+
+
+async def test_transaction_semantic_conflict_preserves_reason_and_fingerprints() -> None:
+    error = TransactionSemanticConflictError(
+        semantic_key="transaction-persistence:v1:tenant-a:TX-001",
+        existing_payload_fingerprint="sha256:" + "a" * 64,
+        incoming_payload_fingerprint="sha256:" + "b" * 64,
+    )
+
+    assert classify_dlq_reason_code(error) == "TRANSACTION_SEMANTIC_CONFLICT"
+    assert error.existing_payload_fingerprint == "sha256:" + "a" * 64
+    assert error.incoming_payload_fingerprint == "sha256:" + "b" * 64
+    assert "existing_payload_fingerprint=sha256:" + "a" * 64 in str(error)
+    assert "incoming_payload_fingerprint=sha256:" + "b" * 64 in str(error)
 
 
 @pytest.mark.parametrize(

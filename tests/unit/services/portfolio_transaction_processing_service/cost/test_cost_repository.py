@@ -11,6 +11,10 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.domain.calculation_lineage import build_calculation_lineage
+from portfolio_common.domain.transaction import (
+    TRANSACTION_PAYLOAD_MATERIAL_FIELDS,
+    transaction_payload_fingerprint,
+)
 from portfolio_common.domain.transaction.numeric_policy import (
     COST_BASIS_STATE_LEDGER_OUTPUT_V1,
     TRANSACTION_COST_LEDGER_OUTPUT_V1,
@@ -1768,3 +1772,91 @@ async def test_upsert_booked_transaction_persists_only_canonical_table_fields() 
     assert parameters["linked_component_ids"] is None
     assert "brokerage" not in parameters
     assert "epoch" not in parameters
+
+
+@pytest.mark.parametrize(
+    ("persisted_source_system", "refresh_required"),
+    [("ORIGINAL_BOOKING_LEDGER", True), (None, False)],
+)
+async def test_generated_transaction_upsert_refreshes_payload_fingerprint_atomically(
+    persisted_source_system: str | None,
+    refresh_required: bool,
+) -> None:
+    db_session = AsyncMock()
+    repository = SqlAlchemyCostBasisTransactionRepository(db_session)
+    transaction = BookedTransaction(
+        transaction_id="BUY-001-CASHLEG",
+        portfolio_id="PORT_COST_01",
+        instrument_id="CASH-USD",
+        security_id="CASH-USD",
+        transaction_type="ADJUSTMENT",
+        transaction_date=datetime(2026, 4, 1, 9, 0, 0, tzinfo=UTC),
+        quantity=Decimal("0"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency="USD",
+        currency="USD",
+        cash_entry_mode="AUTO_GENERATE",
+        originating_transaction_id="BUY-001",
+        originating_transaction_type="BUY",
+        link_type="BUY_TO_CASH",
+        source_system=None,
+    )
+    persisted = DBTransaction(
+        transaction_id=transaction.transaction_id,
+        portfolio_id=transaction.portfolio_id,
+        instrument_id=transaction.instrument_id,
+        security_id=transaction.security_id,
+        transaction_type=transaction.transaction_type,
+        transaction_date=transaction.transaction_date,
+        quantity=transaction.quantity,
+        price=transaction.price,
+        gross_transaction_amount=transaction.gross_transaction_amount,
+        trade_currency=transaction.trade_currency,
+        currency=transaction.currency,
+        trade_fee=Decimal(0),
+        cash_entry_mode=transaction.cash_entry_mode,
+        originating_transaction_id=transaction.originating_transaction_id,
+        originating_transaction_type=transaction.originating_transaction_type,
+        link_type=transaction.link_type,
+        source_system=persisted_source_system,
+    )
+    expected_fingerprint = transaction_payload_fingerprint(
+        {
+            field_name: getattr(persisted, field_name)
+            for field_name in TRANSACTION_PAYLOAD_MATERIAL_FIELDS
+            if field_name in DBTransaction.__table__.columns
+        }
+    )
+    persisted.payload_fingerprint = (
+        "sha256:" + "a" * 64 if refresh_required else expected_fingerprint
+    )
+    persisted_row = {
+        column.name: getattr(persisted, column.name) for column in DBTransaction.__table__.columns
+    }
+    execute_result = MagicMock()
+    execute_result.scalar_one_or_none.return_value = persisted.transaction_id
+    snapshot_result = MagicMock()
+    snapshot_result.mappings.return_value.one.return_value = persisted_row
+    refresh_result = MagicMock()
+    db_session.execute.side_effect = (
+        [execute_result, snapshot_result, refresh_result]
+        if refresh_required
+        else [execute_result, snapshot_result]
+    )
+
+    await repository.upsert_generated_booked_transaction(transaction)
+
+    assert db_session.execute.await_count == (3 if refresh_required else 2)
+    upsert_statement = db_session.execute.await_args_list[0].args[0]
+    upsert_parameters = upsert_statement.compile().params
+    assert "RETURNING transactions.transaction_id" in str(upsert_statement)
+    assert upsert_parameters["payload_fingerprint"].startswith("sha256:")
+    assert "payload_fingerprint = excluded.payload_fingerprint" in str(upsert_statement)
+    snapshot_statement = db_session.execute.await_args_list[1].args[0]
+    assert "SELECT transactions.id" in str(snapshot_statement)
+
+    if refresh_required:
+        refresh_statement = db_session.execute.await_args_list[2].args[0]
+        refresh_parameters = refresh_statement.compile().params
+        assert refresh_parameters["payload_fingerprint"] == expected_fingerprint

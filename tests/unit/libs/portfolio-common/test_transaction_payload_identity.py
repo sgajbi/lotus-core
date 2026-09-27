@@ -1,0 +1,109 @@
+from datetime import UTC, datetime, timedelta, timezone
+from decimal import Decimal
+
+import pytest
+from portfolio_common.domain.transaction import (
+    TRANSACTION_PAYLOAD_MATERIAL_FIELDS,
+    TRANSACTION_PAYLOAD_NON_MATERIAL_FIELDS,
+    build_transaction_payload_identity,
+    transaction_payload_fingerprint,
+)
+from portfolio_common.events import TransactionEvent
+
+
+def _event(**updates: object) -> TransactionEvent:
+    payload: dict[str, object] = {
+        "transaction_id": "TX-PAYLOAD-001",
+        "portfolio_id": "PORT-001",
+        "tenant_id": "tenant-a",
+        "instrument_id": "INST-001",
+        "security_id": "SEC-001",
+        "transaction_date": datetime(2026, 9, 27, 10, 15, tzinfo=UTC),
+        "settlement_date": datetime(2026, 9, 29, 0, 0, tzinfo=UTC),
+        "transaction_type": "BUY",
+        "quantity": Decimal("10.0000000000"),
+        "price": Decimal("125.50"),
+        "gross_transaction_amount": Decimal("1255"),
+        "trade_currency": "USD",
+        "currency": "USD",
+        "brokerage": Decimal("2.50"),
+        "source_system": "BOOKING_SOURCE",
+        "source_transaction_reference": "BOOKING-001",
+    }
+    payload.update(updates)
+    return TransactionEvent.model_validate(payload)
+
+
+def test_transaction_payload_field_contract_classifies_every_event_field() -> None:
+    assert TRANSACTION_PAYLOAD_MATERIAL_FIELDS.isdisjoint(TRANSACTION_PAYLOAD_NON_MATERIAL_FIELDS)
+    assert set(TransactionEvent.model_fields) == (
+        TRANSACTION_PAYLOAD_MATERIAL_FIELDS
+        | (TRANSACTION_PAYLOAD_NON_MATERIAL_FIELDS & set(TransactionEvent.model_fields))
+    )
+
+
+def test_transaction_payload_identity_is_stable_for_metadata_and_timezone_only_changes() -> None:
+    original = _event(
+        correlation_id="corr-a",
+        traceparent="00-0123456789abcdef0123456789abcdef-0123456789abcdef-01",
+        epoch=1,
+        created_at=datetime(2026, 9, 27, 10, 16, tzinfo=UTC),
+    )
+    same_instant = _event(
+        tenant_id="tenant-b",
+        correlation_id="corr-b",
+        traceparent="00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01",
+        epoch=99,
+        created_at=datetime(2026, 9, 28, 11, 0, tzinfo=UTC),
+        transaction_date=datetime(
+            2026,
+            9,
+            27,
+            18,
+            15,
+            tzinfo=timezone(timedelta(hours=8)),
+        ),
+    )
+
+    original_identity = build_transaction_payload_identity(
+        original.model_dump(mode="python"), tenant_id="tenant-a"
+    )
+    other_tenant_identity = build_transaction_payload_identity(
+        same_instant.model_dump(mode="python"), tenant_id="tenant-b"
+    )
+
+    assert original_identity.payload_fingerprint == other_tenant_identity.payload_fingerprint
+    assert original_identity.semantic_key != other_tenant_identity.semantic_key
+    assert original_identity.payload_fingerprint == (
+        "sha256:0d3dc27caf1667513c34f0f1e406b4466bb977e759e4b7f685da06432deeddc8"
+    )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "changed_value"),
+    [
+        ("quantity", Decimal("11")),
+        ("trade_currency", "EUR"),
+        ("source_system", "CORRECTED_SOURCE"),
+        ("source_transaction_reference", "BOOKING-002"),
+        ("brokerage", Decimal("3.00")),
+    ],
+)
+def test_transaction_payload_identity_changes_for_material_restatement(
+    field_name: str,
+    changed_value: object,
+) -> None:
+    original = _event()
+    changed = _event(**{field_name: changed_value})
+
+    assert transaction_payload_fingerprint(original.model_dump(mode="python")) != (
+        transaction_payload_fingerprint(changed.model_dump(mode="python"))
+    )
+
+
+def test_transaction_payload_identity_rejects_unclassified_fields() -> None:
+    payload = _event().model_dump(mode="python")
+    payload["future_unclassified_field"] = "unsafe-default"
+
+    with pytest.raises(ValueError, match="future_unclassified_field"):
+        transaction_payload_fingerprint(payload)

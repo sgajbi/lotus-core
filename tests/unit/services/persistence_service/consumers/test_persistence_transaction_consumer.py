@@ -5,22 +5,33 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from portfolio_common.events import TransactionEvent
-from portfolio_common.idempotency_repository import IdempotencyRepository
+from portfolio_common.exceptions import TransactionSemanticConflictError
+from portfolio_common.idempotency_repository import (
+    IdempotencyRepository,
+    SemanticEventClaimOutcome,
+)
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.persistence_service.app.consumers.transaction_consumer import (
+    PortfolioNotFoundError,
     TransactionPersistenceConsumer,
 )
 from src.services.persistence_service.app.repositories.transaction_db_repo import (
     TransactionDBRepository,
     TransactionReferenceAvailability,
+    TransactionWriteOutcome,
 )
 
 # Mark all tests in this file as asyncio
 pytestmark = pytest.mark.asyncio
 TRANSACTION_CONSUMER_LOGGER = "src.services.persistence_service.app.consumers.transaction_consumer"
+
+
+class _OtherEvent(BaseModel):
+    pass
 
 
 @pytest.fixture
@@ -71,6 +82,10 @@ def mock_kafka_message(valid_transaction_event: TransactionEvent):
 def mock_dependencies():
     """A fixture to patch all external dependencies for a consumer test."""
     mock_repo = AsyncMock(spec=TransactionDBRepository)
+    mock_repo.create_or_update_transaction.return_value = TransactionWriteOutcome(
+        transaction=MagicMock(),
+        inserted=True,
+    )
     mock_outbox_repo = AsyncMock(spec=OutboxRepository)
     mock_idempotency_repo = AsyncMock(spec=IdempotencyRepository)
     mock_repo.resolve_portfolio_tenant.return_value = "tenant-test"
@@ -132,7 +147,9 @@ async def test_process_message_success(
             cash_account_exists=None,
         )
     )
-    mock_idempotency_repo.claim_event_processing.return_value = True
+    mock_idempotency_repo.claim_semantic_event_processing.return_value = (
+        SemanticEventClaimOutcome.CLAIMED
+    )
 
     # Use patch.object for robust mocking
     with patch.object(
@@ -158,14 +175,128 @@ async def test_process_message_success(
         assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
             "test-corr-id"
         )
-        mock_idempotency_repo.claim_event_processing.assert_awaited_once_with(
-            "UNIT_TEST_01",
-            "PORT_UT_01",
-            "persistence-transactions",
-            "test-corr-id",
-            tenant_id="tenant-test",
-        )
+        semantic_claim = mock_idempotency_repo.claim_semantic_event_processing.await_args.kwargs
+        assert semantic_claim == {
+            "event_id": "UNIT_TEST_01",
+            "portfolio_id": "PORT_UT_01",
+            "service_name": "persistence-transactions",
+            "semantic_key": "transaction-persistence:v1:tenant-test:UNIT_TEST_01",
+            "payload_fingerprint": semantic_claim["payload_fingerprint"],
+            "correlation_id": "test-corr-id",
+            "tenant_id": "tenant-test",
+        }
+        assert semantic_claim["payload_fingerprint"].startswith("sha256:")
         mock_send_to_dlq.assert_not_called()
+
+
+async def test_semantic_identity_requires_admitted_transaction(
+    transaction_consumer: TransactionPersistenceConsumer,
+    valid_transaction_event: TransactionEvent,
+) -> None:
+    for invalid_event in (
+        _OtherEvent(),
+        valid_transaction_event.model_copy(update={"tenant_id": None}),
+    ):
+        with pytest.raises(TypeError, match="requires an admitted tenant"):
+            transaction_consumer.semantic_idempotency_identity(invalid_event)
+
+
+async def test_prepare_event_rejects_non_transaction(
+    transaction_consumer: TransactionPersistenceConsumer,
+) -> None:
+    with pytest.raises(TypeError, match="requires a transaction event"):
+        await TransactionPersistenceConsumer.prepare_event.__wrapped__(
+            transaction_consumer,
+            AsyncMock(spec=AsyncSession),
+            _OtherEvent(),
+        )
+
+
+@pytest.mark.parametrize(
+    ("source_tenant_id", "expected_error"),
+    [
+        (None, PortfolioNotFoundError),
+        ("tenant-other", ValueError),
+    ],
+)
+async def test_prepare_event_fails_closed_without_matching_tenant_authority(
+    transaction_consumer: TransactionPersistenceConsumer,
+    valid_transaction_event: TransactionEvent,
+    mock_dependencies: dict,
+    source_tenant_id: str | None,
+    expected_error: type[Exception],
+) -> None:
+    mock_dependencies["repo"].resolve_portfolio_tenant.return_value = source_tenant_id
+
+    with pytest.raises(expected_error):
+        await TransactionPersistenceConsumer.prepare_event.__wrapped__(
+            transaction_consumer,
+            AsyncMock(spec=AsyncSession),
+            valid_transaction_event,
+        )
+
+
+async def test_process_message_skips_identical_semantic_replay(
+    transaction_consumer: TransactionPersistenceConsumer,
+    mock_kafka_message: MagicMock,
+    mock_dependencies: dict,
+) -> None:
+    mock_dependencies[
+        "idempotency_repo"
+    ].claim_semantic_event_processing.return_value = SemanticEventClaimOutcome.SEMANTIC_DUPLICATE
+
+    await transaction_consumer.process_message(mock_kafka_message)
+
+    mock_dependencies["repo"].create_or_update_transaction.assert_not_awaited()
+    mock_dependencies["outbox_repo"].create_outbox_event.assert_not_awaited()
+
+
+async def test_process_message_skips_outbox_for_durable_ledger_replay_after_claim_expiry(
+    transaction_consumer: TransactionPersistenceConsumer,
+    mock_kafka_message: MagicMock,
+    mock_dependencies: dict,
+) -> None:
+    mock_dependencies[
+        "repo"
+    ].resolve_transaction_reference_availability.return_value = TransactionReferenceAvailability(
+        portfolio_exists=True,
+        instrument_exists=True,
+        cash_account_exists=None,
+    )
+    mock_dependencies[
+        "idempotency_repo"
+    ].claim_semantic_event_processing.return_value = SemanticEventClaimOutcome.CLAIMED
+    mock_dependencies["repo"].create_or_update_transaction.return_value = TransactionWriteOutcome(
+        transaction=MagicMock(), inserted=False
+    )
+
+    await transaction_consumer.process_message(mock_kafka_message)
+
+    mock_dependencies["repo"].create_or_update_transaction.assert_awaited_once()
+    mock_dependencies["outbox_repo"].create_outbox_event.assert_not_awaited()
+
+
+async def test_process_message_rejects_materially_changed_semantic_replay(
+    transaction_consumer: TransactionPersistenceConsumer,
+    mock_kafka_message: MagicMock,
+    mock_dependencies: dict,
+) -> None:
+    idempotency = mock_dependencies["idempotency_repo"]
+    idempotency.claim_semantic_event_processing.return_value = (
+        SemanticEventClaimOutcome.SEMANTIC_CONFLICT
+    )
+    idempotency.resolve_semantic_payload_fingerprint.return_value = "sha256:" + "a" * 64
+
+    with pytest.raises(
+        TransactionSemanticConflictError,
+        match="TRANSACTION_SEMANTIC_CONFLICT",
+    ) as exc_info:
+        await transaction_consumer.process_message(mock_kafka_message)
+
+    assert exc_info.value.existing_payload_fingerprint == "sha256:" + "a" * 64
+    assert exc_info.value.incoming_payload_fingerprint.startswith("sha256:")
+    mock_dependencies["repo"].create_or_update_transaction.assert_not_awaited()
+    mock_dependencies["outbox_repo"].create_outbox_event.assert_not_awaited()
 
 
 async def test_legacy_v1_message_resolves_tenant_before_idempotency_and_persistence(
@@ -188,20 +319,22 @@ async def test_legacy_v1_message_resolves_tenant_before_idempotency_and_persiste
             cash_account_exists=None,
         )
     )
-    mock_dependencies["idempotency_repo"].claim_event_processing.return_value = True
+    mock_dependencies[
+        "idempotency_repo"
+    ].claim_semantic_event_processing.return_value = SemanticEventClaimOutcome.CLAIMED
 
     await transaction_consumer.process_message(message)
 
     mock_repo.resolve_portfolio_tenant.assert_awaited_once_with("PORT_UT_01")
     persisted_event = mock_repo.create_or_update_transaction.await_args.args[0]
     assert persisted_event.tenant_id == "tenant-test"
-    mock_dependencies["idempotency_repo"].claim_event_processing.assert_awaited_once_with(
-        "UNIT_TEST_01",
-        "PORT_UT_01",
-        "persistence-transactions",
-        "legacy-corr",
-        tenant_id="tenant-test",
-    )
+    semantic_claim = mock_dependencies[
+        "idempotency_repo"
+    ].claim_semantic_event_processing.await_args.kwargs
+    assert semantic_claim["event_id"] == "UNIT_TEST_01"
+    assert semantic_claim["semantic_key"] == ("transaction-persistence:v1:tenant-test:UNIT_TEST_01")
+    assert semantic_claim["tenant_id"] == "tenant-test"
+    assert semantic_claim["correlation_id"] == "legacy-corr"
 
 
 async def test_persisted_linked_transaction_retains_group_partition_identity(
@@ -258,7 +391,9 @@ async def test_process_message_uses_header_correlation_on_direct_path(
             cash_account_exists=None,
         )
     )
-    mock_idempotency_repo.claim_event_processing.return_value = True
+    mock_idempotency_repo.claim_semantic_event_processing.return_value = (
+        SemanticEventClaimOutcome.CLAIMED
+    )
 
     token = correlation_id_var.set("<not-set>")
     try:
@@ -269,13 +404,10 @@ async def test_process_message_uses_header_correlation_on_direct_path(
     assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
         "test-corr-id"
     )
-    mock_idempotency_repo.claim_event_processing.assert_awaited_once_with(
-        "UNIT_TEST_01",
-        "PORT_UT_01",
-        "persistence-transactions",
-        "test-corr-id",
-        tenant_id="tenant-test",
-    )
+    semantic_claim = mock_idempotency_repo.claim_semantic_event_processing.await_args.kwargs
+    assert semantic_claim["event_id"] == "UNIT_TEST_01"
+    assert semantic_claim["tenant_id"] == "tenant-test"
+    assert semantic_claim["correlation_id"] == "test-corr-id"
 
 
 # --- REVISED TEST ---

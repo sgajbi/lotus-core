@@ -154,6 +154,10 @@ async def test_claim_event_processing_returns_false_when_fence_exists(
             SemanticEventClaimOutcome.PHYSICAL_DUPLICATE,
         ),
         (
+            ("topic-0-42", "transaction:v1:P1:T2:0", "sha256:same"),
+            SemanticEventClaimOutcome.SEMANTIC_CONFLICT,
+        ),
+        (
             ("other-topic-2-7", "transaction:v1:P1:T1:0", "sha256:same"),
             SemanticEventClaimOutcome.SEMANTIC_DUPLICATE,
         ),
@@ -232,3 +236,78 @@ async def test_semantic_claim_fails_closed_when_conflict_row_is_not_visible(
             semantic_key="transaction:v1:P1:T1:0",
             payload_fingerprint="sha256:same",
         )
+
+
+async def test_semantic_claim_skips_unrelated_same_payload_fence(
+    repository: IdempotencyRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    insert_result = MagicMock()
+    insert_result.scalar_one_or_none.return_value = None
+    select_result = MagicMock()
+    select_result.all.return_value = [
+        ("unrelated-event", "unrelated-semantic-key", "sha256:same"),
+        ("other-event", "transaction:v1:P1:T1:0", "sha256:same"),
+    ]
+    mock_db_session.execute.side_effect = [insert_result, select_result]
+
+    outcome = await repository.claim_semantic_event_processing(
+        tenant_id="tenant-a",
+        event_id="topic-0-42",
+        portfolio_id="P1",
+        service_name="transaction-processing",
+        semantic_key="transaction:v1:P1:T1:0",
+        payload_fingerprint="sha256:same",
+    )
+
+    assert outcome is SemanticEventClaimOutcome.SEMANTIC_DUPLICATE
+
+
+@pytest.mark.parametrize(
+    ("fingerprints", "expected"),
+    [([], None), ([None], None), (["sha256:same"], "sha256:same")],
+)
+async def test_resolve_semantic_payload_fingerprint_returns_consistent_evidence(
+    repository: IdempotencyRepository,
+    mock_db_session: AsyncMock,
+    fingerprints: list[str | None],
+    expected: str | None,
+) -> None:
+    result = MagicMock()
+    result.all.return_value = fingerprints
+    mock_db_session.scalars.return_value = result
+
+    observed = await repository.resolve_semantic_payload_fingerprint(
+        tenant_id="tenant-a",
+        event_id="topic-0-42",
+        service_name="transaction-processing",
+        semantic_key="transaction:v1:P1:T1:0",
+    )
+
+    assert observed == expected
+
+
+async def test_resolve_semantic_payload_fingerprint_rejects_inconsistent_evidence(
+    repository: IdempotencyRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    result = MagicMock()
+    result.all.return_value = ["sha256:first", "sha256:second"]
+    mock_db_session.scalars.return_value = result
+
+    with pytest.raises(RuntimeError, match="inconsistent durable fingerprints"):
+        await repository.resolve_semantic_payload_fingerprint(
+            tenant_id="tenant-a",
+            event_id="topic-0-42",
+            service_name="transaction-processing",
+            semantic_key="transaction:v1:P1:T1:0",
+        )
+
+
+async def test_tenant_scoped_physical_conflict_target_uses_tenant_identity(
+    repository: IdempotencyRepository,
+) -> None:
+    target = repository._physical_conflict_target("tenant-a")
+
+    assert target["index_elements"] == ["tenant_id", "event_id", "service_name"]
+    assert "IS NOT NULL" in str(target["index_where"])

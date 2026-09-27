@@ -233,7 +233,8 @@ def _seed_book_scope(connection) -> None:
                 trade_currency,
                 currency,
                 transaction_date,
-                trade_fee
+                trade_fee,
+                payload_fingerprint
             ) VALUES
             (
                 'CA-SOURCE-DB-001',
@@ -247,7 +248,8 @@ def _seed_book_scope(connection) -> None:
                 'USD',
                 'USD',
                 TIMESTAMPTZ '2026-08-09 01:00:00+00',
-                0
+                0,
+                'sha256:' || repeat('b', 64)
             ),
             (
                 'CA-CROSS-BOOK-DB-001',
@@ -261,7 +263,8 @@ def _seed_book_scope(connection) -> None:
                 'CHF',
                 'CHF',
                 TIMESTAMPTZ '2026-08-09 01:00:00+00',
-                0
+                0,
+                'sha256:' || repeat('c', 64)
             ),
             (
                 'CA-TARGET-DB-001',
@@ -275,7 +278,8 @@ def _seed_book_scope(connection) -> None:
                 'USD',
                 'USD',
                 TIMESTAMPTZ '2026-08-09 01:00:00+00',
-                0
+                0,
+                'sha256:' || repeat('d', 64)
             ),
             (
                 'CA-UNEXPECTED-DB-001',
@@ -289,7 +293,8 @@ def _seed_book_scope(connection) -> None:
                 'USD',
                 'USD',
                 TIMESTAMPTZ '2026-08-09 01:00:00+00',
-                0
+                0,
+                'sha256:' || repeat('e', 64)
             )
             """
         )

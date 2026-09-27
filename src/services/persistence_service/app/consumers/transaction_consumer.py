@@ -5,6 +5,10 @@ from typing import Any, Dict, Optional
 from portfolio_common.config import KAFKA_TRANSACTIONS_PERSISTED_TOPIC
 from portfolio_common.domain.eventing import transaction_partition_key
 from portfolio_common.domain.tenant import TenantId
+from portfolio_common.domain.transaction import (
+    TransactionPayloadIdentity,
+    build_transaction_payload_identity,
+)
 from portfolio_common.event_mapping import transaction_event_v1_payload
 from portfolio_common.events import TransactionEvent
 from portfolio_common.logging_utils import log_operation_event
@@ -47,6 +51,17 @@ class TransactionPersistenceConsumer(GenericPersistenceConsumer):
     def tenant_scoped_idempotency(self) -> bool:
         return True
 
+    def semantic_idempotency_identity(
+        self,
+        event: BaseModel,
+    ) -> TransactionPayloadIdentity:
+        if not isinstance(event, TransactionEvent) or event.tenant_id is None:
+            raise TypeError("Transaction semantic identity requires an admitted tenant")
+        return build_transaction_payload_identity(
+            event.model_dump(mode="python"),
+            tenant_id=event.tenant_id,
+        )
+
     @retry(
         wait=wait_fixed(2),
         stop=stop_after_delay(10),
@@ -77,7 +92,11 @@ class TransactionPersistenceConsumer(GenericPersistenceConsumer):
         retry=retry_if_exception_type(PortfolioNotFoundError),
         reraise=True,
     )
-    async def handle_persistence(self, db_session: AsyncSession, event: TransactionEvent) -> Any:
+    async def handle_persistence(
+        self,
+        db_session: AsyncSession,
+        event: TransactionEvent,
+    ) -> TransactionEvent | None:
         """
         Checks for portfolio existence and persists the transaction.
         Returns the event for outbox creation.
@@ -132,11 +151,16 @@ class TransactionPersistenceConsumer(GenericPersistenceConsumer):
                 downstream_lifecycle_blocked=(cash_account_decision.downstream_lifecycle_blocked),
             )
 
-        await repo.create_or_update_transaction(event)
-        return event
+        outcome = await repo.create_or_update_transaction(event)
+        return event if outcome.inserted else None
 
-    def get_outbox_event(self, persisted_object: TransactionEvent) -> Optional[Dict[str, Any]]:
+    def get_outbox_event(
+        self,
+        persisted_object: TransactionEvent | None,
+    ) -> Optional[Dict[str, Any]]:
         """Creates the completion event to be sent via the outbox."""
+        if persisted_object is None:
+            return None
         return {
             "aggregate_type": "RawTransaction",
             "aggregate_id": str(persisted_object.portfolio_id),

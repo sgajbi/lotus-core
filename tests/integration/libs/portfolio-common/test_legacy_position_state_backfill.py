@@ -90,10 +90,11 @@ async def test_backfill_restores_missing_snapshot_and_history_state_without_over
             INSERT INTO transactions (
                 transaction_id, portfolio_id, instrument_id, security_id,
                 transaction_type, quantity, price, gross_transaction_amount,
-                trade_currency, currency, transaction_date
+                trade_currency, currency, transaction_date, payload_fingerprint
             ) VALUES (
                 'LEGACY-TXN-2', 'LEGACY-HISTORY', 'LEGACY-SEC-2', 'LEGACY-SEC-2',
-                'BUY', 4, 10, 40, 'USD', 'USD', TIMESTAMPTZ '2026-01-05 00:00:00+00'
+                'BUY', 4, 10, 40, 'USD', 'USD', TIMESTAMPTZ '2026-01-05 00:00:00+00',
+                'sha256:' || repeat('1', 64)
             )
             """
         )

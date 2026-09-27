@@ -932,6 +932,60 @@ sets first; downgrade fails closed if cross-tenant physical or semantic keys wou
 legacy global key. Reconcile such collisions from authoritative source evidence or retain the new
 revision—never delete fences or invent tenant ownership to force rollback.
 
+### Source-transaction semantic conflict
+
+Persistence rejects a repeated `(tenant_id, transaction_id)` when its authoritative economic
+payload fingerprint differs from the fingerprint retained on the transaction ledger. The durable
+ledger comparison remains effective after transient `processed_events` retention expires and is
+reported as `TRANSACTION_SEMANTIC_CONFLICT`. An identical economic replay is a complete no-op: it
+does not mutate the ledger or publish another `RawTransactionPersisted` outbox event. Changes only
+to correlation id, event creation time, or replay epoch do not create a conflict. Moving the same
+source transaction ID between two portfolios admitted to the same tenant is a material payload
+change and uses this semantic-conflict remediation path. A foreign-tenant reuse of the globally
+fenced ID, or a mismatch in deterministic generated-child ownership, remains an identity collision
+and must not be relabeled as an ordinary correction candidate.
+
+Migration `c173b2c3d534` is a quiesced compatibility-set cutover, not a mixed-version rolling
+migration. Before upgrade, stop both `persistence-service` and
+`portfolio-transaction-processing`, wait for their database sessions and in-flight generated-child
+work to drain, and retain both consumer groups' offsets and lag evidence. Apply the migration,
+deploy the new persistence and transaction-processing writer set, and only then resume either
+consumer. A predecessor transaction processor omits the new non-null fingerprint when inserting a
+generated child and cannot atomically refresh it when generated economics change; leaving it live
+can therefore fail new child writes or retain a stale identity after the schema cutover.
+
+The migration backfills ordinary source fingerprints from retained immutable
+`RawTransactionPersisted` outbox payloads under the transaction writer fence and also backfills
+matching persistence semantic evidence. Repeated identical source outbox rows are accepted;
+malformed, portfolio-mismatched, conflicting, or missing ordinary-source evidence fails the
+migration closed. Canonically identified processor-generated settlement and accrued-interest
+children use their generated ledger row as their migration authority, and later generated-child
+upserts refresh that fingerprint atomically from the merged durable row. This includes nullable
+material fields omitted by the incoming generated calculation and retained by PostgreSQL, and
+material economics changed while the row is already loaded in the writer session. The fingerprint
+uses a raw post-upsert ledger snapshot in the caller transaction, not cached ORM state. Current
+enriched transaction columns and replaceable
+`transaction_costs` rows are not source payload evidence and are never used to reconstruct an
+ordinary source fingerprint. The migration stages the relevant immutable outbox evidence in one
+indexed temporary relation before its bounded transaction batches; it does not rescan the full
+outbox for every batch. The temporary relation is removed inside the migration transaction.
+
+When this conflict occurs, retain the message, correlation evidence, existing transaction, named
+cost rows, and source-system payload for reconciliation. Do not modify the transaction, delete its
+fingerprint, or clear idempotency rows to retry a changed payload. Escalate the mismatch to the
+governed correction workflow owner; ordinary replay has no authority to replace source history.
+Rollback preserves the semantic evidence while removing the ledger column, so operators must
+continue treating any retained conflict as unresolved during a deliberate downgrade.
+
+If `c173b2c3d534` reports missing or conflicting immutable source evidence, stop the rollout and
+reconcile the named transaction IDs against the authoritative booking-source export and retained
+outbox history. Do not insert a synthetic outbox payload or copy the current enriched row into the
+fingerprint column to force migration completion.
+
+For rollback, stop both new writer sets before downgrading. Do not resume either predecessor until
+the downgrade completes and generated-child identities have been reconciled against retained source
+and processing evidence.
+
 The reprocessing-job support listing projects this same `lease_expires_at` authority: a
 `PROCESSING` row is `STALE_PROCESSING` only when its database-clock lease has expired. The caller's
 `stale_threshold_minutes` never marks a live leased claim stale and remains applicable only to
