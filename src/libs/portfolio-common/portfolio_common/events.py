@@ -671,6 +671,7 @@ class FinancialReconciliationRequestedEvent(CoreEventModel):
     reconciliation execution.
     """
 
+    tenant_id: str
     portfolio_id: str
     business_date: date
     epoch: int = 0
@@ -694,6 +695,7 @@ class FinancialReconciliationCompletedEvent(CoreEventModel):
     `(portfolio_id, business_date, epoch)` scope.
     """
 
+    tenant_id: str
     portfolio_id: str
     business_date: date
     epoch: int = 0
@@ -714,6 +716,7 @@ class PortfolioDayControlsEvaluatedEvent(CoreEventModel):
     Canonical reconciliation-owned control outcome for a portfolio business day.
     """
 
+    tenant_id: str
     portfolio_id: str
     business_date: date
     epoch: int = 0

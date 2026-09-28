@@ -233,7 +233,9 @@ reconciliation behavior is not incidental implementation detail in `lotus-core`.
 
 `processed_events` separates tenant-owned transaction fences from deliberately global event
 families. Transaction persistence, combined transaction processing, and cashflow fences require a
-normalized tenant and enforce physical and semantic uniqueness within that tenant. Global price and
+normalized tenant and enforce physical and semantic uniqueness within that tenant. Financial
+reconciliation request fences also require the event's source-owned tenant, so the same broker
+identity in one tenant cannot suppress another tenant's authorized replay. Global price and
 FX fences, plus existing portfolio v1 fences, retain null tenant attribution and their own partial
 unique keys. During the compatible transaction-v1 transition, consumers derive tenant from durable
 portfolio ownership before claiming a fence; payloads do not silently add a field that older
@@ -241,6 +243,14 @@ strict consumers would reject. An asserted tenant must match the portfolio owner
 migration derives existing transaction ownership only from the persisted portfolio and stops when
 any row is unattributable; rollback also stops when cross-tenant keys cannot safely return to the
 former global constraint.
+
+`financial_reconciliation_runs` and `financial_reconciliation_findings` persist explicit
+`TENANT` or historical `ESTATE` authority. Tenant rows carry normalized `tenant_id`, use composite
+portfolio ownership foreign keys, and place tenant first in operational indexes. New service and
+corporate-action writes are always tenant-owned. Portfolio-null history remains `ESTATE` instead of
+being guessed into a tenant and is excluded from tenant-facing APIs. Dedupe keys are unique per
+tenant; downgrade stops if retained cross-tenant keys cannot be represented by the former global
+unique index or if a tenant-wide run would lose its authority classification.
 
 ## Model rules that matter
 

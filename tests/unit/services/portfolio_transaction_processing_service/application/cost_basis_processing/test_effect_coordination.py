@@ -6,6 +6,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.infrastructure.persistence.transaction_identity_guard import (
     GeneratedTransactionIdentityCollisionError,
 )
@@ -23,6 +24,8 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisTransactionStatePort,
     CostProcessingEffectStagingPort,
 )
+
+TENANT_ID = TenantId("tenant-test")
 
 
 def _transaction(
@@ -65,6 +68,7 @@ async def test_effect_coordination_links_and_stages_generated_cash_leg() -> None
     effect_stager = AsyncMock(spec=CostProcessingEffectStagingPort)
 
     result = await coordinate_cost_processing_effects(
+        tenant_id=TENANT_ID,
         processed_transactions=[product_leg],
         instrument_updates=[],
         source_epoch=7,
@@ -116,6 +120,7 @@ async def test_effect_coordination_emits_separate_redemption_interest_income() -
     transaction_state = AsyncMock(spec=CostBasisTransactionStatePort)
 
     result = await coordinate_cost_processing_effects(
+        tenant_id=TENANT_ID,
         processed_transactions=[product_leg],
         instrument_updates=[],
         source_epoch=4,
@@ -179,6 +184,7 @@ async def test_redemption_interest_collision_prevents_effect_staging() -> None:
         match="generated_transaction_identity_collision",
     ):
         await coordinate_cost_processing_effects(
+            tenant_id=TENANT_ID,
             processed_transactions=[product_leg],
             instrument_updates=[],
             source_epoch=4,
@@ -214,6 +220,7 @@ async def test_effect_coordination_supersedes_removed_redemption_interest_with_z
     )
 
     result = await coordinate_cost_processing_effects(
+        tenant_id=TENANT_ID,
         processed_transactions=[product_leg],
         instrument_updates=[],
         source_epoch=5,
@@ -259,6 +266,7 @@ async def test_corrected_zero_net_redemption_clears_prior_interest_cash_link() -
     transaction_state.get_booked_transaction.side_effect = [None, prior_interest]
 
     result = await coordinate_cost_processing_effects(
+        tenant_id=TENANT_ID,
         processed_transactions=[corrected],
         instrument_updates=[],
         source_epoch=6,
@@ -298,6 +306,7 @@ async def test_correction_neutralizes_interest_child_after_leaving_redemption() 
     transaction_state.get_booked_transaction.side_effect = [None, prior_interest]
 
     result = await coordinate_cost_processing_effects(
+        tenant_id=TENANT_ID,
         processed_transactions=[corrected],
         instrument_updates=[],
         source_epoch=6,
@@ -350,6 +359,7 @@ async def test_effect_coordination_reconciles_corporate_action_group_once() -> N
     observer = MagicMock()
 
     result = await coordinate_cost_processing_effects(
+        tenant_id=TENANT_ID,
         processed_transactions=[source, target],
         instrument_updates=[],
         source_epoch=None,
@@ -372,6 +382,7 @@ async def test_effect_coordination_stages_instrument_updates_and_count() -> None
     effect_stager = AsyncMock(spec=CostProcessingEffectStagingPort)
 
     result = await coordinate_cost_processing_effects(
+        tenant_id=TENANT_ID,
         processed_transactions=[],
         instrument_updates=[instrument],
         source_epoch=None,

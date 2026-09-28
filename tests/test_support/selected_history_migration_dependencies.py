@@ -1,9 +1,11 @@
-"""Isolate older migration rollbacks from newer selected-history foreign keys.
+"""Isolate older migration rollbacks from newer portfolio-tenant foreign keys.
 
 Alembic normally downgrades c171 before c168/c118. Historical migration tests
 invoke the older revisions directly against the current schema, so they must
-temporarily remove only the two newer foreign keys that depend on c168's
-portfolio tenant uniqueness constraint, then restore and verify them.
+temporarily remove the verified newer foreign keys that depend on c168's
+portfolio tenant uniqueness constraint, then restore and verify them. This now
+includes selected-history and financial-reconciliation authority introduced by
+later revisions.
 """
 
 from __future__ import annotations
@@ -20,10 +22,18 @@ _DEPENDENCIES = (
         "portfolio_selected_history_valuation_states",
         "fk_portfolio_selected_history_valuation_states_tenant_portfolio",
     ),
+    (
+        "financial_reconciliation_runs",
+        "fk_fin_recon_runs_tenant_portfolio",
+    ),
+    (
+        "financial_reconciliation_findings",
+        "fk_fin_recon_findings_tenant_portfolio",
+    ),
 )
 
 
-def _assert_selected_history_foreign_keys(connection: Connection) -> None:
+def _assert_portfolio_tenant_foreign_keys(connection: Connection) -> None:
     for table_name, constraint_name in _DEPENDENCIES:
         matches = [
             foreign_key
@@ -42,9 +52,9 @@ def _assert_selected_history_foreign_keys(connection: Connection) -> None:
 
 
 def suspend_selected_history_portfolio_foreign_keys(connection: Connection) -> None:
-    """Drop only the verified newer dependencies before an older direct rollback."""
+    """Drop verified newer tenant dependencies before an older direct rollback."""
 
-    _assert_selected_history_foreign_keys(connection)
+    _assert_portfolio_tenant_foreign_keys(connection)
     for table_name, _constraint_name in _DEPENDENCIES:
         if connection.scalar(text(f'SELECT EXISTS (SELECT 1 FROM "{table_name}" LIMIT 1)')):
             raise AssertionError(f"cannot suspend tenant authority with rows in {table_name}")
@@ -63,4 +73,4 @@ def restore_selected_history_portfolio_foreign_keys(connection: Connection) -> N
                 "REFERENCES portfolios (tenant_id, portfolio_id)"
             )
         )
-    _assert_selected_history_foreign_keys(connection)
+    _assert_portfolio_tenant_foreign_keys(connection)

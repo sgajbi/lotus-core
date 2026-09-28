@@ -11,6 +11,7 @@ from portfolio_common.database_models import (
     FinancialReconciliationRun,
     PortfolioTimeseries,
 )
+from portfolio_common.domain.tenant import TenantId
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -23,9 +24,17 @@ class FxRateLookupKey:
 
 
 class ReconciliationRunWriter(Protocol):
+    async def reconciliation_scope_exists(
+        self,
+        *,
+        tenant_id: TenantId,
+        portfolio_id: str | None,
+    ) -> bool: ...
+
     async def create_run(
         self,
         *,
+        tenant_id: TenantId,
         reconciliation_type: str,
         portfolio_id: str | None,
         business_date: date | None,
@@ -39,6 +48,8 @@ class ReconciliationRunWriter(Protocol):
 
     async def add_findings(
         self,
+        *,
+        tenant_id: TenantId,
         findings: Sequence[FinancialReconciliationFinding],
     ) -> None: ...
 
@@ -56,6 +67,7 @@ class TransactionCashflowEvidenceReader(Protocol):
     async def fetch_transaction_cashflow_rows(
         self,
         *,
+        tenant_id: TenantId,
         portfolio_id: str | None,
         business_date: date | None,
     ) -> Any: ...
@@ -65,6 +77,7 @@ class PositionValuationEvidenceReader(Protocol):
     async def fetch_position_valuation_rows(
         self,
         *,
+        tenant_id: TenantId,
         portfolio_id: str | None,
         business_date: date | None,
         epoch: int | None,
@@ -75,6 +88,7 @@ class TimeseriesIntegrityEvidenceReader(Protocol):
     async def fetch_portfolio_timeseries_rows(
         self,
         *,
+        tenant_id: TenantId,
         portfolio_id: str | None,
         business_date: date | None,
         epoch: int | None,
@@ -83,6 +97,7 @@ class TimeseriesIntegrityEvidenceReader(Protocol):
     async def fetch_position_timeseries_aggregates(
         self,
         *,
+        tenant_id: TenantId,
         portfolio_id: str | None,
         business_date: date | None,
         epoch: int | None,
@@ -91,6 +106,7 @@ class TimeseriesIntegrityEvidenceReader(Protocol):
     async def fetch_snapshot_counts(
         self,
         *,
+        tenant_id: TenantId,
         portfolio_id: str | None,
         business_date: date | None,
         epoch: int | None,
@@ -99,6 +115,7 @@ class TimeseriesIntegrityEvidenceReader(Protocol):
     async def fetch_authoritative_position_timeseries_rows(
         self,
         *,
+        tenant_id: TenantId,
         portfolio_id: str,
         business_date: date,
         epoch: int,
@@ -107,6 +124,7 @@ class TimeseriesIntegrityEvidenceReader(Protocol):
     async def fetch_authoritative_snapshot_count(
         self,
         *,
+        tenant_id: TenantId,
         portfolio_id: str,
         business_date: date,
         epoch: int,

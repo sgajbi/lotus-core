@@ -9,9 +9,9 @@
   "entries": [
     {
       "path": "src/libs/portfolio-common/portfolio_common/database_models.py",
-      "lines": 5507,
+      "lines": 5432,
       "owner": "lotus-core maintainers",
-      "rationale": "Legacy shared ORM monolith; bounded-context decomposition remains tracked by #462. Ingestion-job and portfolio-aggregation-job constraints and indexes now live in owning schema modules, finite numeric constraint construction lives with the governed numeric type, and this lower ceiling prevents extracted surfaces returning to the monolith.",
+      "rationale": "Legacy shared ORM monolith; bounded-context decomposition remains tracked by #462. Ingestion-job, portfolio-aggregation-job and financial-reconciliation constraints and indexes now live in owning schema modules, finite numeric checks remain directly visible to the persistence guard, and this lower ceiling prevents extracted surfaces returning to the monolith.",
       "issue": "#462",
       "expires_on": "2027-02-28"
     },
@@ -33,7 +33,7 @@
     },
     {
       "path": "src/services/query_control_plane_service/app/application/operations/service.py",
-      "lines": 2032,
+      "lines": 2010,
       "owner": "lotus-core maintainers",
       "rationale": "Legacy QCP operations application service pending route-family decomposition.",
       "issue": "#462",
@@ -41,7 +41,7 @@
     },
     {
       "path": "src/services/query_control_plane_service/app/infrastructure/operations/repository.py",
-      "lines": 1850,
+      "lines": 1841,
       "owner": "lotus-core maintainers",
       "rationale": "Legacy QCP operations repository pending route-family decomposition.",
       "issue": "#462",

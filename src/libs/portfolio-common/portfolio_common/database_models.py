@@ -40,6 +40,10 @@ from .financial_numeric import (
 from .financial_numeric import (
     finite_numeric_check_constraint as _finite_numeric_check_constraint,
 )
+from .financial_reconciliation_schema import (
+    financial_reconciliation_finding_table_args,
+    financial_reconciliation_run_table_args,
+)
 from .ingestion_job_schema import ingestion_job_table_args
 from .processed_event_schema import processed_event_table_args
 from .source_lifecycle_predicates import (
@@ -5302,6 +5306,13 @@ class FinancialReconciliationRun(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     run_id = Column(String, unique=True, index=True, nullable=False)
+    authority_scope = Column(
+        String(16),
+        nullable=False,
+        default="TENANT",
+        server_default="TENANT",
+    )
+    tenant_id = Column(String(128), nullable=True)
     reconciliation_type = Column(String, nullable=False, index=True)
     portfolio_id = Column(String, nullable=True, index=True)
     business_date = Column(Date, nullable=True, index=True)
@@ -5309,7 +5320,7 @@ class FinancialReconciliationRun(Base):
     aggregation_revision = Column(Integer, nullable=True)
     status = Column(String, nullable=False, default="RUNNING", server_default="RUNNING", index=True)
     requested_by = Column(String, nullable=True)
-    dedupe_key = Column(String, nullable=True, unique=True, index=True)
+    dedupe_key = Column(String, nullable=True)
     correlation_id = Column(String, nullable=True)
     tolerance = Column(ExactNumeric(18, 10), nullable=True)
     summary = Column(JSON, nullable=True)
@@ -5321,7 +5332,10 @@ class FinancialReconciliationRun(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    __table_args__ = (
+    __table_args__ = financial_reconciliation_run_table_args(
+        row_id=id,
+        started_at=started_at,
+    ) + (
         _finite_numeric_check_constraint(
             "ck_fin_recon_tolerance_finite",
             "tolerance",
@@ -5329,60 +5343,6 @@ class FinancialReconciliationRun(Base):
         CheckConstraint(
             "tolerance >= 0",
             name="ck_fin_recon_tolerance_nonnegative",
-        ),
-        CheckConstraint(
-            "aggregation_revision IS NULL OR aggregation_revision >= 0",
-            name="ck_fin_recon_aggregation_revision_nonnegative",
-        ),
-        Index(
-            "ix_fin_recon_scope_revision_type",
-            "portfolio_id",
-            "business_date",
-            "epoch",
-            "aggregation_revision",
-            "reconciliation_type",
-        ),
-        Index(
-            "ix_financial_reconciliation_runs_type_status_started_at",
-            "reconciliation_type",
-            "status",
-            started_at.desc(),
-        ),
-        Index(
-            "ix_financial_reconciliation_runs_port_status_started_id",
-            "portfolio_id",
-            "status",
-            started_at.desc(),
-            id.asc(),
-        ),
-        Index(
-            "ix_financial_reconciliation_runs_port_type_started_id",
-            "portfolio_id",
-            "reconciliation_type",
-            started_at.desc(),
-            id.desc(),
-        ),
-        Index(
-            "ix_fin_recon_runs_port_corr_started_id",
-            "portfolio_id",
-            "correlation_id",
-            started_at.desc(),
-            id.asc(),
-        ),
-        Index(
-            "ix_fin_recon_runs_port_req_by_started_id",
-            "portfolio_id",
-            "requested_by",
-            started_at.desc(),
-            id.asc(),
-        ),
-        Index(
-            "ix_fin_recon_runs_port_date_epoch_started_id",
-            "portfolio_id",
-            "business_date",
-            "epoch",
-            started_at.desc(),
-            id.desc(),
         ),
     )
 
@@ -5396,6 +5356,13 @@ class FinancialReconciliationFinding(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     finding_id = Column(String, unique=True, index=True, nullable=False)
+    authority_scope = Column(
+        String(16),
+        nullable=False,
+        default="TENANT",
+        server_default="TENANT",
+    )
+    tenant_id = Column(String(128), nullable=True)
     run_id = Column(
         String,
         ForeignKey("financial_reconciliation_runs.run_id"),
@@ -5428,26 +5395,10 @@ class FinancialReconciliationFinding(Base):
     repair_recommendation = Column(String(100), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
-    __table_args__ = (
-        CheckConstraint(
-            "btrim(owner) <> ''",
-            name="ck_fin_recon_finding_owner_nonempty",
-        ),
-        CheckConstraint(
-            "resolution_state IN ('OPEN', 'IN_PROGRESS', 'RESOLVED', 'WAIVED', 'SUPPRESSED')",
-            name="ck_fin_recon_finding_resolution_state",
-        ),
-        CheckConstraint(
-            "("
-            "resolution_state IN ('OPEN', 'IN_PROGRESS') "
-            "AND resolution_actor IS NULL AND resolved_at IS NULL"
-            ") OR ("
-            "resolution_state IN ('RESOLVED', 'WAIVED', 'SUPPRESSED') "
-            "AND resolution_actor IS NOT NULL AND btrim(resolution_actor) <> '' "
-            "AND resolved_at IS NOT NULL AND resolved_at >= created_at"
-            ")",
-            name="ck_fin_recon_finding_resolution_evidence",
-        ),
+    __table_args__ = financial_reconciliation_finding_table_args(
+        row_id=id,
+        created_at=created_at,
+    ) + (
         _finite_numeric_check_constraint(
             "ck_fin_recon_finding_tolerance_finite",
             "tolerance",
@@ -5459,32 +5410,6 @@ class FinancialReconciliationFinding(Base):
         _finite_numeric_check_constraint(
             "ck_fin_recon_finding_observed_delta_finite",
             "observed_delta",
-        ),
-        CheckConstraint(
-            "btrim(repair_recommendation) <> ''",
-            name="ck_fin_recon_finding_repair_nonempty",
-        ),
-        Index(
-            "ix_financial_reconciliation_findings_run_severity_type_id",
-            "run_id",
-            "severity",
-            "finding_type",
-            id.asc(),
-        ),
-        Index(
-            "ix_financial_reconciliation_findings_run_severity_created_id",
-            "run_id",
-            "severity",
-            created_at.desc(),
-            id.desc(),
-        ),
-        Index(
-            "ix_fin_recon_findings_run_resolution_severity_created_id",
-            "run_id",
-            "resolution_state",
-            "severity",
-            created_at.asc(),
-            id.asc(),
         ),
     )
 

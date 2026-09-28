@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import patch
 
+from portfolio_common.domain.tenant import TenantId
+
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     PrometheusCorporateActionReconciliationObserver,
@@ -36,6 +38,7 @@ def _observation(
     )
     return CorporateActionReconciliationObservation(
         key=CorporateActionReconciliationKey(
+            tenant_id=TenantId("tenant-test"),
             portfolio_id="PORT_CA_01",
             linked_transaction_group_id="LTG-CA-01",
             parent_event_reference="CA-PARENT-01",

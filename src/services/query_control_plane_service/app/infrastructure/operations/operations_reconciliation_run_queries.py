@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from portfolio_common.database_models import FinancialReconciliationRun
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy import case
 
 
@@ -73,6 +74,7 @@ def apply_reconciliation_run_attribute_scope(
 def apply_reconciliation_run_scope(
     stmt,
     *,
+    tenant_id: TenantId,
     portfolio_id: str,
     run_id: str | None = None,
     correlation_id: str | None = None,
@@ -85,7 +87,11 @@ def apply_reconciliation_run_scope(
     as_of: datetime | None = None,
     include_started_as_of: bool = False,
 ):
-    stmt = stmt.where(FinancialReconciliationRun.portfolio_id == portfolio_id)
+    stmt = stmt.where(
+        FinancialReconciliationRun.authority_scope == "TENANT",
+        FinancialReconciliationRun.tenant_id == tenant_id.value,
+        FinancialReconciliationRun.portfolio_id == portfolio_id,
+    )
     stmt = apply_reconciliation_run_time_scope(
         stmt,
         as_of=as_of,

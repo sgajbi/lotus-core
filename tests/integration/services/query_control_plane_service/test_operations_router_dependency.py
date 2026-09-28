@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 import pytest_asyncio
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_control_plane_service.app.application.operations.errors import (
@@ -18,7 +19,7 @@ from src.services.query_control_plane_service.app.routers.operations import (
     get_load_run_progress,
     parse_required_iso_date,
 )
-from tests.test_support.tenant import TEST_TENANT_HEADERS
+from tests.test_support.tenant import TEST_TENANT_HEADERS, TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
@@ -211,6 +212,7 @@ async def test_support_overview_success(async_test_client):
     assert "X-Correlation-ID" in response.headers
     mock_service.get_support_overview.assert_awaited_once_with(
         portfolio_id="P1",
+        tenant_id=TenantId(TEST_TENANT_ID),
         as_of_date=date(2025, 8, 30),
         stale_threshold_minutes=30,
         failed_window_hours=48,
@@ -300,6 +302,7 @@ async def test_support_overview_defaults_apply(async_test_client):
     assert body["failed_window_hours"] == 24
     mock_service.get_support_overview.assert_awaited_once_with(
         portfolio_id="P1",
+        tenant_id=TenantId(TEST_TENANT_ID),
         as_of_date=None,
         stale_threshold_minutes=15,
         failed_window_hours=24,
@@ -394,6 +397,7 @@ async def test_portfolio_readiness_success(async_test_client):
     assert response.json()["missing_historical_fx_dependencies"]["missing_count"] == 1
     mock_service.get_portfolio_readiness.assert_awaited_once_with(
         portfolio_id="P1",
+        tenant_id=TenantId(TEST_TENANT_ID),
         as_of_date=date(2026, 3, 28),
         stale_threshold_minutes=30,
         failed_window_hours=48,
@@ -449,6 +453,7 @@ async def test_portfolio_readiness_defaults_apply(async_test_client):
     assert body["publish_allowed"] is True
     mock_service.get_portfolio_readiness.assert_awaited_once_with(
         portfolio_id="P1",
+        tenant_id=TenantId(TEST_TENANT_ID),
         as_of_date=None,
         stale_threshold_minutes=15,
         failed_window_hours=24,
@@ -1290,6 +1295,7 @@ async def test_reconciliation_runs_success(async_test_client):
     assert response.json()["items"][0]["normalized_reconciliation_status"] == "BLOCKED"
     mock_service.get_reconciliation_runs.assert_awaited_once_with(
         portfolio_id="P1",
+        tenant_id=TenantId(TEST_TENANT_ID),
         skip=0,
         limit=100,
         run_id="recon_1234567890abcdef",
@@ -1386,6 +1392,7 @@ async def test_reconciliation_findings_success(async_test_client):
     assert response.json()["items"][0]["owner"] == "TRANSACTION_OPERATIONS"
     mock_service.get_reconciliation_findings.assert_awaited_once_with(
         portfolio_id="P1",
+        tenant_id=TenantId(TEST_TENANT_ID),
         run_id="recon_1234567890abcdef",
         limit=50,
         finding_id="rf_1234567890abcdef",

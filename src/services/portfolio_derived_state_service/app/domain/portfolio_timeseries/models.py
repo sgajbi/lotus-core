@@ -92,6 +92,7 @@ class PortfolioPositionContribution:
 class PortfolioAggregationCompletion:
     """Portfolio-day aggregation identity ready for durable event staging."""
 
+    tenant_id: TenantId
     portfolio_id: str
     aggregation_date: date
     epoch: int

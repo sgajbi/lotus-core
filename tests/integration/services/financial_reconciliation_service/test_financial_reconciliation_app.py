@@ -22,6 +22,7 @@ from portfolio_common.enterprise_readiness import (
     _enterprise_auth_context_signature,
     _normalize_headers,
 )
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.financial_reconciliation_service.app.main import app, lifespan
@@ -30,10 +31,14 @@ from tests.test_support.tenant import TEST_TENANT_HEADERS, TEST_TENANT_ID
 pytestmark = pytest.mark.asyncio
 
 
-def _enterprise_headers(capabilities: str) -> dict[str, str]:
+def _enterprise_headers(
+    capabilities: str,
+    *,
+    tenant_id: str = TEST_TENANT_ID,
+) -> dict[str, str]:
     headers = {
         "X-Actor-Id": "actor-1",
-        "X-Tenant-Id": TEST_TENANT_ID,
+        "X-Tenant-Id": tenant_id,
         "X-Role": "ops",
         "X-Correlation-Id": "corr-1",
         "X-Service-Identity": "lotus-gateway",
@@ -79,10 +84,15 @@ async def ensure_reconciliation_tables(async_db_session: AsyncSession):
     yield
 
 
-async def _seed_portfolio(async_db_session: AsyncSession, portfolio_id: str) -> None:
+async def _seed_portfolio(
+    async_db_session: AsyncSession,
+    portfolio_id: str,
+    *,
+    tenant_id: str = TEST_TENANT_ID,
+) -> None:
     async_db_session.add(
         Portfolio(
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=tenant_id,
             portfolio_id=portfolio_id,
             base_currency="USD",
             open_date=date(2020, 1, 1),
@@ -228,7 +238,14 @@ async def test_openapi_includes_reconciliation_examples(async_test_client: httpx
 
     assert "portfolio_day_scope" in request_examples
     assert request_examples["portfolio_day_scope"]["value"]["portfolio_id"] == "PORT-OPS-001"
+    assert request_examples["all_portfolios_day_scope"]["summary"] == "Tenant-wide day scan"
     assert response_example["run_id"] == "FRR-20260306-0001"
+    assert transaction_cashflow["responses"]["404"]["content"]["application/json"]["example"] == {
+        "detail": {
+            "code": "RECONCILIATION_SCOPE_NOT_FOUND",
+            "message": "Requested reconciliation scope was not found.",
+        }
+    }
     assert transaction_cashflow["summary"] == "Run transaction-to-cashflow completeness controls"
     assert "silent ledger-to-cashflow drift" in transaction_cashflow["description"]
     assert position_valuation["summary"] == "Run position-to-valuation consistency controls"
@@ -352,7 +369,14 @@ async def test_position_valuation_run_detects_inconsistent_snapshot_math(
     async_db_session: AsyncSession,
     clean_db,
     ensure_reconciliation_tables,
+    monkeypatch,
 ):
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
+    _configure_auth_context_env(monkeypatch)
+    headers = _enterprise_headers(
+        "financial_reconciliation.controls.run,financial_reconciliation.controls.read"
+    )
     await _seed_portfolio(async_db_session, "PORT-R2")
     await _seed_instrument(async_db_session, "SEC-R2")
     async_db_session.add(
@@ -377,7 +401,7 @@ async def test_position_valuation_run_detects_inconsistent_snapshot_math(
     response = await async_test_client.post(
         "/reconciliation/runs/position-valuation",
         json={"portfolio_id": "PORT-R2", "business_date": "2026-03-08"},
-        headers=TEST_TENANT_HEADERS,
+        headers=headers,
     )
 
     assert response.status_code == 200
@@ -388,13 +412,31 @@ async def test_position_valuation_run_detects_inconsistent_snapshot_math(
 
     findings_response = await async_test_client.get(
         f"/reconciliation/runs/{payload['run_id']}/findings",
-        headers=TEST_TENANT_HEADERS,
+        headers=headers,
     )
     assert findings_response.status_code == 200
-    assert {finding["finding_type"] for finding in findings_response.json()["findings"]} == {
+    findings = {
+        finding["finding_type"]: finding for finding in findings_response.json()["findings"]
+    }
+    assert set(findings) == {
         "market_value_local_mismatch",
         "unrealized_gain_loss_local_mismatch",
     }
+    market_value = findings["market_value_local_mismatch"]
+    assert set(market_value["expected_value"]) == {"market_value_local"}
+    assert Decimal(market_value["expected_value"]["market_value_local"]) == Decimal("110")
+    assert set(market_value["observed_value"]) == {"market_value_local", "delta"}
+    assert Decimal(market_value["observed_value"]["market_value_local"]) == Decimal("100")
+    assert Decimal(market_value["observed_value"]["delta"]) == Decimal("-10")
+    assert Decimal(str(market_value["observed_delta"])) == Decimal("-10")
+
+    unrealized = findings["unrealized_gain_loss_local_mismatch"]
+    assert set(unrealized["expected_value"]) == {"unrealized_gain_loss_local"}
+    assert Decimal(unrealized["expected_value"]["unrealized_gain_loss_local"]) == Decimal("20")
+    assert set(unrealized["observed_value"]) == {"unrealized_gain_loss_local", "delta"}
+    assert Decimal(unrealized["observed_value"]["unrealized_gain_loss_local"]) == Decimal("5")
+    assert Decimal(unrealized["observed_value"]["delta"]) == Decimal("-15")
+    assert Decimal(str(unrealized["observed_delta"])) == Decimal("-15")
 
 
 async def test_position_valuation_run_detects_prior_date_fx_authority(
@@ -862,4 +904,268 @@ async def test_reconciliation_run_list_filters_and_findings_missing_run_returns_
             "code": "RECONCILIATION_RUN_NOT_FOUND",
             "message": "Reconciliation run 'FRR-MISSING' was not found.",
         }
+    }
+
+
+async def test_supported_routes_isolate_tenant_before_writes_and_pagination(
+    async_test_client: httpx.AsyncClient,
+    async_db_session: AsyncSession,
+    clean_db,
+    ensure_reconciliation_tables,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
+    _configure_auth_context_env(monkeypatch)
+    capabilities = "financial_reconciliation.controls.run,financial_reconciliation.controls.read"
+    owner_headers = _enterprise_headers(capabilities, tenant_id="tenant-owner")
+    foreign_headers = _enterprise_headers(capabilities, tenant_id="tenant-foreign")
+    empty_headers = _enterprise_headers(capabilities, tenant_id="tenant-empty")
+    await _seed_portfolio(async_db_session, "PORT-OWNER", tenant_id="tenant-owner")
+    await _seed_portfolio(async_db_session, "PORT-FOREIGN", tenant_id="tenant-foreign")
+    await _seed_instrument(async_db_session, "SEC-OWNER")
+    await _seed_instrument(async_db_session, "SEC-FOREIGN")
+    async_db_session.add(
+        CashflowRule(
+            transaction_type="RECON_TENANT_BUY",
+            classification="EXTERNAL",
+            timing="SETTLEMENT",
+            is_position_flow=True,
+            is_portfolio_flow=False,
+        )
+    )
+    async_db_session.add_all(
+        [
+            Transaction(
+                transaction_id="TXN-OWNER",
+                portfolio_id="PORT-OWNER",
+                instrument_id="INST-OWNER",
+                security_id="SEC-OWNER",
+                transaction_type="RECON_TENANT_BUY",
+                quantity=Decimal("10"),
+                price=Decimal("11"),
+                gross_transaction_amount=Decimal("110"),
+                trade_currency="USD",
+                currency="USD",
+                transaction_date=datetime(2026, 3, 8, tzinfo=timezone.utc),
+                settlement_date=datetime(2026, 3, 10, tzinfo=timezone.utc),
+            ),
+            Transaction(
+                transaction_id="TXN-FOREIGN",
+                portfolio_id="PORT-FOREIGN",
+                instrument_id="INST-FOREIGN",
+                security_id="SEC-FOREIGN",
+                transaction_type="RECON_TENANT_BUY",
+                quantity=Decimal("7"),
+                price=Decimal("13"),
+                gross_transaction_amount=Decimal("91"),
+                trade_currency="USD",
+                currency="USD",
+                transaction_date=datetime(2026, 3, 8, tzinfo=timezone.utc),
+                settlement_date=datetime(2026, 3, 10, tzinfo=timezone.utc),
+            ),
+            DailyPositionSnapshot(
+                portfolio_id="PORT-OWNER",
+                security_id="SEC-OWNER",
+                date=date(2026, 3, 8),
+                epoch=0,
+                quantity=Decimal("10"),
+                cost_basis=Decimal("90"),
+                cost_basis_local=Decimal("90"),
+                market_price=Decimal("11"),
+                market_value=Decimal("110"),
+                market_value_local=Decimal("110"),
+                unrealized_gain_loss=Decimal("20"),
+                unrealized_gain_loss_local=Decimal("20"),
+                valuation_status="VALUED",
+            ),
+            DailyPositionSnapshot(
+                portfolio_id="PORT-FOREIGN",
+                security_id="SEC-FOREIGN",
+                date=date(2026, 3, 8),
+                epoch=0,
+                quantity=Decimal("7"),
+                cost_basis=Decimal("80"),
+                cost_basis_local=Decimal("80"),
+                market_price=Decimal("13"),
+                market_value=Decimal("90"),
+                market_value_local=Decimal("90"),
+                unrealized_gain_loss=Decimal("5"),
+                unrealized_gain_loss_local=Decimal("5"),
+                valuation_status="VALUED",
+            ),
+            PositionTimeseries(
+                portfolio_id="PORT-OWNER",
+                security_id="SEC-OWNER",
+                date=date(2026, 3, 8),
+                epoch=0,
+                bod_market_value=Decimal("100"),
+                bod_cashflow_position=Decimal("0"),
+                eod_cashflow_position=Decimal("0"),
+                bod_cashflow_portfolio=Decimal("0"),
+                eod_cashflow_portfolio=Decimal("0"),
+                eod_market_value=Decimal("110"),
+                fees=Decimal("0"),
+                quantity=Decimal("10"),
+                cost=Decimal("90"),
+            ),
+            PositionTimeseries(
+                portfolio_id="PORT-FOREIGN",
+                security_id="SEC-FOREIGN",
+                date=date(2026, 3, 8),
+                epoch=0,
+                bod_market_value=Decimal("80"),
+                bod_cashflow_position=Decimal("0"),
+                eod_cashflow_position=Decimal("0"),
+                bod_cashflow_portfolio=Decimal("0"),
+                eod_cashflow_portfolio=Decimal("0"),
+                eod_market_value=Decimal("90"),
+                fees=Decimal("0"),
+                quantity=Decimal("7"),
+                cost=Decimal("80"),
+            ),
+            PortfolioTimeseries(
+                portfolio_id="PORT-OWNER",
+                date=date(2026, 3, 8),
+                epoch=0,
+                bod_market_value=Decimal("100"),
+                bod_cashflow=Decimal("0"),
+                eod_cashflow=Decimal("0"),
+                eod_market_value=Decimal("110"),
+                fees=Decimal("0"),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    owner_run = await async_test_client.post(
+        "/reconciliation/runs/transaction-cashflow",
+        json={"portfolio_id": "PORT-OWNER", "business_date": "2026-03-08"},
+        headers=owner_headers,
+    )
+    assert owner_run.status_code == 200
+    owner_run_id = owner_run.json()["run_id"]
+    assert owner_run.json()["summary"]["finding_count"] == 1
+
+    owner_detail = await async_test_client.get(
+        f"/reconciliation/runs/{owner_run_id}",
+        headers=owner_headers,
+    )
+    owner_findings = await async_test_client.get(
+        f"/reconciliation/runs/{owner_run_id}/findings",
+        headers=owner_headers,
+    )
+    assert owner_detail.status_code == 200
+    assert owner_findings.status_code == 200
+    assert owner_findings.json()["findings"][0]["finding_type"] == "missing_cashflow"
+
+    foreign_detail = await async_test_client.get(
+        f"/reconciliation/runs/{owner_run_id}",
+        headers=foreign_headers,
+    )
+    unknown_detail = await async_test_client.get(
+        "/reconciliation/runs/RUN-UNKNOWN",
+        headers=foreign_headers,
+    )
+    foreign_findings = await async_test_client.get(
+        f"/reconciliation/runs/{owner_run_id}/findings",
+        headers=foreign_headers,
+    )
+    assert foreign_detail.status_code == unknown_detail.status_code == 404
+    assert foreign_detail.json()["detail"]["code"] == unknown_detail.json()["detail"]["code"]
+    assert foreign_findings.status_code == 404
+
+    counts_before = (
+        await async_db_session.scalar(select(func.count()).select_from(FinancialReconciliationRun)),
+        await async_db_session.scalar(
+            select(func.count()).select_from(FinancialReconciliationFinding)
+        ),
+    )
+    foreign_writes = [
+        await async_test_client.post(
+            endpoint,
+            json={"portfolio_id": "PORT-OWNER", "business_date": "2026-03-08"},
+            headers=foreign_headers,
+        )
+        for endpoint in (
+            "/reconciliation/runs/transaction-cashflow",
+            "/reconciliation/runs/position-valuation",
+            "/reconciliation/runs/timeseries-integrity",
+        )
+    ]
+    empty_scan = await async_test_client.post(
+        "/reconciliation/runs/transaction-cashflow",
+        json={"business_date": "2026-03-08"},
+        headers=empty_headers,
+    )
+    assert empty_scan.status_code == 404
+    assert all(response.status_code == 404 for response in foreign_writes)
+    assert empty_scan.json() == {
+        "detail": {
+            "code": "RECONCILIATION_SCOPE_NOT_FOUND",
+            "message": "Requested reconciliation scope was not found.",
+        }
+    }
+    assert all(response.json() == empty_scan.json() for response in foreign_writes)
+    counts_after = (
+        await async_db_session.scalar(select(func.count()).select_from(FinancialReconciliationRun)),
+        await async_db_session.scalar(
+            select(func.count()).select_from(FinancialReconciliationFinding)
+        ),
+    )
+    assert counts_after == counts_before
+
+    foreign_run = await async_test_client.post(
+        "/reconciliation/runs/transaction-cashflow",
+        json={"portfolio_id": "PORT-FOREIGN", "business_date": "2026-03-08"},
+        headers=foreign_headers,
+    )
+    assert foreign_run.status_code == 200
+
+    owner_page = await async_test_client.get(
+        "/reconciliation/runs",
+        params={"limit": 1},
+        headers=owner_headers,
+    )
+    assert owner_page.status_code == 200
+    assert owner_page.json()["total"] == 1
+    assert owner_page.json()["runs"][0]["run_id"] == owner_run_id
+
+    owner_tenant_wide_run = await async_test_client.post(
+        "/reconciliation/runs/transaction-cashflow",
+        json={"business_date": "2026-03-08"},
+        headers=owner_headers,
+    )
+    assert owner_tenant_wide_run.status_code == 200
+    assert owner_tenant_wide_run.json()["portfolio_id"] is None
+    assert owner_tenant_wide_run.json()["summary"]["finding_count"] == 1
+
+    owner_tenant_wide_valuation = await async_test_client.post(
+        "/reconciliation/runs/position-valuation",
+        json={"business_date": "2026-03-08", "epoch": 0},
+        headers=owner_headers,
+    )
+    assert owner_tenant_wide_valuation.status_code == 200
+    assert owner_tenant_wide_valuation.json()["portfolio_id"] is None
+    assert owner_tenant_wide_valuation.json()["summary"] == {
+        "examined_count": 1,
+        "finding_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "passed": True,
+    }
+
+    owner_tenant_wide_timeseries = await async_test_client.post(
+        "/reconciliation/runs/timeseries-integrity",
+        json={"business_date": "2026-03-08", "epoch": 0},
+        headers=owner_headers,
+    )
+    assert owner_tenant_wide_timeseries.status_code == 200
+    assert owner_tenant_wide_timeseries.json()["portfolio_id"] is None
+    assert owner_tenant_wide_timeseries.json()["summary"] == {
+        "examined_count": 1,
+        "finding_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "passed": True,
     }

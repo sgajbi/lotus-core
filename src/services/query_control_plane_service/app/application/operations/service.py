@@ -4,6 +4,7 @@ from collections.abc import Awaitable
 from datetime import date, datetime, timezone
 from typing import Any, TypeVar, cast
 
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 from portfolio_common.logging_utils import redact_sensitive_text
 from portfolio_common.monitoring import observe_outbox_recovery_attempt
@@ -54,9 +55,7 @@ from ...contracts.operations import (
 from ...domain.operations import (
     LineageKeyEvidence,
     MissingHistoricalFxDependencySummary,
-    PortfolioControlStageEvidence,
     ReconciliationFindingSummary,
-    ReconciliationRunEvidence,
     SnapshotValuationCoverageSummary,
 )
 from ...ports.operations import OperationsSupportRepository
@@ -66,6 +65,7 @@ from .policy import (
     DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
     DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
 )
+from .portfolio_authority import PortfolioAuthorityServiceMixin
 from .portfolio_readiness import (
     PortfolioReadinessSnapshot,
     build_portfolio_readiness_response,
@@ -96,7 +96,7 @@ _PagedRowT = TypeVar("_PagedRowT")
 MAX_OUTBOX_RECOVERY_REASON_LENGTH = 512
 
 
-class OperationsService:
+class OperationsService(PortfolioAuthorityServiceMixin):
     def __init__(self, repository: OperationsSupportRepository):
         self.repo = repository
 
@@ -454,21 +454,6 @@ class OperationsService:
             stale_deadline=stale_deadline,
         )
 
-    async def _ensure_portfolio_exists(self, portfolio_id: str) -> None:
-        if not await self.repo.portfolio_exists(portfolio_id):
-            raise ValueError(f"Portfolio with id {portfolio_id} not found")
-
-    async def _resolve_portfolio_latest_business_date(
-        self,
-        portfolio_id: str,
-        *,
-        generated_at_utc: datetime,
-    ) -> date | None:
-        portfolio_exists = await self.repo.portfolio_exists(portfolio_id)
-        if not portfolio_exists:
-            raise ValueError(f"Portfolio with id {portfolio_id} not found")
-        return await self.repo.get_latest_business_date(as_of=generated_at_utc)
-
     async def _read_count_and_page(
         self,
         count_read: Awaitable[int],
@@ -483,30 +468,6 @@ class OperationsService:
             raise
         rows = await page_read
         return total, rows
-
-    async def _read_latest_reconciliation_evidence(
-        self,
-        *,
-        portfolio_id: str,
-        latest_control_stage: PortfolioControlStageEvidence | None,
-    ) -> tuple[ReconciliationRunEvidence | None, ReconciliationFindingSummary | None]:
-        if latest_control_stage is None:
-            return None, None
-
-        latest_reconciliation_run = await self.repo.get_latest_reconciliation_run_for_portfolio_day(
-            portfolio_id=portfolio_id,
-            business_date=latest_control_stage.business_date,
-            epoch=latest_control_stage.epoch,
-            as_of=latest_control_stage.updated_at,
-        )
-        if latest_reconciliation_run is None:
-            return None, None
-
-        latest_reconciliation_finding_summary = await self.repo.get_reconciliation_finding_summary(
-            latest_reconciliation_run.run_id,
-            as_of=latest_control_stage.updated_at,
-        )
-        return latest_reconciliation_run, latest_reconciliation_finding_summary
 
     async def _read_latest_booked_dates(
         self,
@@ -555,6 +516,8 @@ class OperationsService:
     async def get_support_overview(
         self,
         portfolio_id: str,
+        *,
+        tenant_id: TenantId,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
         failed_window_hours: int = DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
         as_of_date: date | None = None,
@@ -563,6 +526,7 @@ class OperationsService:
         generated_at_utc = datetime.now(timezone.utc)
         latest_business_date = await self._resolve_portfolio_latest_business_date(
             portfolio_id,
+            tenant_id=tenant_id,
             generated_at_utc=generated_at_utc,
         )
         aggregation_health_through_date = as_of_date
@@ -627,6 +591,7 @@ class OperationsService:
             latest_reconciliation_run,
             latest_reconciliation_finding_summary,
         ) = await self._read_latest_reconciliation_evidence(
+            tenant_id=tenant_id,
             portfolio_id=portfolio_id,
             latest_control_stage=latest_control_stage,
         )
@@ -669,12 +634,15 @@ class OperationsService:
     async def get_portfolio_readiness(
         self,
         portfolio_id: str,
+        *,
+        tenant_id: TenantId,
         as_of_date: date | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
         failed_window_hours: int = DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
     ) -> PortfolioReadinessResponse:
         support_overview = await self.get_support_overview(
             portfolio_id=portfolio_id,
+            tenant_id=tenant_id,
             as_of_date=as_of_date,
             stale_threshold_minutes=stale_threshold_minutes,
             failed_window_hours=failed_window_hours,
@@ -1282,6 +1250,8 @@ class OperationsService:
         portfolio_id: str,
         skip: int,
         limit: int,
+        *,
+        tenant_id: TenantId,
         run_id: str | None = None,
         correlation_id: str | None = None,
         requested_by: str | None = None,
@@ -1289,13 +1259,14 @@ class OperationsService:
         reconciliation_type: str | None = None,
         status: str | None = None,
     ) -> ReconciliationRunListResponse:
-        await self._ensure_portfolio_exists(portfolio_id)
+        await self._ensure_portfolio_exists(portfolio_id, tenant_id=tenant_id)
         generated_at_utc = datetime.now(timezone.utc)
         stale_threshold_minutes = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES
         normalized_status = self._normalize_support_status_filter(status)
         total, runs = await self._read_count_and_page(
             self.repo.get_reconciliation_runs_count(
                 portfolio_id=portfolio_id,
+                tenant_id=tenant_id,
                 run_id=run_id,
                 correlation_id=correlation_id,
                 requested_by=requested_by,
@@ -1306,6 +1277,7 @@ class OperationsService:
             ),
             self.repo.get_reconciliation_runs(
                 portfolio_id=portfolio_id,
+                tenant_id=tenant_id,
                 skip=skip,
                 limit=limit,
                 run_id=run_id,
@@ -1319,6 +1291,7 @@ class OperationsService:
         )
         finding_summaries = await self.repo.get_reconciliation_finding_summaries(
             [run.run_id for run in runs],
+            tenant_id=tenant_id,
             as_of=generated_at_utc,
         )
         current_finding_summaries = {
@@ -1556,21 +1529,25 @@ class OperationsService:
         portfolio_id: str,
         run_id: str,
         limit: int,
+        *,
+        tenant_id: TenantId,
         finding_id: str | None = None,
         security_id: str | None = None,
         transaction_id: str | None = None,
     ) -> ReconciliationFindingListResponse:
-        await self._ensure_portfolio_exists(portfolio_id)
+        await self._ensure_portfolio_exists(portfolio_id, tenant_id=tenant_id)
         generated_at_utc = datetime.now(timezone.utc)
         run = await self.repo.get_reconciliation_run(
             portfolio_id=portfolio_id,
             run_id=run_id,
+            tenant_id=tenant_id,
             as_of=generated_at_utc,
         )
         if run is None:
             raise ValueError(f"Reconciliation run {run_id} not found for portfolio {portfolio_id}")
         finding_summary = await self.repo.get_reconciliation_finding_summary(
             run_id=run_id,
+            tenant_id=tenant_id,
             finding_id=finding_id,
             security_id=security_id,
             transaction_id=transaction_id,
@@ -1579,6 +1556,7 @@ class OperationsService:
         findings = await self.repo.get_reconciliation_findings(
             run_id=run_id,
             limit=limit,
+            tenant_id=tenant_id,
             finding_id=finding_id,
             security_id=security_id,
             transaction_id=transaction_id,

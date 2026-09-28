@@ -219,6 +219,7 @@ async def test_materialization_persists_aggregate_and_stages_completion_atomical
     assert event_stager.calls == [
         (
             PortfolioAggregationCompletion(
+                tenant_id=TEST_TENANT,
                 portfolio_id="PB_SG_GLOBAL_BAL_001",
                 aggregation_date=date(2026, 4, 10),
                 epoch=4,

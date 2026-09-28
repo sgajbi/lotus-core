@@ -5,6 +5,7 @@ from .reconciliation_use_cases import (
     ReconciliationFindingListResult,
     ReconciliationRunCommand,
     ReconciliationRunListResult,
+    ReconciliationScopeNotFoundError,
     ReconciliationUseCases,
 )
 
@@ -15,5 +16,6 @@ __all__ = [
     "ReconciliationFindingListResult",
     "ReconciliationRunCommand",
     "ReconciliationRunListResult",
+    "ReconciliationScopeNotFoundError",
     "ReconciliationUseCases",
 ]

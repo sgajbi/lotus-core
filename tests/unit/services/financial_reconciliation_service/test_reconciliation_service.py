@@ -5,14 +5,33 @@ from typing import get_type_hints
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from portfolio_common.domain.tenant import TenantId
 
+from src.services.financial_reconciliation_service.app.application import (
+    ReconciliationScopeNotFoundError,
+)
 from src.services.financial_reconciliation_service.app.dtos import ReconciliationRunRequest
 from src.services.financial_reconciliation_service.app.ports import (
     reconciliation_repository_ports,
 )
 from src.services.financial_reconciliation_service.app.services.reconciliation_service import (
     ReconciliationService,
+    ScopeKey,
+    _timeseries_integrity_scope_keys,
 )
+
+TENANT_ID = TenantId("tenant-a")
+
+
+def test_timeseries_scope_union_keeps_partially_materialized_portfolios_visible() -> None:
+    complete_key = ScopeKey("PORT-COMPLETE", date(2026, 3, 8), 2)
+    missing_portfolio_key = ScopeKey("PORT-MISSING", date(2026, 3, 8), 2)
+
+    assert _timeseries_integrity_scope_keys(
+        portfolio_by_key={complete_key: object()},
+        aggregate_by_key={complete_key: object(), missing_portfolio_key: object()},
+        snapshot_count_by_key={missing_portfolio_key: 1},
+    ) == [complete_key, missing_portfolio_key]
 
 
 class FakeMonotonicTimer:
@@ -41,6 +60,34 @@ def test_reconciliation_service_depends_on_repository_port() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "method_name",
+    [
+        "run_transaction_cashflow",
+        "run_position_valuation",
+        "run_timeseries_integrity",
+    ],
+)
+async def test_reconciliation_rejects_unowned_scope_before_durable_writes(
+    method_name: str,
+) -> None:
+    repository = AsyncMock()
+    repository.reconciliation_scope_exists.return_value = False
+    service = ReconciliationService(repository)
+
+    with pytest.raises(ReconciliationScopeNotFoundError):
+        await getattr(service, method_name)(
+            tenant_id=TENANT_ID,
+            request=ReconciliationRunRequest(portfolio_id="FOREIGN-PORTFOLIO"),
+            correlation_id="corr-foreign",
+        )
+
+    repository.create_run.assert_not_awaited()
+    repository.add_findings.assert_not_awaited()
+    repository.mark_run_completed.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_run_transaction_cashflow_records_missing_cashflow_finding():
     run = SimpleNamespace(run_id="recon-1")
     transaction = SimpleNamespace(
@@ -66,12 +113,13 @@ async def test_run_transaction_cashflow_records_missing_cashflow_finding():
         "src.services.financial_reconciliation_service.app.services.reconciliation_service.observe_financial_reconciliation_run"
     ) as observe_metric:
         result = await service.run_transaction_cashflow(
+            tenant_id=TENANT_ID,
             request=ReconciliationRunRequest(portfolio_id="PORT-1", business_date=date(2026, 3, 8)),
             correlation_id="corr-1",
         )
 
     assert result is run
-    findings = repository.add_findings.await_args.args[0]
+    findings = repository.add_findings.await_args.kwargs["findings"]
     assert len(findings) == 1
     assert findings[0].finding_type == "missing_cashflow"
     summary = repository.mark_run_completed.await_args.kwargs["summary"]
@@ -111,6 +159,7 @@ async def test_run_transaction_cashflow_uses_injected_timer_and_id_generator():
         "src.services.financial_reconciliation_service.app.services.reconciliation_service.observe_financial_reconciliation_run"
     ) as observe_metric:
         await service.run_transaction_cashflow(
+            tenant_id=TENANT_ID,
             request=ReconciliationRunRequest(
                 portfolio_id="PORT-DETERMINISTIC",
                 business_date=date(2026, 3, 8),
@@ -118,7 +167,7 @@ async def test_run_transaction_cashflow_uses_injected_timer_and_id_generator():
             correlation_id="corr-deterministic",
         )
 
-    findings = repository.add_findings.await_args.args[0]
+    findings = repository.add_findings.await_args.kwargs["findings"]
     assert findings[0].finding_id == "finding-abc123"
     assert observe_metric.call_args.args[2] == 3.5
 
@@ -151,11 +200,12 @@ async def test_run_position_valuation_records_both_core_arithmetic_failures():
         "src.services.financial_reconciliation_service.app.services.reconciliation_service.observe_financial_reconciliation_run"
     ) as observe_metric:
         await service.run_position_valuation(
+            tenant_id=TENANT_ID,
             request=ReconciliationRunRequest(portfolio_id="PORT-2", business_date=date(2026, 3, 8)),
             correlation_id="corr-2",
         )
 
-    findings = repository.add_findings.await_args.args[0]
+    findings = repository.add_findings.await_args.kwargs["findings"]
     assert {finding.finding_type for finding in findings} == {
         "market_value_local_mismatch",
         "unrealized_gain_loss_local_mismatch",
@@ -192,6 +242,7 @@ async def test_run_position_valuation_maps_persisted_fx_date_into_control_eviden
 
     service = ReconciliationService(repository)
     await service.run_position_valuation(
+        tenant_id=TENANT_ID,
         request=ReconciliationRunRequest(
             portfolio_id="PORT-FX",
             business_date=date(2026, 3, 8),
@@ -200,7 +251,7 @@ async def test_run_position_valuation_maps_persisted_fx_date_into_control_eviden
         correlation_id="corr-fx-date",
     )
 
-    findings = repository.add_findings.await_args.args[0]
+    findings = repository.add_findings.await_args.kwargs["findings"]
     assert [finding.finding_type for finding in findings] == ["fx_rate_not_on_valuation_date"]
     assert findings[0].expected_value == {"valuation_fx_rate_date": "2026-03-08"}
     assert findings[0].observed_value == {"valuation_fx_rate_date": "2026-03-07"}
@@ -243,13 +294,14 @@ async def test_run_position_valuation_flags_unscoped_bond_quote_authority():
         "src.services.financial_reconciliation_service.app.services.reconciliation_service.observe_financial_reconciliation_run"
     ):
         await service.run_position_valuation(
+            tenant_id=TENANT_ID,
             request=ReconciliationRunRequest(
                 portfolio_id="PORT-BOND", business_date=date(2026, 3, 8)
             ),
             correlation_id="corr-bond",
         )
 
-    findings = repository.add_findings.await_args.args[0]
+    findings = repository.add_findings.await_args.kwargs["findings"]
     assert [finding.finding_type for finding in findings] == ["missing_bond_quote_authority"]
     summary = repository.mark_run_completed.await_args.kwargs["summary"]
     assert summary["finding_count"] == 1
@@ -288,6 +340,7 @@ async def test_run_position_valuation_uses_supported_receipt_instead_of_bond_heu
 
     service = ReconciliationService(repository)
     await service.run_position_valuation(
+        tenant_id=TENANT_ID,
         request=ReconciliationRunRequest(
             portfolio_id="PORT-BOND",
             business_date=date(2026, 3, 8),
@@ -295,7 +348,7 @@ async def test_run_position_valuation_uses_supported_receipt_instead_of_bond_heu
         correlation_id="corr-authoritative-unit-price",
     )
 
-    assert repository.add_findings.await_args.args[0] == []
+    assert repository.add_findings.await_args.kwargs["findings"] == []
     assert repository.mark_run_completed.await_args.kwargs["summary"]["passed"] is True
 
 
@@ -324,11 +377,12 @@ async def test_run_position_valuation_normalizes_string_amounts():
 
     service = ReconciliationService(repository)
     await service.run_position_valuation(
+        tenant_id=TENANT_ID,
         request=ReconciliationRunRequest(portfolio_id="PORT-STR", business_date=date(2026, 3, 8)),
         correlation_id="corr-string-amounts",
     )
 
-    assert repository.add_findings.await_args.args[0] == []
+    assert repository.add_findings.await_args.kwargs["findings"] == []
     summary = repository.mark_run_completed.await_args.kwargs["summary"]
     assert summary["examined_count"] == 1
     assert summary["finding_count"] == 0
@@ -360,13 +414,14 @@ async def test_run_position_valuation_records_invalid_market_price_without_deriv
 
     service = ReconciliationService(repository)
     await service.run_position_valuation(
+        tenant_id=TENANT_ID,
         request=ReconciliationRunRequest(
             portfolio_id="PORT-INVALID-PRICE", business_date=date(2026, 3, 8)
         ),
         correlation_id="corr-invalid-price",
     )
 
-    findings = repository.add_findings.await_args.args[0]
+    findings = repository.add_findings.await_args.kwargs["findings"]
     assert len(findings) == 1
     assert findings[0].finding_type == "invalid_market_price"
     assert findings[0].expected_value == {"market_price": ">0"}
@@ -399,6 +454,7 @@ async def test_run_automatic_bundle_dedupes_each_aggregation_revision():
 
     service = ReconciliationService(repository)
     result = await service.run_automatic_bundle(
+        tenant_id=TENANT_ID,
         request=ReconciliationRunRequest(
             portfolio_id="PORT-AUTO",
             business_date=date(2026, 3, 8),
@@ -524,13 +580,14 @@ async def test_run_timeseries_integrity_records_missing_portfolio_timeseries():
         "src.services.financial_reconciliation_service.app.services.reconciliation_service.observe_financial_reconciliation_run"
     ) as observe_metric:
         await service.run_timeseries_integrity(
+            tenant_id=TENANT_ID,
             request=ReconciliationRunRequest(
                 portfolio_id="PORT-TS-1", business_date=date(2026, 3, 8), epoch=2
             ),
             correlation_id="corr-ts-1",
         )
 
-    findings = repository.add_findings.await_args.args[0]
+    findings = repository.add_findings.await_args.kwargs["findings"]
     assert len(findings) == 1
     assert findings[0].finding_type == "missing_portfolio_timeseries"
     summary = repository.mark_run_completed.await_args.kwargs["summary"]
@@ -577,13 +634,14 @@ async def test_run_timeseries_integrity_records_completeness_and_aggregate_misma
 
     service = ReconciliationService(repository)
     await service.run_timeseries_integrity(
+        tenant_id=TENANT_ID,
         request=ReconciliationRunRequest(
             portfolio_id="PORT-TS-2", business_date=date(2026, 3, 8), epoch=4
         ),
         correlation_id="corr-ts-2",
     )
 
-    findings = repository.add_findings.await_args.args[0]
+    findings = repository.add_findings.await_args.kwargs["findings"]
     assert {finding.finding_type for finding in findings} == {
         "position_timeseries_completeness_gap",
         "portfolio_timeseries_aggregate_mismatch",
@@ -622,6 +680,7 @@ async def test_authoritative_portfolio_metrics_skip_non_positive_fx_rates():
 
     service = ReconciliationService(repository)
     metrics, row_count = await service._aggregate_authoritative_portfolio_metrics(
+        tenant_id=TENANT_ID,
         portfolio_id="PORT-TS-FX",
         business_date=date(2026, 3, 8),
         epoch=1,
@@ -663,6 +722,7 @@ async def test_authoritative_portfolio_metrics_batch_unique_fx_keys_once_for_man
 
     service = ReconciliationService(repository)
     metrics, row_count = await service._aggregate_authoritative_portfolio_metrics(
+        tenant_id=TENANT_ID,
         portfolio_id="PORT-TS-BATCH-FX",
         business_date=position_date,
         epoch=1,
@@ -698,6 +758,7 @@ async def test_authoritative_portfolio_metrics_zero_default_sparse_amounts():
 
     service = ReconciliationService(repository)
     metrics, row_count = await service._aggregate_authoritative_portfolio_metrics(
+        tenant_id=TENANT_ID,
         portfolio_id="PORT-TS-SPARSE",
         business_date=date(2026, 3, 8),
         epoch=1,
@@ -782,6 +843,7 @@ async def test_run_timeseries_integrity_uses_authoritative_asof_rows_when_portfo
 
     service = ReconciliationService(repository)
     await service.run_timeseries_integrity(
+        tenant_id=TENANT_ID,
         request=ReconciliationRunRequest(
             portfolio_id="PORT-TS-3",
             business_date=date(2026, 3, 8),
@@ -790,9 +852,10 @@ async def test_run_timeseries_integrity_uses_authoritative_asof_rows_when_portfo
         correlation_id="corr-ts-3",
     )
 
-    findings = repository.add_findings.await_args.args[0]
+    findings = repository.add_findings.await_args.kwargs["findings"]
     assert findings == []
     repository.fetch_authoritative_position_timeseries_rows.assert_awaited_once_with(
+        tenant_id=TENANT_ID,
         portfolio_id="PORT-TS-3",
         business_date=date(2026, 3, 8),
         epoch=13,

@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from types import SimpleNamespace
 
 import pytest
+from portfolio_common.domain.tenant import TenantId
 
 from src.services.financial_reconciliation_service.app.application import (
     GetReconciliationRunQuery,
@@ -12,6 +13,8 @@ from src.services.financial_reconciliation_service.app.application import (
     ReconciliationRunCommand,
     ReconciliationUseCases,
 )
+
+TENANT_ID = TenantId("tenant-a")
 
 
 @dataclass
@@ -25,33 +28,36 @@ class FakeUnitOfWork:
 @dataclass
 class FakeReconciliationService:
     returned_run: object
-    calls: list[tuple[str, object, str | None]] = field(default_factory=list)
+    calls: list[tuple[str, object, TenantId, str | None]] = field(default_factory=list)
 
     async def run_transaction_cashflow(
         self,
         *,
         request: object,
+        tenant_id: TenantId,
         correlation_id: str | None,
     ) -> object:
-        self.calls.append(("transaction_cashflow", request, correlation_id))
+        self.calls.append(("transaction_cashflow", request, tenant_id, correlation_id))
         return self.returned_run
 
     async def run_position_valuation(
         self,
         *,
         request: object,
+        tenant_id: TenantId,
         correlation_id: str | None,
     ) -> object:
-        self.calls.append(("position_valuation", request, correlation_id))
+        self.calls.append(("position_valuation", request, tenant_id, correlation_id))
         return self.returned_run
 
     async def run_timeseries_integrity(
         self,
         *,
         request: object,
+        tenant_id: TenantId,
         correlation_id: str | None,
     ) -> object:
-        self.calls.append(("timeseries_integrity", request, correlation_id))
+        self.calls.append(("timeseries_integrity", request, tenant_id, correlation_id))
         return self.returned_run
 
 
@@ -60,22 +66,25 @@ class FakeReconciliationRepository:
     runs: list[object] = field(default_factory=list)
     run_by_id: dict[str, object] = field(default_factory=dict)
     findings_by_run_id: dict[str, list[object]] = field(default_factory=dict)
-    list_runs_calls: list[tuple[str | None, str | None, int]] = field(default_factory=list)
+    list_runs_calls: list[tuple[TenantId, str | None, str | None, int]] = field(
+        default_factory=list
+    )
 
     async def list_runs(
         self,
         *,
+        tenant_id: TenantId,
         reconciliation_type: str | None = None,
         portfolio_id: str | None = None,
         limit: int = 50,
     ) -> list[object]:
-        self.list_runs_calls.append((reconciliation_type, portfolio_id, limit))
+        self.list_runs_calls.append((tenant_id, reconciliation_type, portfolio_id, limit))
         return self.runs
 
-    async def get_run(self, run_id: str) -> object | None:
+    async def get_run(self, *, tenant_id: TenantId, run_id: str) -> object | None:
         return self.run_by_id.get(run_id)
 
-    async def list_findings(self, run_id: str) -> list[object]:
+    async def list_findings(self, *, tenant_id: TenantId, run_id: str) -> list[object]:
         return self.findings_by_run_id.get(run_id, [])
 
 
@@ -110,6 +119,7 @@ def _use_cases(
 @pytest.mark.asyncio
 async def test_run_transaction_cashflow_commits_after_service_call() -> None:
     command = ReconciliationRunCommand(
+        tenant_id=TENANT_ID,
         portfolio_id="P1",
         business_date=None,
         epoch=None,
@@ -122,13 +132,14 @@ async def test_run_transaction_cashflow_commits_after_service_call() -> None:
     run = await use_cases.run_transaction_cashflow(command)
 
     assert run.run_id == "run-1"
-    assert service.calls == [("transaction_cashflow", command, "corr-1")]
+    assert service.calls == [("transaction_cashflow", command, TENANT_ID, "corr-1")]
     assert unit_of_work.commit_count == 1
 
 
 @pytest.mark.asyncio
 async def test_run_position_valuation_commits_after_service_call() -> None:
     command = ReconciliationRunCommand(
+        tenant_id=TENANT_ID,
         portfolio_id="P1",
         business_date=None,
         epoch=None,
@@ -140,13 +151,14 @@ async def test_run_position_valuation_commits_after_service_call() -> None:
 
     await use_cases.run_position_valuation(command)
 
-    assert service.calls == [("position_valuation", command, None)]
+    assert service.calls == [("position_valuation", command, TENANT_ID, None)]
     assert unit_of_work.commit_count == 1
 
 
 @pytest.mark.asyncio
 async def test_run_timeseries_integrity_commits_after_service_call() -> None:
     command = ReconciliationRunCommand(
+        tenant_id=TENANT_ID,
         portfolio_id="P1",
         business_date=None,
         epoch=None,
@@ -158,7 +170,7 @@ async def test_run_timeseries_integrity_commits_after_service_call() -> None:
 
     await use_cases.run_timeseries_integrity(command)
 
-    assert service.calls == [("timeseries_integrity", command, "corr-2")]
+    assert service.calls == [("timeseries_integrity", command, TENANT_ID, "corr-2")]
     assert unit_of_work.commit_count == 1
 
 
@@ -169,6 +181,7 @@ async def test_list_runs_returns_query_result_without_commit() -> None:
 
     result = await use_cases.list_runs(
         ListReconciliationRunsQuery(
+            tenant_id=TENANT_ID,
             reconciliation_type="transaction_cashflow",
             portfolio_id="P1",
             limit=25,
@@ -177,7 +190,7 @@ async def test_list_runs_returns_query_result_without_commit() -> None:
 
     assert result.runs == repository.runs
     assert result.total == 1
-    assert repository.list_runs_calls == [("transaction_cashflow", "P1", 25)]
+    assert repository.list_runs_calls == [(TENANT_ID, "transaction_cashflow", "P1", 25)]
     assert unit_of_work.commit_count == 0
 
 
@@ -187,8 +200,14 @@ async def test_get_run_returns_optional_result() -> None:
     repository = FakeReconciliationRepository(run_by_id={"run-1": expected_run})
     use_cases, _, _, _ = _use_cases(repository=repository)
 
-    assert await use_cases.get_run(GetReconciliationRunQuery(run_id="run-1")) is expected_run
-    assert await use_cases.get_run(GetReconciliationRunQuery(run_id="missing")) is None
+    assert (
+        await use_cases.get_run(GetReconciliationRunQuery(tenant_id=TENANT_ID, run_id="run-1"))
+        is expected_run
+    )
+    assert (
+        await use_cases.get_run(GetReconciliationRunQuery(tenant_id=TENANT_ID, run_id="missing"))
+        is None
+    )
 
 
 @pytest.mark.asyncio
@@ -200,8 +219,12 @@ async def test_list_findings_requires_existing_run() -> None:
     )
     use_cases, _, _, _ = _use_cases(repository=repository)
 
-    result = await use_cases.list_findings(ListReconciliationFindingsQuery(run_id="run-1"))
-    missing = await use_cases.list_findings(ListReconciliationFindingsQuery(run_id="missing"))
+    result = await use_cases.list_findings(
+        ListReconciliationFindingsQuery(tenant_id=TENANT_ID, run_id="run-1")
+    )
+    missing = await use_cases.list_findings(
+        ListReconciliationFindingsQuery(tenant_id=TENANT_ID, run_id="missing")
+    )
 
     assert result is not None
     assert result.findings == findings

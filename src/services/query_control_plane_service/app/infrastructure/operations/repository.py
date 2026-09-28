@@ -14,13 +14,13 @@ from portfolio_common.database_models import (
     OutboxEvent,
     OutboxRecoveryAudit,
     PipelineStageState,
-    Portfolio,
     PortfolioAggregationJob,
     PortfolioValuationJob,
     PositionHistory,
     PositionState,
     ReprocessingJob,
 )
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 from sqlalchemy import and_, case, false, func, literal, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,7 +34,6 @@ from ...domain.operations import (
     MissingHistoricalFxDependencySummary,
     PortfolioControlStageEvidence,
     ReconciliationFindingSummary,
-    ReconciliationRunEvidence,
     ReprocessingHealthSummary,
     SnapshotValuationCoverageSummary,
 )
@@ -70,6 +69,7 @@ from .operations_missing_fx_queries import (
     missing_historical_fx_sample_stmt,
     missing_historical_fx_summary_from_rows,
 )
+from .operations_portfolio_authority_repository import PortfolioAuthorityRepositoryMixin
 from .operations_portfolio_control_queries import (
     apply_portfolio_control_stage_scope,
     portfolio_control_stage_priority,
@@ -83,6 +83,7 @@ from .operations_position_scope_queries import (
     security_id_expr,
 )
 from .operations_reconciliation_finding_queries import (
+    apply_reconciliation_finding_authority_scope,
     apply_reconciliation_finding_scope,
     reconciliation_finding_severity_rank,
     reconciliation_finding_summaries_select,
@@ -90,6 +91,7 @@ from .operations_reconciliation_finding_queries import (
     reconciliation_finding_summary_from_row,
     reconciliation_finding_summary_select,
 )
+from .operations_reconciliation_repository import ReconciliationEvidenceRepositoryMixin
 from .operations_reconciliation_run_queries import (
     apply_reconciliation_run_scope,
     reconciliation_run_priority,
@@ -116,7 +118,10 @@ OUTBOX_TERMINAL_FAILURE_STATUS = "FAILED"
 OUTBOX_PENDING_STATUS = "PENDING"
 
 
-class OperationsRepository:
+class OperationsRepository(
+    PortfolioAuthorityRepositoryMixin,
+    ReconciliationEvidenceRepositoryMixin,
+):
     def __init__(self, db: AsyncSession):
         self.db = db
 
@@ -186,10 +191,6 @@ class OperationsRepository:
             )
         ).one()
         return analytics_export_job_health_summary_from_row(row)
-
-    async def portfolio_exists(self, portfolio_id: str) -> bool:
-        stmt = select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id).limit(1)
-        return (await self.db.execute(stmt)).scalar_one_or_none() is not None
 
     async def get_load_run_progress(
         self,
@@ -615,40 +616,6 @@ class OperationsRepository:
             ready_emitted_at=row.ready_emitted_at,
             failure_reason=None,
             updated_at=row.updated_at,
-        )
-
-    async def get_latest_reconciliation_run_for_portfolio_day(
-        self,
-        portfolio_id: str,
-        business_date: date,
-        epoch: int,
-        as_of: Optional[datetime] = None,
-    ) -> ReconciliationRunEvidence | None:
-        stmt = apply_reconciliation_run_scope(
-            select(FinancialReconciliationRun),
-            portfolio_id=portfolio_id,
-            business_date=business_date,
-            epoch=epoch,
-            as_of=as_of,
-            include_started_as_of=True,
-        )
-        stmt = stmt.order_by(
-            reconciliation_run_priority(FinancialReconciliationRun.status).asc(),
-            FinancialReconciliationRun.started_at.desc(),
-            FinancialReconciliationRun.id.desc(),
-        ).limit(1)
-        row = (await self.db.execute(stmt)).scalar_one_or_none()
-        if row is None:
-            return None
-        return ReconciliationRunEvidence(
-            run_id=row.run_id,
-            reconciliation_type=row.reconciliation_type,
-            status=row.status,
-            correlation_id=row.correlation_id,
-            requested_by=row.requested_by,
-            dedupe_key=row.dedupe_key,
-            aggregation_revision=row.aggregation_revision,
-            failure_reason=row.failure_reason,
         )
 
     async def get_position_state(
@@ -1475,6 +1442,8 @@ class OperationsRepository:
     async def get_reconciliation_runs_count(
         self,
         portfolio_id: str,
+        *,
+        tenant_id: TenantId,
         run_id: Optional[str] = None,
         correlation_id: Optional[str] = None,
         requested_by: Optional[str] = None,
@@ -1485,6 +1454,7 @@ class OperationsRepository:
     ) -> int:
         stmt = apply_reconciliation_run_scope(
             select(func.count()).select_from(FinancialReconciliationRun),
+            tenant_id=tenant_id,
             portfolio_id=portfolio_id,
             run_id=run_id,
             correlation_id=correlation_id,
@@ -1501,6 +1471,8 @@ class OperationsRepository:
         portfolio_id: str,
         skip: int,
         limit: int,
+        *,
+        tenant_id: TenantId,
         run_id: Optional[str] = None,
         correlation_id: Optional[str] = None,
         requested_by: Optional[str] = None,
@@ -1511,6 +1483,7 @@ class OperationsRepository:
     ) -> list[FinancialReconciliationRun]:
         stmt = apply_reconciliation_run_scope(
             select(FinancialReconciliationRun),
+            tenant_id=tenant_id,
             portfolio_id=portfolio_id,
             run_id=run_id,
             correlation_id=correlation_id,
@@ -1532,10 +1505,16 @@ class OperationsRepository:
         return list((await self.db.execute(stmt)).scalars().all())
 
     async def get_reconciliation_run(
-        self, portfolio_id: str, run_id: str, as_of: Optional[datetime] = None
+        self,
+        portfolio_id: str,
+        run_id: str,
+        *,
+        tenant_id: TenantId,
+        as_of: Optional[datetime] = None,
     ) -> Optional[FinancialReconciliationRun]:
         stmt = apply_reconciliation_run_scope(
             select(FinancialReconciliationRun),
+            tenant_id=tenant_id,
             portfolio_id=portfolio_id,
             run_id=run_id,
             as_of=as_of,
@@ -1546,6 +1525,8 @@ class OperationsRepository:
         self,
         run_id: str,
         limit: int,
+        *,
+        tenant_id: TenantId,
         finding_id: Optional[str] = None,
         security_id: Optional[str] = None,
         transaction_id: Optional[str] = None,
@@ -1558,6 +1539,7 @@ class OperationsRepository:
             return []
         stmt = apply_reconciliation_finding_scope(
             select(FinancialReconciliationFinding),
+            tenant_id=tenant_id,
             run_id=run_id,
             finding_id=finding_id,
             normalized_security_id=normalized_security_id,
@@ -1575,6 +1557,8 @@ class OperationsRepository:
     async def get_reconciliation_findings_count(
         self,
         run_id: str,
+        *,
+        tenant_id: TenantId,
         finding_id: Optional[str] = None,
         security_id: Optional[str] = None,
         transaction_id: Optional[str] = None,
@@ -1587,6 +1571,7 @@ class OperationsRepository:
             return 0
         stmt = apply_reconciliation_finding_scope(
             select(func.count()).select_from(FinancialReconciliationFinding),
+            tenant_id=tenant_id,
             run_id=run_id,
             finding_id=finding_id,
             normalized_security_id=normalized_security_id,
@@ -1598,6 +1583,8 @@ class OperationsRepository:
     async def get_reconciliation_finding_summary(
         self,
         run_id: str,
+        *,
+        tenant_id: TenantId,
         finding_id: Optional[str] = None,
         security_id: Optional[str] = None,
         transaction_id: Optional[str] = None,
@@ -1617,6 +1604,7 @@ class OperationsRepository:
             )
         base_stmt = apply_reconciliation_finding_scope(
             reconciliation_finding_summary_base_select(as_of=as_of),
+            tenant_id=tenant_id,
             run_id=run_id,
             finding_id=finding_id,
             normalized_security_id=normalized_security_id,
@@ -1629,14 +1617,17 @@ class OperationsRepository:
     async def get_reconciliation_finding_summaries(
         self,
         run_ids: Sequence[str],
+        *,
+        tenant_id: TenantId,
         as_of: Optional[datetime] = None,
     ) -> dict[str, ReconciliationFindingSummary]:
         resolved_run_ids = tuple(dict.fromkeys(run_ids))
         if not resolved_run_ids:
             return {}
-        base_stmt = reconciliation_finding_summary_base_select(as_of=as_of).where(
-            FinancialReconciliationFinding.run_id.in_(resolved_run_ids)
-        )
+        base_stmt = apply_reconciliation_finding_authority_scope(
+            reconciliation_finding_summary_base_select(as_of=as_of),
+            tenant_id=tenant_id,
+        ).where(FinancialReconciliationFinding.run_id.in_(resolved_run_ids))
         if as_of is not None:
             base_stmt = base_stmt.where(FinancialReconciliationFinding.created_at <= as_of)
         rows = (await self.db.execute(reconciliation_finding_summaries_select(base_stmt))).all()

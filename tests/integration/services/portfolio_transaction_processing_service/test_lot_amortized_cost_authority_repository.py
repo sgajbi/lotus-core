@@ -222,7 +222,7 @@ async def test_authority_correction_survives_restart_with_one_durable_replay_int
         price="1",
         gross_amount="10",
         trade_currency="SGD",
-    )
+    ).model_copy(update={"tenant_id": scope.tenant_id})
     initial_context = transaction_processing_test_context(async_db_session)
     initial_disposal = await persist_and_process_booked_transaction(
         session=async_db_session,

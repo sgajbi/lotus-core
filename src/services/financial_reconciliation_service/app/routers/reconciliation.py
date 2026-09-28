@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Body, Depends, Header, Path, Query
+from fastapi import APIRouter, Body, Depends, Header, Path, Query, Request
 
 from ..application import (
     GetReconciliationRunQuery,
     ListReconciliationFindingsQuery,
     ListReconciliationRunsQuery,
+    ReconciliationScopeNotFoundError,
     ReconciliationUseCases,
 )
 from ..dependencies import get_reconciliation_use_cases
@@ -18,6 +19,7 @@ from ..dtos import (
 from .reconciliation_mappers import (
     reconciliation_run_command_from_request,
     reconciliation_run_not_found,
+    reconciliation_scope_not_found,
 )
 
 router = APIRouter(tags=["financial-reconciliation"])
@@ -26,6 +28,12 @@ NOT_FOUND_RESPONSE_EXAMPLE = {
     "detail": {
         "code": "RECONCILIATION_RUN_NOT_FOUND",
         "message": "Reconciliation run 'FRR-20260306-0001' was not found.",
+    }
+}
+SCOPE_NOT_FOUND_RESPONSE_EXAMPLE = {
+    "detail": {
+        "code": "RECONCILIATION_SCOPE_NOT_FOUND",
+        "message": "Requested reconciliation scope was not found.",
     }
 }
 
@@ -44,8 +52,10 @@ RECONCILIATION_RUN_REQUEST_EXAMPLES = {
         },
     },
     "all_portfolios_day_scope": {
-        "summary": "Estate-wide day scan",
-        "description": "Run the control across all portfolios for one business date.",
+        "summary": "Tenant-wide day scan",
+        "description": (
+            "Run the control across portfolios owned by the admitted tenant for one business date."
+        ),
         "value": {
             "business_date": "2026-03-06",
             "requested_by": "daily_control_scheduler",
@@ -114,10 +124,15 @@ RECONCILIATION_FINDING_LIST_RESPONSE_EXAMPLE = {
         200: {
             "description": "Completed reconciliation run.",
             "content": {"application/json": {"example": RECONCILIATION_RUN_RESPONSE_EXAMPLE}},
-        }
+        },
+        404: {
+            "description": "The admitted tenant does not own the requested scope.",
+            "content": {"application/json": {"example": SCOPE_NOT_FOUND_RESPONSE_EXAMPLE}},
+        },
     },
 )
 async def run_transaction_cashflow_reconciliation(
+    http_request: Request,
     request: ReconciliationRunRequest = Body(openapi_examples=RECONCILIATION_RUN_REQUEST_EXAMPLES),
     use_cases: ReconciliationUseCases = Depends(get_reconciliation_use_cases),
     x_correlation_id: str | None = Header(
@@ -128,12 +143,16 @@ async def run_transaction_cashflow_reconciliation(
         examples=["CTL:9b4db9d1-1a39-42f2-9f55-2b2a4f9a4700"],
     ),
 ):
-    return await use_cases.run_transaction_cashflow(
-        reconciliation_run_command_from_request(
-            request,
-            correlation_id=x_correlation_id,
+    try:
+        return await use_cases.run_transaction_cashflow(
+            reconciliation_run_command_from_request(
+                request,
+                tenant_id=http_request.state.tenant_context.tenant_id,
+                correlation_id=x_correlation_id,
+            )
         )
-    )
+    except ReconciliationScopeNotFoundError as exc:
+        raise reconciliation_scope_not_found() from exc
 
 
 @router.post(
@@ -150,10 +169,15 @@ async def run_transaction_cashflow_reconciliation(
         200: {
             "description": "Completed reconciliation run.",
             "content": {"application/json": {"example": RECONCILIATION_RUN_RESPONSE_EXAMPLE}},
-        }
+        },
+        404: {
+            "description": "The admitted tenant does not own the requested scope.",
+            "content": {"application/json": {"example": SCOPE_NOT_FOUND_RESPONSE_EXAMPLE}},
+        },
     },
 )
 async def run_position_valuation_reconciliation(
+    http_request: Request,
     request: ReconciliationRunRequest = Body(openapi_examples=RECONCILIATION_RUN_REQUEST_EXAMPLES),
     use_cases: ReconciliationUseCases = Depends(get_reconciliation_use_cases),
     x_correlation_id: str | None = Header(
@@ -164,12 +188,16 @@ async def run_position_valuation_reconciliation(
         examples=["CTL:9b4db9d1-1a39-42f2-9f55-2b2a4f9a4700"],
     ),
 ):
-    return await use_cases.run_position_valuation(
-        reconciliation_run_command_from_request(
-            request,
-            correlation_id=x_correlation_id,
+    try:
+        return await use_cases.run_position_valuation(
+            reconciliation_run_command_from_request(
+                request,
+                tenant_id=http_request.state.tenant_context.tenant_id,
+                correlation_id=x_correlation_id,
+            )
         )
-    )
+    except ReconciliationScopeNotFoundError as exc:
+        raise reconciliation_scope_not_found() from exc
 
 
 @router.post(
@@ -188,10 +216,15 @@ async def run_position_valuation_reconciliation(
         200: {
             "description": "Completed reconciliation run.",
             "content": {"application/json": {"example": RECONCILIATION_RUN_RESPONSE_EXAMPLE}},
-        }
+        },
+        404: {
+            "description": "The admitted tenant does not own the requested scope.",
+            "content": {"application/json": {"example": SCOPE_NOT_FOUND_RESPONSE_EXAMPLE}},
+        },
     },
 )
 async def run_timeseries_integrity_reconciliation(
+    http_request: Request,
     request: ReconciliationRunRequest = Body(openapi_examples=RECONCILIATION_RUN_REQUEST_EXAMPLES),
     use_cases: ReconciliationUseCases = Depends(get_reconciliation_use_cases),
     x_correlation_id: str | None = Header(
@@ -202,12 +235,16 @@ async def run_timeseries_integrity_reconciliation(
         examples=["CTL:9b4db9d1-1a39-42f2-9f55-2b2a4f9a4700"],
     ),
 ):
-    return await use_cases.run_timeseries_integrity(
-        reconciliation_run_command_from_request(
-            request,
-            correlation_id=x_correlation_id,
+    try:
+        return await use_cases.run_timeseries_integrity(
+            reconciliation_run_command_from_request(
+                request,
+                tenant_id=http_request.state.tenant_context.tenant_id,
+                correlation_id=x_correlation_id,
+            )
         )
-    )
+    except ReconciliationScopeNotFoundError as exc:
+        raise reconciliation_scope_not_found() from exc
 
 
 @router.get(
@@ -234,6 +271,7 @@ async def run_timeseries_integrity_reconciliation(
     },
 )
 async def list_reconciliation_runs(
+    http_request: Request,
     reconciliation_type: str | None = Query(
         default=None,
         description="Optional reconciliation type filter.",
@@ -255,6 +293,7 @@ async def list_reconciliation_runs(
 ):
     result = await use_cases.list_runs(
         ListReconciliationRunsQuery(
+            tenant_id=http_request.state.tenant_context.tenant_id,
             reconciliation_type=reconciliation_type,
             portfolio_id=portfolio_id,
             limit=limit,
@@ -284,13 +323,19 @@ async def list_reconciliation_runs(
     },
 )
 async def get_reconciliation_run(
+    http_request: Request,
     run_id: str = Path(
         description="Reconciliation run identifier.",
         examples=["FRR-20260306-0001"],
     ),
     use_cases: ReconciliationUseCases = Depends(get_reconciliation_use_cases),
 ):
-    run = await use_cases.get_run(GetReconciliationRunQuery(run_id=run_id))
+    run = await use_cases.get_run(
+        GetReconciliationRunQuery(
+            tenant_id=http_request.state.tenant_context.tenant_id,
+            run_id=run_id,
+        )
+    )
     if run is None:
         raise reconciliation_run_not_found(run_id)
     return run
@@ -319,13 +364,19 @@ async def get_reconciliation_run(
     },
 )
 async def list_reconciliation_findings(
+    http_request: Request,
     run_id: str = Path(
         description="Reconciliation run identifier.",
         examples=["FRR-20260306-0001"],
     ),
     use_cases: ReconciliationUseCases = Depends(get_reconciliation_use_cases),
 ):
-    result = await use_cases.list_findings(ListReconciliationFindingsQuery(run_id=run_id))
+    result = await use_cases.list_findings(
+        ListReconciliationFindingsQuery(
+            tenant_id=http_request.state.tenant_context.tenant_id,
+            run_id=run_id,
+        )
+    )
     if result is None:
         raise reconciliation_run_not_found(run_id)
     return ReconciliationFindingListResponse(findings=result.findings, total=result.total)

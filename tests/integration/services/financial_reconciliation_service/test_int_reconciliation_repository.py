@@ -12,6 +12,7 @@ from portfolio_common.database_models import (
     Instrument,
     Portfolio,
 )
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -25,6 +26,7 @@ from src.services.financial_reconciliation_service.app.repositories import (
 from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
+TENANT_ID = TenantId(TEST_TENANT_ID)
 
 
 async def test_latest_fx_rates_resolve_all_point_in_time_keys_in_one_statement(
@@ -147,6 +149,7 @@ async def test_position_valuation_rows_select_latest_security_state_through_targ
     rows = await reconciliation_repo.ReconciliationRepository(
         async_db_session
     ).fetch_position_valuation_rows(
+        tenant_id=TENANT_ID,
         portfolio_id=portfolio_id,
         business_date=business_date,
         epoch=3,
@@ -163,6 +166,21 @@ async def test_position_valuation_rows_select_latest_security_state_through_targ
 async def test_create_run_deduplicates_concurrent_requests(
     clean_db, async_db_session: AsyncSession
 ):
+    async_db_session.add(
+        Portfolio(
+            tenant_id=TENANT_ID.value,
+            portfolio_id="P-CONC",
+            base_currency="USD",
+            open_date=date(2020, 1, 1),
+            risk_exposure="MEDIUM",
+            investment_time_horizon="LONG",
+            portfolio_type="DISCRETIONARY",
+            booking_center_code="SG",
+            client_id="CLIENT-CONC",
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.commit()
     session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
     dedupe_key = "auto:transaction_cashflow:P-CONC:2026-03-14:7"
     barrier_lock = asyncio.Lock()
@@ -175,9 +193,9 @@ async def test_create_run_deduplicates_concurrent_requests(
             repo = reconciliation_repo.ReconciliationRepository(session)
             original_get = repo.get_run_by_dedupe_key
 
-            async def synchronized_get_run_by_dedupe_key(key: str):
+            async def synchronized_get_run_by_dedupe_key(*, tenant_id: TenantId, dedupe_key: str):
                 nonlocal barrier_count
-                result = await original_get(key)
+                result = await original_get(tenant_id=tenant_id, dedupe_key=dedupe_key)
                 async with barrier_lock:
                     barrier_count += 1
                     if barrier_count == 2:
@@ -187,6 +205,7 @@ async def test_create_run_deduplicates_concurrent_requests(
 
             repo.get_run_by_dedupe_key = synchronized_get_run_by_dedupe_key  # type: ignore[method-assign]
             run, created = await repo.create_run(
+                tenant_id=TENANT_ID,
                 reconciliation_type="transaction_cashflow",
                 portfolio_id="P-CONC",
                 business_date=date(2026, 3, 14),

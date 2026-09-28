@@ -4,6 +4,7 @@ from datetime import date
 
 import pytest
 from portfolio_common.database_models import PipelineStageState
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.reconciliation_quality import FINANCIAL_RECONCILIATION_STAGE
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,6 +27,7 @@ def _completion(
     aggregation_revision: int = 1,
 ) -> FinancialReconciliationCompletion:
     return FinancialReconciliationCompletion(
+        tenant_id=TenantId("tenant-a"),
         portfolio_id=portfolio_id,
         business_date=date(2026, 3, 7),
         epoch=epoch,

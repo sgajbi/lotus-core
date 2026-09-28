@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
+from portfolio_common.domain.tenant import TenantId
 
 from src.services.portfolio_transaction_processing_service.app.application import (
     CorporateActionReconciliationFindingType,
@@ -18,6 +19,8 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     BookedTransaction,
 )
+
+TENANT_ID = TenantId("tenant-test")
 
 
 def _transaction(
@@ -53,9 +56,11 @@ def _evidence(
     *transactions: BookedTransaction,
     missing_dependencies: tuple[str, ...] = (),
     completed_at: datetime = datetime(2025, 1, 16, tzinfo=UTC),
+    tenant_id: TenantId = TENANT_ID,
 ):
     processed_transaction = transactions[-1]
     return build_corporate_action_reconciliation_evidence(
+        tenant_id=tenant_id,
         processed_transaction=processed_transaction,
         input_transactions=transactions,
         linked_transaction_group_id="LTG-CA-DEM-01",
@@ -87,6 +92,7 @@ def test_balanced_evidence_has_no_findings_and_preserves_run_contract() -> None:
     assert evidence.run.business_date.isoformat() == "2025-01-15"
     assert evidence.run.epoch == 7
     assert evidence.run.correlation_id == "corr-ca-01"
+    assert evidence.tenant_id == TENANT_ID
     assert evidence.run.summary == {
         "examined_count": 2,
         "finding_count": 0,
@@ -458,6 +464,29 @@ def test_missing_dependency_adds_an_independent_error_finding() -> None:
         "missing_dependency_reference_ids": ["CA-OUT-MISSING"]
     }
     assert evidence.findings[0].repair_recommendation == ("RESTORE_CORPORATE_ACTION_DEPENDENCY")
+
+
+def test_evidence_identity_is_tenant_scoped() -> None:
+    transactions = (
+        _transaction(
+            transaction_id="CA-OUT-01",
+            transaction_type="SPIN_OFF",
+            net_cost_local="-100",
+        ),
+        _transaction(
+            transaction_id="CA-IN-01",
+            transaction_type="SPIN_IN",
+            net_cost_local="100",
+        ),
+    )
+
+    owner = _evidence(*transactions, tenant_id=TENANT_ID)
+    other = _evidence(*transactions, tenant_id=TenantId("tenant-other"))
+
+    assert owner.run.run_id != other.run.run_id
+    assert owner.run.dedupe_key != other.run.dedupe_key
+    assert owner.tenant_id == TENANT_ID
+    assert other.tenant_id == TenantId("tenant-other")
 
 
 def test_evidence_identity_is_stable_across_reprocessing_time() -> None:

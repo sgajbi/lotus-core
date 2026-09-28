@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from portfolio_common.database_models import FinancialReconciliationFinding
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 from portfolio_common.reconciliation_quality import CLOSED_FINDING_RESOLUTION_STATES
 from sqlalchemy import and_, case, func, select, true
@@ -13,15 +14,24 @@ from ...domain.operations import ReconciliationFindingSummary
 from .operations_position_scope_queries import security_id_expr
 
 
+def apply_reconciliation_finding_authority_scope(stmt, *, tenant_id: TenantId):
+    return stmt.where(
+        FinancialReconciliationFinding.authority_scope == "TENANT",
+        FinancialReconciliationFinding.tenant_id == tenant_id.value,
+    )
+
+
 def apply_reconciliation_finding_scope(
     stmt,
     *,
+    tenant_id: TenantId,
     run_id: str,
     finding_id: str | None = None,
     normalized_security_id: str | None = None,
     transaction_id: str | None = None,
     as_of: datetime | None = None,
 ):
+    stmt = apply_reconciliation_finding_authority_scope(stmt, tenant_id=tenant_id)
     stmt = stmt.where(FinancialReconciliationFinding.run_id == run_id)
     if as_of is not None:
         stmt = stmt.where(FinancialReconciliationFinding.created_at <= as_of)

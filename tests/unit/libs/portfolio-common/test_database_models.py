@@ -1027,6 +1027,38 @@ def test_reconciliation_tolerance_is_finite_and_nonnegative() -> None:
     assert constraints["ck_fin_recon_tolerance_nonnegative"] == "tolerance >= 0"
 
 
+def test_reconciliation_findings_bind_scope_and_tenant_to_parent_run() -> None:
+    run_constraints = {
+        constraint.name: constraint
+        for constraint in FinancialReconciliationRun.__table__.constraints
+        if constraint.name is not None
+    }
+    finding_constraints = {
+        constraint.name: constraint
+        for constraint in FinancialReconciliationFinding.__table__.constraints
+        if constraint.name is not None
+    }
+
+    assert list(run_constraints["uq_fin_recon_runs_scope_run"].columns.keys()) == [
+        "authority_scope",
+        "run_id",
+    ]
+    assert list(run_constraints["uq_fin_recon_runs_authority_run"].columns.keys()) == [
+        "authority_scope",
+        "tenant_id",
+        "run_id",
+    ]
+    assert list(finding_constraints["fk_fin_recon_findings_scope_run"].column_keys) == [
+        "authority_scope",
+        "run_id",
+    ]
+    assert list(finding_constraints["fk_fin_recon_findings_authority_run"].column_keys) == [
+        "authority_scope",
+        "tenant_id",
+        "run_id",
+    ]
+
+
 def test_model_portfolio_tables_declare_dpm_source_indexes():
     definition_indexes = {index.name: index for index in ModelPortfolioDefinition.__table__.indexes}
     target_indexes = {index.name: index for index in ModelPortfolioTarget.__table__.indexes}
@@ -1265,57 +1297,73 @@ def test_transaction_declares_projected_external_cash_index():
 def test_financial_reconciliation_finding_declares_control_query_indexes():
     indexes = {index.name: index for index in FinancialReconciliationFinding.__table__.indexes}
 
-    run_severity_type_id = indexes["ix_financial_reconciliation_findings_run_severity_type_id"]
-    run_severity_created = indexes["ix_financial_reconciliation_findings_run_severity_created_id"]
+    run_severity_type_id = indexes["ix_fin_recon_findings_tenant_run_severity_type"]
+    run_severity_created = indexes["ix_fin_recon_findings_tenant_run_severity_created"]
+    run_resolution_created = indexes["ix_fin_recon_findings_tenant_run_resolution_created"]
 
     assert [str(expression) for expression in run_severity_type_id.expressions] == [
+        "financial_reconciliation_findings.tenant_id",
         "financial_reconciliation_findings.run_id",
         "financial_reconciliation_findings.severity",
         "financial_reconciliation_findings.finding_type",
         "financial_reconciliation_findings.id ASC",
     ]
     assert [str(expression) for expression in run_severity_created.expressions] == [
+        "financial_reconciliation_findings.tenant_id",
         "financial_reconciliation_findings.run_id",
         "financial_reconciliation_findings.severity",
         "financial_reconciliation_findings.created_at DESC",
         "financial_reconciliation_findings.id DESC",
+    ]
+    assert [str(expression) for expression in run_resolution_created.expressions] == [
+        "financial_reconciliation_findings.tenant_id",
+        "financial_reconciliation_findings.run_id",
+        "financial_reconciliation_findings.resolution_state",
+        "financial_reconciliation_findings.severity",
+        "financial_reconciliation_findings.created_at ASC",
+        "financial_reconciliation_findings.id ASC",
     ]
 
 
 def test_financial_reconciliation_run_declares_support_query_indexes():
     indexes = {index.name: index for index in FinancialReconciliationRun.__table__.indexes}
 
-    portfolio_status_started = indexes["ix_financial_reconciliation_runs_port_status_started_id"]
-    portfolio_type_started = indexes["ix_financial_reconciliation_runs_port_type_started_id"]
-    portfolio_correlation_started = indexes["ix_fin_recon_runs_port_corr_started_id"]
-    portfolio_requested_started = indexes["ix_fin_recon_runs_port_req_by_started_id"]
-    portfolio_date_epoch_started = indexes["ix_fin_recon_runs_port_date_epoch_started_id"]
+    portfolio_status_started = indexes["ix_fin_recon_runs_tenant_port_status_started"]
+    portfolio_type_started = indexes["ix_fin_recon_runs_tenant_port_type_started"]
+    portfolio_correlation_started = indexes["ix_fin_recon_runs_tenant_port_corr_started"]
+    portfolio_requested_started = indexes["ix_fin_recon_runs_tenant_port_requester_started"]
+    portfolio_date_epoch_started = indexes["ix_fin_recon_runs_tenant_port_date_epoch_started"]
 
     assert [str(expression) for expression in portfolio_status_started.expressions] == [
+        "financial_reconciliation_runs.tenant_id",
         "financial_reconciliation_runs.portfolio_id",
         "financial_reconciliation_runs.status",
         "financial_reconciliation_runs.started_at DESC",
         "financial_reconciliation_runs.id ASC",
     ]
     assert [str(expression) for expression in portfolio_type_started.expressions] == [
+        "financial_reconciliation_runs.tenant_id",
         "financial_reconciliation_runs.portfolio_id",
         "financial_reconciliation_runs.reconciliation_type",
         "financial_reconciliation_runs.started_at DESC",
         "financial_reconciliation_runs.id DESC",
     ]
     assert [str(expression) for expression in portfolio_correlation_started.expressions] == [
+        "financial_reconciliation_runs.tenant_id",
         "financial_reconciliation_runs.portfolio_id",
         "financial_reconciliation_runs.correlation_id",
         "financial_reconciliation_runs.started_at DESC",
         "financial_reconciliation_runs.id ASC",
     ]
     assert [str(expression) for expression in portfolio_requested_started.expressions] == [
+        "financial_reconciliation_runs.tenant_id",
         "financial_reconciliation_runs.portfolio_id",
         "financial_reconciliation_runs.requested_by",
         "financial_reconciliation_runs.started_at DESC",
         "financial_reconciliation_runs.id ASC",
     ]
     assert [str(expression) for expression in portfolio_date_epoch_started.expressions] == [
+        "financial_reconciliation_runs.tenant_id",
         "financial_reconciliation_runs.portfolio_id",
         "financial_reconciliation_runs.business_date",
         "financial_reconciliation_runs.epoch",

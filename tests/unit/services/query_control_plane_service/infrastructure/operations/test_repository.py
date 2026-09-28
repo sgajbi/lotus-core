@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.database_models import OutboxEvent, OutboxRecoveryAudit
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_control_plane_service.app.application.operations.errors import (
@@ -20,6 +21,7 @@ from src.services.query_control_plane_service.app.infrastructure.operations.repo
 pytestmark = pytest.mark.asyncio
 
 CONTROL_STAGE_UPDATED_AT = datetime(2025, 8, 30, 10, 5, tzinfo=timezone.utc)
+TENANT_ID = TenantId("tenant-test")
 
 
 def _control_stage_row() -> SimpleNamespace:
@@ -602,6 +604,7 @@ async def test_get_latest_reconciliation_run_for_portfolio_day_prefers_latest_hi
         "P1",
         business_date=date(2026, 4, 17),
         epoch=4,
+        tenant_id=TENANT_ID,
         as_of=datetime(2026, 4, 18, 7, 30, tzinfo=timezone.utc),
     )
 
@@ -1313,6 +1316,20 @@ async def test_portfolio_exists_false(repository: OperationsRepository, mock_db_
     assert exists is False
 
 
+async def test_portfolio_exists_for_tenant_filters_admitted_authority(
+    repository: OperationsRepository, mock_db_session: AsyncMock
+):
+    mock_execute_scalar_one_or_none(mock_db_session, "P1")
+
+    exists = await repository.portfolio_exists_for_tenant("P1", tenant_id=TENANT_ID)
+
+    assert exists is True
+    stmt = mock_db_session.execute.call_args.args[0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolios.tenant_id = 'tenant-test'" in compiled
+    assert "portfolios.portfolio_id = 'P1'" in compiled
+
+
 async def test_get_latest_financial_reconciliation_control_stage(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
@@ -1346,7 +1363,7 @@ async def test_get_latest_reconciliation_run_for_portfolio_day(
     mock_execute_scalar_one_or_none(mock_db_session, mock_run)
 
     value = await repository.get_latest_reconciliation_run_for_portfolio_day(
-        "P1", date(2025, 8, 30), 2
+        "P1", date(2025, 8, 30), 2, tenant_id=TENANT_ID
     )
 
     assert value == ReconciliationRunEvidence(
@@ -1362,6 +1379,8 @@ async def test_get_latest_reconciliation_run_for_portfolio_day(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from financial_reconciliation_runs" in compiled.lower()
+    assert "financial_reconciliation_runs.authority_scope = 'TENANT'" in compiled
+    assert "financial_reconciliation_runs.tenant_id = 'tenant-test'" in compiled
     assert "financial_reconciliation_runs.portfolio_id = 'P1'" in compiled
     assert "financial_reconciliation_runs.business_date = '2025-08-30'" in compiled
     assert "financial_reconciliation_runs.epoch = 2" in compiled
@@ -1376,7 +1395,7 @@ async def test_get_latest_reconciliation_run_for_portfolio_day_honors_as_of(
     as_of = datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc)
 
     value = await repository.get_latest_reconciliation_run_for_portfolio_day(
-        "P1", date(2025, 8, 30), 2, as_of=as_of
+        "P1", date(2025, 8, 30), 2, tenant_id=TENANT_ID, as_of=as_of
     )
 
     assert value == ReconciliationRunEvidence(
@@ -1410,7 +1429,9 @@ async def test_get_reconciliation_finding_summary_honors_as_of(
     mock_db_session.execute = AsyncMock(return_value=result)
     as_of = datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc)
 
-    value = await repository.get_reconciliation_finding_summary("run-1", as_of=as_of)
+    value = await repository.get_reconciliation_finding_summary(
+        "run-1", tenant_id=TENANT_ID, as_of=as_of
+    )
 
     assert value.total_findings == 3
     assert value.blocking_findings == 2
@@ -1453,6 +1474,7 @@ async def test_get_reconciliation_finding_summaries_is_grouped_and_as_of_coheren
 
     value = await repository.get_reconciliation_finding_summaries(
         ["run-1", "run-2", "run-1"],
+        tenant_id=TENANT_ID,
         as_of=as_of,
     )
 
@@ -1462,6 +1484,8 @@ async def test_get_reconciliation_finding_summaries_is_grouped_and_as_of_coheren
     stmt = mock_db_session.execute.await_args.args[0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "financial_reconciliation_findings.run_id IN ('run-1', 'run-2')" in compiled
+    assert "financial_reconciliation_findings.authority_scope = 'TENANT'" in compiled
+    assert "financial_reconciliation_findings.tenant_id = 'tenant-test'" in compiled
     assert "GROUP BY" in compiled
     assert "row_number() OVER (PARTITION BY" in compiled
     assert (
@@ -1476,7 +1500,7 @@ async def test_get_reconciliation_finding_summaries_skips_empty_membership(
     repository: OperationsRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    assert await repository.get_reconciliation_finding_summaries([]) == {}
+    assert await repository.get_reconciliation_finding_summaries([], tenant_id=TENANT_ID) == {}
     mock_db_session.execute.assert_not_awaited()
 
 
@@ -1881,6 +1905,7 @@ async def test_get_reconciliation_runs_count_with_filters(
 
     value = await repository.get_reconciliation_runs_count(
         portfolio_id="P1",
+        tenant_id=TENANT_ID,
         run_id="recon_123",
         correlation_id="corr-recon-123",
         requested_by="pipeline_orchestrator_service",
@@ -1894,6 +1919,8 @@ async def test_get_reconciliation_runs_count_with_filters(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from financial_reconciliation_runs" in compiled.lower()
+    assert "financial_reconciliation_runs.authority_scope = 'TENANT'" in compiled
+    assert "financial_reconciliation_runs.tenant_id = 'tenant-test'" in compiled
     assert "financial_reconciliation_runs.updated_at <= '2026-03-14 10:50:00+00:00'" in compiled
     assert "financial_reconciliation_runs.run_id = 'recon_123'" in compiled
     assert "financial_reconciliation_runs.correlation_id = 'corr-recon-123'" in compiled
@@ -1921,6 +1948,7 @@ async def test_get_reconciliation_runs_query(
         portfolio_id="P1",
         skip=2,
         limit=5,
+        tenant_id=TENANT_ID,
         run_id="recon_123",
         correlation_id="corr-recon-123",
         requested_by="pipeline_orchestrator_service",
@@ -1967,6 +1995,7 @@ async def test_get_reconciliation_findings_query(
     value = await repository.get_reconciliation_findings(
         run_id="recon_123",
         limit=20,
+        tenant_id=TENANT_ID,
         finding_id="rf_123",
         security_id=" SEC-US-IBM ",
         transaction_id="txn_0001",
@@ -1977,6 +2006,8 @@ async def test_get_reconciliation_findings_query(
     stmt = mock_db_session.execute.call_args[0][0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "from financial_reconciliation_findings" in compiled.lower()
+    assert "financial_reconciliation_findings.authority_scope = 'TENANT'" in compiled
+    assert "financial_reconciliation_findings.tenant_id = 'tenant-test'" in compiled
     assert "financial_reconciliation_findings.run_id = 'recon_123'" in compiled
     assert "financial_reconciliation_findings.created_at <= '2026-03-14 10:50:00+00:00'" in compiled
     assert "financial_reconciliation_findings.finding_id = 'rf_123'" in compiled
@@ -1997,6 +2028,7 @@ async def test_get_reconciliation_run_query(
     value = await repository.get_reconciliation_run(
         portfolio_id="P1",
         run_id="recon_123",
+        tenant_id=TENANT_ID,
         as_of=as_of,
     )
 
@@ -2017,6 +2049,7 @@ async def test_get_reconciliation_findings_count(
 
     value = await repository.get_reconciliation_findings_count(
         run_id="recon_123",
+        tenant_id=TENANT_ID,
         finding_id="rf_123",
         security_id=" SEC-US-IBM ",
         transaction_id="txn_0001",
@@ -2058,7 +2091,9 @@ async def test_get_reconciliation_finding_summary(
     )
     mock_db_session.execute = AsyncMock(return_value=result)
 
-    value = await repository.get_reconciliation_finding_summary(run_id="recon_123")
+    value = await repository.get_reconciliation_finding_summary(
+        run_id="recon_123", tenant_id=TENANT_ID
+    )
 
     assert value.total_findings == 4
     assert value.blocking_findings == 2

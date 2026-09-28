@@ -51,6 +51,7 @@ def consumer() -> consumer_module.ReconciliationRequestedConsumer:
 @pytest.fixture
 def mock_event() -> FinancialReconciliationRequestedEvent:
     return FinancialReconciliationRequestedEvent(
+        tenant_id="tenant-a",
         portfolio_id="PORT-RECON-1",
         business_date=date(2026, 3, 8),
         epoch=1,
@@ -166,6 +167,7 @@ async def test_reconciliation_request_runs_automatic_bundle_and_marks_idempotenc
     assert request.business_date == mock_event.business_date
     assert request.epoch == mock_event.epoch
     assert request.requested_by == mock_event.requested_by
+    assert call.kwargs["tenant_id"].value == "tenant-a"
     assert call.kwargs["reconciliation_types"] == mock_event.reconciliation_types
     assert call.kwargs["aggregation_revision"] == 7
     mock_service.determine_automatic_bundle_outcome.assert_called_once()
@@ -178,6 +180,7 @@ async def test_reconciliation_request_runs_automatic_bundle_and_marks_idempotenc
     assert outbox_call.kwargs["event_type"] == "FinancialReconciliationCompleted"
     payload = FinancialReconciliationCompletedEvent.model_validate(outbox_call.kwargs["payload"])
     assert payload.outcome_status == "REQUIRES_REPLAY"
+    assert payload.tenant_id == "tenant-a"
     assert payload.aggregation_revision == 7
     assert payload.blocking_reconciliation_types == ["transaction_cashflow"]
     assert payload.run_ids == {
@@ -190,6 +193,7 @@ async def test_reconciliation_request_runs_automatic_bundle_and_marks_idempotenc
         mock_event.portfolio_id,
         consumer_module.SERVICE_NAME,
         "corr-recon",
+        tenant_id="tenant-a",
     )
     mock_idempotency_repo.mark_event_processed.assert_not_called()
 

@@ -40,17 +40,27 @@ an independent certification or downstream analytics conclusion.
 
 For a requested reconciliation scope, the service:
 
-1. accepts a deterministic run request for a portfolio or business-date scope
-2. loads the relevant persisted core data for the requested control type
-3. recomputes or cross-checks the expected invariant
-4. records a durable reconciliation run result
-5. persists any findings with portfolio, security, transaction, date, and epoch context
+1. accepts a deterministic run request under the tenant admitted by runtime middleware
+2. verifies that the tenant owns the specific portfolio, or at least one portfolio for a
+   tenant-wide request, before creating a run
+3. loads only that tenant's persisted portfolio data for the requested control type
+4. recomputes or cross-checks the expected invariant
+5. records a durable tenant-owned reconciliation run result
+6. persists tenant-owned findings with portfolio, security, transaction, date, and epoch context
+
+Portfolio ownership is filtered before ordering, limits, grouping, or aggregation. A foreign or
+unknown specific scope and a tenant-wide request with no owned portfolio both return the same
+generic `404 RECONCILIATION_SCOPE_NOT_FOUND` and write no run or finding. Request bodies do not
+grant or default tenant authority. FX rates, prices, instruments, and governed calendars remain
+deliberately global reference inputs.
 
 Automatic portfolio-day requests also carry the durable `aggregation_revision` assigned by the
 lease-fenced aggregation job. Run identity includes reconciliation type, portfolio, business date,
-epoch, and aggregation revision. A newer revision replaces same-epoch control status; an older or
+epoch, aggregation revision, and tenant authority. Requested and completed events carry that same
+tenant, and processed-event claims use tenant-qualified physical identity. A newer revision replaces same-epoch control status; an older or
 identical revision cannot overwrite or republish it, and contradictory outcomes for one revision
-fail closed. Legacy events deserialize as revision `0`, preserving their existing dedupe identity.
+fail closed. Events without tenant authority fail validation rather than being assigned a default.
+Legacy revision fields still deserialize as revision `0`, preserving their existing revision identity.
 
 The current control families cover:
 
@@ -73,6 +83,13 @@ Primary durable outputs include:
 - `financial_reconciliation_findings`
 - control evidence surfaced through reconciliation APIs
 
+New runs and findings carry `authority_scope=TENANT` and a normalized tenant id. Historical
+portfolio-specific rows are backfilled only from the authoritative portfolio root. Historical
+portfolio-null runs remain explicit `ESTATE` records and are not exposed through tenant APIs.
+Automatic dedupe is unique within tenant authority, so equivalent keys in two tenants neither
+collide nor suppress each other's replay. QCP support reads and Bundle A corporate-action evidence
+use the same durable authority boundary.
+
 Finding rows also persist accountable owner, governed resolution state, terminal actor/timestamp
 evidence, finite tolerance and observed delta where value-based, and a bounded repair recommendation.
 QCP reconciliation routes expose deterministic evidence identities, open-break severity counts,
@@ -92,6 +109,29 @@ hide a stale run and a stale-only page remains visibly `STALE`.
 
 Run and support responses expose `aggregation_revision` so operators can join the aggregate input
 generation to its independent control calculation and published control decision.
+
+## Tenant-authority cutover and rollback
+
+Migration `c174b2c3d535` is a coordinated compatibility cutover, not an online mixed-version change.
+Before applying it, drain and stop reconciliation command writers, aggregation producers, the
+reconciliation-requested consumer, corporate-action evidence writers, and QCP reconciliation
+readers. Verify that no old-version reconciliation request, completion, or control event remains
+pending or failed in the outbox or broker. Version `1.0.0` events without tenant authority are
+intentionally rejected, never assigned a default tenant. Deploy the tenant-aware producer and
+consumer set with the migration, then resume it together.
+
+The migration takes an access-exclusive lock with a five-second lock timeout. A timeout means no
+cutover occurred: keep writers drained, identify the holding transaction, and rerun only after it is
+resolved. After upgrade, verify that portfolio-scoped history derives tenant only from the
+authoritative portfolio root, portfolio-null history is explicit `ESTATE`, tenant rows satisfy the
+composite portfolio/run foreign keys, and legacy run, finding, and event inserts without tenant fail.
+
+Rollback also requires the same drain. It refuses when tenant-wide (`TENANT` with no portfolio)
+runs exist or when per-tenant dedupe keys would collide under the former global unique key. Retain
+the new schema until those records are archived or reconciled from authoritative evidence; do not
+delete or rewrite them merely to force a downgrade. After either direction, run migration history,
+tenant-separation, supported-route, QCP, corporate-action, and event-replay checks before reopening
+traffic.
 
 These outputs feed:
 

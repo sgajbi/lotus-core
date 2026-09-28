@@ -23,13 +23,18 @@ Current useful building blocks:
 2. `financial_reconciliation_runs` records run status, requested-by, correlation, dedupe,
    aggregation revision, tolerance, summary, failure, start, and completion metadata. Automatic
    runs reconcile each durable aggregation revision exactly once; manual and legacy runs may have
-   no revision.
+   no revision. Tenant-owned runs persist admitted authority and use tenant-qualified dedupe;
+   historical portfolio-null rows remain explicit estate history rather than inferred tenancy.
 3. `financial_reconciliation_findings` records finding type, severity, portfolio, security,
    transaction, business date, epoch, expected value, observed value, detail, and creation timestamp.
 4. `query_control_plane_service` exposes support routes for reconciliation runs and findings.
 5. `query_service` support DTOs already expose `is_blocking`, operational state, correlation,
    requested-by, dedupe key, and top blocking finding fields for reconciliation support views.
 6. readiness and coverage routes already expose useful foundations for data-quality coverage.
+7. supported reconciliation commands, source scans, run/finding reads, QCP support reads, Bundle A
+   evidence, completion events, and processed-event replay fences carry one typed tenant authority.
+   Portfolio facts are filtered before order, limit, grouping, or aggregation; deliberately global
+   market/reference inputs remain global.
 
 Current runtime posture:
 

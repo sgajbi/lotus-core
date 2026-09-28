@@ -4,6 +4,7 @@ from datetime import date
 from unittest.mock import AsyncMock
 
 import pytest
+from portfolio_common.domain.tenant import TenantId
 
 from src.services.financial_reconciliation_service.app.application import (
     record_reconciliation_completion,
@@ -18,6 +19,7 @@ pytestmark = pytest.mark.asyncio
 
 def _completion(*, epoch: int = 3, status: str = "COMPLETED") -> FinancialReconciliationCompletion:
     return FinancialReconciliationCompletion(
+        tenant_id=TenantId("tenant-a"),
         portfolio_id="PORT-CTRL-1",
         business_date=date(2026, 3, 8),
         epoch=epoch,

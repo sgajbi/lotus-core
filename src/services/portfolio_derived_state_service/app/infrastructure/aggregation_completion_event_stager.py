@@ -51,6 +51,7 @@ class TransactionalAggregationCompletionEventStager:
         )
 
         reconciliation_event = FinancialReconciliationRequestedEvent(
+            tenant_id=completion.tenant_id.value,
             portfolio_id=completion.portfolio_id,
             business_date=completion.aggregation_date,
             epoch=completion.epoch,

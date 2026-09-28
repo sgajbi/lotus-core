@@ -9,6 +9,7 @@ from portfolio_common.database_models import FinancialReconciliationFinding
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.domain.decimal_amount import decimal_or_none, required_decimal
 from portfolio_common.domain.market_data.fx_rate import coerce_positive_fx_rate_or_none
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.monitoring import observe_financial_reconciliation_run
 from portfolio_common.runtime_providers import (
     IdGenerator,
@@ -18,6 +19,7 @@ from portfolio_common.runtime_providers import (
 )
 
 from ..adapters.reconciliation_finding_mapper import reconciliation_finding_to_orm
+from ..application import ReconciliationScopeNotFoundError
 from ..domain.reconciliation_policies import (
     PositionValuationEvidence,
     PositionValuationReceiptEvidence,
@@ -149,10 +151,18 @@ def _timeseries_integrity_scope_keys(
     aggregate_by_key: dict[ScopeKey, Any],
     snapshot_count_by_key: dict[ScopeKey, int],
 ) -> list[ScopeKey]:
-    if portfolio_by_key:
-        all_keys = set(portfolio_by_key)
-    else:
-        all_keys = set(aggregate_by_key) | set(snapshot_count_by_key)
+    # A portfolio row defines the selected epoch for its portfolio/day; older
+    # position or snapshot epochs for that same scope are inputs to the as-of
+    # reconstruction, not extra control scopes.  For a portfolio/day with no
+    # portfolio row, retain position/snapshot keys because that absence is the
+    # finding this control exists to surface.
+    portfolio_days = {(key.portfolio_id, key.business_date) for key in portfolio_by_key}
+    missing_portfolio_keys = {
+        key
+        for key in set(aggregate_by_key) | set(snapshot_count_by_key)
+        if (key.portfolio_id, key.business_date) not in portfolio_days
+    }
+    all_keys = set(portfolio_by_key) | missing_portfolio_keys
     return sorted(all_keys, key=lambda item: (item.portfolio_id, item.business_date, item.epoch))
 
 
@@ -244,11 +254,13 @@ class ReconciliationService:
     async def _aggregate_authoritative_portfolio_metrics(
         self,
         *,
+        tenant_id: TenantId,
         portfolio_id: str,
         business_date: date,
         epoch: int,
     ) -> tuple[dict[str, Decimal], int]:
         authoritative_rows = await self.repository.fetch_authoritative_position_timeseries_rows(
+            tenant_id=tenant_id,
             portfolio_id=portfolio_id,
             business_date=business_date,
             epoch=epoch,
@@ -276,6 +288,18 @@ class ReconciliationService:
             _add_authoritative_position_metrics(metrics, position_row=position_row, rate=rate)
 
         return metrics, len(authoritative_rows)
+
+    async def _require_reconciliation_scope(
+        self,
+        *,
+        tenant_id: TenantId,
+        portfolio_id: str | None,
+    ) -> None:
+        if not await self.repository.reconciliation_scope_exists(
+            tenant_id=tenant_id,
+            portfolio_id=portfolio_id,
+        ):
+            raise ReconciliationScopeNotFoundError
 
     @staticmethod
     def _automatic_dedupe_key(
@@ -316,10 +340,12 @@ class ReconciliationService:
         self,
         *,
         request: ReconciliationRunRequest,
+        tenant_id: TenantId,
         correlation_id: str | None,
     ):
         return await self._run_transaction_cashflow(
             request=request,
+            tenant_id=tenant_id,
             correlation_id=correlation_id,
             aggregation_revision=None,
         )
@@ -328,16 +354,22 @@ class ReconciliationService:
         self,
         *,
         request: ReconciliationRunRequest,
+        tenant_id: TenantId,
         correlation_id: str | None,
         aggregation_revision: int | None = None,
     ):
         started_at = self._monotonic_timer.seconds()
+        await self._require_reconciliation_scope(
+            tenant_id=tenant_id,
+            portfolio_id=request.portfolio_id,
+        )
         dedupe_key = self._automatic_dedupe_key(
             reconciliation_type="transaction_cashflow",
             request=request,
             aggregation_revision=aggregation_revision,
         )
         run, created = await self.repository.create_run(
+            tenant_id=tenant_id,
             reconciliation_type="transaction_cashflow",
             portfolio_id=request.portfolio_id,
             business_date=request.business_date,
@@ -351,6 +383,7 @@ class ReconciliationService:
         if not created:
             return run
         rows = await self.repository.fetch_transaction_cashflow_rows(
+            tenant_id=tenant_id,
             portfolio_id=request.portfolio_id,
             business_date=request.business_date,
         )
@@ -361,7 +394,7 @@ class ReconciliationService:
         )
         examined = len(rows)
 
-        await self.repository.add_findings(findings)
+        await self.repository.add_findings(tenant_id=tenant_id, findings=findings)
         summary = self._summary(examined=examined, findings=findings)
         status = completed_reconciliation_run_status()
         await self.repository.mark_run_completed(run, status=status, summary=summary)
@@ -478,10 +511,12 @@ class ReconciliationService:
         self,
         *,
         request: ReconciliationRunRequest,
+        tenant_id: TenantId,
         correlation_id: str | None,
     ):
         return await self._run_position_valuation(
             request=request,
+            tenant_id=tenant_id,
             correlation_id=correlation_id,
             aggregation_revision=None,
         )
@@ -490,10 +525,15 @@ class ReconciliationService:
         self,
         *,
         request: ReconciliationRunRequest,
+        tenant_id: TenantId,
         correlation_id: str | None,
         aggregation_revision: int | None = None,
     ):
         started_at = self._monotonic_timer.seconds()
+        await self._require_reconciliation_scope(
+            tenant_id=tenant_id,
+            portfolio_id=request.portfolio_id,
+        )
         tolerance = resolve_value_tolerance(request.tolerance)
         dedupe_key = self._automatic_dedupe_key(
             reconciliation_type="position_valuation",
@@ -501,6 +541,7 @@ class ReconciliationService:
             aggregation_revision=aggregation_revision,
         )
         run, created = await self.repository.create_run(
+            tenant_id=tenant_id,
             reconciliation_type="position_valuation",
             portfolio_id=request.portfolio_id,
             business_date=request.business_date,
@@ -514,6 +555,7 @@ class ReconciliationService:
         if not created:
             return run
         rows = await self.repository.fetch_position_valuation_rows(
+            tenant_id=tenant_id,
             portfolio_id=request.portfolio_id,
             business_date=request.business_date,
             epoch=request.epoch,
@@ -554,7 +596,7 @@ class ReconciliationService:
             )
 
         findings = self._persisted_findings(run_id=run.run_id, findings=domain_findings)
-        await self.repository.add_findings(findings)
+        await self.repository.add_findings(tenant_id=tenant_id, findings=findings)
         summary = build_reconciliation_summary(
             examined=examined,
             findings=domain_findings,
@@ -573,10 +615,12 @@ class ReconciliationService:
         self,
         *,
         request: ReconciliationRunRequest,
+        tenant_id: TenantId,
         correlation_id: str | None,
     ):
         return await self._run_timeseries_integrity(
             request=request,
+            tenant_id=tenant_id,
             correlation_id=correlation_id,
             aggregation_revision=None,
         )
@@ -585,10 +629,15 @@ class ReconciliationService:
         self,
         *,
         request: ReconciliationRunRequest,
+        tenant_id: TenantId,
         correlation_id: str | None,
         aggregation_revision: int | None = None,
     ):
         started_at = self._monotonic_timer.seconds()
+        await self._require_reconciliation_scope(
+            tenant_id=tenant_id,
+            portfolio_id=request.portfolio_id,
+        )
         tolerance = resolve_value_tolerance(request.tolerance)
         dedupe_key = self._automatic_dedupe_key(
             reconciliation_type="timeseries_integrity",
@@ -596,6 +645,7 @@ class ReconciliationService:
             aggregation_revision=aggregation_revision,
         )
         run, created = await self.repository.create_run(
+            tenant_id=tenant_id,
             reconciliation_type="timeseries_integrity",
             portfolio_id=request.portfolio_id,
             business_date=request.business_date,
@@ -609,21 +659,25 @@ class ReconciliationService:
         if not created:
             return run
         portfolio_rows = await self.repository.fetch_portfolio_timeseries_rows(
+            tenant_id=tenant_id,
             portfolio_id=request.portfolio_id,
             business_date=request.business_date,
             epoch=request.epoch,
         )
         aggregate_rows = await self.repository.fetch_position_timeseries_aggregates(
+            tenant_id=tenant_id,
             portfolio_id=request.portfolio_id,
             business_date=request.business_date,
             epoch=request.epoch,
         )
         snapshot_counts = await self.repository.fetch_snapshot_counts(
+            tenant_id=tenant_id,
             portfolio_id=request.portfolio_id,
             business_date=request.business_date,
             epoch=request.epoch,
         )
         findings, examined = await self._timeseries_integrity_findings(
+            tenant_id=tenant_id,
             run_id=run.run_id,
             portfolio_rows=portfolio_rows,
             aggregate_rows=aggregate_rows,
@@ -631,7 +685,7 @@ class ReconciliationService:
             tolerance=tolerance,
         )
 
-        await self.repository.add_findings(findings)
+        await self.repository.add_findings(tenant_id=tenant_id, findings=findings)
         summary = self._summary(examined=examined, findings=findings)
         status = completed_reconciliation_run_status()
         await self.repository.mark_run_completed(run, status=status, summary=summary)
@@ -646,6 +700,7 @@ class ReconciliationService:
     async def _timeseries_integrity_findings(
         self,
         *,
+        tenant_id: TenantId,
         run_id: str,
         portfolio_rows: list[Any],
         aggregate_rows: list[Any],
@@ -666,6 +721,7 @@ class ReconciliationService:
         for key in scope_keys:
             findings.extend(
                 await self._timeseries_integrity_findings_for_key(
+                    tenant_id=tenant_id,
                     run_id=run_id,
                     key=key,
                     portfolio_by_key=portfolio_by_key,
@@ -679,6 +735,7 @@ class ReconciliationService:
     async def _timeseries_integrity_findings_for_key(
         self,
         *,
+        tenant_id: TenantId,
         run_id: str,
         key: ScopeKey,
         portfolio_by_key: dict[ScopeKey, Any],
@@ -699,11 +756,13 @@ class ReconciliationService:
             authoritative_metrics,
             authoritative_position_count,
         ) = await self._aggregate_authoritative_portfolio_metrics(
+            tenant_id=tenant_id,
             portfolio_id=key.portfolio_id,
             business_date=key.business_date,
             epoch=key.epoch,
         )
         authoritative_snapshot_count = await self.repository.fetch_authoritative_snapshot_count(
+            tenant_id=tenant_id,
             portfolio_id=key.portfolio_id,
             business_date=key.business_date,
             epoch=key.epoch,
@@ -827,6 +886,7 @@ class ReconciliationService:
         self,
         *,
         request: ReconciliationRunRequest,
+        tenant_id: TenantId,
         correlation_id: str | None,
         reconciliation_types: list[str],
         aggregation_revision: int | None = None,
@@ -836,6 +896,7 @@ class ReconciliationService:
             if reconciliation_type == "transaction_cashflow":
                 results[reconciliation_type] = await self._run_transaction_cashflow(
                     request=request,
+                    tenant_id=tenant_id,
                     correlation_id=correlation_id,
                     aggregation_revision=aggregation_revision,
                 )
@@ -843,6 +904,7 @@ class ReconciliationService:
             if reconciliation_type == "position_valuation":
                 results[reconciliation_type] = await self._run_position_valuation(
                     request=request,
+                    tenant_id=tenant_id,
                     correlation_id=correlation_id,
                     aggregation_revision=aggregation_revision,
                 )
@@ -850,6 +912,7 @@ class ReconciliationService:
             if reconciliation_type == "timeseries_integrity":
                 results[reconciliation_type] = await self._run_timeseries_integrity(
                     request=request,
+                    tenant_id=tenant_id,
                     correlation_id=correlation_id,
                     aggregation_revision=aggregation_revision,
                 )

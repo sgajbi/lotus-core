@@ -1211,6 +1211,38 @@ section shape and derive the usage line from a fresh scan rather than copying a 
   - `created_at` (DateTime): Server timestamp when row was created.
   - `updated_at` (DateTime): Server timestamp when row was last updated.
 
+## `financial_reconciliation_runs`
+
+- **Purpose**: Durable execution and completion evidence for independent financial controls.
+- **Relationships**: Tenant rows reference `portfolios(tenant_id, portfolio_id)`; run identity is
+  unique globally and additionally addressable by `(authority_scope, tenant_id, run_id)`.
+- **Typical access patterns**: Tenant-first command dedupe, bounded run-history reads, and latest
+  portfolio-day control selection.
+- **Authority**: New rows use `authority_scope=TENANT` with normalized `tenant_id`. Historical
+  portfolio-null rows use `ESTATE` with null tenant and are not returned by tenant APIs.
+- **Key columns**: `run_id`, `authority_scope`, `tenant_id`, `reconciliation_type`, `portfolio_id`,
+  `business_date`, `epoch`, `aggregation_revision`, `status`, `requested_by`, `dedupe_key`,
+  `correlation_id`, `tolerance`, `summary`, `failure_reason`, `started_at`, `completed_at`,
+  `created_at`, `updated_at`.
+
+## `financial_reconciliation_findings`
+
+- **Purpose**: Durable break evidence emitted by a financial reconciliation run.
+- **Relationships**: References its run by global `run_id` and, for tenant rows, by
+  `(authority_scope, tenant_id, run_id)`; portfolio-scoped tenant findings reference
+  `portfolios(tenant_id, portfolio_id)`.
+- **Typical access patterns**: Tenant-first run finding lists and current open/blocking break
+  summaries.
+- **Authority**: The finding authority is copied from its owning run. New findings use `TENANT`;
+  retained estate history stays explicit and is excluded from tenant APIs.
+- **Key columns**: `finding_id`, `authority_scope`, `tenant_id`, `run_id`, `reconciliation_type`,
+  `finding_type`, `severity`, `owner`, `resolution_state`, `resolution_actor`, `resolved_at`,
+  `portfolio_id`, `security_id`, `transaction_id`, `business_date`, `epoch`, `expected_value`,
+  `observed_value`, `tolerance`, `observed_delta`, `repair_recommendation`, `detail`, `created_at`.
+- **Migration**: `c174b2c3d535` requires reconciliation/event writer drain and rejects mixed-version
+  writes. Upgrade aborts on lock timeout or unattributable authority. Downgrade refuses tenant-wide
+  runs and cross-tenant dedupe collisions that the former global schema cannot represent.
+
 ## `processed_events`
 
 - **Purpose**: Consumer idempotency registry.
@@ -1223,6 +1255,8 @@ section shape and derive the usage line from a fresh scan rather than copying a 
   - `event_id` (String): Identifier for event.
   - `portfolio_id` (String): Canonical portfolio identifier.
   - `service_name` (String): Domain attribute used by the owning module.
+  - `tenant_id` (String): Nullable authority for deliberately global event families; required for
+    transaction-owned and financial-reconciliation-requested fences.
   - `correlation_id` (String): Trace/correlation id used across logs and events.
   - `processed_at` (DateTime): Business/event date or timestamp used for ordering, as-of queries, or lifecycle tracking.
 
