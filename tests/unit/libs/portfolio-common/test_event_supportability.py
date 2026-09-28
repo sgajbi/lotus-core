@@ -137,16 +137,19 @@ def test_cataloged_event_models_accept_governed_outbox_envelope_metadata() -> No
         },
         "FinancialReconciliationRequestedEvent": {
             "portfolio_id": "P1",
+            "tenant_id": "tenant-test",
             "business_date": "2026-04-10",
         },
         "FinancialReconciliationCompletedEvent": {
             "portfolio_id": "P1",
+            "tenant_id": "tenant-test",
             "business_date": "2026-04-10",
             "outcome_status": "PASSED",
             "reconciliation_types": ["transaction_cashflow"],
         },
         "PortfolioDayControlsEvaluatedEvent": {
             "portfolio_id": "P1",
+            "tenant_id": "tenant-test",
             "business_date": "2026-04-10",
             "status": "PASSED",
         },

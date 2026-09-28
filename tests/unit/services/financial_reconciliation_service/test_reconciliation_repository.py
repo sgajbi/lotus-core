@@ -3,6 +3,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy.exc import IntegrityError
 
 from src.services.financial_reconciliation_service.app.ports import (
@@ -13,6 +14,7 @@ from src.services.financial_reconciliation_service.app.repositories import (
 )
 
 pytestmark = pytest.mark.asyncio
+TENANT_ID = TenantId("tenant-a")
 
 
 class _AsyncContextManager:
@@ -38,6 +40,7 @@ async def test_create_run_normalizes_sentinel_correlation(mock_db_session: Async
     repository.get_run_by_dedupe_key = AsyncMock(return_value=None)
 
     run, created = await repository.create_run(
+        tenant_id=TENANT_ID,
         reconciliation_type="transaction_cashflow",
         portfolio_id="P1",
         business_date=date(2025, 8, 10),
@@ -64,6 +67,7 @@ async def test_create_run_uses_injected_run_id_suffix_provider(mock_db_session: 
     repository.get_run_by_dedupe_key = AsyncMock(return_value=None)
 
     run, created = await repository.create_run(
+        tenant_id=TENANT_ID,
         reconciliation_type="transaction_cashflow",
         portfolio_id="P1",
         business_date=date(2025, 8, 10),
@@ -88,6 +92,7 @@ async def test_create_run_returns_existing_row_after_dedupe_integrity_race(
     mock_db_session.flush.side_effect = IntegrityError("stmt", "params", Exception("duplicate"))
 
     run, created = await repository.create_run(
+        tenant_id=TENANT_ID,
         reconciliation_type="transaction_cashflow",
         portfolio_id="P1",
         business_date=date(2025, 8, 10),
@@ -112,6 +117,7 @@ async def test_create_run_returns_preexisting_deduplicated_run_without_writing(
     repository.get_run_by_dedupe_key = AsyncMock(return_value=existing_run)
 
     run, created = await repository.create_run(
+        tenant_id=TENANT_ID,
         reconciliation_type="transaction_cashflow",
         portfolio_id="P1",
         business_date=date(2025, 8, 10),
@@ -141,6 +147,7 @@ async def test_create_run_reraises_unresolved_integrity_error(
 
     with pytest.raises(IntegrityError) as raised:
         await repository.create_run(
+            tenant_id=TENANT_ID,
             reconciliation_type="transaction_cashflow",
             portfolio_id="P1",
             business_date=date(2025, 8, 10),
@@ -163,20 +170,31 @@ async def test_run_lookup_and_mutations_delegate_to_the_session(mock_db_session:
     result.scalar_one_or_none.return_value = stored_run
     mock_db_session.execute.return_value = result
 
-    assert await repository.get_run_by_dedupe_key("dedupe-1") is stored_run
+    assert (
+        await repository.get_run_by_dedupe_key(
+            tenant_id=TENANT_ID,
+            dedupe_key="dedupe-1",
+        )
+        is stored_run
+    )
     dedupe_query = str(
         mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
     assert "financial_reconciliation_runs.dedupe_key = 'dedupe-1'" in dedupe_query
+    assert "financial_reconciliation_runs.tenant_id = 'tenant-a'" in dedupe_query
 
-    assert await repository.get_run("recon-1") is stored_run
+    assert await repository.get_run(tenant_id=TENANT_ID, run_id="recon-1") is stored_run
     run_query = str(
         mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
     assert "financial_reconciliation_runs.run_id = 'recon-1'" in run_query
+    assert "financial_reconciliation_runs.tenant_id = 'tenant-a'" in run_query
 
     findings = [MagicMock(), MagicMock()]
-    await repository.add_findings(findings)
+    for finding in findings:
+        finding.tenant_id = None
+        finding.authority_scope = None
+    await repository.add_findings(tenant_id=TENANT_ID, findings=findings)
     mock_db_session.add_all.assert_called_once_with(findings)
 
     await repository.mark_run_completed(
@@ -191,6 +209,37 @@ async def test_run_lookup_and_mutations_delegate_to_the_session(mock_db_session:
     assert stored_run.completed_at is not None
     assert mock_db_session.flush.await_count == 2
     mock_db_session.refresh.assert_awaited_once_with(stored_run)
+
+
+async def test_reconciliation_scope_exists_filters_authority_before_portfolio_identity(
+    mock_db_session: AsyncMock,
+):
+    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = 1
+    mock_db_session.execute.return_value = result
+
+    assert await repository.reconciliation_scope_exists(
+        tenant_id=TENANT_ID,
+        portfolio_id="P1",
+    )
+
+    compiled_query = str(
+        mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "portfolios.tenant_id = 'tenant-a'" in compiled_query
+    assert "portfolios.portfolio_id = 'P1'" in compiled_query
+
+
+async def test_add_findings_rejects_mismatched_tenant_before_flush(mock_db_session: AsyncMock):
+    repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
+    finding = MagicMock(tenant_id="tenant-b", authority_scope="TENANT")
+
+    with pytest.raises(ValueError, match="tenant authority"):
+        await repository.add_findings(tenant_id=TENANT_ID, findings=[finding])
+
+    mock_db_session.add_all.assert_not_called()
+    mock_db_session.flush.assert_not_awaited()
 
 
 async def test_fetch_latest_fx_rates_normalizes_keys_and_uses_lateral_latest_rate_lookup(
@@ -270,13 +319,14 @@ async def test_list_findings_uses_index_aligned_order(mock_db_session: AsyncMock
     result.scalars.return_value.all.return_value = []
     mock_db_session.execute.return_value = result
 
-    findings = await repository.list_findings("recon-123")
+    findings = await repository.list_findings(tenant_id=TENANT_ID, run_id="recon-123")
 
     assert findings == []
     compiled_query = str(
         mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
     assert "financial_reconciliation_findings.run_id = 'recon-123'" in compiled_query
+    assert "financial_reconciliation_findings.tenant_id = 'tenant-a'" in compiled_query
     assert (
         "ORDER BY financial_reconciliation_findings.severity ASC, "
         "financial_reconciliation_findings.finding_type ASC, "
@@ -292,6 +342,7 @@ async def test_list_runs_uses_index_aligned_deterministic_order(mock_db_session:
     mock_db_session.execute.return_value = result
 
     runs = await repository.list_runs(
+        tenant_id=TENANT_ID,
         reconciliation_type="position_valuation",
         portfolio_id="P1",
         limit=10,
@@ -305,6 +356,7 @@ async def test_list_runs_uses_index_aligned_deterministic_order(mock_db_session:
         "financial_reconciliation_runs.reconciliation_type = 'position_valuation'" in compiled_query
     )
     assert "financial_reconciliation_runs.portfolio_id = 'P1'" in compiled_query
+    assert "financial_reconciliation_runs.tenant_id = 'tenant-a'" in compiled_query
     assert (
         "ORDER BY financial_reconciliation_runs.started_at DESC, "
         "financial_reconciliation_runs.id DESC"
@@ -318,11 +370,12 @@ async def test_list_runs_without_optional_filters(mock_db_session: AsyncMock):
     result.scalars.return_value.all.return_value = []
     mock_db_session.execute.return_value = result
 
-    assert await repository.list_runs() == []
+    assert await repository.list_runs(tenant_id=TENANT_ID) == []
     compiled_query = str(
         mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
-    assert "WHERE" not in compiled_query
+    assert "financial_reconciliation_runs.authority_scope = 'TENANT'" in compiled_query
+    assert "financial_reconciliation_runs.tenant_id = 'tenant-a'" in compiled_query
     assert "LIMIT 50" in compiled_query
 
 
@@ -335,6 +388,7 @@ async def test_fetch_transaction_cashflow_rows_uses_index_friendly_business_date
     mock_db_session.execute.return_value = result
 
     rows = await repository.fetch_transaction_cashflow_rows(
+        tenant_id=TENANT_ID,
         portfolio_id="P1",
         business_date=date(2026, 5, 28),
     )
@@ -359,6 +413,7 @@ async def test_fetch_transaction_cashflow_rows_without_optional_filters(
 
     assert (
         await repository.fetch_transaction_cashflow_rows(
+            tenant_id=TENANT_ID,
             portfolio_id=None,
             business_date=None,
         )
@@ -367,7 +422,7 @@ async def test_fetch_transaction_cashflow_rows_without_optional_filters(
     compiled_query = str(
         mock_db_session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
-    assert "WHERE" not in compiled_query
+    assert "portfolios.tenant_id = 'tenant-a'" in compiled_query
 
 
 async def test_fetch_position_valuation_rows_selects_authoritative_rows_through_target_epoch(
@@ -379,6 +434,7 @@ async def test_fetch_position_valuation_rows_selects_authoritative_rows_through_
     mock_db_session.execute.return_value = result
 
     rows = await repository.fetch_position_valuation_rows(
+        tenant_id=TENANT_ID,
         portfolio_id="P1",
         business_date=date(2026, 5, 28),
         epoch=4,
@@ -427,6 +483,7 @@ async def test_fetch_position_valuation_rows_supports_non_authoritative_filter_c
 
     assert (
         await repository.fetch_position_valuation_rows(
+            tenant_id=TENANT_ID,
             portfolio_id=portfolio_id,
             business_date=business_date,
             epoch=epoch,
@@ -451,6 +508,7 @@ async def test_fetch_position_valuation_rows_ranks_all_portfolios_when_unscoped(
 
     assert (
         await repository.fetch_position_valuation_rows(
+            tenant_id=TENANT_ID,
             portfolio_id=None,
             business_date=date(2026, 5, 28),
             epoch=4,
@@ -463,6 +521,9 @@ async def test_fetch_position_valuation_rows_ranks_all_portfolios_when_unscoped(
     assert "row_number() over" in compiled_query
     assert "daily_position_snapshots.date = '2026-05-28'" in compiled_query
     assert "daily_position_snapshots.epoch <= 4" in compiled_query
+    ranked_subquery = compiled_query.split(") as anon_1", maxsplit=1)[0]
+    assert "join portfolios" in ranked_subquery
+    assert "portfolios.tenant_id = 'tenant-a'" in ranked_subquery
 
 
 @pytest.mark.parametrize(
@@ -485,6 +546,7 @@ async def test_repository_aggregate_queries_cover_optional_filter_paths(
     result.scalars.return_value.all.return_value = []
     mock_db_session.execute.return_value = result
     filters = {
+        "tenant_id": TENANT_ID,
         "portfolio_id": "P1" if with_filters else None,
         "business_date": date(2026, 5, 28) if with_filters else None,
         "epoch": 4 if with_filters else None,
@@ -499,7 +561,7 @@ async def test_repository_aggregate_queries_cover_optional_filter_paths(
         assert "date = '2026-05-28'" in compiled_query
         assert "epoch = 4" in compiled_query
     else:
-        assert "where" not in compiled_query
+        assert "portfolios.tenant_id = 'tenant-a'" in compiled_query
 
 
 async def test_fetch_authoritative_position_timeseries_rows_uses_normalized_instrument_join(
@@ -511,6 +573,7 @@ async def test_fetch_authoritative_position_timeseries_rows_uses_normalized_inst
     mock_db_session.execute.return_value = result
 
     rows = await repository.fetch_authoritative_position_timeseries_rows(
+        tenant_id=TENANT_ID,
         portfolio_id="P1",
         business_date=date(2026, 5, 28),
         epoch=4,
@@ -528,6 +591,9 @@ async def test_fetch_authoritative_position_timeseries_rows_uses_normalized_inst
     assert "position_timeseries.date <= '2026-05-28'" in compiled_query
     assert "position_timeseries.epoch <= 4" in compiled_query
     assert "ORDER BY position_timeseries.security_id ASC" in compiled_query
+    ranked_subquery = compiled_query.lower().split(") as anon_1", maxsplit=1)[0]
+    assert "join portfolios" in ranked_subquery
+    assert "portfolios.tenant_id = 'tenant-a'" in ranked_subquery
 
 
 @pytest.mark.parametrize(("stored_count", "expected_count"), [(7, 7), (None, 0)])
@@ -542,6 +608,7 @@ async def test_fetch_authoritative_snapshot_count_returns_normalized_count(
     mock_db_session.execute.return_value = result
 
     count = await repository.fetch_authoritative_snapshot_count(
+        tenant_id=TENANT_ID,
         portfolio_id="P1",
         business_date=date(2026, 5, 28),
         epoch=4,

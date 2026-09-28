@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
+from portfolio_common.domain.tenant import TenantAuthorityMismatchError, TenantId
 
 from src.services.portfolio_transaction_processing_service.app.application.cost_basis_processing import (  # noqa: E501
     CostProcessingRoute,
@@ -72,6 +73,7 @@ def _transaction(*, transaction_type: str = "BUY") -> BookedTransaction:
         trade_currency="SGD",
         currency="SGD",
         epoch=7,
+        tenant_id=TEST_TENANT_ID,
     )
 
 
@@ -537,3 +539,27 @@ async def test_execution_routes_prepared_transaction_without_framework_events(
         use_case._calculate_cost_basis.assert_awaited_once()
         use_case._book_foreign_exchange.assert_not_awaited()
     coordination.assert_awaited_once()
+    assert coordination.await_args.kwargs["tenant_id"] == TenantId(TEST_TENANT_ID)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("transaction_tenant_id", [None, "tenant-other"])
+async def test_execution_rejects_missing_or_mismatched_admitted_tenant_before_effects(
+    transaction_tenant_id: str | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prepared = _prepared(route=CostProcessingRoute.COST_BASIS)
+    prepared = replace(
+        prepared,
+        transaction=replace(prepared.transaction, tenant_id=transaction_tenant_id),
+    )
+    use_case = PreparedCostProcessingUseCase()
+    use_case._calculate_cost_basis = AsyncMock(return_value=(prepared.transaction,))
+    coordination = AsyncMock()
+    monkeypatch.setattr(execution_module, "coordinate_cost_processing_effects", coordination)
+
+    with pytest.raises(TenantAuthorityMismatchError):
+        await use_case.execute(prepared=prepared, **_dependencies())
+
+    use_case._calculate_cost_basis.assert_not_awaited()
+    coordination.assert_not_awaited()

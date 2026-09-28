@@ -18,7 +18,7 @@ from ..domain.reconciliation_control import FinancialReconciliationCompletion
 
 
 class TransactionalReconciliationCompletionEventStager:
-    """Stage existing completion and control events in the caller transaction."""
+    """Stage tenant-authoritative completion and control events in the caller transaction."""
 
     def __init__(self, outbox_repository: OutboxRepository) -> None:
         self._outbox_repository = outbox_repository
@@ -29,9 +29,10 @@ class TransactionalReconciliationCompletionEventStager:
         *,
         correlation_id: str | None,
     ) -> None:
-        """Stage the existing reconciliation-completed contract unchanged."""
+        """Stage reconciliation completion with the source-owned tenant authority."""
 
         event = FinancialReconciliationCompletedEvent(
+            tenant_id=completion.tenant_id.value,
             portfolio_id=completion.portfolio_id,
             business_date=completion.business_date,
             epoch=completion.epoch,
@@ -64,9 +65,10 @@ class TransactionalReconciliationCompletionEventStager:
         controls_blocking: bool,
         correlation_id: str | None,
     ) -> None:
-        """Stage the existing controls-evaluated contract unchanged."""
+        """Stage the control decision with the same source-owned tenant authority."""
 
         event = PortfolioDayControlsEvaluatedEvent(
+            tenant_id=completion.tenant_id.value,
             portfolio_id=completion.portfolio_id,
             business_date=completion.business_date,
             epoch=completion.epoch,

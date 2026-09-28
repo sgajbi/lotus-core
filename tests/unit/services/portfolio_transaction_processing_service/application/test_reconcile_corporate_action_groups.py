@@ -6,6 +6,7 @@ from decimal import Decimal
 from time import perf_counter
 
 import pytest
+from portfolio_common.domain.tenant import TenantAuthorityMismatchError, TenantId
 
 from src.services.portfolio_transaction_processing_service.app.application import (
     CorporateActionReconciliationCoordinator,
@@ -18,6 +19,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
 )
 
 pytestmark = pytest.mark.asyncio
+TENANT_ID = TenantId("tenant-test")
 
 
 def _transaction(
@@ -60,7 +62,13 @@ class _Repository:
         self.loaded_keys.append(key)
         return self.transactions
 
-    async def save_evidence(self, evidence: CorporateActionReconciliationEvidence) -> None:
+    async def save_evidence(
+        self,
+        *,
+        tenant_id: TenantId,
+        evidence: CorporateActionReconciliationEvidence,
+    ) -> None:
+        assert tenant_id == TENANT_ID
         if self.save_error is not None:
             raise self.save_error
         self.saved_evidence.append(evidence)
@@ -86,12 +94,34 @@ async def test_non_corporate_action_does_not_cross_reconciliation_port() -> None
     result = await CorporateActionReconciliationCoordinator(
         repository,
         observer=observer,
-    ).reconcile(transaction, correlation_id="corr-01")
+    ).reconcile(transaction, tenant_id=TENANT_ID, correlation_id="corr-01")
 
     assert result is None
     assert repository.loaded_keys == []
     assert repository.saved_evidence == []
     assert observer.observations == []
+
+
+async def test_transaction_tenant_override_is_rejected_before_repository_access() -> None:
+    transaction = replace(
+        _transaction(
+            transaction_id="CA-OUT-OVERRIDE-01",
+            transaction_type="DEMERGER_OUT",
+            net_cost_local="-100",
+        ),
+        tenant_id="tenant-other",
+    )
+    repository = _Repository((transaction,))
+
+    with pytest.raises(TenantAuthorityMismatchError, match="does not match admitted"):
+        await CorporateActionReconciliationCoordinator(repository).reconcile(
+            transaction,
+            tenant_id=TENANT_ID,
+            correlation_id="corr-override-01",
+        )
+
+    assert repository.loaded_keys == []
+    assert repository.saved_evidence == []
 
 
 async def test_incomplete_group_identity_does_not_cross_reconciliation_port() -> None:
@@ -105,6 +135,7 @@ async def test_incomplete_group_identity_does_not_cross_reconciliation_port() ->
 
     result = await CorporateActionReconciliationCoordinator(repository).reconcile(
         transaction,
+        tenant_id=TENANT_ID,
         correlation_id="corr-01",
     )
 
@@ -132,13 +163,14 @@ async def test_group_is_loaded_persisted_and_observed_once_per_batch() -> None:
         clock=lambda: completed_at,
     )
 
-    first = await coordinator.reconcile(source, correlation_id="corr-01")
-    repeated = await coordinator.reconcile(target, correlation_id="corr-01")
+    first = await coordinator.reconcile(source, tenant_id=TENANT_ID, correlation_id="corr-01")
+    repeated = await coordinator.reconcile(target, tenant_id=TENANT_ID, correlation_id="corr-01")
 
     assert first is not None
     assert repeated is None
     assert repository.loaded_keys == [
         CorporateActionReconciliationKey(
+            tenant_id=TENANT_ID,
             portfolio_id="PORT_CA_01",
             linked_transaction_group_id="LTG-CA-01",
             parent_event_reference="CA-PARENT-01",
@@ -187,7 +219,7 @@ async def test_missing_dependency_is_carried_to_evidence_and_observation() -> No
     evidence = await CorporateActionReconciliationCoordinator(
         repository,
         observer=observer,
-    ).reconcile(source, correlation_id=None)
+    ).reconcile(source, tenant_id=TENANT_ID, correlation_id=None)
 
     assert evidence is not None
     assert evidence.run.summary["missing_dependency_count"] == 1
@@ -224,7 +256,7 @@ async def test_quantity_transfer_group_emits_reciprocal_linkage_evidence() -> No
     evidence = await CorporateActionReconciliationCoordinator(
         repository,
         observer=observer,
-    ).reconcile(source, correlation_id="corr-linkage-01")
+    ).reconcile(source, tenant_id=TENANT_ID, correlation_id="corr-linkage-01")
 
     assert evidence is not None
     assert evidence.run.reconciliation_type == "corporate_action_quantity_transfer"
@@ -262,6 +294,7 @@ async def test_late_source_adjustment_triggers_unsupported_adjustment_evidence()
 
     evidence = await CorporateActionReconciliationCoordinator(repository).reconcile(
         adjustment,
+        tenant_id=TENANT_ID,
         correlation_id="corr-late-adjustment-01",
     )
 
@@ -274,6 +307,7 @@ async def test_late_source_adjustment_triggers_unsupported_adjustment_evidence()
     ]
     assert repository.loaded_keys == [
         CorporateActionReconciliationKey(
+            tenant_id=TENANT_ID,
             portfolio_id="PORT_CA_01",
             linked_transaction_group_id="LTG-CA-01",
             parent_event_reference="CA-PARENT-01",
@@ -316,6 +350,7 @@ async def test_cash_overlay_uses_loaded_quantity_transfer_family(
 
     evidence = await CorporateActionReconciliationCoordinator(repository).reconcile(
         corrected_cash,
+        tenant_id=TENANT_ID,
         correlation_id="corr-corrected-cash-01",
     )
 
@@ -337,10 +372,10 @@ async def test_failed_persistence_is_not_observed_or_deduplicated() -> None:
     coordinator = CorporateActionReconciliationCoordinator(repository, observer=observer)
 
     with pytest.raises(RuntimeError, match="database unavailable"):
-        await coordinator.reconcile(source, correlation_id="corr-01")
+        await coordinator.reconcile(source, tenant_id=TENANT_ID, correlation_id="corr-01")
 
     repository.save_error = None
-    evidence = await coordinator.reconcile(source, correlation_id="corr-01")
+    evidence = await coordinator.reconcile(source, tenant_id=TENANT_ID, correlation_id="corr-01")
 
     assert evidence is not None
     assert len(repository.loaded_keys) == 2
@@ -367,6 +402,7 @@ async def test_one_thousand_target_group_uses_one_read_and_one_evidence_write() 
     started_at = perf_counter()
     evidence = await CorporateActionReconciliationCoordinator(repository).reconcile(
         source,
+        tenant_id=TENANT_ID,
         correlation_id="corr-capacity-1000",
     )
     elapsed_seconds = perf_counter() - started_at

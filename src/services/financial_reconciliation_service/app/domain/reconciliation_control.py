@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Mapping
 
+from portfolio_common.domain.tenant import TenantId
+
 CONTROL_BLOCKING_STATUSES = frozenset({"FAILED", "REQUIRES_REPLAY"})
 
 
@@ -13,6 +15,7 @@ CONTROL_BLOCKING_STATUSES = frozenset({"FAILED", "REQUIRES_REPLAY"})
 class FinancialReconciliationCompletion:
     """Outcome of one automatic reconciliation bundle for a portfolio day."""
 
+    tenant_id: TenantId
     portfolio_id: str
     business_date: date
     epoch: int

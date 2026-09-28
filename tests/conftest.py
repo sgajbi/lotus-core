@@ -6,6 +6,8 @@ from typing import Any, Callable
 
 import pytest
 import pytest_asyncio
+import sqlalchemy
+import sqlalchemy.ext.asyncio as sa_async
 from portfolio_common.database_models import ReprocessingJob
 from portfolio_common.database_runtime_profile import DatabasePoolMode
 from portfolio_common.db import create_async_database_engine, create_sync_database_engine
@@ -54,6 +56,42 @@ _test_runtime = prepare_test_runtime(
     preserve_existing=True,
 )
 _test_runtime.export_to(os.environ)
+
+_REAL_CREATE_ENGINE = sqlalchemy.create_engine
+_REAL_CREATE_ASYNC_ENGINE = sa_async.create_async_engine
+_REAL_SESSIONMAKER = sqlalchemy.orm.sessionmaker
+_REAL_ASYNC_SESSIONMAKER = sa_async.async_sessionmaker
+
+
+@pytest.fixture(autouse=True)
+def restore_reloaded_database_module_bindings():
+    """Prevent reload-based unit tests from poisoning later database fixtures.
+
+    Reload tests replace SQLAlchemy constructors before importing the module and can
+    leave both those bindings and constructor-built singleton caches behind after
+    ``monkeypatch`` restores the SQLAlchemy package.  Clear the four module-owned
+    caches together so a later test cannot reuse a fake engine or factory.
+    """
+
+    import portfolio_common.db as db_module
+
+    bindings_are_poisoned = (
+        db_module.create_engine is not _REAL_CREATE_ENGINE
+        or db_module.create_async_engine is not _REAL_CREATE_ASYNC_ENGINE
+        or db_module.sessionmaker is not _REAL_SESSIONMAKER
+        or db_module.async_sessionmaker is not _REAL_ASYNC_SESSIONMAKER
+    )
+    if bindings_are_poisoned:
+        db_module.create_engine = _REAL_CREATE_ENGINE
+        db_module.create_async_engine = _REAL_CREATE_ASYNC_ENGINE
+        db_module.sessionmaker = _REAL_SESSIONMAKER
+        db_module.async_sessionmaker = _REAL_ASYNC_SESSIONMAKER
+        db_module._engine = None
+        db_module._session_factory = None
+        db_module._async_engine = None
+        db_module._async_session_factory = None
+
+    yield
 
 
 def _release_test_runtime_port_reservation() -> None:

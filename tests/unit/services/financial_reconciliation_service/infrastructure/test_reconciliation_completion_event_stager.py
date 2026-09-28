@@ -4,6 +4,7 @@ from datetime import date
 from unittest.mock import AsyncMock
 
 import pytest
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.events import (
     FinancialReconciliationCompletedEvent,
     PortfolioDayControlsEvaluatedEvent,
@@ -21,6 +22,7 @@ pytestmark = pytest.mark.asyncio
 
 def _completion() -> FinancialReconciliationCompletion:
     return FinancialReconciliationCompletion(
+        tenant_id=TenantId("tenant-a"),
         portfolio_id="PORT-CTRL-1",
         business_date=date(2026, 3, 8),
         epoch=3,
@@ -50,6 +52,7 @@ async def test_stages_existing_completion_contract_without_payload_drift() -> No
     assert call.kwargs["topic"] == "portfolio_day.reconciliation.completed"
     payload = FinancialReconciliationCompletedEvent.model_validate(call.kwargs["payload"])
     assert payload.outcome_status == "REQUIRES_REPLAY"
+    assert payload.tenant_id == "tenant-a"
     assert payload.aggregation_revision == 5
     assert payload.blocking_reconciliation_types == ["transaction_cashflow"]
 
@@ -73,6 +76,7 @@ async def test_stages_existing_controls_contract_with_recorded_status() -> None:
     assert call.kwargs["topic"] == "portfolio_day.controls.evaluated"
     payload = PortfolioDayControlsEvaluatedEvent.model_validate(call.kwargs["payload"])
     assert payload.status == "FAILED"
+    assert payload.tenant_id == "tenant-a"
     assert payload.aggregation_revision == 5
     assert payload.controls_blocking is True
     assert payload.publish_allowed is False

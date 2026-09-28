@@ -13,7 +13,8 @@ def processed_event_table_args(*, tenant_id: Any, semantic_key: Any) -> tuple[An
     return (
         CheckConstraint(
             "(service_name NOT IN ('persistence-transactions', "
-            "'portfolio-transaction-processing', 'cashflow-calculator') "
+            "'portfolio-transaction-processing', 'cashflow-calculator', "
+            "'financial-reconciliation-requested') "
             "OR tenant_id IS NOT NULL) AND (tenant_id IS NULL OR "
             "(tenant_id = btrim(tenant_id) AND tenant_id <> '' "
             "AND char_length(tenant_id) <= 128))",

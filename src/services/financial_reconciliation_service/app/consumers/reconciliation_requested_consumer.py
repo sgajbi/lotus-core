@@ -3,6 +3,7 @@ import logging
 
 from confluent_kafka import Message
 from portfolio_common.db import get_async_db_session
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.events import FinancialReconciliationRequestedEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
@@ -57,6 +58,7 @@ class ReconciliationRequestedConsumer(BaseConsumer):
                             event.portfolio_id,
                             SERVICE_NAME,
                             correlation_id,
+                            tenant_id=event.tenant_id,
                         ):
                             return
 
@@ -69,6 +71,7 @@ class ReconciliationRequestedConsumer(BaseConsumer):
                         )
                         runs = await service.run_automatic_bundle(
                             request=request,
+                            tenant_id=TenantId(event.tenant_id),
                             correlation_id=correlation_id,
                             reconciliation_types=event.reconciliation_types,
                             aggregation_revision=event.aggregation_revision,
@@ -84,6 +87,7 @@ class ReconciliationRequestedConsumer(BaseConsumer):
                         )
                         await completion_recorder.execute(
                             FinancialReconciliationCompletion(
+                                tenant_id=TenantId(event.tenant_id),
                                 portfolio_id=event.portfolio_id,
                                 business_date=event.business_date,
                                 epoch=event.epoch,

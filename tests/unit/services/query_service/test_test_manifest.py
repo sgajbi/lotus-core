@@ -60,6 +60,34 @@ def test_critical_db_coverage_includes_financial_reconciliation_repository() -> 
     )
 
 
+TENANT_RECONCILIATION_CRITICAL_PROOF_NODES = [
+    "tests/integration/services/query_control_plane_service/"
+    "test_int_operations_service.py::"
+    "test_reconciliation_reads_require_matching_tenant_authority",
+    "tests/integration/services/portfolio_transaction_processing_service/"
+    "test_int_corporate_action_reconciliation_evidence.py",
+]
+
+
+@pytest.mark.parametrize("node_id", TENANT_RECONCILIATION_CRITICAL_PROOF_NODES)
+def test_critical_db_coverage_executes_tenant_reconciliation_proof(node_id: str) -> None:
+    assert node_id in get_suite("critical-db-coverage")
+
+
+@pytest.mark.parametrize("node_id", TENANT_RECONCILIATION_CRITICAL_PROOF_NODES)
+def test_tenant_reconciliation_manifest_guard_rejects_missing_proof(
+    monkeypatch,
+    node_id: str,
+) -> None:
+    monkeypatch.setitem(
+        SUITES,
+        "critical-db-coverage",
+        [path for path in get_suite("critical-db-coverage") if path != node_id],
+    )
+    with pytest.raises(AssertionError):
+        test_critical_db_coverage_executes_tenant_reconciliation_proof(node_id)
+
+
 def test_critical_db_coverage_includes_cashflow_source_cut_migration() -> None:
     assert "tests/integration/test_portfolio_cashflow_source_cut_migration.py" in get_suite(
         "critical-db-coverage"

@@ -76,6 +76,7 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/services/persistence_service/repositories/"
         "test_transaction_payload_conflict.py",
         "tests/integration/test_aggregation_job_tenant_migration.py",
+        "tests/integration/test_financial_reconciliation_tenant_migration.py",
         "tests/integration/test_portfolio_cashflow_source_cut_migration.py",
         "tests/integration/test_selected_history_sweep_migration.py::"
         "test_sweep_marker_upgrade_defaults_existing_jobs_and_rolls_back",
@@ -105,8 +106,16 @@ SUITES: dict[str, list[str]] = {
         "test_analytics_cashflow_trade_date_postgresql.py",
         "tests/integration/services/query_control_plane_service/"
         "test_benchmark_assignment_tenant_postgresql.py",
+        "tests/integration/services/query_control_plane_service/"
+        "test_int_operations_service.py::"
+        "test_reconciliation_reads_require_matching_tenant_authority",
         "tests/integration/services/financial_reconciliation_service/"
         "test_int_reconciliation_repository.py",
+        "tests/integration/services/financial_reconciliation_service/"
+        "test_financial_reconciliation_app.py::"
+        "test_supported_routes_isolate_tenant_before_writes_and_pagination",
+        "tests/integration/services/portfolio_transaction_processing_service/"
+        "test_int_corporate_action_reconciliation_evidence.py",
         "tests/integration/services/portfolio_derived_state_service/"
         "test_portfolio_aggregation_repository.py::"
         "test_claim_eligible_jobs_does_not_double_claim_under_concurrency",

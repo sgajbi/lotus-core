@@ -2,7 +2,7 @@ import logging
 from datetime import date
 from typing import Awaitable, Optional, TypeVar
 
-from fastapi import APIRouter, Body, Depends, Path, Query, status
+from fastapi import APIRouter, Body, Depends, Path, Query, Request, status
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from ..application.operations.errors import OutboxRecoveryRejected
@@ -232,6 +232,7 @@ async def execute_outbox_recovery_call(
     ),
 )
 async def get_support_overview(
+    request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier.",
@@ -265,6 +266,7 @@ async def get_support_overview(
     return await execute_operations_call(
         service.get_support_overview(
             portfolio_id=portfolio_id,
+            tenant_id=request.state.tenant_context.tenant_id,
             as_of_date=parsed_as_of_date,
             stale_threshold_minutes=stale_threshold_minutes,
             failed_window_hours=failed_window_hours,
@@ -296,6 +298,7 @@ async def get_support_overview(
     ),
 )
 async def get_portfolio_readiness(
+    request: Request,
     portfolio_id: str = Path(
         ...,
         description="Portfolio identifier.",
@@ -328,6 +331,7 @@ async def get_portfolio_readiness(
     return await execute_operations_call(
         service.get_portfolio_readiness(
             portfolio_id=portfolio_id,
+            tenant_id=request.state.tenant_context.tenant_id,
             as_of_date=parsed_as_of_date,
             stale_threshold_minutes=stale_threshold_minutes,
             failed_window_hours=failed_window_hours,
@@ -1028,6 +1032,7 @@ async def requeue_failed_outbox_event(
     openapi_extra=source_data_product_openapi_extra("ReconciliationEvidenceBundle"),
 )
 async def get_reconciliation_runs(
+    request: Request,
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
     run_id: Optional[str] = Query(
         None,
@@ -1066,6 +1071,7 @@ async def get_reconciliation_runs(
     return await execute_operations_call(
         service.get_reconciliation_runs(
             portfolio_id=portfolio_id,
+            tenant_id=request.state.tenant_context.tenant_id,
             skip=skip,
             limit=limit,
             run_id=run_id,
@@ -1101,6 +1107,7 @@ async def get_reconciliation_runs(
     openapi_extra=source_data_product_openapi_extra("ReconciliationEvidenceBundle"),
 )
 async def get_reconciliation_findings(
+    request: Request,
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
     run_id: str = Path(
         ...,
@@ -1132,6 +1139,7 @@ async def get_reconciliation_findings(
             portfolio_id=portfolio_id,
             run_id=run_id,
             limit=limit,
+            tenant_id=request.state.tenant_context.tenant_id,
             finding_id=finding_id,
             security_id=security_id,
             transaction_id=transaction_id,

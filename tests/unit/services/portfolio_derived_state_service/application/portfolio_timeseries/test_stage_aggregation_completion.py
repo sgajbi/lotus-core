@@ -3,6 +3,7 @@
 from datetime import date
 
 import pytest
+from portfolio_common.domain.tenant import TenantId
 
 from src.services.portfolio_derived_state_service.app.application.portfolio_timeseries import (
     stage_aggregation_completion,
@@ -31,6 +32,7 @@ async def test_use_case_delegates_domain_completion_to_event_port() -> None:
     stager = _CompletionEventStager()
     use_case = stage_aggregation_completion.StagePortfolioAggregationCompletion(event_stager=stager)
     completion = PortfolioAggregationCompletion(
+        tenant_id=TenantId("tenant-a"),
         portfolio_id="PORT-1",
         aggregation_date=date(2026, 7, 15),
         epoch=4,

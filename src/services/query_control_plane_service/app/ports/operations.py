@@ -6,6 +6,8 @@ from collections.abc import Sequence
 from datetime import date, datetime
 from typing import Any, Protocol
 
+from portfolio_common.domain.tenant import TenantId
+
 from ..domain.operations import (
     ExportJobHealthSummary,
     JobHealthSummary,
@@ -24,6 +26,13 @@ class OperationsSupportRepository(Protocol):
     """Read and transition the operational evidence required by support use cases."""
 
     async def portfolio_exists(self, portfolio_id: str) -> bool: ...
+
+    async def portfolio_exists_for_tenant(
+        self,
+        portfolio_id: str,
+        *,
+        tenant_id: TenantId,
+    ) -> bool: ...
 
     async def get_load_run_progress(
         self,
@@ -137,6 +146,8 @@ class OperationsSupportRepository(Protocol):
         portfolio_id: str,
         business_date: date,
         epoch: int,
+        *,
+        tenant_id: TenantId,
         as_of: datetime | None = None,
     ) -> ReconciliationRunEvidence | None: ...
 
@@ -276,6 +287,8 @@ class OperationsSupportRepository(Protocol):
     async def get_reconciliation_runs_count(
         self,
         portfolio_id: str,
+        *,
+        tenant_id: TenantId,
         **filters: Any,
     ) -> int: ...
 
@@ -284,6 +297,8 @@ class OperationsSupportRepository(Protocol):
         portfolio_id: str,
         skip: int,
         limit: int,
+        *,
+        tenant_id: TenantId,
         **filters: Any,
     ) -> list[Any]: ...
 
@@ -291,6 +306,8 @@ class OperationsSupportRepository(Protocol):
         self,
         portfolio_id: str,
         run_id: str,
+        *,
+        tenant_id: TenantId,
         as_of: datetime | None = None,
     ) -> Any | None: ...
 
@@ -298,18 +315,24 @@ class OperationsSupportRepository(Protocol):
         self,
         run_id: str,
         limit: int,
+        *,
+        tenant_id: TenantId,
         **filters: Any,
     ) -> list[Any]: ...
 
     async def get_reconciliation_findings_count(
         self,
         run_id: str,
+        *,
+        tenant_id: TenantId,
         **filters: Any,
     ) -> int: ...
 
     async def get_reconciliation_finding_summary(
         self,
         run_id: str,
+        *,
+        tenant_id: TenantId,
         as_of: datetime | None = None,
         **filters: Any,
     ) -> ReconciliationFindingSummary: ...
@@ -317,6 +340,8 @@ class OperationsSupportRepository(Protocol):
     async def get_reconciliation_finding_summaries(
         self,
         run_ids: Sequence[str],
+        *,
+        tenant_id: TenantId,
         as_of: datetime | None = None,
     ) -> dict[str, ReconciliationFindingSummary]: ...
 

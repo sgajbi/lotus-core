@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from portfolio_common.domain.eventing import portfolio_partition_key
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.outbox_repository import OutboxRepository
 
 from src.services.portfolio_derived_state_service.app.domain.portfolio_timeseries.models import (
@@ -25,6 +26,7 @@ async def test_stager_preserves_existing_completion_and_reconciliation_contracts
 
     await stager.stage_completion(
         PortfolioAggregationCompletion(
+            tenant_id=TenantId("tenant-a"),
             portfolio_id="PORT-1",
             aggregation_date=date(2026, 7, 15),
             epoch=4,
@@ -57,6 +59,7 @@ async def test_stager_preserves_existing_completion_and_reconciliation_contracts
         "correlation_id": "corr-1",
     }
     assert reconciliation_call.kwargs["payload"]["portfolio_id"] == "PORT-1"
+    assert reconciliation_call.kwargs["payload"]["tenant_id"] == "tenant-a"
     assert reconciliation_call.kwargs["payload"]["business_date"] == "2026-07-15"
     assert reconciliation_call.kwargs["payload"]["epoch"] == 4
     assert reconciliation_call.kwargs["payload"]["aggregation_revision"] == 7

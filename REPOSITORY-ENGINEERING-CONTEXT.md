@@ -331,6 +331,15 @@ schema, machine-readable contracts, or executable evidence.
   stateful fences, ledger and derived records, other
   portfolio-owned query paths, replay, and operations are tenant-bound and exact-main proven.
   Global reference and market-data products remain explicitly global.
+- Financial reconciliation run/finding persistence, supported command/read routes, aggregation
+  request/completion events, request-consumer fences, QCP support reads, and Bundle A corporate
+  action evidence carry typed admitted tenant authority. Filter tenant before pagination or
+  aggregation, return non-disclosing not-found responses, and never expose historical `ESTATE`
+  reconciliation rows through tenant APIs. This does not close the remaining #798 S2-S6 families.
+  Migration `c174b2c3d535` requires a coordinated drain of reconciliation writers and tenant-bearing
+  event producers/consumers, zero pending legacy reconciliation events, and simultaneous deployment.
+  Its five-second lock timeout is fail-closed; downgrade refuses tenant-wide runs and dedupe keys
+  that cannot return to the former global constraint.
 - Raw persistence source transactions retain a versioned economic-payload fingerprint on the
   durable ledger. Identical `(tenant_id, transaction_id)` replay is a no-op, transport-metadata-only
   changes remain stable, and materially changed economics fail closed at the transaction write

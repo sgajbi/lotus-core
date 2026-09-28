@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from dataclasses import replace
 
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
+from portfolio_common.domain.tenant import TenantAuthorityMismatchError, TenantId
 
 from ...domain.cost_basis import (
     CostBasisProcessingCheckpoint,
@@ -91,6 +92,10 @@ class PreparedCostProcessingUseCase:
     ) -> CostProcessingResult:
         """Execute the selected route and coordinate its settlement and delivery effects."""
 
+        tenant_id = _admitted_tenant_id(
+            transaction_tenant_id=prepared.transaction.tenant_id,
+            portfolio_tenant_id=portfolio.tenant_id,
+        )
         if prepared.route is CostProcessingRoute.FOREIGN_EXCHANGE:
             processed_transactions, instrument_updates = await self._book_foreign_exchange(
                 prepared=prepared,
@@ -122,6 +127,7 @@ class PreparedCostProcessingUseCase:
             processed_transactions=processed_transactions,
             instrument_updates=instrument_updates,
             source_epoch=prepared.transaction.epoch,
+            tenant_id=tenant_id,
             transaction_state=transaction_state,
             reconciliation_repository=reconciliation_repository,
             effect_stager=effect_stager,
@@ -327,3 +333,20 @@ def _raise_for_calculation_errors(errors: Sequence[CostCalculationError]) -> Non
         f"Cost-basis calculation failed for {first_error.transaction_id}: "
         f"{first_error.error_reason}"
     )
+
+
+def _admitted_tenant_id(
+    *,
+    transaction_tenant_id: str | None,
+    portfolio_tenant_id: str,
+) -> TenantId:
+    """Bind persisted portfolio scope to the tenant admitted at message ingress."""
+
+    if transaction_tenant_id is None:
+        raise TenantAuthorityMismatchError("transaction is missing admitted tenant authority")
+    admitted = TenantId(transaction_tenant_id)
+    if admitted != TenantId(portfolio_tenant_id):
+        raise TenantAuthorityMismatchError(
+            "transaction tenant authority does not match persisted portfolio ownership"
+        )
+    return admitted

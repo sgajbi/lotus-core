@@ -1,12 +1,14 @@
 """SQLAlchemy adapter for corporate-action cost-basis reconciliation evidence."""
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 from portfolio_common.database_models import (
     FinancialReconciliationFinding,
     FinancialReconciliationRun,
+    Portfolio,
 )
 from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.domain.tenant import TenantAuthorityMismatchError, TenantId
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +35,8 @@ class SqlAlchemyCorporateActionReconciliationRepository:
     ) -> tuple[BookedTransaction, ...]:
         stmt = (
             select(DBTransaction)
+            .join(Portfolio, Portfolio.portfolio_id == DBTransaction.portfolio_id)
+            .where(Portfolio.tenant_id == key.tenant_id.value)
             .where(DBTransaction.portfolio_id == key.portfolio_id)
             .where(DBTransaction.linked_transaction_group_id == key.linked_transaction_group_id)
             .where(DBTransaction.parent_event_reference == key.parent_event_reference)
@@ -43,12 +47,31 @@ class SqlAlchemyCorporateActionReconciliationRepository:
             )
         )
         rows = (await self._session.execute(stmt)).scalars().all()
-        return tuple(to_booked_transaction_from_record(row) for row in rows)
+        return tuple(
+            replace(
+                to_booked_transaction_from_record(row),
+                tenant_id=key.tenant_id.value,
+            )
+            for row in rows
+        )
 
-    async def save_evidence(self, evidence: CorporateActionReconciliationEvidence) -> None:
-        run = asdict(evidence.run)
+    async def save_evidence(
+        self,
+        *,
+        tenant_id: TenantId,
+        evidence: CorporateActionReconciliationEvidence,
+    ) -> None:
+        if evidence.tenant_id != tenant_id:
+            raise TenantAuthorityMismatchError(
+                "reconciliation evidence tenant does not match admitted tenant authority"
+            )
+        run = {
+            **asdict(evidence.run),
+            "authority_scope": "TENANT",
+            "tenant_id": tenant_id.value,
+        }
         run_stmt = pg_insert(FinancialReconciliationRun).values(**run)
-        await self._session.execute(
+        run_result = await self._session.execute(
             run_stmt.on_conflict_do_update(
                 index_elements=["run_id"],
                 set_={
@@ -58,12 +81,26 @@ class SqlAlchemyCorporateActionReconciliationRepository:
                     "completed_at": run_stmt.excluded.completed_at,
                     "updated_at": func.now(),
                 },
-            )
+                where=(
+                    (FinancialReconciliationRun.authority_scope == "TENANT")
+                    & (FinancialReconciliationRun.tenant_id == tenant_id.value)
+                ),
+            ).returning(FinancialReconciliationRun.run_id)
         )
-        await self._resolve_superseded_findings(evidence)
+        # PostgreSQL returns no row when the conflict WHERE rejects a foreign
+        # authority. Treat that as an ownership violation, never a successful replay.
+        if run_result.scalar_one_or_none() is None:
+            raise TenantAuthorityMismatchError(
+                "reconciliation run identity is bound to different tenant authority"
+            )
+        await self._resolve_superseded_findings(tenant_id=tenant_id, evidence=evidence)
         for finding in evidence.findings:
-            finding_stmt = pg_insert(FinancialReconciliationFinding).values(**asdict(finding))
-            await self._session.execute(
+            finding_stmt = pg_insert(FinancialReconciliationFinding).values(
+                **asdict(finding),
+                authority_scope="TENANT",
+                tenant_id=tenant_id.value,
+            )
+            finding_result = await self._session.execute(
                 finding_stmt.on_conflict_do_update(
                     index_elements=["finding_id"],
                     set_={
@@ -83,11 +120,22 @@ class SqlAlchemyCorporateActionReconciliationRepository:
                         "observed_delta": finding_stmt.excluded.observed_delta,
                         "repair_recommendation": finding_stmt.excluded.repair_recommendation,
                     },
-                )
+                    where=(
+                        (FinancialReconciliationFinding.authority_scope == "TENANT")
+                        & (FinancialReconciliationFinding.tenant_id == tenant_id.value)
+                    ),
+                ).returning(FinancialReconciliationFinding.finding_id)
             )
+            # Keep finding identity collisions on the same fail-closed contract as runs.
+            if finding_result.scalar_one_or_none() is None:
+                raise TenantAuthorityMismatchError(
+                    "reconciliation finding identity is bound to different tenant authority"
+                )
 
     async def _resolve_superseded_findings(
         self,
+        *,
+        tenant_id: TenantId,
         evidence: CorporateActionReconciliationEvidence,
     ) -> None:
         linked_group = _required_summary_identity(
@@ -101,6 +149,8 @@ class SqlAlchemyCorporateActionReconciliationRepository:
         stmt = (
             update(FinancialReconciliationFinding)
             .where(
+                FinancialReconciliationFinding.authority_scope == "TENANT",
+                FinancialReconciliationFinding.tenant_id == tenant_id.value,
                 FinancialReconciliationFinding.reconciliation_type
                 == evidence.run.reconciliation_type,
                 FinancialReconciliationFinding.portfolio_id == evidence.run.portfolio_id,

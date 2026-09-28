@@ -4,6 +4,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.observability_contracts import PORTFOLIO_SUPPORTABILITY_METRIC_LABELS
 from portfolio_common.reconciliation_quality import (
     BLOCKED,
@@ -46,6 +47,7 @@ from src.services.query_control_plane_service.app.domain.operations import (
 pytestmark = pytest.mark.asyncio
 
 FIXED_GENERATED_AT = datetime(2026, 4, 18, 8, 10, tzinfo=timezone.utc)
+TENANT_ID = TenantId("tenant-test")
 FORBIDDEN_SUPPORTABILITY_METRIC_LABELS = (
     "portfolio_id",
     "account_id",
@@ -80,6 +82,7 @@ def _portfolio_supportability_metric_lines() -> list[str]:
 def mock_ops_repo() -> AsyncMock:
     repo = AsyncMock()
     repo.portfolio_exists.return_value = True
+    repo.portfolio_exists_for_tenant.return_value = True
     repo.get_reconciliation_finding_summaries.return_value = {}
 
     async def valuation_snapshot(**kwargs):
@@ -330,7 +333,7 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
         top_blocking_finding_transaction_id="txn_0001",
     )
 
-    response = await service.get_support_overview("P1")
+    response = await service.get_support_overview("P1", tenant_id=TENANT_ID)
 
     assert response.portfolio_id == "P1"
     assert response.business_date == date(2025, 8, 30)
@@ -566,7 +569,7 @@ async def test_support_overview_reads_reconciliation_and_booked_evidence_sequent
     )
     mock_ops_repo.get_latest_transaction_date_as_of.side_effect = get_latest_transaction_date_as_of
 
-    response = await service.get_support_overview("P1")
+    response = await service.get_support_overview("P1", tenant_id=TENANT_ID)
 
     assert call_order == ["reconciliation", "booked_transaction"]
     assert response.controls_latest_reconciliation_run_id == "recon_1234567890abcdef"
@@ -800,7 +803,7 @@ async def test_get_support_overview_keeps_carried_forward_snapshot_ahead_of_last
     mock_ops_repo.get_position_snapshot_history_mismatch_count.return_value = 0
     mock_ops_repo.get_latest_financial_reconciliation_control_stage.return_value = None
 
-    response = await service.get_support_overview("P1")
+    response = await service.get_support_overview("P1", tenant_id=TENANT_ID)
 
     assert response.latest_transaction_date == date(2025, 9, 2)
     assert response.latest_booked_transaction_date == date(2025, 8, 26)
@@ -2110,6 +2113,7 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
         "P1",
         skip=0,
         limit=20,
+        tenant_id=TENANT_ID,
         run_id="recon_1234567890abcdef",
         requested_by="pipeline_orchestrator_service",
         dedupe_key="recon:corporate_action_bundle_a:P1:2026-03-13:3",
@@ -2137,6 +2141,7 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
     assert response.items[0].operational_state == "BLOCKING"
     mock_ops_repo.get_reconciliation_runs_count.assert_awaited_once_with(
         portfolio_id="P1",
+        tenant_id=TENANT_ID,
         run_id="recon_1234567890abcdef",
         correlation_id=None,
         requested_by="pipeline_orchestrator_service",
@@ -2149,6 +2154,7 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
         portfolio_id="P1",
         skip=0,
         limit=20,
+        tenant_id=TENANT_ID,
         run_id="recon_1234567890abcdef",
         correlation_id=None,
         requested_by="pipeline_orchestrator_service",
@@ -2169,6 +2175,7 @@ async def test_get_reconciliation_runs_forwards_correlation_filter(
         "P1",
         skip=0,
         limit=20,
+        tenant_id=TENANT_ID,
         correlation_id="corr-recon-20260313-001",
         status="FAILED",
     )
@@ -2176,6 +2183,7 @@ async def test_get_reconciliation_runs_forwards_correlation_filter(
     assert response.total == 0
     mock_ops_repo.get_reconciliation_runs_count.assert_awaited_once_with(
         portfolio_id="P1",
+        tenant_id=TENANT_ID,
         run_id=None,
         correlation_id="corr-recon-20260313-001",
         requested_by=None,
@@ -2188,6 +2196,7 @@ async def test_get_reconciliation_runs_forwards_correlation_filter(
         portfolio_id="P1",
         skip=0,
         limit=20,
+        tenant_id=TENANT_ID,
         run_id=None,
         correlation_id="corr-recon-20260313-001",
         requested_by=None,
@@ -2226,12 +2235,33 @@ async def test_get_reconciliation_runs_blocks_usage_for_incomplete_page(
         )()
     ]
 
-    response = await service.get_reconciliation_runs("P1", skip=0, limit=1)
+    response = await service.get_reconciliation_runs("P1", skip=0, limit=1, tenant_id=TENANT_ID)
 
     assert response.reconciliation_status == COMPLETE
     assert response.publication_gate == "BLOCK"
     assert response.source_evidence_current is False
     assert response.publication_block_reasons == ["INCOMPLETE_RECONCILIATION_EVIDENCE_WINDOW"]
+
+
+async def test_get_reconciliation_runs_rejects_foreign_portfolio_before_evidence_reads(
+    service: OperationsService, mock_ops_repo: AsyncMock
+) -> None:
+    mock_ops_repo.portfolio_exists_for_tenant.return_value = False
+
+    with pytest.raises(ValueError, match="Requested operations support resource was not found"):
+        await service.get_reconciliation_runs(
+            "P-FOREIGN",
+            skip=0,
+            limit=1,
+            tenant_id=TENANT_ID,
+        )
+
+    mock_ops_repo.portfolio_exists_for_tenant.assert_awaited_once_with(
+        "P-FOREIGN", tenant_id=TENANT_ID
+    )
+    mock_ops_repo.get_reconciliation_runs_count.assert_not_awaited()
+    mock_ops_repo.get_reconciliation_runs.assert_not_awaited()
+    mock_ops_repo.get_reconciliation_finding_summaries.assert_not_awaited()
 
 
 async def test_reconciliation_run_gate_uses_current_findings_and_preserves_history(
@@ -2274,7 +2304,9 @@ async def test_reconciliation_run_gate_uses_current_findings_and_preserves_histo
     )
     mock_ops_repo.get_reconciliation_finding_summaries.return_value = {run.run_id: closed_summary}
 
-    closed_response = await service.get_reconciliation_runs("P1", skip=0, limit=20)
+    closed_response = await service.get_reconciliation_runs(
+        "P1", skip=0, limit=20, tenant_id=TENANT_ID
+    )
 
     assert closed_response.reconciliation_status == COMPLETE
     assert closed_response.publication_gate == "ALLOW"
@@ -2293,7 +2325,9 @@ async def test_reconciliation_run_gate_uses_current_findings_and_preserves_histo
     )
     mock_ops_repo.get_reconciliation_finding_summaries.return_value = {run.run_id: open_summary}
 
-    open_response = await service.get_reconciliation_runs("P1", skip=0, limit=20)
+    open_response = await service.get_reconciliation_runs(
+        "P1", skip=0, limit=20, tenant_id=TENANT_ID
+    )
 
     assert open_response.reconciliation_status == BLOCKED
     assert open_response.publication_gate == "BLOCK"
@@ -2307,6 +2341,7 @@ async def test_reconciliation_run_gate_uses_current_findings_and_preserves_histo
     assert open_response.reconciliation_evidence_id != closed_response.reconciliation_evidence_id
     mock_ops_repo.get_reconciliation_finding_summaries.assert_awaited_with(
         [run.run_id],
+        tenant_id=TENANT_ID,
         as_of=open_response.generated_at_utc,
     )
 
@@ -2321,6 +2356,7 @@ async def test_get_reconciliation_runs_forwards_requester_and_dedupe_filters(
         "P1",
         skip=0,
         limit=20,
+        tenant_id=TENANT_ID,
         requested_by="pipeline_orchestrator_service",
         dedupe_key="recon:transaction_cashflow:P1:2026-03-13:3",
         status="FAILED",
@@ -2329,6 +2365,7 @@ async def test_get_reconciliation_runs_forwards_requester_and_dedupe_filters(
     assert response.total == 0
     mock_ops_repo.get_reconciliation_runs_count.assert_awaited_once_with(
         portfolio_id="P1",
+        tenant_id=TENANT_ID,
         run_id=None,
         correlation_id=None,
         requested_by="pipeline_orchestrator_service",
@@ -2341,6 +2378,7 @@ async def test_get_reconciliation_runs_forwards_requester_and_dedupe_filters(
         portfolio_id="P1",
         skip=0,
         limit=20,
+        tenant_id=TENANT_ID,
         run_id=None,
         correlation_id=None,
         requested_by="pipeline_orchestrator_service",
@@ -2566,6 +2604,7 @@ async def test_get_reconciliation_findings(service: OperationsService, mock_ops_
         portfolio_id="P1",
         run_id="recon_1234567890abcdef",
         limit=50,
+        tenant_id=TENANT_ID,
         finding_id="rf_1234567890abcdef",
         security_id="SEC-US-IBM",
         transaction_id="TXN-20260313-0042",
@@ -2585,10 +2624,12 @@ async def test_get_reconciliation_findings(service: OperationsService, mock_ops_
     mock_ops_repo.get_reconciliation_run.assert_awaited_once_with(
         portfolio_id="P1",
         run_id="recon_1234567890abcdef",
+        tenant_id=TENANT_ID,
         as_of=response.generated_at_utc,
     )
     mock_ops_repo.get_reconciliation_finding_summary.assert_awaited_once_with(
         run_id="recon_1234567890abcdef",
+        tenant_id=TENANT_ID,
         finding_id="rf_1234567890abcdef",
         security_id="SEC-US-IBM",
         transaction_id="TXN-20260313-0042",
@@ -2597,6 +2638,7 @@ async def test_get_reconciliation_findings(service: OperationsService, mock_ops_
     mock_ops_repo.get_reconciliation_findings.assert_awaited_once_with(
         run_id="recon_1234567890abcdef",
         limit=50,
+        tenant_id=TENANT_ID,
         finding_id="rf_1234567890abcdef",
         security_id="SEC-US-IBM",
         transaction_id="TXN-20260313-0042",
@@ -2666,6 +2708,7 @@ async def test_get_reconciliation_findings_raises_when_run_missing(
             portfolio_id="P1",
             run_id="recon_1234567890abcdef",
             limit=50,
+            tenant_id=TENANT_ID,
         )
     mock_ops_repo.get_reconciliation_run.assert_awaited_once()
 
@@ -2914,10 +2957,10 @@ async def test_get_reprocessing_jobs_forwards_correlation_filter(
 async def test_get_support_overview_raises_when_portfolio_missing(
     service: OperationsService, mock_ops_repo: AsyncMock
 ):
-    mock_ops_repo.portfolio_exists.return_value = False
+    mock_ops_repo.portfolio_exists_for_tenant.return_value = False
 
-    with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
-        await service.get_support_overview("P404")
+    with pytest.raises(ValueError, match="Requested operations support resource was not found"):
+        await service.get_support_overview("P404", tenant_id=TENANT_ID)
 
 
 async def test_get_support_overview_honors_custom_stale_threshold(
@@ -2975,6 +3018,7 @@ async def test_get_support_overview_honors_custom_stale_threshold(
 
     response = await service.get_support_overview(
         "P1",
+        tenant_id=TENANT_ID,
         stale_threshold_minutes=30,
         failed_window_hours=48,
         use_latest_business_date_for_aggregation_health=True,
@@ -3074,7 +3118,7 @@ async def test_get_support_overview_without_business_date(
     mock_ops_repo.get_latest_financial_reconciliation_control_stage.return_value = None
     mock_ops_repo.get_latest_reconciliation_run_for_portfolio_day.return_value = None
 
-    response = await service.get_support_overview("P1")
+    response = await service.get_support_overview("P1", tenant_id=TENANT_ID)
 
     assert response.business_date is None
     assert response.stale_threshold_minutes == 15
@@ -3216,7 +3260,7 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
         top_blocking_finding_transaction_id="txn_0099",
     )
 
-    response = await service.get_support_overview("P1")
+    response = await service.get_support_overview("P1", tenant_id=TENANT_ID)
 
     assert response.controls_stage_id == 702
     assert response.controls_last_source_event_type == "portfolio_day.reconciliation.completed"
@@ -3268,10 +3312,12 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
         portfolio_id="P1",
         business_date=date(2025, 8, 30),
         epoch=2,
+        tenant_id=TENANT_ID,
         as_of=datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
     )
     mock_ops_repo.get_reconciliation_finding_summary.assert_awaited_once_with(
         "recon_failed_20250830",
+        tenant_id=TENANT_ID,
         as_of=datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
     )
 
@@ -3386,7 +3432,9 @@ async def test_get_portfolio_readiness_surfaces_missing_historical_fx_as_blockin
     )()
     mock_ops_repo.get_latest_reconciliation_run_for_portfolio_day.return_value = None
 
-    response = await service.get_portfolio_readiness("P1", as_of_date=date(2026, 3, 28))
+    response = await service.get_portfolio_readiness(
+        "P1", tenant_id=TENANT_ID, as_of_date=date(2026, 3, 28)
+    )
 
     assert response.resolved_as_of_date == date(2026, 3, 28)
     assert mock_ops_repo.get_aggregation_job_health_summary.await_args.kwargs[
@@ -3495,7 +3543,9 @@ async def test_get_portfolio_readiness_marks_pending_when_snapshots_lag_transact
     mock_ops_repo.get_latest_financial_reconciliation_control_stage.return_value = None
     mock_ops_repo.get_latest_reconciliation_run_for_portfolio_day.return_value = None
 
-    response = await service.get_portfolio_readiness("P1", as_of_date=date(2026, 3, 28))
+    response = await service.get_portfolio_readiness(
+        "P1", tenant_id=TENANT_ID, as_of_date=date(2026, 3, 28)
+    )
 
     assert response.holdings.status == "PENDING"
     assert response.pricing.status == "PENDING"

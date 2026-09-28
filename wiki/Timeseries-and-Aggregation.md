@@ -34,7 +34,9 @@ cluster topology, disaster recovery, or downstream front-office readiness.
    statement policy. Larger stale backlogs drain across later polls within caller-owned transactions.
 5. Bounded workers invoke `MaterializePortfolioTimeseries` and write `portfolio_timeseries`.
 6. Successful work atomically stages `portfolio_day.aggregation.completed` and
-   `portfolio_day.reconciliation.requested` through the outbox.
+   `portfolio_day.reconciliation.requested` through the outbox. The reconciliation request carries
+   the claim's typed tenant authority; the consumer uses it for its durable processed-event fence
+   and every run, finding, and source read.
 
 The durable database queue provides coalescing, replay, backdated-restatement, retry, and fan-in
 control. There is no private Kafka command between the two modules.

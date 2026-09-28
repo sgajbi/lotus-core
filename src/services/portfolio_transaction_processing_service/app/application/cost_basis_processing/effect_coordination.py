@@ -3,6 +3,7 @@
 from collections.abc import Sequence
 from dataclasses import replace
 
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
 
 from ...domain.transaction import BookedTransaction
@@ -29,6 +30,7 @@ async def coordinate_cost_processing_effects(
     processed_transactions: Sequence[BookedTransaction],
     instrument_updates: Sequence[FxContractInstrument],
     source_epoch: int | None,
+    tenant_id: TenantId,
     transaction_state: CostBasisTransactionStatePort,
     reconciliation_repository: CorporateActionReconciliationRepository,
     effect_stager: CostProcessingEffectStagingPort,
@@ -54,6 +56,7 @@ async def coordinate_cost_processing_effects(
         )
         await reconciliation.reconcile(
             linking.product_leg,
+            tenant_id=tenant_id,
             correlation_id=correlation_id,
         )
         emitted_transactions.append(

@@ -5,6 +5,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Protocol
 
+from portfolio_common.domain.tenant import TenantId
+
 from ..domain.transaction import BookedTransaction
 
 
@@ -12,6 +14,7 @@ from ..domain.transaction import BookedTransaction
 class CorporateActionReconciliationKey:
     """Identify one portfolio-owned linked corporate-action group."""
 
+    tenant_id: TenantId
     portfolio_id: str
     linked_transaction_group_id: str
     parent_event_reference: str
@@ -64,6 +67,7 @@ class CorporateActionReconciliationFindingEvidence:
 class CorporateActionReconciliationEvidence:
     """Group the run and findings produced by one reconciliation assessment."""
 
+    tenant_id: TenantId
     run: CorporateActionReconciliationRunEvidence
     findings: tuple[CorporateActionReconciliationFindingEvidence, ...]
 
@@ -102,7 +106,12 @@ class CorporateActionReconciliationRepository(Protocol):
         self, key: CorporateActionReconciliationKey
     ) -> tuple[BookedTransaction, ...]: ...
 
-    async def save_evidence(self, evidence: CorporateActionReconciliationEvidence) -> None: ...
+    async def save_evidence(
+        self,
+        *,
+        tenant_id: TenantId,
+        evidence: CorporateActionReconciliationEvidence,
+    ) -> None: ...
 
 
 class CorporateActionReconciliationObserver(Protocol):

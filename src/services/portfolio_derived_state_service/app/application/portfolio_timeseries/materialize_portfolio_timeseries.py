@@ -124,6 +124,7 @@ class MaterializePortfolioTimeseries:
         await repository.upsert_portfolio_timeseries(portfolio_timeseries)
         await StagePortfolioAggregationCompletion(event_stager=event_stager).execute(
             PortfolioAggregationCompletion(
+                tenant_id=command.tenant_id,
                 portfolio_id=command.portfolio_id,
                 aggregation_date=command.aggregation_date,
                 epoch=command.target_epoch,

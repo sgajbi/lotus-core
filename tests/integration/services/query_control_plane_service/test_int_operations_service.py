@@ -2,6 +2,7 @@ import asyncio
 from datetime import date, datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 from portfolio_common.database_models import (
     AnalyticsExportJob,
@@ -23,6 +24,7 @@ from portfolio_common.database_models import (
     ReprocessingJob,
     Transaction,
 )
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.kafka_utils import KafkaProducer
 from portfolio_common.outbox_dispatcher import OutboxDispatcher
 from portfolio_common.reprocessing_job_repository import (
@@ -46,14 +48,17 @@ from src.services.query_control_plane_service.app.application.operations.service
 from src.services.query_control_plane_service.app.contracts.operations import (
     FailedOutboxRequeueRequest,
 )
+from src.services.query_control_plane_service.app.dependencies import get_operations_service
 from src.services.query_control_plane_service.app.infrastructure.operations.repository import (
     OperationsRepository,
 )
-from tests.test_support.tenant import TEST_TENANT_ID
+from src.services.query_control_plane_service.app.main import app
+from tests.test_support.tenant import TEST_TENANT_HEADERS, TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
 
 FIXED_GENERATED_AT = datetime(2025, 8, 30, 12, 0, tzinfo=timezone.utc)
+TENANT_ID = TenantId(TEST_TENANT_ID)
 VALUATION_RUNTIME_SETTINGS = get_valuation_runtime_settings()
 
 
@@ -172,6 +177,7 @@ async def test_support_overview_returns_coherent_snapshot_under_control_churn(
             late_control,
             FinancialReconciliationRun(
                 run_id="recon-old",
+                tenant_id=TEST_TENANT_ID,
                 reconciliation_type="transaction_cashflow",
                 portfolio_id="P1",
                 business_date=date(2025, 8, 30),
@@ -187,6 +193,7 @@ async def test_support_overview_returns_coherent_snapshot_under_control_churn(
             ),
             FinancialReconciliationRun(
                 run_id="recon-late",
+                tenant_id=TEST_TENANT_ID,
                 reconciliation_type="transaction_cashflow",
                 portfolio_id="P1",
                 business_date=date(2025, 8, 30),
@@ -207,6 +214,7 @@ async def test_support_overview_returns_coherent_snapshot_under_control_churn(
         [
             FinancialReconciliationFinding(
                 finding_id="finding-old",
+                tenant_id=TEST_TENANT_ID,
                 run_id="recon-old",
                 reconciliation_type="transaction_cashflow",
                 finding_type="missing_cashflow",
@@ -223,6 +231,7 @@ async def test_support_overview_returns_coherent_snapshot_under_control_churn(
             ),
             FinancialReconciliationFinding(
                 finding_id="finding-late",
+                tenant_id=TEST_TENANT_ID,
                 run_id="recon-old",
                 reconciliation_type="transaction_cashflow",
                 finding_type="late_breakage",
@@ -245,7 +254,7 @@ async def test_support_overview_returns_coherent_snapshot_under_control_churn(
     service = OperationsService(OperationsRepository(async_db_session))
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
-        response = await service.get_support_overview("P1")
+        response = await service.get_support_overview("P1", tenant_id=TENANT_ID)
 
     assert response.generated_at_utc == FIXED_GENERATED_AT
     assert response.business_date == date(2025, 8, 30)
@@ -472,6 +481,7 @@ async def test_reconciliation_runs_return_coherent_snapshot_under_run_churn(
         [
             FinancialReconciliationRun(
                 run_id="recon-run-old",
+                tenant_id=TEST_TENANT_ID,
                 reconciliation_type="transaction_cashflow",
                 portfolio_id="P3",
                 business_date=date(2025, 8, 30),
@@ -487,6 +497,7 @@ async def test_reconciliation_runs_return_coherent_snapshot_under_run_churn(
             ),
             FinancialReconciliationRun(
                 run_id="recon-run-late",
+                tenant_id=TEST_TENANT_ID,
                 reconciliation_type="transaction_cashflow",
                 portfolio_id="P3",
                 business_date=date(2025, 8, 30),
@@ -507,7 +518,9 @@ async def test_reconciliation_runs_return_coherent_snapshot_under_run_churn(
     service = OperationsService(OperationsRepository(async_db_session))
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
-        response = await service.get_reconciliation_runs("P3", skip=0, limit=10)
+        response = await service.get_reconciliation_runs(
+            "P3", skip=0, limit=10, tenant_id=TENANT_ID
+        )
 
     assert response.generated_at_utc == FIXED_GENERATED_AT
     assert response.total == 1
@@ -541,6 +554,7 @@ async def test_reconciliation_run_gate_tracks_current_finding_lifecycle(
     async_db_session.add(
         FinancialReconciliationRun(
             run_id="recon-lifecycle-current",
+            tenant_id=TEST_TENANT_ID,
             reconciliation_type="transaction_cashflow",
             portfolio_id="P6",
             business_date=date(2025, 8, 30),
@@ -561,6 +575,7 @@ async def test_reconciliation_run_gate_tracks_current_finding_lifecycle(
         [
             FinancialReconciliationFinding(
                 finding_id=f"finding-closed-{resolution_state.lower()}",
+                tenant_id=TEST_TENANT_ID,
                 run_id="recon-lifecycle-current",
                 reconciliation_type="transaction_cashflow",
                 finding_type="historical_break",
@@ -587,7 +602,9 @@ async def test_reconciliation_run_gate_tracks_current_finding_lifecycle(
     service = OperationsService(OperationsRepository(async_db_session))
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
-        closed_response = await service.get_reconciliation_runs("P6", skip=0, limit=10)
+        closed_response = await service.get_reconciliation_runs(
+            "P6", skip=0, limit=10, tenant_id=TENANT_ID
+        )
 
     assert closed_response.publication_gate == "ALLOW"
     assert closed_response.reconciliation_status == "COMPLETE"
@@ -598,6 +615,7 @@ async def test_reconciliation_run_gate_tracks_current_finding_lifecycle(
     async_db_session.add(
         FinancialReconciliationFinding(
             finding_id="finding-current-error",
+            tenant_id=TEST_TENANT_ID,
             run_id="recon-lifecycle-current",
             reconciliation_type="transaction_cashflow",
             finding_type="current_break",
@@ -615,7 +633,9 @@ async def test_reconciliation_run_gate_tracks_current_finding_lifecycle(
     await async_db_session.commit()
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
-        open_response = await service.get_reconciliation_runs("P6", skip=0, limit=10)
+        open_response = await service.get_reconciliation_runs(
+            "P6", skip=0, limit=10, tenant_id=TENANT_ID
+        )
 
     assert open_response.publication_gate == "BLOCK"
     assert open_response.reconciliation_status == "BLOCKED"
@@ -649,6 +669,7 @@ async def test_reconciliation_run_gate_is_coherent_during_concurrent_resolution(
     async_db_session.add(
         FinancialReconciliationRun(
             run_id="recon-concurrent-resolution",
+            tenant_id=TEST_TENANT_ID,
             reconciliation_type="transaction_cashflow",
             portfolio_id="P7",
             business_date=date(2025, 8, 30),
@@ -668,6 +689,7 @@ async def test_reconciliation_run_gate_is_coherent_during_concurrent_resolution(
     async_db_session.add(
         FinancialReconciliationFinding(
             finding_id="finding-concurrent-resolution",
+            tenant_id=TEST_TENANT_ID,
             run_id="recon-concurrent-resolution",
             reconciliation_type="transaction_cashflow",
             finding_type="current_break",
@@ -691,7 +713,9 @@ async def test_reconciliation_run_gate_is_coherent_during_concurrent_resolution(
     class ResolvingOperationsRepository(OperationsRepository):
         resolved = False
 
-        async def get_reconciliation_finding_summaries(self, run_ids, as_of=None):
+        async def get_reconciliation_finding_summaries(
+            self, run_ids, *, tenant_id: TenantId, as_of=None
+        ):
             if not self.resolved:
                 async with second_session_factory() as second_session:
                     await second_session.execute(
@@ -710,13 +734,16 @@ async def test_reconciliation_run_gate_is_coherent_during_concurrent_resolution(
                 self.resolved = True
             return await super().get_reconciliation_finding_summaries(
                 run_ids,
+                tenant_id=tenant_id,
                 as_of=as_of,
             )
 
     service = OperationsService(ResolvingOperationsRepository(async_db_session))
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
-        snapshot_response = await service.get_reconciliation_runs("P7", skip=0, limit=10)
+        snapshot_response = await service.get_reconciliation_runs(
+            "P7", skip=0, limit=10, tenant_id=TENANT_ID
+        )
 
     assert snapshot_response.generated_at_utc == FIXED_GENERATED_AT
     assert snapshot_response.reconciliation_status == "BLOCKED"
@@ -736,7 +763,9 @@ async def test_reconciliation_run_gate_is_coherent_during_concurrent_resolution(
         "datetime",
         _AfterResolutionDateTime,
     ):
-        resolved_response = await service.get_reconciliation_runs("P7", skip=0, limit=10)
+        resolved_response = await service.get_reconciliation_runs(
+            "P7", skip=0, limit=10, tenant_id=TENANT_ID
+        )
 
     assert resolved_response.reconciliation_status == "COMPLETE"
     assert resolved_response.publication_gate == "ALLOW"
@@ -767,6 +796,7 @@ async def test_reconciliation_findings_return_coherent_snapshot_under_finding_ch
     async_db_session.add(
         FinancialReconciliationRun(
             run_id="recon-findings-old",
+            tenant_id=TEST_TENANT_ID,
             reconciliation_type="transaction_cashflow",
             portfolio_id="P4",
             business_date=date(2025, 8, 30),
@@ -786,6 +816,7 @@ async def test_reconciliation_findings_return_coherent_snapshot_under_finding_ch
         [
             FinancialReconciliationFinding(
                 finding_id="finding-visible",
+                tenant_id=TEST_TENANT_ID,
                 run_id="recon-findings-old",
                 reconciliation_type="transaction_cashflow",
                 finding_type="missing_cashflow",
@@ -802,6 +833,7 @@ async def test_reconciliation_findings_return_coherent_snapshot_under_finding_ch
             ),
             FinancialReconciliationFinding(
                 finding_id="finding-hidden",
+                tenant_id=TEST_TENANT_ID,
                 run_id="recon-findings-old",
                 reconciliation_type="transaction_cashflow",
                 finding_type="late_breakage",
@@ -823,7 +855,9 @@ async def test_reconciliation_findings_return_coherent_snapshot_under_finding_ch
     service = OperationsService(OperationsRepository(async_db_session))
 
     with patch.object(operations_service_module, "datetime", _FixedDateTime):
-        response = await service.get_reconciliation_findings("P4", "recon-findings-old", limit=20)
+        response = await service.get_reconciliation_findings(
+            "P4", "recon-findings-old", limit=20, tenant_id=TENANT_ID
+        )
 
     assert response.generated_at_utc == FIXED_GENERATED_AT
     assert response.total == 1
@@ -913,6 +947,156 @@ async def test_portfolio_control_stages_return_coherent_snapshot_under_stage_chu
     assert response.items[0].status == "COMPLETED"
     assert response.items[0].last_source_event_type == "portfolio_day.reconciliation.completed"
     assert response.items[0].operational_state == "COMPLETED"
+
+
+async def test_reconciliation_reads_require_matching_tenant_authority(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    other_tenant = TenantId("tenant-other")
+    async_db_session.add_all(
+        [
+            Portfolio(
+                tenant_id=TENANT_ID.value,
+                portfolio_id="P-TENANT-OWNER",
+                base_currency="USD",
+                open_date=date(2025, 1, 1),
+                risk_exposure="MODERATE",
+                investment_time_horizon="MEDIUM_TERM",
+                portfolio_type="DISCRETIONARY",
+                booking_center_code="SG",
+                client_id="CLIENT-TENANT-OWNER",
+                is_leverage_allowed=False,
+                status="ACTIVE",
+            ),
+            Portfolio(
+                tenant_id=other_tenant.value,
+                portfolio_id="P-TENANT-OTHER",
+                base_currency="EUR",
+                open_date=date(2025, 1, 1),
+                risk_exposure="MODERATE",
+                investment_time_horizon="MEDIUM_TERM",
+                portfolio_type="DISCRETIONARY",
+                booking_center_code="LU",
+                client_id="CLIENT-TENANT-OTHER",
+                is_leverage_allowed=False,
+                status="ACTIVE",
+            ),
+        ]
+    )
+    await async_db_session.flush()
+    async_db_session.add_all(
+        [
+            FinancialReconciliationRun(
+                tenant_id=TENANT_ID.value,
+                run_id="recon-tenant-owner",
+                reconciliation_type="transaction_cashflow",
+                portfolio_id="P-TENANT-OWNER",
+                business_date=date(2025, 8, 30),
+                epoch=1,
+                status="COMPLETED",
+                requested_by="pipeline_orchestrator_service",
+                dedupe_key="recon:tenant-owner",
+                correlation_id="corr-tenant-owner",
+                started_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
+                completed_at=datetime(2025, 8, 30, 10, 1, tzinfo=timezone.utc),
+                created_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 10, 1, tzinfo=timezone.utc),
+            ),
+            FinancialReconciliationRun(
+                tenant_id=other_tenant.value,
+                run_id="recon-tenant-other-newer",
+                reconciliation_type="transaction_cashflow",
+                portfolio_id="P-TENANT-OTHER",
+                business_date=date(2025, 8, 30),
+                epoch=1,
+                status="FAILED",
+                requested_by="pipeline_orchestrator_service",
+                dedupe_key="recon:tenant-other",
+                correlation_id="corr-tenant-other",
+                started_at=datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
+                created_at=datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 11, 1, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await async_db_session.flush()
+    async_db_session.add(
+        FinancialReconciliationFinding(
+            tenant_id=TENANT_ID.value,
+            finding_id="finding-tenant-owner",
+            run_id="recon-tenant-owner",
+            reconciliation_type="transaction_cashflow",
+            finding_type="missing_cashflow",
+            severity="ERROR",
+            portfolio_id="P-TENANT-OWNER",
+            business_date=date(2025, 8, 30),
+            epoch=1,
+            owner="TRANSACTION_OPERATIONS",
+            repair_recommendation="REGENERATE_CASHFLOW",
+        )
+    )
+    await async_db_session.commit()
+    repository = OperationsRepository(async_db_session)
+    service = OperationsService(repository)
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        owner_response = await service.get_reconciliation_runs(
+            "P-TENANT-OWNER",
+            skip=0,
+            limit=1,
+            tenant_id=TENANT_ID,
+        )
+
+    assert owner_response.total == 1
+    assert [item.run_id for item in owner_response.items] == ["recon-tenant-owner"]
+    assert (
+        await repository.get_reconciliation_runs(
+            "P-TENANT-OWNER",
+            skip=0,
+            limit=1,
+            tenant_id=other_tenant,
+        )
+        == []
+    )
+    with pytest.raises(ValueError, match="Requested operations support resource was not found"):
+        await service.get_reconciliation_runs(
+            "P-TENANT-OWNER",
+            skip=0,
+            limit=1,
+            tenant_id=other_tenant,
+        )
+
+    app.dependency_overrides[get_operations_service] = lambda: service
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    try:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            owner_runs = await client.get(
+                "/support/portfolios/P-TENANT-OWNER/reconciliation-runs?limit=1",
+                headers=TEST_TENANT_HEADERS,
+            )
+            owner_findings = await client.get(
+                "/support/portfolios/P-TENANT-OWNER/reconciliation-runs/"
+                "recon-tenant-owner/findings?limit=1",
+                headers=TEST_TENANT_HEADERS,
+            )
+            foreign_headers = {"X-Tenant-Id": other_tenant.value}
+            foreign_runs = await client.get(
+                "/support/portfolios/P-TENANT-OWNER/reconciliation-runs?limit=1",
+                headers=foreign_headers,
+            )
+            foreign_findings = await client.get(
+                "/support/portfolios/P-TENANT-OWNER/reconciliation-runs/"
+                "recon-tenant-owner/findings?limit=1",
+                headers=foreign_headers,
+            )
+    finally:
+        app.dependency_overrides.pop(get_operations_service, None)
+
+    assert owner_runs.status_code == owner_findings.status_code == 200
+    assert owner_runs.json()["items"][0]["run_id"] == "recon-tenant-owner"
+    assert owner_findings.json()["items"][0]["finding_id"] == "finding-tenant-owner"
+    assert foreign_runs.status_code == foreign_findings.status_code == 404
 
 
 async def test_reprocessing_keys_return_coherent_snapshot_under_key_churn(
