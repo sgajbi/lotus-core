@@ -132,21 +132,26 @@ async def test_support_overview_returns_coherent_snapshot_under_control_churn(
         updated_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
     )
 
+    async_db_session.add(
+        Portfolio(
+            tenant_id=TEST_TENANT_ID,
+            portfolio_id="P1",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="MODERATE",
+            investment_time_horizon="MEDIUM_TERM",
+            portfolio_type="DISCRETIONARY",
+            booking_center_code="SG",
+            client_id="CLIENT-P1",
+            is_leverage_allowed=False,
+            status="ACTIVE",
+        )
+    )
+    # The reconciliation row has a durable composite tenant/portfolio foreign
+    # key.  Persist its source-owned parent before staging dependent controls.
+    await async_db_session.flush()
     async_db_session.add_all(
         [
-            Portfolio(
-                tenant_id=TEST_TENANT_ID,
-                portfolio_id="P1",
-                base_currency="USD",
-                open_date=date(2025, 1, 1),
-                risk_exposure="MODERATE",
-                investment_time_horizon="MEDIUM_TERM",
-                portfolio_type="DISCRETIONARY",
-                booking_center_code="SG",
-                client_id="CLIENT-P1",
-                is_leverage_allowed=False,
-                status="ACTIVE",
-            ),
             BusinessDate(
                 date=date(2025, 8, 30),
                 created_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
@@ -477,6 +482,7 @@ async def test_reconciliation_runs_return_coherent_snapshot_under_run_churn(
             status="ACTIVE",
         )
     )
+    await async_db_session.flush()
     async_db_session.add_all(
         [
             FinancialReconciliationRun(
@@ -551,6 +557,7 @@ async def test_reconciliation_run_gate_tracks_current_finding_lifecycle(
             status="ACTIVE",
         )
     )
+    await async_db_session.flush()
     async_db_session.add(
         FinancialReconciliationRun(
             run_id="recon-lifecycle-current",
@@ -666,6 +673,7 @@ async def test_reconciliation_run_gate_is_coherent_during_concurrent_resolution(
             status="ACTIVE",
         )
     )
+    await async_db_session.flush()
     async_db_session.add(
         FinancialReconciliationRun(
             run_id="recon-concurrent-resolution",
@@ -793,6 +801,7 @@ async def test_reconciliation_findings_return_coherent_snapshot_under_finding_ch
             status="ACTIVE",
         )
     )
+    await async_db_session.flush()
     async_db_session.add(
         FinancialReconciliationRun(
             run_id="recon-findings-old",
