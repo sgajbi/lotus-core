@@ -40,6 +40,9 @@ def setup_reprocessing_data(clean_db_module, e2e_api_client: E2EApiClient, poll_
             ]
         },
     )
+    # Transaction admission joins durable portfolio ownership.  Portfolio ingestion is
+    # asynchronous, so wait for that source fact before submitting dependent trades.
+    e2e_api_client.wait_for_admitted_portfolio(portfolio_id)
     e2e_api_client.ingest(
         "/ingest/instruments",
         {
@@ -247,6 +250,9 @@ def test_reprocess_api_rearms_current_valuation_after_transaction_correction(
             ]
         },
     )
+    # Keep the replay workflow on the same supported source-admission sequence as
+    # every other transaction-producing E2E fixture.
+    e2e_api_client.wait_for_admitted_portfolio(portfolio_id)
     e2e_api_client.ingest(
         "/ingest/instruments",
         {
