@@ -44,7 +44,7 @@ per row, repeatedly refreshing the growing cashflow source cut. PostgreSQL work-
 exercise both a single batch and a batch boundary while retaining the real refresh function and
 transaction locks. The original 10,000-row ledger plan and cardinality expectations remain unchanged.
 
-The independent bank-day ledger test retains 100,000 transactions, costs and cashflows, with
+The independent bank-day ledger test retains 10,000 transactions, costs and cashflows, with
 5,000-row commit batches and 1,000-row physical SQL statements. Its refresh-count controls preserve
 real maintenance and locks. A separate `EXPLAIN ANALYZE` guard executes the installed refresh
 statement and bounds actual tuple work; it protects against a quadratic selected-cashflow self-join

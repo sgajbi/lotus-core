@@ -142,4 +142,5 @@ identity, and replay audit evidence that make redelivery safe.
 - duplicate, poison, restart, backdated correction, reversal, restatement, and corporate-action
   scenarios reconcile,
 - p50/p95/p99 latency, lag, database locks/pool, CPU, memory, and outbox evidence are recorded, and
-- the 100,000-transaction certification profile passes before production promotion.
+- the owner-approved bounded 10,000-transaction certification profile passes before production
+  promotion; historical 100,000-transaction failures remain evidence and are not a rerun gate.

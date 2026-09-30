@@ -1,5 +1,19 @@
 # Operations Runbook
 
+## Interpret capacity results
+
+Report throughput together with its workload and completion boundary. Ingestion rate, processing
+drain rate, and fully reconciled portfolio rate measure different outcomes. The deterministic load
+gate characterizes submission through count-based processing completion; it does not independently
+prove monetary accuracy, valuation completion, derived-history coverage, or downstream analytics
+readiness.
+
+Before making a capacity commitment, retain exact source and image identities, hardware, workload
+mix, worker configuration, financial reconciliation, covered downstream stages, tail latency,
+queue age, database contention, resource use, and duplicate/correction/restart outcomes. Follow the
+bounded acceptance sequence in issue `#714`; do not substitute a larger workload for missing
+correctness or recovery evidence. Preserve failed runs with their measured boundary and cause.
+
 ## Current Scope And Evidence
 
 This page is the first-response map for the Core app-local runtime, durable evidence, queue

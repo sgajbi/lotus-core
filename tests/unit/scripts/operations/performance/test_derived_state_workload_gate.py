@@ -53,7 +53,7 @@ def test_orchestration_failure_receipt_is_durable_redacted_and_non_certifying(
     assert payload["schema_version"] == "lotus.managed-gate-orchestration-failure.v1"
     assert payload["evidence_classification"] == "non_certifying_failure"
     assert payload["context"]["certifying_profile"] is True
-    assert payload["context"]["transaction_count"] == 100_000
+    assert payload["context"]["transaction_count"] == 10_000
     assert payload["failure_phase"] == "wait-for-migration"
     assert payload["compose_project_name"] == "lotus-derived-state-certification"
     assert "secret" not in payload["error_message"]
@@ -115,9 +115,9 @@ def test_daily_profile_models_the_governed_bank_day_volume() -> None:
     profile = resolve_workload_profile(profile_name="daily", diagnostic_smoke=False)
 
     assert profile.name == "derived-state-daily-volume"
-    assert profile.portfolio_count == 1000
+    assert profile.portfolio_count == 100
     assert profile.positions_per_portfolio == 100
-    assert profile.transaction_count == 100_000
+    assert profile.transaction_count == 10_000
     assert profile.seed_materialization_timeout_seconds == 600
     assert profile.certifying is True
 

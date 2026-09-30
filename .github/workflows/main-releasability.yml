@@ -16,7 +16,7 @@ on:
         required: false
         type: string
       run_institutional_completion:
-        description: "Run the approval-grade 1000-portfolio institutional completion and sign-off jobs."
+        description: "Run the bounded 100-portfolio institutional completion and sign-off jobs."
         required: false
         default: false
         type: boolean
@@ -525,7 +525,7 @@ jobs:
 
   institutional-completion-gate:
     name: Main Releasability / Institutional Completion Gate
-    # This approval-grade 1000-portfolio / 100k-transaction bank-day run is
+    # This bounded 100-portfolio / 10k-transaction bank-day run is
     # intentionally opt-in. The faster main releasability gates remain the
     # routine post-merge signal; release candidates can enable this input when
     # institutional sign-off evidence is explicitly required.

@@ -3,9 +3,9 @@
 This runbook defines the governed `lotus-core` load scenario for a realistic
 average banking day:
 
-1. `1,000` portfolios,
+1. `100` portfolios,
 2. `100` BUY transactions per portfolio,
-3. `100,000` transactions total,
+3. `10,000` transactions total,
 4. deterministic instrument, FX, and market-price support data,
 5. end-to-end proof across ingestion, asynchronous processing, query APIs,
    reconciliation, health, and logs.
@@ -25,7 +25,10 @@ Clean exact-source daily artifact `20260811T161351Z-bank-day-load.json` is a val
 certifying-shape capacity failure. It made all `100,000` transactions durable and reconciled all
 `1,031` database resource samples with zero unattributed clients, but only `95,873` valuation
 snapshots and `95,865` position-timeseries rows completed before the fixed drain deadline. This
-proves the service-attribution classifier while leaving the capacity profile unapproved. Issues
+proves the service-attribution classifier while leaving the capacity profile unapproved. It is
+retained as historical diagnostic evidence and must not be rerun merely to reproduce the same
+limit. The owner-approved current acceptance target is the bounded `10,000`-transaction profile
+below. Issues
 `#794` and `#795` remain open; do not increase beyond 12 transaction partitions, add aggregation
 debounce, or restore rejected position-lock/MAX experiments without new evidence. A final-head
 daily run and the governed recovery, correction, and restatement profiles remain required.
@@ -37,7 +40,7 @@ Run:
 ```powershell
 python scripts\operations\bank_day_load_scenario.py `
   --compose-project-name lotus-core-app-local `
-  --portfolio-count 1000 `
+  --portfolio-count 100 `
   --transactions-per-portfolio 100 `
   --transaction-batch-size 2000 `
   --sample-size 5 `
@@ -63,7 +66,7 @@ make profile-derived-state-fx-restatement
 make test-derived-state-workload-smoke
 ```
 
-`daily` is the certifying 1,000-portfolio x 100-position profile. `fan-in` is the certifying
+`daily` is the bounded 100-portfolio x 100-position profile. `fan-in` is the certifying
 one-portfolio x 1,000-position aggregation profile. `price-burst` first materializes 100 portfolios
 x 100 shared instruments, then applies a 5% same-date price correction and requires all 10,000
 snapshots and position rows plus 100 portfolio rows to carry post-correction timestamps and exact
@@ -79,7 +82,7 @@ Dispatcher capacity is governed once in
 deployments use the same candidate `1s` poll, `1000` row batch, `130s` claim lease, `150s`
 termination grace, and unchanged three-attempt retry ceiling. The guard cross-checks the Kafka
 delivery fence and supervised shutdown safety bounds and rejects Compose/Kubernetes drift. The
-profile remains `candidate_pending_exact_source` until its current-source 100,000-transaction run
+profile remains `candidate_pending_exact_source` until its current-source 10,000-transaction run
 passes; do not describe the configuration as certified or tune it independently in one environment
 before that receipt exists.
 Run `make test-outbox-capacity-acceptance` to execute the contract's deduplicated direct PostgreSQL

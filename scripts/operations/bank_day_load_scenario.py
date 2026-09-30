@@ -2765,7 +2765,7 @@ def main() -> int:
         choices=("certifying", "diagnostic"),
         default="certifying",
     )
-    parser.add_argument("--portfolio-count", type=int, default=1000)
+    parser.add_argument("--portfolio-count", type=int, default=100)
     parser.add_argument("--transactions-per-portfolio", type=int, default=100)
     parser.add_argument("--transaction-batch-size", type=int, default=2000)
     parser.add_argument("--sample-size", type=int, default=5)

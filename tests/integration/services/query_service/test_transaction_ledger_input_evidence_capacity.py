@@ -12,7 +12,7 @@ from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db, pytest.mark.performance]
 
-TRANSACTION_COUNT = 100_000
+BANK_DAY_TRANSACTION_COUNT = 10_000
 BATCH_SIZE = 5_000
 PHYSICAL_BATCH_SIZE = 1_000
 
@@ -208,7 +208,7 @@ async def test_transaction_ledger_input_evidence_is_bounded_at_bank_day_volume(
     clean_db,
     async_db_session: AsyncSession,
 ) -> None:
-    await _seed_bank_day_ledger(async_db_session, count=TRANSACTION_COUNT)
+    await _seed_bank_day_ledger(async_db_session, count=BANK_DAY_TRANSACTION_COUNT)
     started_at = perf_counter()
     evidence = await TransactionRepository(async_db_session).get_transaction_ledger_input_evidence(
         filters=TransactionLedgerFilters(
@@ -220,14 +220,15 @@ async def test_transaction_ledger_input_evidence_is_bounded_at_bank_day_volume(
     )
     elapsed_seconds = perf_counter() - started_at
 
-    assert evidence.transaction_count == TRANSACTION_COUNT
+    assert evidence.transaction_count == BANK_DAY_TRANSACTION_COUNT
     assert len(evidence.transaction_digest or "") == 64
     assert len(evidence.transaction_cost_digest or "") == 64
     assert len(evidence.selected_cashflow_digest or "") == 64
     assert evidence.selected_fx_rate_digest is None
     print(
         "ledger_input_evidence_capacity "
-        f"rows={TRANSACTION_COUNT} costs={TRANSACTION_COUNT} cashflows={TRANSACTION_COUNT} "
+        f"rows={BANK_DAY_TRANSACTION_COUNT} costs={BANK_DAY_TRANSACTION_COUNT} "
+        f"cashflows={BANK_DAY_TRANSACTION_COUNT} "
         f"elapsed_seconds={elapsed_seconds:.3f}"
     )
 

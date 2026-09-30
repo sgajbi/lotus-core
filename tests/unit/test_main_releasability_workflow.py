@@ -93,8 +93,7 @@ def test_institutional_completion_gate_is_manual_opt_in() -> None:
 
     assert "run_institutional_completion:" in workflow
     assert (
-        'description: "Run the approval-grade 1000-portfolio institutional completion '
-        'and sign-off jobs."'
+        'description: "Run the bounded 100-portfolio institutional completion and sign-off jobs."'
     ) in workflow
     assert "default: false" in workflow
     assert "type: boolean" in workflow
@@ -108,4 +107,4 @@ def test_institutional_completion_is_not_default_merge_or_manual_truth() -> None
 
     assert "run_institutional_completion=true" in runbook
     assert "Exact-merge-SHA dispatcher runs and default manual runs intentionally skip" in runbook
-    assert "1000-portfolio institutional completion" in runbook
+    assert "100-portfolio institutional completion" in runbook

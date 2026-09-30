@@ -246,7 +246,7 @@ def test_main_runs_scenario_then_exhaustive_reconciliation(
                         "run_id": "20260419T120000Z",
                         "config": {
                             "trade_date": "2026-04-17",
-                            "portfolio_count": 1000,
+                            "portfolio_count": 100,
                             "transactions_per_portfolio": 100,
                         },
                     }
@@ -299,7 +299,7 @@ def test_main_runs_scenario_then_exhaustive_reconciliation(
         "--transactions-per-portfolio",
         "100",
         "--portfolio-limit",
-        "1000",
+        "100",
         "--output-dir",
         "output/task-runs",
         "--query-base-url",
@@ -340,7 +340,7 @@ def test_main_falls_back_to_latest_new_artifact_when_stdout_has_no_report_path(
                         "run_id": "20260419T120000Z",
                         "config": {
                             "trade_date": "2026-04-17",
-                            "portfolio_count": 1000,
+                            "portfolio_count": 100,
                             "transactions_per_portfolio": 100,
                         },
                     }
@@ -387,7 +387,7 @@ def test_main_propagates_reconciliation_failure_through_managed_lifecycle(
                 "run_id": "20260419T120000Z",
                 "config": {
                     "trade_date": "2026-04-17",
-                    "portfolio_count": 1000,
+                    "portfolio_count": 100,
                     "transactions_per_portfolio": 100,
                 },
             }

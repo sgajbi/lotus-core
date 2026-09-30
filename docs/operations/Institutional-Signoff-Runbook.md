@@ -43,8 +43,8 @@ reconciliation for the exact generated `run_id`, producing both:
    3. any required artifact is older than 24 hours (`--max-age-hours 24`).
 3. The opt-in manual main releasability workflow generates RFC-086 completion evidence through
    `Main Releasability / Institutional Completion Gate` before sign-off aggregation.
-4. Exact-merge-SHA dispatcher runs and default manual runs intentionally skip the approval-grade
-   1000-portfolio institutional completion and sign-off jobs so post-merge health remains governed
+4. Exact-merge-SHA dispatcher runs and default manual runs intentionally skip the bounded
+   100-portfolio institutional completion and sign-off jobs so post-merge health remains governed
    by the faster release gates. Use an explicit manual dispatch with
    `run_institutional_completion=true` for institutional release evidence.
 

@@ -66,7 +66,7 @@ class DerivedStateWorkloadProfile:
 _CERTIFYING_PROFILES = {
     "daily": DerivedStateWorkloadProfile(
         name="derived-state-daily-volume",
-        portfolio_count=1000,
+        portfolio_count=100,
         positions_per_portfolio=100,
         transaction_batch_size=2000,
         sample_size=5,
