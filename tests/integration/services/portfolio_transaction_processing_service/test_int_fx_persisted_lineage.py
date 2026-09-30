@@ -116,6 +116,10 @@ async def test_fx_reprocessing_receipt_binds_optional_value_retained_by_conflict
             for field_name in TRANSACTION_PAYLOAD_MATERIAL_FIELDS
             if field_name in DBTransaction.__table__.columns
         }
+        | {
+            "transaction_fx_rate": durable_row["transaction_fx_rate"],
+            "transaction_fx_rate_origin": durable_row["transaction_fx_rate_origin"],
+        }
     )
     assert result.transaction.calculation_lineage is not None
     assert durable_row["calculation_lineage"] == (
@@ -131,6 +135,7 @@ def _generated_cash_leg(
     *,
     source_system: str | None,
     gross_transaction_amount: Decimal,
+    transaction_fx_rate: Decimal = Decimal("2"),
 ) -> BookedTransaction:
     return BookedTransaction(
         transaction_id="BUY-LINEAGE-001-CASHLEG",
@@ -150,6 +155,8 @@ def _generated_cash_leg(
         originating_transaction_type="BUY",
         link_type="BUY_TO_CASH",
         source_system=source_system,
+        transaction_fx_rate=transaction_fx_rate,
+        transaction_fx_rate_origin="SOURCE_BOOKED",
     )
 
 
@@ -203,5 +210,43 @@ async def test_generated_child_fingerprint_uses_post_upsert_durable_economics(
             field_name: durable_row[field_name]
             for field_name in TRANSACTION_PAYLOAD_MATERIAL_FIELDS
             if field_name in DBTransaction.__table__.columns
+        }
+        | {
+            "transaction_fx_rate": durable_row["transaction_fx_rate"],
+            "transaction_fx_rate_origin": durable_row["transaction_fx_rate_origin"],
+        }
+    )
+
+    prior_fingerprint = durable_row["payload_fingerprint"]
+    await SqlAlchemyCostBasisTransactionRepository(
+        async_db_session
+    ).upsert_generated_booked_transaction(
+        _generated_cash_leg(
+            source_system=None,
+            gross_transaction_amount=Decimal("1095000"),
+            transaction_fx_rate=Decimal("2.5"),
+        )
+    )
+    refreshed = (
+        (
+            await async_db_session.execute(
+                select(*DBTransaction.__table__.columns).where(
+                    DBTransaction.transaction_id == result.transaction_id
+                )
+            )
+        )
+        .mappings()
+        .one()
+    )
+    assert refreshed["payload_fingerprint"] != prior_fingerprint
+    assert refreshed["payload_fingerprint"] == transaction_payload_fingerprint(
+        {
+            field_name: refreshed[field_name]
+            for field_name in TRANSACTION_PAYLOAD_MATERIAL_FIELDS
+            if field_name in DBTransaction.__table__.columns
+        }
+        | {
+            "transaction_fx_rate": refreshed["transaction_fx_rate"],
+            "transaction_fx_rate_origin": refreshed["transaction_fx_rate_origin"],
         }
     )

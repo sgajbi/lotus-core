@@ -1,7 +1,7 @@
 """Application tests for settlement cash-leg validation, generation, and linking."""
 
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock
 
@@ -13,11 +13,18 @@ from portfolio_common.infrastructure.persistence.transaction_identity_guard impo
 from src.services.portfolio_transaction_processing_service.app.application import (
     settlement_processing,
 )
+from src.services.portfolio_transaction_processing_service.app.application.errors import (
+    FxRateNotFoundError,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    EffectiveFxRate,
+)
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     BookedTransaction,
     build_generated_settlement_cash_leg,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
+    CostBasisFxRatePort,
     SettlementTransactionLookupPort,
     SettlementTransactionPersistencePort,
 )
@@ -76,6 +83,249 @@ async def test_generated_cash_leg_is_persisted_before_linked_product_leg() -> No
     )
     persistence.upsert_booked_transaction.assert_awaited_once_with(result.product_leg)
     lookup.get_booked_transaction.assert_not_awaited()
+
+
+async def test_missing_source_fx_uses_settlement_date_reference_rate() -> None:
+    product_leg = _product_leg(
+        trade_currency="XTS",
+        currency="XTS",
+        transaction_fx_rate=Decimal("2.0"),
+    )
+    lookup = AsyncMock(spec=SettlementTransactionLookupPort)
+    lookup.get_booked_transaction.return_value = None
+    persistence = AsyncMock(spec=SettlementTransactionPersistencePort)
+    fx_rates = AsyncMock(spec=CostBasisFxRatePort)
+    fx_rates.get_fx_rate_window.return_value = [
+        EffectiveFxRate(effective_date=date(2026, 3, 7), rate=Decimal("2.5"))
+    ]
+
+    result = await link_settlement_cash_leg(
+        product_leg=product_leg,
+        transaction_lookup=lookup,
+        transaction_persistence=persistence,
+        derive_fx_at_settlement=True,
+        portfolio_base_currency="USD",
+        fx_rates=fx_rates,
+    )
+
+    assert result.generated_cash_leg is not None
+    assert result.generated_cash_leg.transaction_fx_rate == Decimal("2.5")
+    assert result.generated_cash_leg.net_cost_local == Decimal("25")
+    assert result.generated_cash_leg.net_cost == Decimal("62.5")
+    fx_rates.get_fx_rate_window.assert_awaited_once_with(
+        from_currency="XTS",
+        to_currency="USD",
+        start_date=date(2026, 3, 7),
+        end_date=date(2026, 3, 7),
+    )
+
+
+async def test_missing_source_fx_replay_preserves_existing_generated_rate() -> None:
+    product_leg = _product_leg(
+        trade_currency="XTS",
+        currency="XTS",
+        transaction_fx_rate=Decimal("2.5"),
+    )
+    existing = build_generated_settlement_cash_leg(
+        replace(product_leg, transaction_fx_rate=Decimal("2.25"))
+    )
+    lookup = AsyncMock(spec=SettlementTransactionLookupPort)
+    lookup.get_booked_transaction.return_value = existing
+    persistence = AsyncMock(spec=SettlementTransactionPersistencePort)
+    fx_rates = AsyncMock(spec=CostBasisFxRatePort)
+
+    result = await link_settlement_cash_leg(
+        product_leg=product_leg,
+        transaction_lookup=lookup,
+        transaction_persistence=persistence,
+        derive_fx_at_settlement=True,
+        portfolio_base_currency="USD",
+        fx_rates=fx_rates,
+    )
+
+    assert result.generated_cash_leg is not None
+    assert result.generated_cash_leg.transaction_fx_rate == Decimal("2.25")
+    fx_rates.get_fx_rate_window.assert_not_awaited()
+
+
+async def test_rebuild_preserves_linked_generated_rate_without_transient_source_flag() -> None:
+    product_leg = _product_leg(
+        trade_currency="XTS",
+        currency="XTS",
+        transaction_fx_rate=Decimal("2.0"),
+        external_cash_transaction_id="DIV-GENERATED-01-CASHLEG",
+    )
+    existing = build_generated_settlement_cash_leg(
+        replace(product_leg, transaction_fx_rate=Decimal("2.5"))
+    )
+    lookup = AsyncMock(spec=SettlementTransactionLookupPort)
+    lookup.get_booked_transaction.return_value = existing
+    persistence = AsyncMock(spec=SettlementTransactionPersistencePort)
+
+    result = await link_settlement_cash_leg(
+        product_leg=product_leg,
+        transaction_lookup=lookup,
+        transaction_persistence=persistence,
+    )
+
+    assert result.generated_cash_leg is not None
+    assert result.generated_cash_leg.transaction_fx_rate == Decimal("2.5")
+    generated = persistence.upsert_generated_booked_transaction.await_args.args[0]
+    assert generated.transaction_fx_rate == Decimal("2.5")
+
+
+async def test_rebuild_fails_closed_when_linked_cross_currency_child_is_missing() -> None:
+    product_leg = _product_leg(
+        trade_currency="XTS",
+        currency="XTS",
+        transaction_fx_rate=Decimal("2.0"),
+        external_cash_transaction_id="DIV-GENERATED-01-CASHLEG",
+    )
+    lookup = AsyncMock(spec=SettlementTransactionLookupPort)
+    lookup.get_booked_transaction.return_value = None
+    persistence = AsyncMock(spec=SettlementTransactionPersistencePort)
+
+    with pytest.raises(FxRateNotFoundError, match="Booked generated settlement FX"):
+        await link_settlement_cash_leg(
+            product_leg=product_leg,
+            transaction_lookup=lookup,
+            transaction_persistence=persistence,
+            portfolio_base_currency="USD",
+        )
+
+    persistence.upsert_generated_booked_transaction.assert_not_awaited()
+    persistence.upsert_booked_transaction.assert_not_awaited()
+
+
+async def test_rebuild_recovers_missing_same_currency_child_with_explicit_instrument() -> None:
+    product_leg = _product_leg(
+        trade_currency="USD",
+        currency="USD",
+        transaction_fx_rate=Decimal("1.0"),
+        external_cash_transaction_id="DIV-GENERATED-01-CASHLEG",
+    )
+    lookup = AsyncMock(spec=SettlementTransactionLookupPort)
+    lookup.get_booked_transaction.return_value = None
+    persistence = AsyncMock(spec=SettlementTransactionPersistencePort)
+
+    result = await link_settlement_cash_leg(
+        product_leg=product_leg,
+        transaction_lookup=lookup,
+        transaction_persistence=persistence,
+        portfolio_base_currency="USD",
+    )
+
+    assert result.generated_cash_leg is not None
+    assert result.generated_cash_leg.transaction_fx_rate == Decimal(1)
+
+
+async def test_rebuild_fails_closed_without_mapped_security_or_linked_child() -> None:
+    product_leg = replace(
+        _product_leg(
+            trade_currency="USD",
+            currency="USD",
+            transaction_fx_rate=Decimal("1.0"),
+            external_cash_transaction_id="DIV-GENERATED-01-CASHLEG",
+        ),
+        settlement_cash_account_id="ACCOUNT-USD-01",
+        settlement_cash_instrument_id=None,
+    )
+    lookup = AsyncMock(spec=SettlementTransactionLookupPort)
+    lookup.get_booked_transaction.return_value = None
+    persistence = AsyncMock(spec=SettlementTransactionPersistencePort)
+
+    with pytest.raises(FxRateNotFoundError, match="Booked generated settlement FX"):
+        await link_settlement_cash_leg(
+            product_leg=product_leg,
+            transaction_lookup=lookup,
+            transaction_persistence=persistence,
+            portfolio_base_currency="USD",
+        )
+
+    persistence.upsert_generated_booked_transaction.assert_not_awaited()
+
+
+async def test_authorized_correction_rederives_missing_source_fx_at_settlement() -> None:
+    product_leg = _product_leg(
+        trade_currency="XTS",
+        currency="XTS",
+        transaction_fx_rate=Decimal("2.5"),
+    )
+    existing = build_generated_settlement_cash_leg(
+        replace(product_leg, transaction_fx_rate=Decimal("2.25"))
+    )
+    lookup = AsyncMock(spec=SettlementTransactionLookupPort)
+    lookup.get_booked_transaction.return_value = existing
+    persistence = AsyncMock(spec=SettlementTransactionPersistencePort)
+    fx_rates = AsyncMock(spec=CostBasisFxRatePort)
+    fx_rates.get_fx_rate_window.return_value = [
+        EffectiveFxRate(effective_date=date(2026, 3, 7), rate=Decimal("2.75"))
+    ]
+
+    result = await link_settlement_cash_leg(
+        product_leg=product_leg,
+        transaction_lookup=lookup,
+        transaction_persistence=persistence,
+        reconcile_superseded_derived=True,
+        derive_fx_at_settlement=True,
+        portfolio_base_currency="USD",
+        fx_rates=fx_rates,
+    )
+
+    assert result.generated_cash_leg is not None
+    assert result.generated_cash_leg.transaction_fx_rate == Decimal("2.75")
+
+
+async def test_missing_settlement_fx_fails_before_generated_cash_persistence() -> None:
+    product_leg = _product_leg(
+        trade_currency="XTS",
+        currency="XTS",
+        transaction_fx_rate=Decimal("2.0"),
+    )
+    lookup = AsyncMock(spec=SettlementTransactionLookupPort)
+    lookup.get_booked_transaction.return_value = None
+    persistence = AsyncMock(spec=SettlementTransactionPersistencePort)
+    fx_rates = AsyncMock(spec=CostBasisFxRatePort)
+    fx_rates.get_fx_rate_window.return_value = []
+
+    with pytest.raises(FxRateNotFoundError, match="XTS->USD on 2026-03-07"):
+        await link_settlement_cash_leg(
+            product_leg=product_leg,
+            transaction_lookup=lookup,
+            transaction_persistence=persistence,
+            derive_fx_at_settlement=True,
+            portfolio_base_currency="USD",
+            fx_rates=fx_rates,
+        )
+
+    persistence.upsert_generated_booked_transaction.assert_not_awaited()
+    persistence.upsert_booked_transaction.assert_not_awaited()
+
+
+async def test_same_currency_missing_source_fx_derives_one_without_reference_lookup() -> None:
+    product_leg = _product_leg(
+        trade_currency="USD",
+        currency="USD",
+        transaction_fx_rate=None,
+    )
+    lookup = AsyncMock(spec=SettlementTransactionLookupPort)
+    lookup.get_booked_transaction.return_value = None
+    persistence = AsyncMock(spec=SettlementTransactionPersistencePort)
+    fx_rates = AsyncMock(spec=CostBasisFxRatePort)
+
+    result = await link_settlement_cash_leg(
+        product_leg=product_leg,
+        transaction_lookup=lookup,
+        transaction_persistence=persistence,
+        derive_fx_at_settlement=True,
+        portfolio_base_currency="USD",
+        fx_rates=fx_rates,
+    )
+
+    assert result.generated_cash_leg is not None
+    assert result.generated_cash_leg.transaction_fx_rate == Decimal(1)
+    assert result.generated_cash_leg.net_cost == Decimal("25")
+    fx_rates.get_fx_rate_window.assert_not_awaited()
 
 
 async def test_generated_cash_collision_prevents_product_leg_mutation() -> None:
@@ -202,6 +452,45 @@ async def test_correction_neutralizes_obsolete_generated_cash_leg() -> None:
     assert result.generated_cash_leg is not None
     assert result.generated_cash_leg.transaction_id == prior_cash_leg.transaction_id
     assert result.generated_cash_leg.gross_transaction_amount == Decimal(0)
+    assert result.generated_cash_leg.gross_cost == Decimal(0)
+    assert result.generated_cash_leg.net_cost == Decimal(0)
+    assert result.generated_cash_leg.net_cost_local == Decimal(0)
+    assert result.generated_cash_leg.realized_gain_loss == Decimal(0)
+    assert result.generated_cash_leg.realized_gain_loss_local == Decimal(0)
+    assert result.generated_cash_leg.transaction_fx_rate == prior_cash_leg.transaction_fx_rate
+    assert result.generated_cash_leg.transaction_fx_rate_origin == (
+        prior_cash_leg.transaction_fx_rate_origin
+    )
+    assert result.generated_cash_leg.calculation_lineage is not None
+    assert (
+        result.generated_cash_leg.calculation_lineage.algorithm_id
+        == "generated-settlement-cash-neutralization"
+    )
+    assert result.generated_cash_leg.calculation_lineage.numeric_output_policy is not None
+    assert (
+        result.generated_cash_leg.calculation_lineage.numeric_output_policy.policy_id
+        == "transaction-cost-ledger-output@1.0.0"
+    )
+    alternate_correction = replace(
+        corrected,
+        embedded_tax_amount_local=Decimal("98"),
+        trade_fee=Decimal("2"),
+    )
+    alternate_lookup = AsyncMock(spec=SettlementTransactionLookupPort)
+    alternate_lookup.get_booked_transaction.return_value = prior_cash_leg
+    alternate_result = await link_settlement_cash_leg(
+        product_leg=alternate_correction,
+        transaction_lookup=alternate_lookup,
+        transaction_persistence=AsyncMock(spec=SettlementTransactionPersistencePort),
+        reconcile_superseded_derived=True,
+    )
+    assert alternate_result.generated_cash_leg is not None
+    assert alternate_result.generated_cash_leg.gross_transaction_amount == Decimal(0)
+    assert alternate_result.generated_cash_leg.calculation_lineage is not None
+    assert (
+        alternate_result.generated_cash_leg.calculation_lineage.input_content_hash
+        != result.generated_cash_leg.calculation_lineage.input_content_hash
+    )
     persistence.upsert_generated_booked_transaction.assert_awaited_once_with(
         result.generated_cash_leg
     )

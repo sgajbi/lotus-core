@@ -9,10 +9,18 @@ from decimal import Decimal
 from hashlib import sha256
 from typing import Any
 
+from portfolio_common.domain.transaction.type_registry import get_transaction_type_definition
+from portfolio_common.domain.transaction_control_codes import (
+    normalize_transaction_control_code,
+)
+
 from .booked import BOOKED_TRANSACTION_DERIVED_FIELDS, BookedTransaction
+from .fx_rate_origin import SOURCE_BOOKED_FX_RATE_ORIGIN
 
 TRANSACTION_SEMANTIC_IDENTITY_VERSION = "v1"
 TRANSACTION_CORRECTION_IDENTITY_VERSION = "v1"
+_SOURCE_BOOKED_SEMANTIC_IDENTITY_VERSION = "v2"
+_SOURCE_BOOKED_CORRECTION_IDENTITY_VERSION = "v2"
 _PROCESSOR_OWNED_OUTPUT_FIELDS = frozenset(
     {
         "allocated_cost_basis_base",
@@ -28,7 +36,7 @@ _PROCESSOR_OWNED_OUTPUT_FIELDS = frozenset(
         "realized_gain_loss_local",
         "realized_total_pnl_base",
         "realized_total_pnl_local",
-        "transaction_fx_rate",
+        "transaction_fx_rate_origin",
     }
 )
 _NON_MATERIAL_FIELDS = (
@@ -48,12 +56,33 @@ _DEFAULT_POLICY_VERSION = "1.0.0"
 class TransactionSemanticIdentity:
     semantic_key: str
     payload_fingerprint: str
+    legacy_semantic_key: str
+    legacy_payload_fingerprint: str
 
 
 def build_transaction_semantic_identity(
     transaction: BookedTransaction,
 ) -> TransactionSemanticIdentity:
+    source_booked = transaction.transaction_fx_rate_origin == SOURCE_BOOKED_FX_RATE_ORIGIN
+    identity_version = (
+        _SOURCE_BOOKED_SEMANTIC_IDENTITY_VERSION
+        if source_booked
+        else TRANSACTION_SEMANTIC_IDENTITY_VERSION
+    )
     semantic_key = ":".join(
+        (
+            "transaction-processing",
+            identity_version,
+            transaction.portfolio_id.strip(),
+            transaction.transaction_id.strip(),
+            str(transaction.epoch or 0),
+        )
+    )
+    material_payload = _material_payload(transaction, include_source_booked_fx=source_booked)
+    legacy_material_payload = _material_payload(transaction, include_source_booked_fx=False)
+    payload_fingerprint = _payload_fingerprint(material_payload)
+    legacy_payload_fingerprint = _payload_fingerprint(legacy_material_payload)
+    legacy_semantic_key = ":".join(
         (
             "transaction-processing",
             TRANSACTION_SEMANTIC_IDENTITY_VERSION,
@@ -62,22 +91,38 @@ def build_transaction_semantic_identity(
             str(transaction.epoch or 0),
         )
     )
-    material_payload = {
-        field.name: _canonical_transaction_field(transaction, field.name)
+    return TransactionSemanticIdentity(
+        semantic_key=semantic_key,
+        payload_fingerprint=payload_fingerprint,
+        legacy_semantic_key=legacy_semantic_key,
+        legacy_payload_fingerprint=legacy_payload_fingerprint,
+    )
+
+
+def _material_payload(
+    transaction: BookedTransaction,
+    *,
+    include_source_booked_fx: bool,
+) -> dict[str, Any]:
+    return {
+        field.name: (
+            None
+            if field.name == "transaction_fx_rate" and not include_source_booked_fx
+            else _canonical_transaction_field(transaction, field.name)
+        )
         for field in fields(transaction)
         if field.name not in _NON_MATERIAL_FIELDS
     }
+
+
+def _payload_fingerprint(material_payload: dict[str, Any]) -> str:
     canonical_payload = json.dumps(
         material_payload,
         ensure_ascii=True,
         separators=(",", ":"),
         sort_keys=True,
     )
-    payload_fingerprint = "sha256:" + sha256(canonical_payload.encode("utf-8")).hexdigest()
-    return TransactionSemanticIdentity(
-        semantic_key=semantic_key,
-        payload_fingerprint=payload_fingerprint,
-    )
+    return "sha256:" + sha256(canonical_payload.encode("utf-8")).hexdigest()
 
 
 def build_transaction_correction_identity(
@@ -86,10 +131,16 @@ def build_transaction_correction_identity(
     """Build an immutable identity for one explicit canonical correction payload."""
 
     base_identity = build_transaction_semantic_identity(transaction)
+    source_booked = transaction.transaction_fx_rate_origin == SOURCE_BOOKED_FX_RATE_ORIGIN
+    correction_version = (
+        _SOURCE_BOOKED_CORRECTION_IDENTITY_VERSION
+        if source_booked
+        else TRANSACTION_CORRECTION_IDENTITY_VERSION
+    )
     semantic_key = ":".join(
         (
             "transaction-correction",
-            TRANSACTION_CORRECTION_IDENTITY_VERSION,
+            correction_version,
             transaction.portfolio_id.strip(),
             transaction.transaction_id.strip(),
             str(transaction.epoch or 0),
@@ -99,13 +150,27 @@ def build_transaction_correction_identity(
     return TransactionSemanticIdentity(
         semantic_key=semantic_key,
         payload_fingerprint=base_identity.payload_fingerprint,
+        legacy_semantic_key=":".join(
+            (
+                "transaction-correction",
+                TRANSACTION_CORRECTION_IDENTITY_VERSION,
+                transaction.portfolio_id.strip(),
+                transaction.transaction_id.strip(),
+                str(transaction.epoch or 0),
+                base_identity.legacy_payload_fingerprint,
+            )
+        ),
+        legacy_payload_fingerprint=base_identity.legacy_payload_fingerprint,
     )
 
 
 def _canonical_transaction_field(transaction: BookedTransaction, field_name: str) -> Any:
     value = getattr(transaction, field_name)
     family = _transaction_family(transaction.transaction_type)
-    if field_name == "economic_event_id":
+    if field_name == "transaction_fx_rate":
+        if transaction.transaction_fx_rate_origin != SOURCE_BOOKED_FX_RATE_ORIGIN:
+            return None
+    elif field_name == "economic_event_id":
         generated = f"EVT-{family}-{transaction.portfolio_id}-{transaction.transaction_id}"
         if value is None or value == generated:
             return None
@@ -121,11 +186,24 @@ def _canonical_transaction_field(transaction: BookedTransaction, field_name: str
             value is None or value == _DEFAULT_POLICY_VERSION
         ):
             return None
+    elif field_name == "cash_entry_mode":
+        value = _effective_cash_entry_mode(transaction)
     elif field_name == "external_cash_transaction_id":
         generated = f"{transaction.transaction_id}-CASHLEG"
-        if transaction.cash_entry_mode == "AUTO_GENERATE" and (value is None or value == generated):
+        if _effective_cash_entry_mode(transaction) == "AUTO_GENERATE" and (
+            value is None or value == generated
+        ):
             return None
     return _canonical_value(value)
+
+
+def _effective_cash_entry_mode(transaction: BookedTransaction) -> str | None:
+    if transaction.cash_entry_mode is not None:
+        return transaction.cash_entry_mode.strip().upper()
+    definition = get_transaction_type_definition(
+        normalize_transaction_control_code(transaction.transaction_type)
+    )
+    return definition.default_cash_entry_mode if definition is not None else None
 
 
 def _transaction_family(transaction_type: str) -> str:

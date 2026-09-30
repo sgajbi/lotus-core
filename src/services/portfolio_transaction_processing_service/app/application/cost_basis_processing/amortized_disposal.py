@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import replace
 from datetime import date, timezone
-from decimal import Decimal
+from decimal import ROUND_HALF_EVEN, Context, Decimal, localcontext
 from typing import cast
 
 from portfolio_common.domain.calculation_lineage import (
@@ -393,15 +393,9 @@ def _book_cost_fx_rate(
         or base_cost <= Decimal(0)
     ):
         raise ValueError("source lot is missing positive local/base book cost for FX preservation")
-    with TRANSACTION_COST_LEDGER_OUTPUT_V1.arithmetic_context():
+    with localcontext(Context(prec=64, rounding=ROUND_HALF_EVEN)):
         rate = base_cost / local_cost
-    return cast(
-        Decimal,
-        TRANSACTION_COST_LEDGER_OUTPUT_V1.normalize(
-            rate,
-            field_name="book_cost_fx_rate_to_base",
-        ),
-    )
+        return rate.quantize(Decimal("1e-10"), rounding=ROUND_HALF_EVEN)
 
 
 def _apply_transaction_overlay(

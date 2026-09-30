@@ -1,14 +1,13 @@
 """Apply deterministic effective-dated FX rates to cost-basis engine inputs."""
 
-from bisect import bisect_right
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
+from ...domain.transaction.fx_rate_origin import REFERENCE_DERIVED_FX_RATE_ORIGIN
 from ...ports import CostBasisFxRatePort
-
-
-class FxRateNotFoundError(Exception):
-    """Report that no effective FX rate exists on or before a transaction date."""
+from ..errors import FxRateNotFoundError, TransactionProcessingRejected
+from ..fx_rate_selection import select_latest_effective_fx_rate
 
 
 def _normalized_currency(value: object) -> str:
@@ -40,6 +39,23 @@ async def enrich_cost_basis_transactions_with_fx(
         transaction["portfolio_base_currency"] = normalized_base_currency
 
         if trade_currency == normalized_base_currency:
+            supplied_rate = transaction.get("transaction_fx_rate")
+            if supplied_rate is not None and Decimal(supplied_rate) != Decimal(1):
+                raise TransactionProcessingRejected(
+                    reason_code="same_currency_fx_rate_invalid",
+                    detail={
+                        "transaction_id": transaction.get("transaction_id"),
+                        "currency": trade_currency,
+                        "transaction_fx_rate": str(supplied_rate),
+                    },
+                    retryable=False,
+                )
+            transaction["transaction_fx_rate"] = Decimal(1)
+            if supplied_rate is None:
+                transaction["transaction_fx_rate_origin"] = REFERENCE_DERIVED_FX_RATE_ORIGIN
+            continue
+
+        if transaction.get("transaction_fx_rate") is not None:
             continue
 
         effective_date = _transaction_effective_date(transaction["transaction_date"])
@@ -55,14 +71,14 @@ async def enrich_cost_basis_transactions_with_fx(
             start_date=min(requested_dates),
             end_date=max(requested_dates),
         )
-        rate_dates = [fx_rate.effective_date for fx_rate in rate_window]
         for transaction, effective_date in pair_transactions:
-            effective_rate_index = bisect_right(rate_dates, effective_date) - 1
-            if effective_rate_index < 0:
+            effective_rate = select_latest_effective_fx_rate(rate_window, effective_date)
+            if effective_rate is None:
                 raise FxRateNotFoundError(
                     f"FX rate for {trade_currency}->{base_currency} on "
                     f"{transaction['transaction_date']} not found. Retrying..."
                 )
-            transaction["transaction_fx_rate"] = rate_window[effective_rate_index].rate
+            transaction["transaction_fx_rate"] = effective_rate.rate
+            transaction["transaction_fx_rate_origin"] = REFERENCE_DERIVED_FX_RATE_ORIGIN
 
     return transactions

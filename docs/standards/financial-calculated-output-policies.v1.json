@@ -47,8 +47,7 @@
       ],
       "lineage_boundary_covered_callsites": {
         "src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/amortized_disposal.py::_apply_transaction_overlay": [
-          "src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/amortized_disposal.py::_adjust_realized_value",
-          "src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/amortized_disposal.py::_book_cost_fx_rate"
+          "src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/amortized_disposal.py::_adjust_realized_value"
         ],
         "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::CostBasisCalculator.calculate_transaction_costs": [
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::AdjustmentStrategy.calculate_costs",
@@ -77,6 +76,15 @@
           "src/services/portfolio_transaction_processing_service/app/domain/transaction/redemption/economics.py::derive_redemption_principal_proceeds_local"
         ]
       },
+      "lineage_boundary_terminal_callsites": {
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::CostBasisCalculator.calculate_transaction_costs": {
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::CashConsiderationStrategy.calculate_costs": "lineage-bound-sibling-orchestrator",
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::CashInLieuStrategy.calculate_costs": "lineage-bound-sibling-orchestrator"
+        },
+        "src/services/portfolio_transaction_processing_service/app/domain/transaction/fx/baseline_processing.py::build_fx_processed_transaction": {
+          "src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/execution.py::PreparedCostProcessingUseCase.execute": "lineage-bound-sibling-orchestrator"
+        }
+      },
       "lineage_gap_callsites": []
     },
     "COST_BASIS_STATE_LEDGER_OUTPUT_V1": {
@@ -99,10 +107,12 @@
       ],
       "lineage_boundary_covered_callsites": {
         "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/basis_transfer_allocation.py::_build_basis_transfer_lineage": [
+          "src/libs/portfolio-common/portfolio_common/domain/cost_basis_receipt_integrity.py::_canonical_cost_basis_output",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/basis_transfer_allocation.py::_sum_amounts",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::_basis_transfer_result"
         ],
         "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/disposal_allocation.py::_build_conserved_allocation_lineage": [
+          "src/libs/portfolio-common/portfolio_common/domain/cost_basis_receipt_integrity.py::_canonical_cost_basis_output",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::_apportion_nonnegative_disposal_values"
         ],
         "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/state_lineage.py::build_cost_basis_state_lineage": [
@@ -130,12 +140,34 @@
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/residual_allocation.py::allocate_nonnegative_storage_share"
         ],
         "src/services/portfolio_transaction_processing_service/app/domain/fixed_income_book_cost/calculation.py::calculate_amortized_cost_schedule": [
+          "src/libs/portfolio-common/portfolio_common/domain/cost_basis_receipt_integrity.py::_canonical_cost_basis_output",
           "src/services/portfolio_transaction_processing_service/app/domain/fixed_income_book_cost/calculation.py::_calculate_period"
         ],
         "src/services/portfolio_transaction_processing_service/app/domain/fixed_income_book_cost/disposal_basis.py::allocate_recognized_lot_book_cost": [
+          "src/libs/portfolio-common/portfolio_common/domain/cost_basis_receipt_integrity.py::_canonical_cost_basis_output",
           "src/services/portfolio_transaction_processing_service/app/domain/fixed_income_book_cost/disposal_basis.py::_current_carried_cost",
           "src/services/portfolio_transaction_processing_service/app/domain/fixed_income_book_cost/disposal_basis.py::_proportional_local_cost"
         ]
+      },
+      "lineage_boundary_terminal_callsites": {
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/state_lineage.py::build_cost_basis_state_lineage": {
+          "src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/calculation.py::CostBasisCalculationCoordinator.calculate": "lineage-bound-sibling-orchestrator",
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::AverageCostSourceAllocation.materialize": "lineage-bound-sibling-orchestrator",
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::CostBasisCalculator.calculate_transaction_costs": "lineage-bound-sibling-orchestrator",
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::AverageCostBasisStrategy.consume_sell_quantity": "lineage-bound-sibling-orchestrator",
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::AverageCostBasisStrategy.transfer_basis_out": "lineage-bound-sibling-orchestrator",
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::FIFOBasisStrategy.consume_sell_quantity": "lineage-bound-sibling-orchestrator",
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::FIFOBasisStrategy.transfer_basis_out": "lineage-bound-sibling-orchestrator",
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/disposal_allocation.py::AmortizedCostAllocationEvidence.__post_init__": "read-only-lineage-verification",
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/lot_basis_transfer_receipt.py::LotBasisTransferReceiptState.__post_init__": "read-only-lineage-verification",
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/lot_disposal_receipt.py::LotDisposalReceiptState.__post_init__": "read-only-lineage-verification",
+          "src/services/portfolio_transaction_processing_service/app/infrastructure/cost_basis/average_cost_pool_reconciliation.py::SqlAlchemyAverageCostPoolReconciliationAdapter.reconcile": "read-only-lineage-verification",
+          "src/services/portfolio_transaction_processing_service/app/infrastructure/cost_basis/average_cost_pool_repository.py::SqlAlchemyAverageCostPoolRepository.get_average_cost_pool_persisted_summary": "read-only-lineage-verification",
+          "src/services/portfolio_transaction_processing_service/app/infrastructure/cost_basis/lot_basis_transfer_repository.py::SqlAlchemyCostBasisLotBasisTransferRepository.reconcile_basis_transfer_receipts": "read-only-lineage-verification",
+          "src/services/portfolio_transaction_processing_service/app/infrastructure/cost_basis/lot_disposal_repository.py::SqlAlchemyCostBasisLotDisposalRepository.reconcile_disposal_receipts": "read-only-lineage-verification",
+          "src/services/query_service/app/repositories/lot_basis_transfer_repository.py::LotBasisTransferRepository.get_latest_receipt": "read-only-lineage-verification",
+          "src/services/query_service/app/repositories/lot_disposal_repository.py::LotDisposalRepository.get_latest_receipt": "read-only-lineage-verification"
+        }
       },
       "lineage_gap_callsites": []
     },

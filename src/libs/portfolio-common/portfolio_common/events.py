@@ -300,6 +300,7 @@ class TransactionEvent(CoreEventModel):
     gross_cost: Optional[Decimal] = None
     realized_gain_loss: Optional[Decimal] = None
     transaction_fx_rate: Optional[Decimal] = None
+    transaction_fx_rate_origin: Optional[str] = None
     net_cost_local: Optional[Decimal] = None
     realized_gain_loss_local: Optional[Decimal] = None
     economic_event_id: Optional[str] = None

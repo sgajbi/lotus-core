@@ -57,6 +57,28 @@ class SqlAlchemyTransactionIdempotencyAdapter:
             )
         )
 
+    async def matches_existing_claim(
+        self,
+        *,
+        tenant_id: str,
+        event_id: str,
+        portfolio_id: str,
+        semantic_key: str,
+        payload_fingerprint: str,
+    ) -> bool:
+        """Qualify a rolling-version fence without inserting compatibility state."""
+
+        return bool(
+            await self._repository.matches_semantic_event_processing(
+                event_id=event_id,
+                tenant_id=tenant_id,
+                portfolio_id=portfolio_id,
+                service_name=TRANSACTION_PROCESSING_SERVICE_NAME,
+                semantic_key=semantic_key,
+                payload_fingerprint=payload_fingerprint,
+            )
+        )
+
 
 def semantic_claim_outcome(
     outcome: SemanticEventClaimOutcome,

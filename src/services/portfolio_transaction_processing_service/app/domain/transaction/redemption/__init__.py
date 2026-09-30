@@ -15,6 +15,7 @@ from .economics import (
     RedemptionEconomics,
     RedemptionTerms,
     calculate_redemption_economics,
+    calculate_redemption_principal_proceeds_local,
     derive_redemption_principal_proceeds_local,
 )
 from .eligibility import (
@@ -48,6 +49,7 @@ __all__ = [
     "assert_redemption_command_eligible",
     "assert_redemption_settlement_date",
     "build_redemption_accrued_interest_component",
+    "calculate_redemption_principal_proceeds_local",
     "calculate_redemption_economics",
     "derive_redemption_principal_proceeds_local",
     "is_generated_redemption_accrued_interest",

@@ -101,6 +101,56 @@ def test_transaction_payload_identity_changes_for_material_restatement(
     )
 
 
+def test_source_booked_fx_rate_is_material_to_raw_payload_identity() -> None:
+    original = _event(
+        transaction_fx_rate=Decimal("2.0"),
+        transaction_fx_rate_origin="SOURCE_BOOKED",
+    )
+    replay = _event(
+        transaction_fx_rate=Decimal("2.00"),
+        transaction_fx_rate_origin="SOURCE_BOOKED",
+    )
+    correction = _event(
+        transaction_fx_rate=Decimal("2.5"),
+        transaction_fx_rate_origin="SOURCE_BOOKED",
+    )
+
+    assert transaction_payload_fingerprint(original.model_dump(mode="python")) == (
+        transaction_payload_fingerprint(replay.model_dump(mode="python"))
+    )
+    assert transaction_payload_fingerprint(original.model_dump(mode="python")) != (
+        transaction_payload_fingerprint(correction.model_dump(mode="python"))
+    )
+    original_identity = build_transaction_payload_identity(
+        original.model_dump(mode="python"), tenant_id="tenant-a"
+    )
+    assert original_identity.semantic_key.startswith("transaction-persistence:v2:")
+    assert original_identity.legacy_payload_fingerprint == (
+        "sha256:0d3dc27caf1667513c34f0f1e406b4466bb977e759e4b7f685da06432deeddc8"
+    )
+
+
+@pytest.mark.parametrize("origin", ["REFERENCE_DERIVED", "LEGACY_UNKNOWN", None])
+def test_processor_or_legacy_fx_rate_is_not_material_to_raw_payload_identity(
+    origin: str | None,
+) -> None:
+    original = _event(
+        transaction_fx_rate=Decimal("2.0"),
+        transaction_fx_rate_origin=origin,
+    )
+    replay = _event(
+        transaction_fx_rate=Decimal("2.5"),
+        transaction_fx_rate_origin=origin,
+    )
+
+    assert transaction_payload_fingerprint(original.model_dump(mode="python")) == (
+        transaction_payload_fingerprint(replay.model_dump(mode="python"))
+    )
+    assert build_transaction_payload_identity(
+        original.model_dump(mode="python"), tenant_id="tenant-a"
+    ).semantic_key.startswith("transaction-persistence:v1:")
+
+
 def test_transaction_payload_identity_rejects_unclassified_fields() -> None:
     payload = _event().model_dump(mode="python")
     payload["future_unclassified_field"] = "unsafe-default"

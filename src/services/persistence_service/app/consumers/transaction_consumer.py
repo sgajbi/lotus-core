@@ -62,6 +62,21 @@ class TransactionPersistenceConsumer(GenericPersistenceConsumer):
             tenant_id=event.tenant_id,
         )
 
+    async def is_compatible_semantic_conflict(
+        self,
+        db_session: AsyncSession,
+        event: BaseModel,
+        semantic_identity: TransactionPayloadIdentity,
+    ) -> bool:
+        """Resolve an exact late-v1 replay after its durable transaction becomes visible."""
+
+        if not isinstance(event, TransactionEvent):
+            return False
+        compatible = await TransactionDBRepository(db_session).qualifies_legacy_semantic_conflict(
+            event, semantic_identity
+        )
+        return compatible is True
+
     @retry(
         wait=wait_fixed(2),
         stop=stop_after_delay(10),
@@ -84,7 +99,15 @@ class TransactionPersistenceConsumer(GenericPersistenceConsumer):
             )
         if event.tenant_id is not None and TenantId(event.tenant_id).value != source_tenant_id:
             raise ValueError("Transaction tenant does not own the referenced portfolio")
-        return event.model_copy(update={"tenant_id": source_tenant_id})
+        # Origin is server-owned at the admitted raw-source boundary. Producers
+        # provide the booked rate, never its authority classification.
+        admitted_origin = "SOURCE_BOOKED" if event.transaction_fx_rate is not None else None
+        return event.model_copy(
+            update={
+                "tenant_id": source_tenant_id,
+                "transaction_fx_rate_origin": admitted_origin,
+            }
+        )
 
     @retry(
         wait=wait_fixed(2),

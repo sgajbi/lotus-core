@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Protocol
 
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
@@ -41,6 +42,7 @@ class CostBasisInstrumentReference:
     security_id: str
     product_type: str
     asset_class: str | None
+    currency: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +51,17 @@ class CostBasisReferenceData:
 
     portfolio: CostBasisPortfolioReference
     instrument: CostBasisInstrumentReference | None
+
+
+@dataclass(frozen=True, slots=True)
+class SettlementCashAccountReference:
+    """Locked cash-account and instrument authority used for generated settlement."""
+
+    cash_account_id: str
+    security_id: str
+    account_currency: str
+    instrument_product_type: str
+    instrument_currency: str
 
 
 class CostBasisReferenceDataPort(Protocol):
@@ -60,3 +73,12 @@ class CostBasisReferenceDataPort(Protocol):
         portfolio_id: str,
         security_id: str,
     ) -> CostBasisReferenceData | None: ...
+
+    async def get_settlement_cash_account_reference(
+        self,
+        *,
+        portfolio_id: str,
+        tenant_id: str,
+        cash_account_id: str,
+        as_of_date: date,
+    ) -> SettlementCashAccountReference | None: ...

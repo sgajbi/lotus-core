@@ -58,11 +58,16 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/test_ingestion_failure_outcome_migration.py",
         "tests/integration/test_portfolio_tenant_cutover_migration.py",
         "tests/integration/test_transaction_payload_fingerprint_migration.py",
+        "tests/integration/test_transaction_fx_rate_origin_migration.py",
         "tests/integration/services/persistence_service/repositories/"
         "test_transaction_payload_conflict.py",
         "tests/integration/services/persistence_service/consumers/"
-        "test_transaction_consumer_boundary.py::"
-        "test_transaction_consumer_boundary_persists_transaction_outbox_and_idempotency",
+        "test_transaction_consumer_boundary.py",
+        "tests/integration/services/portfolio_transaction_processing_service/"
+        "test_int_cost_basis_reference_data_repository.py",
+        "tests/integration/services/portfolio_transaction_processing_service/"
+        "test_int_redemption_lifecycle.py::"
+        "test_redemption_correction_clears_superseded_terms_and_interest_cash_link",
     ],
     "critical-db-coverage": [
         "tests/integration/libs/portfolio-common/test_database_runtime_identity.py",

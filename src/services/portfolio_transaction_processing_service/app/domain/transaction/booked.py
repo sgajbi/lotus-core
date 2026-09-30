@@ -44,6 +44,7 @@ class BookedTransaction:
     gross_cost: Decimal | None = None
     realized_gain_loss: Decimal | None = None
     transaction_fx_rate: Decimal | None = None
+    transaction_fx_rate_origin: str | None = None
     net_cost_local: Decimal | None = None
     realized_gain_loss_local: Decimal | None = None
     economic_event_id: str | None = None

@@ -1,0 +1,14 @@
+"""Govern durable authority provenance for transaction FX rates."""
+
+from typing import Final
+
+SOURCE_BOOKED_FX_RATE_ORIGIN: Final = "SOURCE_BOOKED"
+REFERENCE_DERIVED_FX_RATE_ORIGIN: Final = "REFERENCE_DERIVED"
+LEGACY_UNKNOWN_FX_RATE_ORIGIN: Final = "LEGACY_UNKNOWN"
+TRANSACTION_FX_RATE_ORIGINS: Final = frozenset(
+    {
+        SOURCE_BOOKED_FX_RATE_ORIGIN,
+        REFERENCE_DERIVED_FX_RATE_ORIGIN,
+        LEGACY_UNKNOWN_FX_RATE_ORIGIN,
+    }
+)

@@ -107,6 +107,7 @@ class _Idempotency:
         self.claim_kwargs: dict = {}
         self.repair_claim_kwargs: dict = {}
         self.repair_claimed = True
+        self.legacy_matches = False
 
     async def claim(self, **kwargs) -> TransactionIdempotencyOutcome:
         self.calls.append("idempotency")
@@ -119,6 +120,10 @@ class _Idempotency:
         self.calls.append("repair-idempotency")
         self.repair_claim_kwargs = kwargs
         return self.repair_claimed
+
+    async def matches_existing_claim(self, **_kwargs) -> bool:
+        self.calls.append("legacy-idempotency")
+        return self.legacy_matches
 
 
 class _Cost:
@@ -682,7 +687,7 @@ async def test_use_case_rejects_material_semantic_conflict_before_financial_work
 
     assert exc_info.value.reason_code == "transaction_semantic_conflict"
     assert exc_info.value.retryable is False
-    assert calls == ["enter", "idempotency", "rollback"]
+    assert calls == ["enter", "idempotency", "legacy-idempotency", "rollback"]
     assert observer.records[0] == (
         TransactionProcessingOperation.IDEMPOTENCY,
         TransactionProcessingOutcome.SEMANTIC_CONFLICT,
@@ -875,6 +880,7 @@ async def test_repair_intent_claims_payload_specific_correction_identity() -> No
     assert calls == [
         "enter",
         "idempotency",
+        "legacy-idempotency",
         "idempotency",
         "cost:TX-001",
         "position:TX-001",
@@ -919,6 +925,7 @@ async def test_stable_repair_claim_fences_payload_correction_delivery() -> None:
     assert calls == [
         "enter",
         "idempotency",
+        "legacy-idempotency",
         "idempotency",
         "repair-idempotency",
         "cost:TX-001",
@@ -962,6 +969,7 @@ async def test_redelivered_stable_payload_correction_skips_financial_work() -> N
     assert calls == [
         "enter",
         "idempotency",
+        "legacy-idempotency",
         "idempotency",
         "repair-idempotency",
         "rollback",
@@ -990,7 +998,14 @@ async def test_repair_intent_fails_closed_when_correction_identity_conflicts() -
         ).execute(command)
 
     assert exc_info.value.reason_code == "transaction_semantic_conflict"
-    assert calls == ["enter", "idempotency", "idempotency", "rollback"]
+    assert calls == [
+        "enter",
+        "idempotency",
+        "legacy-idempotency",
+        "idempotency",
+        "legacy-idempotency",
+        "rollback",
+    ]
 
 
 @pytest.mark.asyncio

@@ -65,6 +65,36 @@ construction, ordered persistence, and immutable product linkage through separat
 and persistence ports. Cost-basis services operate on canonical booked transactions through
 transaction-state, reference-data, and FX ports. The cost-basis application package owns the
 persistence-scope decision for complete snapshots, selected FIFO lots, and atomic AVCO transitions.
+An admitted positive `transaction_fx_rate` is source-booked cost authority and is preserved through
+incremental calculation, full replay, and generated settlement cash. When it is absent, the product
+leg derives effective-dated reference FX at trade date and a generated cash leg derives it at
+settlement date; ordinary replay preserves the generated leg's booked result. Reference FX remains
+valuation authority and does not silently restate source-booked cost.
+An authorized correction of reference-derived economics may rederive settlement cash basis;
+ordinary replay keeps the existing generated rate frozen.
+Core persists server-owned booked/reference/legacy-unknown FX provenance. Only source-booked FX is
+material to correction identity; legacy provenance is never guessed. Same-currency rates must be
+`1`. Generated cash also requires its authoritative settlement-instrument currency to match trade
+currency before persistence. Core resolves that security from the active tenant/portfolio/date
+cash-account mapping; a supplied instrument is only a matching assertion. The mapped instrument
+must exist, be `CASH`, and agree with the account currency. The derived security does not rewrite
+source identity, and generated costs use the governed 18,10 ledger policy.
+Core locks the tenant portfolio, active cash-account mapping, and mapped instrument in the same
+processing transaction, so a supported authority update cannot race a stale generated child.
+The shared settlement resolver owns deterministic intermediate arithmetic and validation only;
+generated-cash and cashflow persistence each bind their own final-output receipt. If an authorized
+correction retires a generated cash leg, its zeroed financial fields retain a deterministic
+transaction-policy neutralization receipt binding the corrected source and prior child evidence.
+New source-booked raw events use FX-sensitive v2 identity. The v1 identity is accepted only for an
+exact historical replay whose locked processed-event fence, scope, v1 economics, numeric FX, and
+durable transaction agree. A late old worker's non-null FX with null origin remains unknown and is
+never promoted or inferred; inconsistent evidence fails closed.
+Source-booked processing uses a separate FX-sensitive v2 identity. An exact existing v1 processing
+fence may qualify read-only during rolling deployment; compatibility never fabricates a v1 claim.
+Omitted cash-entry mode is canonicalized to the governed transaction-type default for replay.
+Existing affected transactions are repaired through the governed source correction/replay flow
+after booked-FX validation; deployment does not rewrite history and direct database repair is not
+supported.
 The same package owns calculated transaction persistence: it writes the affected
 timeline suffix through transaction, lot-state, and accrued-income-offset ports and returns
 immutable booked transactions. Processed transactions and derived FX contract instruments cross a

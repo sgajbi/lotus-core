@@ -271,6 +271,57 @@ async def test_historical_fee_dominated_delivery_remains_an_idempotent_duplicate
     assert int(idempotency_count or 0) == 1
 
 
+@pytest.mark.parametrize("repair", [False, True])
+async def test_source_booked_v2_replay_accepts_same_physical_v1_worker_claim(
+    clean_db,
+    async_db_session: AsyncSession,
+    repair: bool,
+) -> None:
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    command = _command("ROLLING-SOURCE-FX")
+    command = replace(
+        command,
+        transaction=replace(
+            command.transaction,
+            transaction_fx_rate=Decimal("2"),
+            transaction_fx_rate_origin="SOURCE_BOOKED",
+        ),
+        metadata=replace(
+            command.metadata,
+            processing_intent=(
+                TransactionProcessingIntent.REPAIR
+                if repair
+                else TransactionProcessingIntent.STANDARD
+            ),
+        ),
+    )
+    identity = (
+        build_transaction_correction_identity(command.transaction)
+        if repair
+        else build_transaction_semantic_identity(command.transaction)
+    )
+    async_db_session.add(
+        ProcessedEvent(
+            event_id=command.metadata.event_id,
+            portfolio_id=command.transaction.portfolio_id,
+            service_name=TRANSACTION_PROCESSING_SERVICE_NAME,
+            tenant_id=command.transaction.tenant_id,
+            correlation_id="corr-old-worker",
+            semantic_key=identity.legacy_semantic_key,
+            payload_fingerprint=identity.legacy_payload_fingerprint,
+        )
+    )
+    await async_db_session.commit()
+
+    result = await ProcessTransactionUseCase(
+        _unit_of_work_factory(session_factory, fail_at=None),
+        observer=PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
+    ).execute(command)
+
+    assert result.status is TransactionProcessingStatus.DUPLICATE
+    assert await _persisted_counts(session_factory, command) == (0, 1)
+
+
 async def test_semantic_fence_suppresses_republication_and_rejects_changed_payload(
     clean_db,
     async_db_session: AsyncSession,
@@ -422,12 +473,21 @@ async def test_explicit_repair_claims_immutable_payload_specific_correction_iden
 ) -> None:
     session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
     original = _command("CORRECTION")
+    original = replace(
+        original,
+        transaction=replace(
+            original.transaction,
+            transaction_fx_rate=Decimal("2"),
+            transaction_fx_rate_origin="SOURCE_BOOKED",
+        ),
+    )
     corrected = replace(
         original,
         transaction=replace(
             original.transaction,
             quantity=Decimal("12"),
             gross_transaction_amount=Decimal("306.00"),
+            transaction_fx_rate=Decimal("2.5"),
         ),
         metadata=replace(
             original.metadata,

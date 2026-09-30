@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from ...application import (
     TransactionProcessingError,
     TransactionProcessingRejected,
@@ -103,10 +105,22 @@ class CostBasisProcessingAdapter:
             instrument_product_type=(instrument.product_type if instrument is not None else None),
             instrument_asset_class=(instrument.asset_class if instrument is not None else None),
         )
+        correction_removes_generated_cash = (
+            reconcile_superseded_derived
+            and transaction.cash_entry_mode is None
+            and not str(transaction.settlement_cash_account_id or "").strip()
+            and not str(transaction.settlement_cash_instrument_id or "").strip()
+        )
+        if correction_removes_generated_cash:
+            prepared = replace(
+                prepared,
+                transaction=replace(prepared.transaction, cash_entry_mode=None),
+            )
         return await self._processor.execute(
             prepared=prepared,
             portfolio=portfolio,
             instrument=instrument,
+            reference_data=self._reference_data,
             transaction_state=self._repository,
             average_cost_pools=self._average_cost_pools,
             lot_disposals=self._lot_disposals,

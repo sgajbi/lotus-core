@@ -2,11 +2,13 @@
 import logging
 from dataclasses import dataclass
 from datetime import date
+from typing import cast
 
 from portfolio_common.database_models import (
     CashAccountMaster,
     Instrument,
     Portfolio,
+    ProcessedEvent,
     TransactionCost,
 )
 from portfolio_common.database_models import Transaction as DBTransaction
@@ -134,6 +136,7 @@ class TransactionDBRepository:
         incoming_ownership: TransactionIdentityOwnership,
         incoming_tenant_id: str,
         incoming_payload_identity: TransactionPayloadIdentity,
+        incoming_event: TransactionEvent,
     ) -> None:
         existing_ownership = transaction_identity_ownership(existing)
         if existing_ownership != incoming_ownership:
@@ -145,12 +148,110 @@ class TransactionDBRepository:
             )
             if not same_tenant_source_replay:
                 raise GeneratedTransactionIdentityCollisionError(incoming_ownership.transaction_id)
-        if existing.payload_fingerprint != incoming_payload_identity.payload_fingerprint:
+        legacy_fx_replay = await self._is_qualified_legacy_fx_replay(
+            existing=existing,
+            incoming_event=incoming_event,
+            incoming_tenant_id=incoming_tenant_id,
+            legacy_payload_fingerprint=incoming_payload_identity.legacy_payload_fingerprint,
+        )
+        if (
+            existing.payload_fingerprint != incoming_payload_identity.payload_fingerprint
+            and not legacy_fx_replay
+        ):
             raise TransactionSemanticConflictError(
                 semantic_key=incoming_payload_identity.semantic_key,
                 existing_payload_fingerprint=existing.payload_fingerprint,
                 incoming_payload_fingerprint=incoming_payload_identity.payload_fingerprint,
             )
+
+    async def _is_qualified_legacy_fx_replay(
+        self,
+        *,
+        existing: DBTransaction,
+        incoming_event: TransactionEvent,
+        incoming_tenant_id: str,
+        legacy_payload_fingerprint: str,
+    ) -> bool:
+        """Allow only an economically identical replay of an UNKNOWN pre-c175 row."""
+
+        if (
+            existing.transaction_fx_rate_origin not in {None, "LEGACY_UNKNOWN"}
+            or incoming_event.transaction_fx_rate_origin != "SOURCE_BOOKED"
+            or existing.portfolio_id != incoming_event.portfolio_id
+            or existing.transaction_fx_rate is None
+            or existing.transaction_fx_rate != incoming_event.transaction_fx_rate
+            or existing.payload_fingerprint != legacy_payload_fingerprint
+        ):
+            return False
+        existing_tenant_id = cast(
+            str | None,
+            await self.resolve_portfolio_tenant(existing.portfolio_id),
+        )
+        normalized_incoming_tenant_id = cast(str, TenantId(incoming_tenant_id).value)
+        return existing_tenant_id == normalized_incoming_tenant_id
+
+    async def qualifies_legacy_fx_replay(self, event: TransactionEvent) -> bool:
+        """Lock and qualify one legacy replay before the consumer idempotency claim."""
+
+        if event.tenant_id is None or event.transaction_fx_rate_origin != "SOURCE_BOOKED":
+            return False
+        existing = (
+            await self.db.execute(
+                select(DBTransaction)
+                .where(
+                    DBTransaction.transaction_id == event.transaction_id,
+                    DBTransaction.portfolio_id == event.portfolio_id,
+                )
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if existing is None:
+            return False
+        incoming_identity = build_transaction_payload_identity(
+            event.model_dump(mode="python"),
+            tenant_id=event.tenant_id,
+        )
+        return await self._is_qualified_legacy_fx_replay(
+            existing=existing,
+            incoming_event=event,
+            incoming_tenant_id=event.tenant_id,
+            legacy_payload_fingerprint=incoming_identity.legacy_payload_fingerprint,
+        )
+
+    async def qualifies_legacy_semantic_conflict(
+        self,
+        event: TransactionEvent,
+        incoming_identity: TransactionPayloadIdentity,
+    ) -> bool:
+        """Qualify both v1 physical fence and transaction before accepting compatibility."""
+
+        if event.tenant_id is None:
+            return False
+        legacy_payload = event.model_dump(mode="python")
+        legacy_payload["transaction_fx_rate_origin"] = "LEGACY_UNKNOWN"
+        legacy_identity = build_transaction_payload_identity(
+            legacy_payload,
+            tenant_id=event.tenant_id,
+        )
+        fence = (
+            await self.db.execute(
+                select(ProcessedEvent)
+                .where(
+                    ProcessedEvent.event_id == event.transaction_id,
+                    ProcessedEvent.service_name == "persistence-transactions",
+                    ProcessedEvent.tenant_id == event.tenant_id,
+                )
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if (
+            fence is None
+            or fence.portfolio_id != event.portfolio_id
+            or fence.semantic_key != legacy_identity.semantic_key
+            or fence.payload_fingerprint != incoming_identity.legacy_payload_fingerprint
+        ):
+            return False
+        return await self.qualifies_legacy_fx_replay(event)
 
     async def create_or_update_transaction(
         self,
@@ -204,6 +305,7 @@ class TransactionDBRepository:
                     incoming_ownership=ownership,
                     incoming_tenant_id=event.tenant_id,
                     incoming_payload_identity=payload_identity,
+                    incoming_event=event,
                 )
                 persisted_id = existing.transaction_id
                 persisted_transaction = existing

@@ -132,7 +132,7 @@ BOOKED_TRANSACTION_PERSISTENCE_EXCLUDE_FIELDS = frozenset(
     {"id", "epoch", "brokerage", "stamp_duty", "exchange_fee", "gst", "other_fees"}
 )
 BOOKED_TRANSACTION_EXPLICIT_NULL_FIELDS = frozenset(
-    {"external_cash_transaction_id", "linked_component_ids"}
+    {"calculation_lineage", "external_cash_transaction_id", "linked_component_ids"}
 )
 
 
@@ -170,6 +170,10 @@ def _persisted_transaction_payload_fingerprint(transaction: DBTransaction) -> st
                 field_name: getattr(transaction, field_name)
                 for field_name in TRANSACTION_PAYLOAD_MATERIAL_FIELDS
                 if field_name in TRANSACTION_TABLE_FIELDS
+            }
+            | {
+                "transaction_fx_rate": transaction.transaction_fx_rate,
+                "transaction_fx_rate_origin": transaction.transaction_fx_rate_origin,
             }
         )
     )
@@ -374,6 +378,9 @@ class SqlAlchemyCostBasisTransactionRepository:
             "gross_cost": transaction_result.gross_cost,
             "realized_gain_loss": transaction_result.realized_gain_loss,
             "transaction_fx_rate": transaction_result.transaction_fx_rate,
+            "transaction_fx_rate_origin": getattr(
+                transaction_result, "transaction_fx_rate_origin", None
+            ),
             "net_cost_local": transaction_result.net_cost_local,
             "realized_gain_loss_local": transaction_result.realized_gain_loss_local,
             "calculation_lineage": calculation_lineage.lineage_payload(),

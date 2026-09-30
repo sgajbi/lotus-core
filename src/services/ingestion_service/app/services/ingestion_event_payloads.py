@@ -26,7 +26,11 @@ def transaction_event_payload(
     tenant_id: str,
 ) -> RawIngestionEventPayload:
     _ = TenantId(tenant_id)
-    return transaction.model_dump()
+    payload = transaction.model_dump()
+    payload["transaction_fx_rate_origin"] = (
+        "SOURCE_BOOKED" if transaction.transaction_fx_rate is not None else None
+    )
+    return payload
 
 
 def instrument_event_payload(instrument: Instrument) -> RawIngestionEventPayload:

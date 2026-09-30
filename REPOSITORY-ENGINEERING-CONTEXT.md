@@ -20,6 +20,32 @@ Core owns source facts and their financial, temporal, tenant, lineage, audit, re
 semantics. Downstream services consume those governed facts; they must not reconstruct competing
 Core truth.
 
+For transaction economics, an admitted positive `transaction_fx_rate` is source-booked historical
+cost authority. Cost enrichment derives reference FX only when that field is absent; generated
+settlement cash uses the supplied rate or derives at settlement date, and ordinary replay preserves
+the booked result. Valuation/reference FX remains a separate effective-dated authority.
+The processor persists server-owned FX origin so only source-booked rates affect correction
+identity. Generated settlement cash resolves its instrument currency from Core reference data and
+rejects a mismatch before writing the child. The tenant/portfolio/effective-date cash-account
+mapping owns the cash security and account currency; an optional source instrument is only an
+assertion against that mapping. The mapped instrument must exist, be classified as `CASH`, and
+match the account and trade currencies before child persistence.
+The processing unit of work reads the tenant-owned portfolio, active cash-account mapping, and
+mapped cash instrument under PostgreSQL row locks; supported authority updates therefore serialize
+before the generated child can commit, preventing a stale mapping from being persisted.
+Settlement-cash resolution is shared validation/intermediate arithmetic, not a durable output
+owner; the generated-cash and cashflow boundaries each normalize and bind their own receipt. When
+a correction retires a generated cash leg, Core persists a transaction-policy neutralization
+receipt binding the corrected source, prior child evidence, and every zeroed financial output.
+New source-booked raw events use FX-sensitive v2 identity. Historical v1 compatibility is admitted
+only against matching locked processed-event and transaction evidence. A non-null FX with null
+origin can represent a late old worker, but remains unknown: exact numeric FX and v1 economics may
+replay without origin inference or promotion; every mismatch conflicts.
+Transaction processing likewise uses FX-sensitive v2 identity for source-booked FX and accepts an
+already-existing v1 processing fence only by exact, read-only physical-fence qualification.
+Governed transaction-type cash-entry defaults are canonical for processing identity, while a
+server-resolved cash security remains derived context and never rewrites source identity.
+
 ## Business And Domain Responsibility
 
 Core owns:

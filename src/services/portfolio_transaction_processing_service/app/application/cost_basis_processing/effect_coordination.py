@@ -6,7 +6,7 @@ from dataclasses import replace
 from portfolio_common.domain.tenant import TenantId
 from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
 
-from ...domain.transaction import BookedTransaction
+from ...domain.transaction import BookedTransaction, should_generate_settlement_cash_leg
 from ...domain.transaction.fx import FxContractInstrument
 from ...domain.transaction.redemption import (
     REDEMPTION_TRANSACTION_TYPES,
@@ -17,11 +17,14 @@ from ...domain.transaction.redemption import (
 from ...ports import (
     CorporateActionReconciliationObserver,
     CorporateActionReconciliationRepository,
+    CostBasisFxRatePort,
+    CostBasisReferenceDataPort,
     CostBasisTransactionStatePort,
     CostProcessingEffectStagingPort,
     CostProcessingResult,
 )
 from ..corporate_action_reconciliation import CorporateActionReconciliationCoordinator
+from ..errors import TransactionProcessingError, TransactionProcessingRejected
 from ..settlement_processing import link_settlement_cash_leg
 
 
@@ -37,6 +40,11 @@ async def coordinate_cost_processing_effects(
     correlation_id: str,
     corrected_transaction_id: str | None = None,
     reconciliation_observer: CorporateActionReconciliationObserver | None = None,
+    portfolio_base_currency: str | None = None,
+    fx_rates: CostBasisFxRatePort | None = None,
+    incoming_transaction_id: str | None = None,
+    incoming_source_fx_rate_missing: bool = False,
+    reference_data: CostBasisReferenceDataPort | None = None,
 ) -> CostProcessingResult:
     """Link settlement, reconcile corporate actions, and stage domain-valued effects."""
 
@@ -46,6 +54,23 @@ async def coordinate_cost_processing_effects(
         observer=reconciliation_observer,
     )
     for processed_transaction in processed_transactions:
+        generated_cash_leg_id = f"{processed_transaction.transaction_id}-CASHLEG"
+        requires_reference_context = (
+            processed_transaction.transaction_id
+            in {incoming_transaction_id, corrected_transaction_id}
+            or processed_transaction.external_cash_transaction_id != generated_cash_leg_id
+        )
+        if requires_reference_context:
+            (
+                settlement_cash_currency,
+                resolved_cash_instrument_id,
+            ) = await _resolve_settlement_cash_context(
+                transaction=processed_transaction,
+                tenant_id=tenant_id,
+                reference_data=reference_data,
+            )
+        else:
+            settlement_cash_currency, resolved_cash_instrument_id = None, None
         linking = await link_settlement_cash_leg(
             product_leg=processed_transaction,
             transaction_lookup=transaction_state,
@@ -53,6 +78,14 @@ async def coordinate_cost_processing_effects(
             reconcile_superseded_derived=(
                 processed_transaction.transaction_id == corrected_transaction_id
             ),
+            derive_fx_at_settlement=(
+                incoming_source_fx_rate_missing
+                and processed_transaction.transaction_id == incoming_transaction_id
+            ),
+            portfolio_base_currency=portfolio_base_currency,
+            fx_rates=fx_rates,
+            settlement_cash_currency=settlement_cash_currency,
+            resolved_settlement_cash_instrument_id=resolved_cash_instrument_id,
         )
         await reconciliation.reconcile(
             linking.product_leg,
@@ -129,6 +162,86 @@ async def coordinate_cost_processing_effects(
     return CostProcessingResult(
         processed_transactions=staged_transactions,
         instrument_update_count=len(staged_instruments),
+    )
+
+
+async def _resolve_settlement_cash_context(
+    *,
+    transaction: BookedTransaction,
+    tenant_id: TenantId,
+    reference_data: CostBasisReferenceDataPort | None,
+) -> tuple[str | None, str | None]:
+    """Resolve authoritative generated-cash context for one rebuilt product leg."""
+
+    if not should_generate_settlement_cash_leg(transaction):
+        return None, None
+    if reference_data is None:
+        raise _settlement_dependency_unavailable(transaction, "reference_data_port")
+
+    cash_account_id = str(transaction.settlement_cash_account_id or "").strip()
+    settlement_at = transaction.settlement_date or transaction.transaction_date
+    cash_account = await reference_data.get_settlement_cash_account_reference(
+        portfolio_id=transaction.portfolio_id,
+        tenant_id=tenant_id.value,
+        cash_account_id=cash_account_id,
+        as_of_date=settlement_at.date(),
+    )
+    if cash_account is None:
+        raise _settlement_dependency_unavailable(transaction, "cash_account_mapping")
+
+    supplied_security_id = str(transaction.settlement_cash_instrument_id or "").strip()
+    if supplied_security_id and supplied_security_id != cash_account.security_id:
+        raise TransactionProcessingRejected(
+            reason_code="settlement_cash_instrument_mapping_mismatch",
+            detail={
+                "transaction_id": transaction.transaction_id,
+                "cash_account_id": cash_account.cash_account_id,
+                "supplied_security_id": supplied_security_id,
+                "mapped_security_id": cash_account.security_id,
+            },
+            retryable=False,
+        )
+
+    if cash_account.instrument_product_type.strip().upper() != "CASH":
+        raise TransactionProcessingRejected(
+            reason_code="settlement_cash_instrument_not_cash",
+            detail={
+                "transaction_id": transaction.transaction_id,
+                "cash_account_id": cash_account.cash_account_id,
+                "mapped_security_id": cash_account.security_id,
+                "product_type": cash_account.instrument_product_type,
+            },
+            retryable=False,
+        )
+
+    account_currency = cash_account.account_currency.strip().upper()
+    instrument_currency = cash_account.instrument_currency.strip().upper()
+    if account_currency != instrument_currency:
+        raise TransactionProcessingRejected(
+            reason_code="settlement_cash_account_currency_mismatch",
+            detail={
+                "transaction_id": transaction.transaction_id,
+                "cash_account_id": cash_account.cash_account_id,
+                "account_currency": account_currency,
+                "instrument_currency": instrument_currency,
+            },
+            retryable=False,
+        )
+    return account_currency, cash_account.security_id
+
+
+def _settlement_dependency_unavailable(
+    transaction: BookedTransaction,
+    dependency: str,
+) -> TransactionProcessingError:
+    return TransactionProcessingError(
+        reason_code="cost_dependency_unavailable",
+        detail={
+            "portfolio_id": transaction.portfolio_id,
+            "transaction_id": transaction.transaction_id,
+            "dependency_error": dependency,
+        },
+        retryable=True,
     )
 
 

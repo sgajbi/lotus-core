@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, call
 import pytest
 
 from src.services.portfolio_transaction_processing_service.app.application import (
+    TransactionProcessingRejected,
     cost_basis_processing,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
@@ -35,7 +36,33 @@ async def test_same_currency_is_normalized_without_lookup() -> None:
     fx_rates.get_fx_rate_window.assert_not_awaited()
     assert enriched[0]["trade_currency"] == "USD"
     assert enriched[0]["portfolio_base_currency"] == "USD"
-    assert "transaction_fx_rate" not in enriched[0]
+    assert enriched[0]["transaction_fx_rate"] == Decimal(1)
+    assert enriched[0]["transaction_fx_rate_origin"] == "REFERENCE_DERIVED"
+
+
+@pytest.mark.asyncio
+async def test_same_currency_rejects_supplied_non_unit_fx_rate() -> None:
+    fx_rates = AsyncMock(spec=CostBasisFxRatePort)
+    transactions = [
+        {
+            "transaction_id": "BUY-SAME-CCY-BAD-FX",
+            "transaction_date": "2025-12-05T10:00:00Z",
+            "trade_currency": "USD",
+            "transaction_fx_rate": Decimal("2"),
+            "transaction_fx_rate_origin": "SOURCE_BOOKED",
+        }
+    ]
+
+    with pytest.raises(TransactionProcessingRejected) as raised:
+        await cost_basis_processing.enrich_cost_basis_transactions_with_fx(
+            transactions=transactions,
+            portfolio_base_currency="USD",
+            fx_rates=fx_rates,
+        )
+
+    assert raised.value.retryable is False
+    assert raised.value.reason_code == "same_currency_fx_rate_invalid"
+    fx_rates.get_fx_rate_window.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -71,6 +98,53 @@ async def test_effective_dated_history_is_batched_by_currency_pair() -> None:
     assert [transaction["transaction_fx_rate"] for transaction in enriched] == [
         Decimal("1.40") if day == "05" else Decimal("1.45") for day in transaction_dates
     ]
+
+
+@pytest.mark.asyncio
+async def test_source_booked_fx_rate_is_not_replaced_by_reference_rate() -> None:
+    fx_rates = AsyncMock(spec=CostBasisFxRatePort)
+    fx_rates.get_fx_rate_window.return_value = [
+        EffectiveFxRate(effective_date=date(2026, 4, 9), rate=Decimal("2.5"))
+    ]
+    transactions = [
+        {
+            "transaction_id": "XTS-SOURCE-BOOKED-01",
+            "transaction_date": "2026-04-09T10:00:00Z",
+            "trade_currency": "XTS",
+            "transaction_fx_rate": Decimal("2.0"),
+        }
+    ]
+
+    enriched = await cost_basis_processing.enrich_cost_basis_transactions_with_fx(
+        transactions=transactions,
+        portfolio_base_currency="USD",
+        fx_rates=fx_rates,
+    )
+
+    assert enriched[0]["transaction_fx_rate"] == Decimal("2.0")
+    fx_rates.get_fx_rate_window.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_source_booked_fx_rate_allows_missing_reference_data() -> None:
+    fx_rates = AsyncMock(spec=CostBasisFxRatePort)
+    transactions = [
+        {
+            "transaction_id": "XTS-SOURCE-BOOKED-NO-REFERENCE-01",
+            "transaction_date": "2026-04-09T10:00:00Z",
+            "trade_currency": "XTS",
+            "transaction_fx_rate": Decimal("2.0"),
+        }
+    ]
+
+    enriched = await cost_basis_processing.enrich_cost_basis_transactions_with_fx(
+        transactions=transactions,
+        portfolio_base_currency="USD",
+        fx_rates=fx_rates,
+    )
+
+    assert enriched[0]["transaction_fx_rate"] == Decimal("2.0")
+    fx_rates.get_fx_rate_window.assert_not_awaited()
 
 
 @pytest.mark.asyncio

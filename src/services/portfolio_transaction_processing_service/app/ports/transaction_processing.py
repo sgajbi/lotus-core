@@ -50,6 +50,16 @@ class TransactionIdempotencyPort(Protocol):
         correlation_id: str | None,
     ) -> TransactionIdempotencyOutcome: ...
 
+    async def matches_existing_claim(
+        self,
+        *,
+        tenant_id: str,
+        event_id: str,
+        portfolio_id: str,
+        semantic_key: str,
+        payload_fingerprint: str,
+    ) -> bool: ...
+
     async def claim_repair_delivery(
         self,
         *,

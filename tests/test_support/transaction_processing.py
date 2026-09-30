@@ -4,7 +4,12 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 
-from portfolio_common.database_models import Instrument, Portfolio, TransactionCost
+from portfolio_common.database_models import (
+    CashAccountMaster,
+    Instrument,
+    Portfolio,
+    TransactionCost,
+)
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.domain.transaction import build_transaction_payload_identity
 from portfolio_common.events import TransactionEvent
@@ -53,9 +58,11 @@ def portfolio_record(
     base_currency: str = "USD",
     client_id: str = "CLIENT-COMBINED-01",
     cost_basis_method: str = "FIFO",
+    legal_book_id: str | None = None,
 ) -> Portfolio:
     return Portfolio(
         tenant_id=TEST_TENANT_ID,
+        legal_book_id=legal_book_id,
         portfolio_id=portfolio_id,
         base_currency=base_currency,
         open_date=date(2025, 1, 1),
@@ -89,6 +96,27 @@ def instrument_record(
     )
 
 
+def cash_account_record(
+    cash_account_id: str,
+    *,
+    portfolio_id: str,
+    security_id: str,
+    account_currency: str,
+    opened_on: date = date(2025, 1, 1),
+) -> CashAccountMaster:
+    """Build an active portfolio-owned settlement cash-account mapping."""
+
+    return CashAccountMaster(
+        cash_account_id=cash_account_id,
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        display_name=f"Settlement cash {cash_account_id}",
+        account_currency=account_currency,
+        lifecycle_status="ACTIVE",
+        opened_on=opened_on,
+    )
+
+
 def booked_transaction_event(
     *,
     transaction_id: str,
@@ -103,6 +131,11 @@ def booked_transaction_event(
     trade_currency: str = "USD",
     **domain_fields: object,
 ) -> TransactionEvent:
+    if (
+        domain_fields.get("transaction_fx_rate") is not None
+        and "transaction_fx_rate_origin" not in domain_fields
+    ):
+        domain_fields["transaction_fx_rate_origin"] = "SOURCE_BOOKED"
     return TransactionEvent(
         transaction_id=transaction_id,
         portfolio_id=portfolio_id,
@@ -157,6 +190,7 @@ async def process_booked_transaction(
     event_id: str,
     correlation_id: str,
     processing_intent: TransactionProcessingIntent = TransactionProcessingIntent.STANDARD,
+    repair_delivery_id: str | None = None,
 ) -> ProcessTransactionResult:
     if event.tenant_id is None:
         tenant_id = await SqlAlchemyTransactionTenantAuthority(context.session_factory).resolve(
@@ -170,5 +204,6 @@ async def process_booked_transaction(
             event_id=event_id,
             correlation_id=correlation_id,
             processing_intent=processing_intent,
+            repair_delivery_id=repair_delivery_id,
         )
     )

@@ -16,6 +16,7 @@ from src.services.portfolio_transaction_processing_service.app.application impor
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
+    cash_account_record,
     instrument_record,
     persist_and_process_booked_transaction,
     portfolio_record,
@@ -77,14 +78,29 @@ async def test_generated_cash_leg_and_product_cashflow_persist_equal_settlement(
     portfolio_id = f"PORT-GENERATED-{transaction_type}-01"
     security_id = f"SEC-GENERATED-{transaction_type}-01"
     transaction_id = f"{transaction_type}-GENERATED-SETTLEMENT-01"
+    async_db_session.add(portfolio_record(portfolio_id))
+    await async_db_session.flush()
     async_db_session.add_all(
         [
-            portfolio_record(portfolio_id),
             instrument_record(
                 security_id,
                 name=f"Generated {transaction_type} settlement instrument",
                 isin=f"SG000000{transaction_type[:2]}01",
                 currency="USD",
+            ),
+            instrument_record(
+                "CASH-USD",
+                name="USD settlement cash",
+                isin=f"CASHUSD{transaction_type[:2]}01",
+                currency="USD",
+                product_type="CASH",
+                asset_class="Cash",
+            ),
+            cash_account_record(
+                "CASH-USD-001",
+                portfolio_id=portfolio_id,
+                security_id="CASH-USD",
+                account_currency="USD",
             ),
         ]
     )

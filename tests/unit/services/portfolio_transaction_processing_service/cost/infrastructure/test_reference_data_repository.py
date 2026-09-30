@@ -31,6 +31,7 @@ async def test_get_cost_basis_reference_data_maps_both_owners_in_one_query() -> 
         "instrument_security_id": "SEC_A",
         "instrument_product_type": "BOND",
         "instrument_asset_class": "FIXED_INCOME",
+        "instrument_currency": "USD",
     }
     db_session.execute.return_value = execute_result
 
@@ -51,6 +52,7 @@ async def test_get_cost_basis_reference_data_maps_both_owners_in_one_query() -> 
             security_id="SEC_A",
             product_type="BOND",
             asset_class="FIXED_INCOME",
+            currency="USD",
         ),
     )
     db_session.execute.assert_awaited_once()
@@ -75,6 +77,7 @@ async def test_get_cost_basis_reference_data_retains_portfolio_without_instrumen
         "instrument_security_id": None,
         "instrument_product_type": None,
         "instrument_asset_class": None,
+        "instrument_currency": None,
     }
     db_session.execute.return_value = execute_result
 

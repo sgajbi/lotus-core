@@ -45,6 +45,15 @@ def test_unit_db_suite_tracks_db_dependent_tests() -> None:
     )
     assert "tests/integration/test_ingestion_dlq_job_ownership_migration.py" in unit_db_suite
     assert "tests/integration/test_ingestion_failure_outcome_migration.py" in unit_db_suite
+    assert "tests/integration/test_transaction_fx_rate_origin_migration.py" in unit_db_suite
+    assert (
+        "tests/integration/services/persistence_service/consumers/"
+        "test_transaction_consumer_boundary.py" in unit_db_suite
+    )
+    assert (
+        "tests/integration/services/portfolio_transaction_processing_service/"
+        "test_int_cost_basis_reference_data_repository.py" in unit_db_suite
+    )
 
 
 def test_critical_db_coverage_includes_changed_outbox_delivery_hot_path() -> None:
@@ -280,7 +289,7 @@ def test_integration_all_suite_tracks_full_integration_tree() -> None:
 
 def test_transaction_processing_contract_tracks_complete_combined_integration_pack() -> None:
     assert get_suite("transaction-processing-contract") == [
-        "tests/integration/services/portfolio_transaction_processing_service"
+        "tests/integration/services/portfolio_transaction_processing_service",
     ]
 
 

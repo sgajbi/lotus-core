@@ -53,6 +53,7 @@ from .cost_basis import (
     CostProcessingEffectStagingPort,
     InitialOpeningCostStatePort,
     OpenLotCheckpointRecord,
+    SettlementCashAccountReference,
 )
 from .fixed_income_book_cost import (
     EffectiveLotAmortizedCostProfileRequest,
@@ -135,6 +136,7 @@ __all__ = [
     "CostBasisReferenceData",
     "CostBasisProcessingStatePort",
     "CostBasisReferenceDataPort",
+    "SettlementCashAccountReference",
     "CostBasisTransactionStatePort",
     "CostProcessingEffectStagingPort",
     "CorporateActionReconciliationEvidence",

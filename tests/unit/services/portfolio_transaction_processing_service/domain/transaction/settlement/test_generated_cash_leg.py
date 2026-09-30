@@ -204,6 +204,41 @@ def test_generated_cash_leg_preserves_upstream_linkage_and_policy() -> None:
     assert cash_leg.calculation_policy_version == "2.0.0"
 
 
+def test_generated_cash_leg_preserves_source_booked_fx_rate() -> None:
+    cash_leg = build_generated_settlement_cash_leg(
+        replace(_dividend_transaction(), transaction_fx_rate=Decimal("2.0"))
+    )
+
+    assert cash_leg.transaction_fx_rate == Decimal("2.0")
+    assert cash_leg.net_cost_local == Decimal("98.00")
+    assert cash_leg.net_cost == Decimal("196.000")
+    assert cash_leg.gross_cost == Decimal("196.000")
+
+
+def test_generated_cash_leg_normalizes_boundary_precision() -> None:
+    cash_leg = build_generated_settlement_cash_leg(
+        replace(
+            _dividend_transaction(),
+            gross_transaction_amount=Decimal("1.1234567890"),
+            trade_fee=Decimal(0),
+            transaction_fx_rate=Decimal("1.1234567890"),
+            transaction_fx_rate_origin="SOURCE_BOOKED",
+        )
+    )
+
+    assert cash_leg.net_cost_local == Decimal("1.1234567890")
+    assert cash_leg.net_cost == Decimal("1.2621551568")
+    assert cash_leg.gross_cost == Decimal("1.2621551568")
+
+
+def test_generated_cash_leg_leaves_absent_fx_for_settlement_date_derivation() -> None:
+    cash_leg = build_generated_settlement_cash_leg(
+        replace(_dividend_transaction(), transaction_fx_rate=None)
+    )
+
+    assert cash_leg.transaction_fx_rate is None
+
+
 def test_generated_cash_leg_uses_component_fee_precedence() -> None:
     transaction = replace(
         _dividend_transaction(),
@@ -231,6 +266,44 @@ def test_generated_dividend_cash_leg_uses_net_withholding_proceeds() -> None:
     assert cash_leg.gross_transaction_amount == Decimal("87.00")
     assert cash_leg.movement_direction == "INFLOW"
     assert cash_leg.adjustment_reason == "DIVIDEND_SETTLEMENT"
+
+
+def test_generated_cash_lineage_distinguishes_equal_net_source_economics_and_mapping() -> None:
+    withholding_case = build_generated_settlement_cash_leg(
+        replace(
+            _dividend_transaction(),
+            withholding_tax_amount=Decimal("10"),
+            trade_fee=Decimal(0),
+        )
+    )
+    fee_case = build_generated_settlement_cash_leg(
+        replace(
+            _dividend_transaction(),
+            withholding_tax_amount=Decimal(0),
+            trade_fee=Decimal("10"),
+        )
+    )
+    remapped_case = build_generated_settlement_cash_leg(
+        replace(
+            _dividend_transaction(),
+            withholding_tax_amount=Decimal("10"),
+            trade_fee=Decimal(0),
+            settlement_cash_instrument_id="CASH-USD-SECONDARY",
+        )
+    )
+
+    assert withholding_case.gross_transaction_amount == Decimal("90")
+    assert fee_case.gross_transaction_amount == Decimal("90")
+    assert remapped_case.gross_transaction_amount == Decimal("90")
+    assert withholding_case.calculation_lineage is not None
+    assert fee_case.calculation_lineage is not None
+    assert remapped_case.calculation_lineage is not None
+    assert withholding_case.calculation_lineage.input_content_hash != (
+        fee_case.calculation_lineage.input_content_hash
+    )
+    assert withholding_case.calculation_lineage.input_content_hash != (
+        remapped_case.calculation_lineage.input_content_hash
+    )
 
 
 @pytest.mark.parametrize("fee", [Decimal("100.00"), Decimal("100.01")])

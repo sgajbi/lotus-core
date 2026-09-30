@@ -45,6 +45,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostProcessingResult,
     InitialOpeningCostStatePort,
     LotAmortizedCostProfilePort,
+    SettlementCashAccountReference,
 )
 from tests.test_support.tenant import TEST_TENANT_ID
 
@@ -134,6 +135,91 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
     assert build_call["income_offsets"] is income_offsets
     assert build_call["processing_state"] is processing_state
     assert build_call["effect_stager"] is effect_stager
+
+
+@pytest.mark.asyncio
+async def test_cost_adapter_passes_reference_port_after_defaulting_auto_generate() -> None:
+    transaction = BookedTransaction(
+        transaction_id="DIVIDEND-DEFAULT-CASH-MODE",
+        portfolio_id="PB-001",
+        instrument_id="EQ-001",
+        security_id="EQ-001",
+        transaction_date=datetime(2026, 4, 10, 9, 30, tzinfo=timezone.utc),
+        transaction_type="DIVIDEND",
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("100"),
+        trade_currency="USD",
+        currency="USD",
+        settlement_cash_account_id="CASH-EUR",
+        settlement_cash_instrument_id=None,
+        cash_entry_mode=None,
+    )
+    portfolio = CostBasisPortfolioReference(
+        base_currency="USD",
+        portfolio_id="PB-001",
+        cost_basis_method=CostBasisMethod.FIFO,
+        tenant_id=TEST_TENANT_ID,
+    )
+    reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
+    reference_data.get_cost_basis_reference_data.side_effect = [
+        CostBasisReferenceData(
+            portfolio=portfolio,
+            instrument=CostBasisInstrumentReference(
+                security_id="EQ-001",
+                product_type="EQUITY",
+                asset_class="EQUITY",
+                currency="USD",
+            ),
+        ),
+        CostBasisReferenceData(
+            portfolio=portfolio,
+            instrument=CostBasisInstrumentReference(
+                security_id="CASH-EUR",
+                product_type="CASH",
+                asset_class="Cash",
+                currency="EUR",
+            ),
+        ),
+    ]
+    reference_data.get_settlement_cash_account_reference.return_value = (
+        SettlementCashAccountReference(
+            cash_account_id="CASH-EUR",
+            security_id="CASH-EUR",
+            account_currency="EUR",
+            instrument_product_type="CASH",
+            instrument_currency="EUR",
+        )
+    )
+    processor = AsyncMock(spec=PreparedCostProcessingUseCase)
+    processor.execute.return_value = CostProcessingResult(
+        processed_transactions=(transaction,),
+        instrument_update_count=0,
+    )
+    adapter = CostBasisProcessingAdapter(
+        processor=processor,
+        repository=AsyncMock(spec=CostBasisTransactionStatePort),
+        average_cost_pools=AsyncMock(spec=CostBasisAverageCostPoolPort),
+        lot_disposals=AsyncMock(spec=CostBasisLotDisposalPort),
+        lot_basis_transfers=AsyncMock(spec=CostBasisLotBasisTransferPort),
+        lot_states=AsyncMock(spec=CostBasisLotStatePort),
+        amortized_cost_profiles=AsyncMock(spec=LotAmortizedCostProfilePort),
+        income_offsets=AsyncMock(spec=AccruedIncomeOffsetStatePort),
+        initial_opening_state=AsyncMock(spec=InitialOpeningCostStatePort),
+        reference_data=reference_data,
+        fx_rates=AsyncMock(spec=CostBasisFxRatePort),
+        processing_state=AsyncMock(spec=CostBasisProcessingStatePort),
+        reconciliation_repository=AsyncMock(spec=CorporateActionReconciliationRepository),
+        effect_stager=AsyncMock(spec=CostProcessingEffectStagingPort),
+    )
+
+    await adapter.process(transaction, correlation_id="corr-default-mode", traceparent=None)
+
+    call = processor.execute.await_args.kwargs
+    assert call["prepared"].transaction.cash_entry_mode == "AUTO_GENERATE"
+    assert call["prepared"].transaction.settlement_cash_instrument_id is None
+    assert call["reference_data"] is reference_data
+    assert reference_data.get_cost_basis_reference_data.await_count == 1
 
 
 @pytest.mark.asyncio

@@ -245,6 +245,34 @@ class IdempotencyRepository:
             raise RuntimeError("Semantic conflict has inconsistent durable fingerprints")
         return next(iter(non_null), None)
 
+    async def matches_semantic_event_processing(
+        self,
+        *,
+        event_id: str,
+        portfolio_id: str,
+        service_name: str,
+        semantic_key: str,
+        payload_fingerprint: str,
+        tenant_id: str | None = None,
+    ) -> bool:
+        """Read-only qualification of one exact durable semantic fence."""
+
+        normalized_tenant_id = self._normalize_tenant_id(tenant_id)
+        return bool(
+            await self.db.scalar(
+                select(
+                    exists().where(
+                        ProcessedEvent.event_id == event_id,
+                        ProcessedEvent.portfolio_id == portfolio_id,
+                        ProcessedEvent.service_name == service_name,
+                        self._tenant_predicate(normalized_tenant_id),
+                        ProcessedEvent.semantic_key == semantic_key,
+                        ProcessedEvent.payload_fingerprint == payload_fingerprint,
+                    )
+                )
+            )
+        )
+
     @staticmethod
     def _normalize_tenant_id(tenant_id: str | None) -> str | None:
         return TenantId(tenant_id).value if tenant_id is not None else None

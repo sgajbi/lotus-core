@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import ROUND_HALF_EVEN, Context, Decimal, localcontext
 from typing import Callable
 
 from portfolio_common.domain.transaction.fee_components import (
@@ -16,7 +16,7 @@ from portfolio_common.domain.transaction_control_codes import (
 
 from ..booked import BookedTransaction
 from ..redemption import (
-    derive_redemption_principal_proceeds_local,
+    calculate_redemption_principal_proceeds_local,
     is_generated_redemption_accrued_interest,
 )
 from .interest import calculate_interest_settlement_economics
@@ -50,7 +50,7 @@ class SettlementCashMovement:
     def amount(self) -> Decimal:
         """Return the posting magnitude after the signed direction is validated."""
 
-        return abs(self.signed_amount)
+        return self.signed_amount.copy_abs()
 
     @property
     def movement_direction(self) -> str:
@@ -60,6 +60,9 @@ class SettlementCashMovement:
 
 
 SettlementCashResolver = Callable[[BookedTransaction, Decimal], SettlementCashMovement]
+
+_SETTLEMENT_CASH_WORKING_PRECISION = 64
+_SETTLEMENT_CASH_QUANTUM = Decimal("1e-10")
 
 
 def calculate_settlement_cash_movement(
@@ -71,7 +74,12 @@ def calculate_settlement_cash_movement(
     resolver = _SETTLEMENT_CASH_RESOLVERS.get(transaction_type)
     if resolver is None:
         raise ValueError(f"{transaction.transaction_type} has no ordinary settlement cash policy")
-    return resolver(transaction, _resolve_fee_amount(transaction))
+    # Settlement validation and routing are shared by several final-output owners. Keep their
+    # intermediate arithmetic deterministic without pretending this helper owns any one owner's
+    # persistence policy or lineage receipt; each durable consumer normalizes and binds its own
+    # final output.
+    with localcontext(Context(prec=_SETTLEMENT_CASH_WORKING_PRECISION, rounding=ROUND_HALF_EVEN)):
+        return resolver(transaction, _resolve_fee_amount(transaction))
 
 
 def _resolve_fee_amount(transaction: BookedTransaction) -> Decimal:
@@ -113,10 +121,10 @@ def _calculate_redemption_movement(
     principal = (
         transaction.principal_proceeds_local
         if transaction.principal_proceeds_local is not None
-        else derive_redemption_principal_proceeds_local(
+        else calculate_redemption_principal_proceeds_local(
             transaction.quantity,
             transaction.price,
-        )
+        ).quantize(_SETTLEMENT_CASH_QUANTUM, rounding=ROUND_HALF_EVEN)
     )
     accrued_interest = transaction.accrued_interest_proceeds_local or Decimal(0)
     embedded_fees = transaction.embedded_fee_amount_local or Decimal(0)

@@ -236,6 +236,40 @@ async def test_prepare_event_fails_closed_without_matching_tenant_authority(
         )
 
 
+@pytest.mark.parametrize(
+    ("rate", "producer_origin", "expected_origin"),
+    [
+        ("2.0", None, "SOURCE_BOOKED"),
+        ("2.0", "REFERENCE_DERIVED", "SOURCE_BOOKED"),
+        ("2.0", "LEGACY_UNKNOWN", "SOURCE_BOOKED"),
+        ("2.0", "producer-garbage", "SOURCE_BOOKED"),
+        (None, "SOURCE_BOOKED", None),
+    ],
+)
+async def test_prepare_event_stamps_server_owned_raw_fx_origin(
+    transaction_consumer: TransactionPersistenceConsumer,
+    valid_transaction_event: TransactionEvent,
+    mock_dependencies: dict,
+    rate: str | None,
+    producer_origin: str | None,
+    expected_origin: str | None,
+) -> None:
+    incoming = valid_transaction_event.model_copy(
+        update={
+            "transaction_fx_rate": rate,
+            "transaction_fx_rate_origin": producer_origin,
+        }
+    )
+
+    admitted = await TransactionPersistenceConsumer.prepare_event.__wrapped__(
+        transaction_consumer,
+        AsyncMock(spec=AsyncSession),
+        incoming,
+    )
+
+    assert admitted.transaction_fx_rate_origin == expected_origin
+
+
 async def test_process_message_skips_identical_semantic_replay(
     transaction_consumer: TransactionPersistenceConsumer,
     mock_kafka_message: MagicMock,

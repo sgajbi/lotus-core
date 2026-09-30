@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from decimal import Decimal
+from decimal import ROUND_HALF_EVEN, Context, Decimal, localcontext
 from enum import StrEnum
 from typing import Never, cast
 
@@ -32,6 +32,7 @@ REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS = frozenset(
 _FULL_REDEMPTION_TRANSACTION_TYPES = frozenset({"MATURITY_REDEMPTION", "CALL_REDEMPTION"})
 _ALGORITHM_ID = "fixed-income-redemption-economics"
 _ALGORITHM_VERSION = 1
+_REDEMPTION_WORKING_PRECISION = 64
 
 
 class RedemptionCalculationReasonCode(StrEnum):
@@ -210,12 +211,24 @@ def derive_redemption_principal_proceeds_local(
 
     return cast(
         Decimal,
-        TRANSACTION_COST_LEDGER_OUTPUT_V1.multiply(
-            redeemed_quantity,
-            redemption_price,
+        TRANSACTION_COST_LEDGER_OUTPUT_V1.normalize(
+            calculate_redemption_principal_proceeds_local(
+                redeemed_quantity,
+                redemption_price,
+            ),
             field_name="derived_principal_proceeds_local",
         ),
     )
+
+
+def calculate_redemption_principal_proceeds_local(
+    redeemed_quantity: Decimal,
+    redemption_price: Decimal,
+) -> Decimal:
+    """Calculate raw redemption principal before an output owner applies its policy."""
+
+    with localcontext(Context(prec=_REDEMPTION_WORKING_PRECISION, rounding=ROUND_HALF_EVEN)):
+        return redeemed_quantity * redemption_price
 
 
 def _validated_inputs(terms: RedemptionTerms) -> RedemptionTerms:

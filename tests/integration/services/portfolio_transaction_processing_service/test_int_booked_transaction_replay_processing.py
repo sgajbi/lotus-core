@@ -29,6 +29,7 @@ from src.services.portfolio_transaction_processing_service.app.runtime.dependenc
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
     canonical_transaction_record,
+    cash_account_record,
     instrument_record,
     portfolio_record,
     process_booked_transaction,
@@ -229,14 +230,29 @@ async def test_replay_after_processing_repairs_missing_derived_state(
         settlement_cash_account_id="CASH-USD-REPLAY-02",
         settlement_cash_instrument_id="CASH-USD-REPLAY-02",
     )
+    async_db_session.add(portfolio_record(portfolio_id))
+    await async_db_session.flush()
     async_db_session.add_all(
         [
-            portfolio_record(portfolio_id),
             instrument_record(
                 "SEC-COMBINED-REPLAY-02",
                 name="Combined replay security",
                 isin="SG0000000002",
                 currency="USD",
+            ),
+            instrument_record(
+                "CASH-USD-REPLAY-02",
+                name="Replay USD settlement cash",
+                isin="CASHUSDRP002",
+                currency="USD",
+                product_type="CASH",
+                asset_class="Cash",
+            ),
+            cash_account_record(
+                "CASH-USD-REPLAY-02",
+                portfolio_id=portfolio_id,
+                security_id="CASH-USD-REPLAY-02",
+                account_currency="USD",
             ),
             canonical_transaction_record(event),
         ]

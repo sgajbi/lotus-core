@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 
+from portfolio_common.domain.calculation_lineage import build_calculation_lineage
+from portfolio_common.domain.transaction.fee_components import TRANSACTION_FEE_COMPONENT_FIELDS
+from portfolio_common.domain.transaction.numeric_policy import (
+    TRANSACTION_COST_LEDGER_OUTPUT_V1,
+)
 from portfolio_common.domain.transaction.type_registry import (
     production_transaction_types_for_generated_cash_legs,
     production_transaction_types_for_lifecycle_families,
@@ -64,7 +69,20 @@ def build_generated_settlement_cash_leg(
         transaction_type,
     )
     settlement_at = transaction.settlement_date or transaction.transaction_date
-    return BookedTransaction(
+    net_cost_local = TRANSACTION_COST_LEDGER_OUTPUT_V1.normalize(
+        settlement_cash.signed_amount,
+        field_name="generated_cash_net_cost_local",
+    )
+    net_cost = (
+        TRANSACTION_COST_LEDGER_OUTPUT_V1.multiply(
+            net_cost_local,
+            transaction.transaction_fx_rate,
+            field_name="generated_cash_net_cost",
+        )
+        if transaction.transaction_fx_rate is not None
+        else None
+    )
+    cash_leg = BookedTransaction(
         transaction_id=f"{transaction.transaction_id}-CASHLEG",
         portfolio_id=transaction.portfolio_id,
         tenant_id=transaction.tenant_id,
@@ -78,7 +96,12 @@ def build_generated_settlement_cash_leg(
         gross_transaction_amount=settlement_cash.amount,
         trade_currency=transaction.trade_currency,
         currency=transaction.currency,
+        transaction_fx_rate=transaction.transaction_fx_rate,
+        transaction_fx_rate_origin=transaction.transaction_fx_rate_origin,
         trade_fee=Decimal(0),
+        gross_cost=net_cost,
+        net_cost=net_cost,
+        net_cost_local=net_cost_local,
         economic_event_id=economic_event_id,
         linked_transaction_group_id=linked_group_id,
         calculation_policy_id=transaction.calculation_policy_id,
@@ -94,6 +117,103 @@ def build_generated_settlement_cash_leg(
         link_type=f"{transaction_type}_TO_CASH",
         reconciliation_key=transaction.reconciliation_key,
     )
+    lineage = build_calculation_lineage(
+        algorithm_id="generated-settlement-cash",
+        algorithm_version=1,
+        intermediate_precision=TRANSACTION_COST_LEDGER_OUTPUT_V1.working_precision,
+        input_payload=_generated_cash_lineage_input(
+            transaction=transaction,
+            transaction_type=transaction_type,
+            settlement_at=settlement_at.isoformat(),
+            signed_settlement_amount=settlement_cash.signed_amount,
+        ),
+        output_payload=_generated_cash_lineage_output(cash_leg),
+        numeric_output_policy=TRANSACTION_COST_LEDGER_OUTPUT_V1.lineage_identity(),
+    )
+    return replace(cash_leg, calculation_lineage=lineage)
+
+
+def _generated_cash_lineage_input(
+    *,
+    transaction: BookedTransaction,
+    transaction_type: str,
+    settlement_at: str,
+    signed_settlement_amount: Decimal,
+) -> dict[str, object]:
+    """Bind every source and resolved authority that can change generated cash economics."""
+
+    return {
+        "source_transaction_id": transaction.transaction_id,
+        "source_transaction_type": transaction_type,
+        "source_transaction_date": transaction.transaction_date.isoformat(),
+        "source_settlement_date": (
+            transaction.settlement_date.isoformat()
+            if transaction.settlement_date is not None
+            else None
+        ),
+        "effective_settlement_at": settlement_at,
+        "tenant_id": transaction.tenant_id,
+        "portfolio_id": transaction.portfolio_id,
+        "gross_transaction_amount": transaction.gross_transaction_amount,
+        "quantity": transaction.quantity,
+        "price": transaction.price,
+        "fee_components": {
+            field: getattr(transaction, field) for field in TRANSACTION_FEE_COMPONENT_FIELDS
+        },
+        "withholding_tax_amount": transaction.withholding_tax_amount,
+        "other_interest_deductions_amount": transaction.other_interest_deductions_amount,
+        "net_interest_amount": transaction.net_interest_amount,
+        "interest_direction": transaction.interest_direction,
+        "principal_proceeds_local": transaction.principal_proceeds_local,
+        "accrued_interest_proceeds_local": transaction.accrued_interest_proceeds_local,
+        "embedded_fee_amount_local": transaction.embedded_fee_amount_local,
+        "embedded_tax_amount_local": transaction.embedded_tax_amount_local,
+        "trade_currency": transaction.trade_currency,
+        "currency": transaction.currency,
+        "transaction_fx_rate": transaction.transaction_fx_rate,
+        "transaction_fx_rate_origin": transaction.transaction_fx_rate_origin,
+        "settlement_cash_account_id": transaction.settlement_cash_account_id,
+        "resolved_settlement_cash_instrument_id": transaction.settlement_cash_instrument_id,
+        "economic_event_id": transaction.economic_event_id,
+        "linked_transaction_group_id": transaction.linked_transaction_group_id,
+        "source_calculation_lineage": (
+            transaction.calculation_lineage.lineage_payload()
+            if transaction.calculation_lineage is not None
+            else None
+        ),
+        "signed_settlement_amount": signed_settlement_amount,
+    }
+
+
+def _generated_cash_lineage_output(cash_leg: BookedTransaction) -> dict[str, object]:
+    """Return the complete persisted generated-cash projection bound by the receipt."""
+
+    return {
+        "transaction_id": cash_leg.transaction_id,
+        "portfolio_id": cash_leg.portfolio_id,
+        "tenant_id": cash_leg.tenant_id,
+        "security_id": cash_leg.security_id,
+        "transaction_date": cash_leg.transaction_date.isoformat(),
+        "settlement_date": (
+            cash_leg.settlement_date.isoformat() if cash_leg.settlement_date is not None else None
+        ),
+        "gross_transaction_amount": cash_leg.gross_transaction_amount,
+        "gross_cost": cash_leg.gross_cost,
+        "net_cost": cash_leg.net_cost,
+        "net_cost_local": cash_leg.net_cost_local,
+        "trade_currency": cash_leg.trade_currency,
+        "currency": cash_leg.currency,
+        "transaction_fx_rate": cash_leg.transaction_fx_rate,
+        "transaction_fx_rate_origin": cash_leg.transaction_fx_rate_origin,
+        "settlement_cash_account_id": cash_leg.settlement_cash_account_id,
+        "settlement_cash_instrument_id": cash_leg.settlement_cash_instrument_id,
+        "movement_direction": cash_leg.movement_direction,
+        "adjustment_reason": cash_leg.adjustment_reason,
+        "economic_event_id": cash_leg.economic_event_id,
+        "linked_transaction_group_id": cash_leg.linked_transaction_group_id,
+        "originating_transaction_id": cash_leg.originating_transaction_id,
+        "originating_transaction_type": cash_leg.originating_transaction_type,
+    }
 
 
 def _require_generated_cash_leg(transaction: BookedTransaction) -> None:

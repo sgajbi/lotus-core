@@ -21,3 +21,7 @@ class TransactionProcessingError(Exception):
 
 class TransactionProcessingRejected(TransactionProcessingError):
     """A governed processing fence rejected the transaction."""
+
+
+class FxRateNotFoundError(Exception):
+    """Report that no effective FX rate exists for required transaction economics."""

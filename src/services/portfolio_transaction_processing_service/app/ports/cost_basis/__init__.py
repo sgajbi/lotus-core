@@ -24,6 +24,7 @@ from .reference_data import (
     CostBasisPortfolioReference,
     CostBasisReferenceData,
     CostBasisReferenceDataPort,
+    SettlementCashAccountReference,
 )
 from .state_records import (
     AverageCostPoolCheckpointRecord,
@@ -56,6 +57,7 @@ __all__ = [
     "CostBasisReferenceData",
     "CostBasisProcessingStatePort",
     "CostBasisReferenceDataPort",
+    "SettlementCashAccountReference",
     "CostBasisTransactionStatePort",
     "OpenLotCheckpointRecord",
 ]

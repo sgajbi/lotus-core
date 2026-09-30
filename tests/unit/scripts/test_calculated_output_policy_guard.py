@@ -8,7 +8,12 @@ from typing import Any, Callable
 
 import pytest
 
-from scripts.quality.calculated_output_policy_guard import _source_module, evaluate, main
+from scripts.quality.calculated_output_policy_guard import (
+    _call_graph,
+    _source_module,
+    evaluate,
+    main,
+)
 
 
 def _write_policy(
@@ -663,6 +668,252 @@ def test_guard_accepts_verified_final_output_boundary_for_upstream_arithmetic(
         )
         == ()
     )
+
+
+def test_guard_rejects_shared_reexported_arithmetic_with_an_unbound_caller(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path, used=False)
+    source = tmp_path / "src" / "owner"
+    (source / "shared.py").write_text(
+        "from decimal import Decimal\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "def calculate_upstream():\n"
+        "    return TEST_LEDGER_OUTPUT_V1.normalize(Decimal('2'), field_name='value')\n",
+        encoding="utf-8",
+    )
+    nested = source / "calculation"
+    nested.mkdir()
+    (nested / "__init__.py").write_text(
+        "from .shared import calculate_upstream\n",
+        encoding="utf-8",
+    )
+    (source / "shared.py").replace(nested / "shared.py")
+    (source / "consumer.py").write_text(
+        "from portfolio_common.domain.calculation_lineage import build_calculation_lineage\n"
+        "from owner.wrapper import calculate_wrapper\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "def calculate_bound():\n"
+        "    value = calculate_wrapper()\n"
+        "    return build_calculation_lineage(\n"
+        "        algorithm_id='test', algorithm_version=1, intermediate_precision=64,\n"
+        "        input_payload={}, output_payload={'value': value},\n"
+        "        numeric_output_policy=TEST_LEDGER_OUTPUT_V1.lineage_identity(),\n"
+        "    )\n",
+        encoding="utf-8",
+    )
+    (source / "wrapper.py").write_text(
+        "from owner.calculation import calculate_upstream\n"
+        "def calculate_wrapper():\n"
+        "    return calculate_upstream()\n",
+        encoding="utf-8",
+    )
+    (source / "unbound.py").write_text(
+        "from owner.wrapper import calculate_wrapper\n"
+        "def calculate_unbound():\n"
+        "    return calculate_wrapper()\n",
+        encoding="utf-8",
+    )
+    boundary = "src/owner/consumer.py::calculate_bound"
+    upstream = "src/owner/calculation/shared.py::calculate_upstream"
+    wrapper = "src/owner/wrapper.py::calculate_wrapper"
+
+    findings = evaluate(
+        tmp_path,
+        _contract(
+            tmp_path,
+            lineage_boundary_callsites=[boundary],
+            lineage_boundary_covered_callsites={boundary: [upstream]},
+            lineage_boundary_terminal_callsites={
+                boundary: {wrapper: "lineage-bound-sibling-orchestrator"}
+            },
+        ),
+    )
+
+    assert (
+        "TEST_LEDGER_OUTPUT_V1: lineage boundary coverage has a caller path outside assigned "
+        f"boundaries from {upstream}"
+    ) in findings
+    assert (
+        "TEST_LEDGER_OUTPUT_V1: lineage dataflow terminal has callers and is not terminal at "
+        f"{wrapper}"
+    ) in findings
+    assert f"TEST_LEDGER_OUTPUT_V1: unclassified lineage gap at {upstream}" in findings
+    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in findings
+
+
+def test_guard_rejects_unknown_terminal_when_boundary_has_no_coverage(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path)
+    boundary = "src/owner/consumer.py::<module>"
+    unknown = "src/owner/missing.py::missing"
+
+    findings = evaluate(
+        tmp_path,
+        _contract(
+            tmp_path,
+            lineage_boundary_callsites=[boundary],
+            lineage_boundary_covered_callsites={},
+            lineage_boundary_terminal_callsites={
+                boundary: {unknown: "read-only-lineage-verification"}
+            },
+        ),
+    )
+
+    assert (
+        "TEST_LEDGER_OUTPUT_V1: lineage dataflow terminals declared for boundary without "
+        f"coverage at {boundary}"
+    ) in findings
+    assert f"TEST_LEDGER_OUTPUT_V1: unknown lineage dataflow terminal at {unknown}" in findings
+
+
+def test_guard_rejects_non_leaf_terminal_when_boundary_has_no_coverage(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path)
+    source = tmp_path / "src" / "owner"
+    (source / "shared.py").write_text(
+        "def helper():\n    return 1\ndef wrapper():\n    return helper()\n",
+        encoding="utf-8",
+    )
+    boundary = "src/owner/consumer.py::<module>"
+    non_leaf = "src/owner/shared.py::helper"
+
+    findings = evaluate(
+        tmp_path,
+        _contract(
+            tmp_path,
+            lineage_boundary_callsites=[boundary],
+            lineage_boundary_covered_callsites={},
+            lineage_boundary_terminal_callsites={
+                boundary: {non_leaf: "lineage-bound-sibling-orchestrator"}
+            },
+        ),
+    )
+
+    assert (
+        "TEST_LEDGER_OUTPUT_V1: lineage dataflow terminals declared for boundary without "
+        f"coverage at {boundary}"
+    ) in findings
+    assert (
+        "TEST_LEDGER_OUTPUT_V1: lineage dataflow terminal has callers and is not terminal at "
+        f"{non_leaf}"
+    ) in findings
+
+
+def test_exact_call_graph_resolves_self_and_cls_calls(tmp_path: Path) -> None:
+    source = tmp_path / "src" / "owner"
+    source.mkdir(parents=True)
+    (source / "service.py").write_text(
+        "class Service:\n"
+        "    def helper(self):\n"
+        "        return 1\n"
+        "    def instance_caller(self):\n"
+        "        return self.helper()\n"
+        "    @classmethod\n"
+        "    def class_caller(cls):\n"
+        "        return cls.helper(cls)\n",
+        encoding="utf-8",
+    )
+
+    graph = _call_graph(tmp_path, exact_calls_only=True)
+
+    helper = "src/owner/service.py::Service.helper"
+    assert graph[helper] == {
+        "src/owner/service.py::Service.class_caller",
+        "src/owner/service.py::Service.instance_caller",
+    }
+
+
+def test_guard_rejects_same_module_wrapper_with_external_unbound_caller(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path, used=False)
+    source = tmp_path / "src" / "owner"
+    (source / "shared.py").write_text(
+        "from decimal import Decimal\n"
+        "from portfolio_common.domain.calculation_lineage import build_calculation_lineage\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "def calculate_upstream():\n"
+        "    return TEST_LEDGER_OUTPUT_V1.normalize(Decimal('2'), field_name='value')\n"
+        "def calculate_wrapper():\n"
+        "    return calculate_upstream()\n"
+        "def calculate_bound():\n"
+        "    value = calculate_upstream()\n"
+        "    return build_calculation_lineage(\n"
+        "        algorithm_id='test', algorithm_version=1, intermediate_precision=64,\n"
+        "        input_payload={}, output_payload={'value': value},\n"
+        "        numeric_output_policy=TEST_LEDGER_OUTPUT_V1.lineage_identity(),\n"
+        "    )\n",
+        encoding="utf-8",
+    )
+    (source / "unbound.py").write_text(
+        "from owner.shared import calculate_wrapper\n"
+        "def calculate_unbound():\n"
+        "    return calculate_wrapper()\n",
+        encoding="utf-8",
+    )
+    boundary = "src/owner/shared.py::calculate_bound"
+    upstream = "src/owner/shared.py::calculate_upstream"
+
+    findings = evaluate(
+        tmp_path,
+        _contract(
+            tmp_path,
+            lineage_boundary_callsites=[boundary],
+            lineage_boundary_covered_callsites={boundary: [upstream]},
+        ),
+    )
+
+    assert any("caller path outside" in finding for finding in findings)
+
+
+def test_guard_rejects_protocol_dispatch_with_bound_and_unbound_callers(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path, used=False)
+    source = tmp_path / "src" / "owner"
+    (source / "calculator.py").write_text(
+        "from decimal import Decimal\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "class Calculator:\n"
+        "    def calculate(self):\n"
+        "        return TEST_LEDGER_OUTPUT_V1.normalize(Decimal('2'), field_name='value')\n",
+        encoding="utf-8",
+    )
+    (source / "bound.py").write_text(
+        "from portfolio_common.domain.calculation_lineage import build_calculation_lineage\n"
+        "from owner.calculator import Calculator\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "def calculate_bound(calculator: Calculator):\n"
+        "    value = calculator.calculate()\n"
+        "    return build_calculation_lineage(\n"
+        "        algorithm_id='test', algorithm_version=1, intermediate_precision=64,\n"
+        "        input_payload={}, output_payload={'value': value},\n"
+        "        numeric_output_policy=TEST_LEDGER_OUTPUT_V1.lineage_identity(),\n"
+        "    )\n",
+        encoding="utf-8",
+    )
+    (source / "unbound.py").write_text(
+        "from owner.calculator import Calculator\n"
+        "def calculate_unbound(calculator: Calculator):\n"
+        "    return calculator.calculate()\n",
+        encoding="utf-8",
+    )
+    boundary = "src/owner/bound.py::calculate_bound"
+    upstream = "src/owner/calculator.py::Calculator.calculate"
+
+    findings = evaluate(
+        tmp_path,
+        _contract(
+            tmp_path,
+            lineage_boundary_callsites=[boundary],
+            lineage_boundary_covered_callsites={boundary: [upstream]},
+        ),
+    )
+
+    assert any("caller path outside" in finding for finding in findings)
 
 
 def test_guard_does_not_hide_unrelated_gap_beside_verified_boundary(

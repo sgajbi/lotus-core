@@ -122,6 +122,16 @@ That path calls `calculate_settlement_cash_movement()` in
 `ValueError("<type> has no ordinary settlement cash policy")` when it is absent. The transaction
 fails while generating a leg the registry said it should have.
 
+The resolver is a shared deterministic intermediate calculation; it does not claim the
+transaction-cost output receipt for every caller. The generated-cash and cashflow boundaries own
+their respective normalization and lineage. A correction that retires an existing generated leg
+must preserve a neutralization receipt over the corrected source, prior child evidence, and all
+zeroed financial fields.
+
+Settlement authority is loaded as one tenant-scoped portfolio/cash-account/instrument snapshot
+under PostgreSQL row locks in the processing transaction. Ingestion updates use the same rows, so a
+supported mapping or instrument change must serialize before the generated child is committed.
+
 Note that `production_transaction_types_for_generated_cash_legs()` documents itself as returning
 types "backed by a settlement-cash resolver", but it derives that set purely from registry fields —
 nothing checks the resolver map. Registering the type is what opts it in; adding the resolver is a

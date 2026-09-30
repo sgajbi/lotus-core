@@ -76,6 +76,36 @@ def test_semantic_identity_detects_material_payload_change() -> None:
     assert changed_policy.payload_fingerprint != original.payload_fingerprint
 
 
+def test_source_booked_fx_rate_is_material_but_reference_derived_rate_is_not() -> None:
+    source = replace(
+        _transaction(),
+        transaction_fx_rate=Decimal("2.0"),
+        transaction_fx_rate_origin="SOURCE_BOOKED",
+    )
+    source_correction = replace(source, transaction_fx_rate=Decimal("2.5"))
+    reference = replace(
+        _transaction(),
+        transaction_fx_rate=Decimal("2.0"),
+        transaction_fx_rate_origin="REFERENCE_DERIVED",
+    )
+    reference_replay = replace(reference, transaction_fx_rate=Decimal("2.5"))
+
+    assert (
+        build_transaction_semantic_identity(source).payload_fingerprint
+        != build_transaction_semantic_identity(source_correction).payload_fingerprint
+    )
+    source_identity = build_transaction_semantic_identity(source)
+    assert source_identity.semantic_key.startswith("transaction-processing:v2:")
+    assert source_identity.legacy_semantic_key.startswith("transaction-processing:v1:")
+    assert source_identity.payload_fingerprint != source_identity.legacy_payload_fingerprint
+    assert build_transaction_semantic_identity(source) == build_transaction_semantic_identity(
+        replace(source, transaction_fx_rate=Decimal("2.0"))
+    )
+    assert build_transaction_semantic_identity(reference) == build_transaction_semantic_identity(
+        reference_replay
+    )
+
+
 def test_semantic_identity_ignores_processor_owned_outputs_added_before_replay() -> None:
     transaction = replace(
         _transaction(),
@@ -98,6 +128,7 @@ def test_semantic_identity_ignores_processor_owned_outputs_added_before_replay()
         realized_total_pnl_base=Decimal("1"),
         realized_total_pnl_local=Decimal("1"),
         transaction_fx_rate=Decimal("1"),
+        transaction_fx_rate_origin="REFERENCE_DERIVED",
         economic_event_id="EVT-BUY-PB-001-TX-SEMANTIC-001",
         linked_transaction_group_id="LTG-BUY-PB-001-TX-SEMANTIC-001",
         calculation_policy_id="BUY_DEFAULT_POLICY",
@@ -177,6 +208,25 @@ def test_semantic_identity_normalizes_only_auto_generated_cash_leg_identity() ->
     )
 
 
+def test_semantic_identity_normalizes_governed_default_cash_entry_mode() -> None:
+    omitted = replace(
+        _transaction(),
+        transaction_type="DIVIDEND",
+        cash_entry_mode=None,
+        settlement_cash_account_id="CASH-USD",
+    )
+    defaulted = replace(omitted, cash_entry_mode="AUTO_GENERATE")
+    upstream = replace(omitted, cash_entry_mode="UPSTREAM_PROVIDED")
+
+    assert build_transaction_semantic_identity(omitted) == (
+        build_transaction_semantic_identity(defaulted)
+    )
+    assert (
+        build_transaction_semantic_identity(upstream).payload_fingerprint
+        != build_transaction_semantic_identity(omitted).payload_fingerprint
+    )
+
+
 def test_semantic_identity_separates_processing_epochs() -> None:
     transaction = _transaction()
 
@@ -207,3 +257,17 @@ def test_correction_identity_is_payload_specific_and_preserves_base_fingerprint(
     assert corrected_correction.semantic_key.startswith(
         "transaction-correction:v1:PB-001:TX-SEMANTIC-001:3:sha256:"
     )
+
+
+def test_source_booked_correction_identity_versions_fx_sensitive_and_legacy_candidates() -> None:
+    transaction = replace(
+        _transaction(),
+        transaction_fx_rate=Decimal("2"),
+        transaction_fx_rate_origin="SOURCE_BOOKED",
+    )
+
+    identity = build_transaction_correction_identity(transaction)
+
+    assert identity.semantic_key.startswith("transaction-correction:v2:")
+    assert identity.legacy_semantic_key.startswith("transaction-correction:v1:")
+    assert identity.payload_fingerprint != identity.legacy_payload_fingerprint

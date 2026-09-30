@@ -16,6 +16,10 @@ from portfolio_common.database_models import (
     PositionLotState,
 )
 from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.domain.calculation_lineage import (
+    calculation_lineage_binds_output,
+    calculation_lineage_from_payload,
+)
 from portfolio_common.events import TransactionEvent
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,8 +34,10 @@ from src.services.portfolio_transaction_processing_service.app.runtime.dependenc
     build_replay_booked_transaction_use_case,
 )
 from src.services.query_service.app.dtos.transaction_dto import TransactionRecord
+from tests.test_support.tenant import TEST_LEGAL_BOOK_ID
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
+    cash_account_record,
     instrument_record,
     persist_and_process_booked_transaction,
     portfolio_record,
@@ -196,9 +202,10 @@ async def test_redemption_books_linked_principal_cash_and_immutable_lot_evidence
         **factor_fields,
     )
 
+    async_db_session.add(portfolio_record(portfolio_id, cost_basis_method="FIFO"))
+    await async_db_session.flush()
     async_db_session.add_all(
         [
-            portfolio_record(portfolio_id, cost_basis_method="FIFO"),
             instrument_record(
                 security_id,
                 name=f"{suffix.title()} Redemption Note",
@@ -206,6 +213,20 @@ async def test_redemption_books_linked_principal_cash_and_immutable_lot_evidence
                 currency="USD",
                 product_type="BOND",
                 asset_class="FIXED_INCOME",
+            ),
+            instrument_record(
+                "CASH-USD",
+                name="USD redemption settlement cash",
+                isin=f"CASHUSD{suffix[:4]:0<4}1",
+                currency="USD",
+                product_type="CASH",
+                asset_class="Cash",
+            ),
+            cash_account_record(
+                "CASH-USD-REDEMPTION-01",
+                portfolio_id=portfolio_id,
+                security_id="CASH-USD",
+                account_currency="USD",
             ),
         ]
     )
@@ -395,9 +416,10 @@ async def test_partial_redemption_replay_restores_cash_without_versioning_receip
         settlement_cash_account_id="CASH-USD-REDEMPTION-REPLAY-01",
         settlement_cash_instrument_id="CASH-USD",
     )
+    async_db_session.add(portfolio_record(portfolio_id, cost_basis_method="FIFO"))
+    await async_db_session.flush()
     async_db_session.add_all(
         [
-            portfolio_record(portfolio_id, cost_basis_method="FIFO"),
             instrument_record(
                 security_id,
                 name="Replayable Partial Redemption Note",
@@ -405,6 +427,20 @@ async def test_partial_redemption_replay_restores_cash_without_versioning_receip
                 currency="USD",
                 product_type="BOND",
                 asset_class="FIXED_INCOME",
+            ),
+            instrument_record(
+                "CASH-USD",
+                name="USD redemption replay cash",
+                isin="CASHUSDRP101",
+                currency="USD",
+                product_type="CASH",
+                asset_class="Cash",
+            ),
+            cash_account_record(
+                "CASH-USD-REDEMPTION-REPLAY-01",
+                portfolio_id=portfolio_id,
+                security_id="CASH-USD",
+                account_currency="USD",
             ),
         ]
     )
@@ -547,9 +583,16 @@ async def test_redemption_correction_clears_superseded_terms_and_interest_cash_l
         settlement_cash_account_id="CASH-USD-REDEMPTION-CORRECTION-01",
         settlement_cash_instrument_id="CASH-USD",
     )
+    async_db_session.add(
+        portfolio_record(
+            portfolio_id,
+            cost_basis_method="FIFO",
+            legal_book_id=TEST_LEGAL_BOOK_ID,
+        )
+    )
+    await async_db_session.flush()
     async_db_session.add_all(
         [
-            portfolio_record(portfolio_id, cost_basis_method="FIFO"),
             instrument_record(
                 security_id,
                 name="Correctable Redemption Note",
@@ -557,6 +600,20 @@ async def test_redemption_correction_clears_superseded_terms_and_interest_cash_l
                 currency="USD",
                 product_type="BOND",
                 asset_class="FIXED_INCOME",
+            ),
+            instrument_record(
+                "CASH-USD",
+                name="USD redemption correction cash",
+                isin="CASHUSDRC101",
+                currency="USD",
+                product_type="CASH",
+                asset_class="Cash",
+            ),
+            cash_account_record(
+                "CASH-USD-REDEMPTION-CORRECTION-01",
+                portfolio_id=portfolio_id,
+                security_id="CASH-USD",
+                account_currency="USD",
             ),
         ]
     )
@@ -616,6 +673,41 @@ async def test_redemption_correction_clears_superseded_terms_and_interest_cash_l
     assert zero_net_rows[interest_leg_id].gross_transaction_amount == Decimal("5")
     assert zero_net_rows[interest_leg_id].external_cash_transaction_id is None
     assert zero_net_rows[cash_leg_id].gross_transaction_amount == Decimal(0)
+    neutralization_lineage = zero_net_rows[cash_leg_id].calculation_lineage
+    assert neutralization_lineage is not None
+    assert neutralization_lineage["algorithm_id"] == "generated-settlement-cash-neutralization"
+    assert neutralization_lineage["numeric_output_policy"]["name"] == (
+        "transaction-cost-ledger-output"
+    )
+    hydrated_neutralization_lineage = calculation_lineage_from_payload(neutralization_lineage)
+    assert hydrated_neutralization_lineage is not None
+    assert calculation_lineage_binds_output(
+        hydrated_neutralization_lineage,
+        output_payload={
+            "transaction_id": cash_leg_id,
+            "gross_transaction_amount": Decimal(0),
+            "gross_cost": Decimal(0),
+            "net_cost": Decimal(0),
+            "net_cost_local": Decimal(0),
+            "realized_gain_loss": Decimal(0),
+            "realized_gain_loss_local": Decimal(0),
+        },
+    )
+    zero_net_replay_context = transaction_processing_test_context(async_db_session)
+    zero_net_replay = await process_booked_transaction(
+        context=zero_net_replay_context,
+        event=zero_net,
+        event_id="transactions.persisted-0-9913-replay",
+        correlation_id="corr-redemption-correction-zero-net-replay",
+        processing_intent=TransactionProcessingIntent.REPAIR,
+    )
+    assert zero_net_replay.status is TransactionProcessingStatus.PROCESSED
+    async with zero_net_replay_context.session_factory() as replay_verification_session:
+        replayed_cash_leg = await replay_verification_session.scalar(
+            select(DBTransaction).where(DBTransaction.transaction_id == cash_leg_id)
+        )
+    assert replayed_cash_leg is not None
+    assert replayed_cash_leg.calculation_lineage == neutralization_lineage
 
     omitted = zero_net.model_copy(
         update={

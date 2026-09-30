@@ -31,7 +31,14 @@ from src.services.persistence_service.app.repositories.transaction_db_repo impor
 pytestmark = [pytest.mark.integration_db, pytest.mark.db_direct, pytest.mark.asyncio]
 
 
-def _event(*, tenant_id: str, portfolio_id: str, quantity: str = "10") -> TransactionEvent:
+def _event(
+    *,
+    tenant_id: str,
+    portfolio_id: str,
+    quantity: str = "10",
+    transaction_fx_rate: str | None = None,
+    transaction_fx_rate_origin: str | None = None,
+) -> TransactionEvent:
     amount = Decimal(quantity) * Decimal("125.50")
     return TransactionEvent(
         transaction_id="TX-DURABLE-CONFLICT-001",
@@ -50,7 +57,114 @@ def _event(*, tenant_id: str, portfolio_id: str, quantity: str = "10") -> Transa
         brokerage=Decimal("2.50"),
         source_system="BOOKING_SOURCE",
         source_transaction_reference="BOOKING-001",
+        transaction_fx_rate=(
+            Decimal(transaction_fx_rate) if transaction_fx_rate is not None else None
+        ),
+        transaction_fx_rate_origin=transaction_fx_rate_origin,
     )
+
+
+async def test_source_booked_fx_redelivery_is_idempotent_but_changed_rate_conflicts(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    tenant_id = "tenant-booked-fx-conflict"
+    portfolio_id = "PORT-BOOKED-FX-CONFLICT"
+    async_db_session.add(
+        Portfolio(
+            tenant_id=tenant_id,
+            portfolio_id=portfolio_id,
+            legal_book_id="BOOK-BOOKED-FX-CONFLICT",
+            base_currency="USD",
+            open_date=date(2026, 1, 1),
+            risk_exposure="Balanced",
+            investment_time_horizon="Long",
+            portfolio_type="Discretionary",
+            booking_center_code="SG",
+            client_id="CLIENT-BOOKED-FX-CONFLICT",
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.commit()
+
+    original = _event(
+        tenant_id=tenant_id,
+        portfolio_id=portfolio_id,
+        transaction_fx_rate="2.0",
+        transaction_fx_rate_origin="SOURCE_BOOKED",
+    )
+    identical = original.model_copy(update={"transaction_fx_rate": Decimal("2.00")})
+    conflicting = original.model_copy(update={"transaction_fx_rate": Decimal("2.5")})
+    repository = TransactionDBRepository(async_db_session)
+
+    assert (await repository.create_or_update_transaction(original)).inserted is True
+    await async_db_session.commit()
+    assert (await repository.create_or_update_transaction(identical)).inserted is False
+    await async_db_session.rollback()
+
+    with pytest.raises(TransactionSemanticConflictError):
+        await repository.create_or_update_transaction(conflicting)
+    await async_db_session.rollback()
+
+    persisted = await async_db_session.scalar(
+        select(DBTransaction).where(DBTransaction.transaction_id == original.transaction_id)
+    )
+    assert persisted is not None
+    assert persisted.transaction_fx_rate == Decimal("2.0")
+    assert persisted.transaction_fx_rate_origin == "SOURCE_BOOKED"
+
+
+@pytest.mark.parametrize("legacy_origin", ["LEGACY_UNKNOWN", None])
+async def test_legacy_fx_row_accepts_only_same_numeric_source_booked_replay(
+    clean_db,
+    async_db_session: AsyncSession,
+    legacy_origin: str | None,
+) -> None:
+    tenant_id = "tenant-legacy-fx-replay"
+    portfolio_id = "PORT-LEGACY-FX-REPLAY"
+    async_db_session.add(
+        Portfolio(
+            tenant_id=tenant_id,
+            portfolio_id=portfolio_id,
+            legal_book_id="BOOK-LEGACY-FX-REPLAY",
+            base_currency="USD",
+            open_date=date(2026, 1, 1),
+            risk_exposure="Balanced",
+            investment_time_horizon="Long",
+            portfolio_type="Discretionary",
+            booking_center_code="SG",
+            client_id="CLIENT-LEGACY-FX-REPLAY",
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.commit()
+
+    legacy = _event(
+        tenant_id=tenant_id,
+        portfolio_id=portfolio_id,
+        transaction_fx_rate="2.0",
+        transaction_fx_rate_origin=legacy_origin,
+    )
+    repository = TransactionDBRepository(async_db_session)
+    assert (await repository.create_or_update_transaction(legacy)).inserted is True
+    await async_db_session.commit()
+
+    source_replay = legacy.model_copy(update={"transaction_fx_rate_origin": "SOURCE_BOOKED"})
+    assert (await repository.create_or_update_transaction(source_replay)).inserted is False
+    await async_db_session.rollback()
+
+    with pytest.raises(TransactionSemanticConflictError):
+        await repository.create_or_update_transaction(
+            source_replay.model_copy(update={"transaction_fx_rate": Decimal("2.5")})
+        )
+    await async_db_session.rollback()
+
+    persisted = await async_db_session.scalar(
+        select(DBTransaction).where(DBTransaction.transaction_id == legacy.transaction_id)
+    )
+    assert persisted is not None
+    assert persisted.transaction_fx_rate == Decimal("2.0")
+    assert persisted.transaction_fx_rate_origin == legacy_origin
 
 
 async def test_transaction_conflict_survives_transient_fence_purge_and_preserves_financial_state(

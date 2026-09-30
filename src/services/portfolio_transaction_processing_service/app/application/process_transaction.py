@@ -10,6 +10,7 @@ from portfolio_common.domain.transaction_control_codes import (
 
 from ..domain import (
     BookedTransaction,
+    TransactionSemanticIdentity,
     build_transaction_correction_identity,
     build_transaction_semantic_identity,
 )
@@ -22,6 +23,7 @@ from ..domain.transaction import (
 from ..ports import (
     PositionProcessingResult,
     TransactionIdempotencyOutcome,
+    TransactionIdempotencyPort,
     TransactionProcessingObservation,
     TransactionProcessingObserver,
     TransactionProcessingOperation,
@@ -32,6 +34,36 @@ from .commands import ProcessTransactionCommand, TransactionProcessingIntent
 from .errors import TransactionProcessingRejected
 from .results import ProcessTransactionResult, TransactionProcessingStatus
 from .settlement_cash_rejection import build_settlement_cash_rejection
+
+
+async def _claim_with_legacy_compatibility(
+    *,
+    idempotency: TransactionIdempotencyPort,
+    transaction: BookedTransaction,
+    event_id: str,
+    correlation_id: str | None,
+    identity: TransactionSemanticIdentity,
+) -> TransactionIdempotencyOutcome:
+    """Claim the current identity while honoring an exact durable v1 claim."""
+
+    outcome = await idempotency.claim(
+        tenant_id=transaction.tenant_id or "",
+        event_id=event_id,
+        portfolio_id=transaction.portfolio_id,
+        semantic_key=identity.semantic_key,
+        payload_fingerprint=identity.payload_fingerprint,
+        correlation_id=correlation_id,
+    )
+    if outcome is not TransactionIdempotencyOutcome.SEMANTIC_CONFLICT:
+        return outcome
+    legacy_match = await idempotency.matches_existing_claim(
+        tenant_id=transaction.tenant_id or "",
+        event_id=event_id,
+        portfolio_id=transaction.portfolio_id,
+        semantic_key=identity.legacy_semantic_key,
+        payload_fingerprint=identity.legacy_payload_fingerprint,
+    )
+    return TransactionIdempotencyOutcome.PHYSICAL_DUPLICATE if legacy_match else outcome
 
 
 def _financial_effect_transactions(
@@ -147,13 +179,12 @@ class ProcessTransactionUseCase:
             with self._observer.observe(
                 TransactionProcessingOperation.IDEMPOTENCY
             ) as idempotency_observation:
-                idempotency_outcome = await unit_of_work.idempotency.claim(
-                    tenant_id=transaction.tenant_id or "",
+                idempotency_outcome = await _claim_with_legacy_compatibility(
+                    idempotency=unit_of_work.idempotency,
+                    transaction=transaction,
                     event_id=metadata.event_id,
-                    portfolio_id=transaction.portfolio_id,
-                    semantic_key=identity.semantic_key,
-                    payload_fingerprint=identity.payload_fingerprint,
                     correlation_id=metadata.correlation_id,
+                    identity=identity,
                 )
                 correction_claimed = False
                 if (
@@ -161,13 +192,12 @@ class ProcessTransactionUseCase:
                     and metadata.processing_intent is TransactionProcessingIntent.REPAIR
                 ):
                     identity = build_transaction_correction_identity(transaction)
-                    idempotency_outcome = await unit_of_work.idempotency.claim(
-                        tenant_id=transaction.tenant_id or "",
+                    idempotency_outcome = await _claim_with_legacy_compatibility(
+                        idempotency=unit_of_work.idempotency,
+                        transaction=transaction,
                         event_id=metadata.event_id,
-                        portfolio_id=transaction.portfolio_id,
-                        semantic_key=identity.semantic_key,
-                        payload_fingerprint=identity.payload_fingerprint,
                         correlation_id=metadata.correlation_id,
+                        identity=identity,
                     )
                     correction_claimed = (
                         idempotency_outcome is TransactionIdempotencyOutcome.CLAIMED

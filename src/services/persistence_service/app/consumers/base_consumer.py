@@ -75,6 +75,16 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
 
         return None
 
+    async def is_compatible_semantic_conflict(
+        self,
+        db_session,
+        event: BaseModel,
+        semantic_identity: TransactionPayloadIdentity,
+    ) -> bool:
+        """Return true only for a consumer-owned rolling-version compatibility rule."""
+
+        return False
+
     def get_outbox_event(self, persisted_object: Any) -> Optional[Dict[str, Any]]:
         """
         Subclasses can override this to create an outbox event upon successful persistence.
@@ -128,6 +138,12 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
                                 **tenant_scope,
                             )
                             if outcome is SemanticEventClaimOutcome.SEMANTIC_CONFLICT:
+                                if await self.is_compatible_semantic_conflict(
+                                    db,
+                                    event,
+                                    semantic_identity,
+                                ):
+                                    return
                                 existing_fingerprint = (
                                     await idempotency_repo.resolve_semantic_payload_fingerprint(
                                         event_id=envelope.idempotency_key,

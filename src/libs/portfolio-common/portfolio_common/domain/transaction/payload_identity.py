@@ -10,6 +10,8 @@ from hashlib import sha256
 from typing import Any, Mapping
 
 TRANSACTION_PAYLOAD_IDENTITY_VERSION = "v1"
+TRANSACTION_PAYLOAD_SOURCE_BOOKED_IDENTITY_VERSION = "v2"
+_SOURCE_BOOKED_FX_ORIGIN = "SOURCE_BOOKED"
 
 # Every TransactionEvent field must be classified by the contract test.  These fields
 # are source economic or source-identity facts whose change requires an explicit
@@ -139,6 +141,7 @@ TRANSACTION_PAYLOAD_NON_MATERIAL_FIELDS = frozenset(
         "realized_total_pnl_base",
         "realized_total_pnl_local",
         "transaction_fx_rate",
+        "transaction_fx_rate_origin",
         # Database-only technical/output fields used by migration backfill.
         "calculation_lineage",
         "id",
@@ -158,6 +161,7 @@ class TransactionPayloadIdentity:
 
     semantic_key: str
     payload_fingerprint: str
+    legacy_payload_fingerprint: str
 
 
 def build_transaction_payload_identity(
@@ -173,17 +177,46 @@ def build_transaction_payload_identity(
         raise ValueError("tenant_id is required for transaction payload identity")
     if not transaction_id:
         raise ValueError("transaction_id is required for transaction payload identity")
+    origin = str(payload.get("transaction_fx_rate_origin") or "").strip().upper()
+    identity_version = (
+        TRANSACTION_PAYLOAD_SOURCE_BOOKED_IDENTITY_VERSION
+        if origin == _SOURCE_BOOKED_FX_ORIGIN
+        else TRANSACTION_PAYLOAD_IDENTITY_VERSION
+    )
     return TransactionPayloadIdentity(
         semantic_key=(
-            f"transaction-persistence:{TRANSACTION_PAYLOAD_IDENTITY_VERSION}:"
-            f"{normalized_tenant_id}:{transaction_id}"
+            f"transaction-persistence:{identity_version}:{normalized_tenant_id}:{transaction_id}"
         ),
         payload_fingerprint=transaction_payload_fingerprint(payload),
+        legacy_payload_fingerprint=transaction_payload_legacy_fingerprint(payload),
     )
 
 
 def transaction_payload_fingerprint(payload: Mapping[str, Any]) -> str:
-    """Hash the complete v1 material field set using canonical JSON."""
+    """Hash source facts using the governed provenance-aware identity version."""
+
+    include_source_booked_fx = (
+        str(payload.get("transaction_fx_rate_origin") or "").strip().upper()
+        == _SOURCE_BOOKED_FX_ORIGIN
+    )
+    return _transaction_payload_fingerprint(
+        payload,
+        include_source_booked_fx=include_source_booked_fx,
+    )
+
+
+def transaction_payload_legacy_fingerprint(payload: Mapping[str, Any]) -> str:
+    """Build the pre-c175 v1 fingerprint for a qualified legacy replay only."""
+
+    return _transaction_payload_fingerprint(payload, include_source_booked_fx=False)
+
+
+def _transaction_payload_fingerprint(
+    payload: Mapping[str, Any],
+    *,
+    include_source_booked_fx: bool,
+) -> str:
+    """Hash the complete classified payload under an explicit compatibility policy."""
 
     unknown_fields = set(payload).difference(_TRANSACTION_PAYLOAD_CLASSIFIED_FIELDS)
     if unknown_fields:
@@ -193,6 +226,10 @@ def transaction_payload_fingerprint(payload: Mapping[str, Any]) -> str:
         field_name: _canonical_value(payload.get(field_name))
         for field_name in sorted(TRANSACTION_PAYLOAD_MATERIAL_FIELDS)
     }
+    if include_source_booked_fx:
+        material_payload["transaction_fx_rate"] = _canonical_value(
+            payload.get("transaction_fx_rate")
+        )
     canonical = json.dumps(
         material_payload,
         ensure_ascii=True,

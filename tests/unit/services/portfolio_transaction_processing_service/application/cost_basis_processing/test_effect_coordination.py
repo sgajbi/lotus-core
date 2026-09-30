@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -15,7 +16,10 @@ from src.services.portfolio_transaction_processing_service.app.application.cost_
     coordinate_cost_processing_effects,
 )
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
-from src.services.portfolio_transaction_processing_service.app.domain.transaction import redemption
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
+    build_generated_settlement_cash_leg,
+    redemption,
+)
 from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
     FxContractInstrument,
 )
@@ -26,6 +30,61 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
 )
 
 TENANT_ID = TenantId("tenant-test")
+
+
+def _cash_reference_data() -> AsyncMock:
+    reference_data = AsyncMock()
+    reference_data.get_settlement_cash_account_reference.return_value = SimpleNamespace(
+        cash_account_id="CASH-SGD-01",
+        security_id="CASH-SGD",
+        account_currency="SGD",
+        instrument_product_type="CASH",
+        instrument_currency="SGD",
+    )
+    return reference_data
+
+
+@pytest.mark.asyncio
+async def test_rebuild_resolves_only_incoming_cash_context_and_preserves_prior_child() -> None:
+    prior = replace(
+        _transaction(
+            transaction_id="DIV-PRIOR-01",
+            transaction_type="DIVIDEND",
+            auto_generate_cash_leg=True,
+        ),
+        external_cash_transaction_id="DIV-PRIOR-01-CASHLEG",
+        transaction_fx_rate=Decimal(1),
+    )
+    prior_child = build_generated_settlement_cash_leg(prior)
+    incoming = _transaction(
+        transaction_id="DIV-INCOMING-01",
+        transaction_type="DIVIDEND",
+        auto_generate_cash_leg=True,
+    )
+    transaction_state = AsyncMock(spec=CostBasisTransactionStatePort)
+    transaction_state.get_booked_transaction.return_value = prior_child
+    reference_data = _cash_reference_data()
+
+    await coordinate_cost_processing_effects(
+        tenant_id=TENANT_ID,
+        processed_transactions=[prior, incoming],
+        instrument_updates=[],
+        source_epoch=None,
+        transaction_state=transaction_state,
+        reconciliation_repository=AsyncMock(spec=CorporateActionReconciliationRepository),
+        effect_stager=AsyncMock(spec=CostProcessingEffectStagingPort),
+        correlation_id="corr-bounded-settlement-context",
+        incoming_transaction_id=incoming.transaction_id,
+        reference_data=reference_data,
+    )
+
+    reference_data.get_settlement_cash_account_reference.assert_awaited_once()
+    generated = [
+        call.args[0]
+        for call in transaction_state.upsert_generated_booked_transaction.await_args_list
+    ]
+    assert generated[0].transaction_id == prior_child.transaction_id
+    assert generated[0].security_id == prior_child.security_id
 
 
 def _transaction(
@@ -76,6 +135,7 @@ async def test_effect_coordination_links_and_stages_generated_cash_leg() -> None
         reconciliation_repository=AsyncMock(spec=CorporateActionReconciliationRepository),
         effect_stager=effect_stager,
         correlation_id="corr-generated-01",
+        reference_data=_cash_reference_data(),
     )
 
     assert [item.transaction_id for item in result.processed_transactions] == [
@@ -128,6 +188,7 @@ async def test_effect_coordination_emits_separate_redemption_interest_income() -
         reconciliation_repository=AsyncMock(spec=CorporateActionReconciliationRepository),
         effect_stager=AsyncMock(spec=CostProcessingEffectStagingPort),
         correlation_id="corr-redemption-interest-01",
+        reference_data=_cash_reference_data(),
     )
 
     assert [item.transaction_id for item in result.processed_transactions] == [
@@ -192,6 +253,7 @@ async def test_redemption_interest_collision_prevents_effect_staging() -> None:
             reconciliation_repository=AsyncMock(spec=CorporateActionReconciliationRepository),
             effect_stager=effect_stager,
             correlation_id="corr-redemption-collision-01",
+            reference_data=_cash_reference_data(),
         )
 
     effect_stager.stage_processed_transactions.assert_not_awaited()
@@ -228,6 +290,7 @@ async def test_effect_coordination_supersedes_removed_redemption_interest_with_z
         reconciliation_repository=AsyncMock(spec=CorporateActionReconciliationRepository),
         effect_stager=AsyncMock(spec=CostProcessingEffectStagingPort),
         correlation_id="corr-redemption-corrected-01",
+        reference_data=_cash_reference_data(),
     )
 
     zero_interest = result.processed_transactions[1]

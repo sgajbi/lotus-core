@@ -6,7 +6,7 @@ anyio==4.14.2
     #   -c requirements/shared-runtime.lock.txt
     #   httpx
     #   httpx2
-ast-serialize==0.11.0
+ast-serialize==0.11.2
     # via mypy
 asyncpg==0.31.0
     # via
@@ -28,7 +28,7 @@ certifi==2026.2.25
     #   httpcore
     #   httpx
     #   requests
-charset-normalizer==3.5.1
+charset-normalizer==3.5.2
     # via requests
 click==8.4.2
     # via
@@ -56,7 +56,7 @@ et-xmlfile==2.0.0
     # via
     #   -c requirements/shared-runtime.lock.txt
     #   openpyxl
-filelock==3.32.5
+filelock==4.0.7
     # via cachecontrol
 grimp==3.17
     # via import-linter
@@ -92,7 +92,7 @@ iniconfig==2.3.0
     # via pytest
 interrogate==1.7.0
     # via -r requirements/ci-tooling.in
-librt==0.15.0
+librt==0.16.0
     # via mypy
 license-expression==30.4.4
     # via cyclonedx-python-lib
@@ -102,7 +102,7 @@ markdown-it-py==4.2.0
     # via rich
 mdurl==0.1.2
     # via markdown-it-py
-msgpack==1.2.2
+msgpack==1.2.3
     # via cachecontrol
 mypy==2.1.0
     # via -r requirements/ci-tooling.in
@@ -149,7 +149,7 @@ pygments==2.21.0
     # via
     #   pytest
     #   rich
-pyparsing==3.3.2
+pyparsing==3.3.3
     # via pip-requirements-parser
 pytest==9.1.1
     # via
@@ -229,14 +229,14 @@ typing-extensions==4.15.0
     #   mypy
     #   pytest-asyncio
     #   testcontainers
-urllib3==2.7.0
+urllib3==2.8.0
     # via
     #   docker
     #   requests
     #   testcontainers
 vulture==2.16
     # via -r requirements/ci-tooling.in
-wrapt==2.4.0
+wrapt==2.5.0
     # via testcontainers
 xenon==0.9.3
     # via -r requirements/ci-tooling.in

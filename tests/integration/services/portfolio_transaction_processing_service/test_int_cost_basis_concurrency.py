@@ -56,6 +56,7 @@ from tests.test_support.async_task_coordination import (
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
     canonical_transaction_record,
+    cash_account_record,
     instrument_record,
     portfolio_record,
 )
@@ -224,9 +225,10 @@ async def test_same_key_buy_sell_and_replay_serialize_to_deterministic_fifo_lot_
         price="15",
         gross_amount="900",
     )
+    async_db_session.add(portfolio_record(portfolio_id, cost_basis_method="FIFO"))
+    await async_db_session.flush()
     async_db_session.add_all(
         [
-            portfolio_record(portfolio_id, cost_basis_method="FIFO"),
             instrument_record(
                 security_id,
                 name="Cost Lock Proof Equity",
@@ -457,9 +459,10 @@ async def test_linked_redemption_interest_group_serializes_cross_security_author
         economic_event_id="EVENT-REDEMPTION-LOCK-01",
         linked_transaction_group_id=group_id,
     )
+    async_db_session.add(portfolio_record(portfolio_id, cost_basis_method="FIFO"))
+    await async_db_session.flush()
     async_db_session.add_all(
         [
-            portfolio_record(portfolio_id, cost_basis_method="FIFO"),
             instrument_record(
                 bond_security_id,
                 name="Linked Group Redemption Note",
@@ -475,6 +478,20 @@ async def test_linked_redemption_interest_group_serializes_cross_security_author
                 currency="USD",
                 product_type="BOND",
                 asset_class="FIXED_INCOME",
+            ),
+            instrument_record(
+                "CASH-USD",
+                name="USD redemption lock cash",
+                isin="CASHUSDLOCK1",
+                currency="USD",
+                product_type="CASH",
+                asset_class="Cash",
+            ),
+            cash_account_record(
+                "CASH-USD-REDEMPTION-LOCK-01",
+                portfolio_id=portfolio_id,
+                security_id="CASH-USD",
+                account_currency="USD",
             ),
             canonical_transaction_record(acquisition),
         ]

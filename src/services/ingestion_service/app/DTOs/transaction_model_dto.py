@@ -270,8 +270,12 @@ class Transaction(BaseModel):
     transaction_fx_rate: Optional[PositiveDecimal] = Field(
         default=None,
         description=(
-            "Historical FX rate used to translate the transaction from trade currency into "
-            "portfolio base currency when the transaction is cross-currency."
+            "Source-booked trade-currency to portfolio-base-currency rate. When supplied, this "
+            "positive rate is authoritative for historical transaction cost and generated "
+            "settlement cash basis; later valuation/reference FX changes do not replace it. "
+            "When omitted, Core derives effective-dated reference FX for each economic leg. "
+            "When trade currency equals the admitted portfolio base currency, any supplied rate "
+            "must be exactly 1 or processing rejects the transaction."
         ),
         json_schema_extra={"example": "1.074352"},
     )

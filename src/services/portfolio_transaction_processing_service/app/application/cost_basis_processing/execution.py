@@ -32,6 +32,7 @@ from ...ports import (
     CostBasisPersistenceObserver,
     CostBasisPortfolioReference,
     CostBasisProcessingStatePort,
+    CostBasisReferenceDataPort,
     CostBasisTransactionStatePort,
     CostProcessingEffectStagingPort,
     CostProcessingResult,
@@ -75,6 +76,7 @@ class PreparedCostProcessingUseCase:
         prepared: PreparedCostTransaction,
         portfolio: CostBasisPortfolioReference,
         instrument: CostBasisInstrumentReference | None,
+        reference_data: CostBasisReferenceDataPort,
         transaction_state: CostBasisTransactionStatePort,
         average_cost_pools: CostBasisAverageCostPoolPort,
         lot_disposals: CostBasisLotDisposalPort,
@@ -136,6 +138,11 @@ class PreparedCostProcessingUseCase:
                 prepared.transaction.transaction_id if reconcile_superseded_derived else None
             ),
             reconciliation_observer=self._reconciliation_observer,
+            portfolio_base_currency=portfolio.base_currency,
+            fx_rates=fx_rates,
+            reference_data=reference_data,
+            incoming_transaction_id=prepared.transaction.transaction_id,
+            incoming_source_fx_rate_missing=(prepared.transaction.transaction_fx_rate is None),
         )
 
     @staticmethod

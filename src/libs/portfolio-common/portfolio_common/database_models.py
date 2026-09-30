@@ -22,6 +22,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
 from . import portfolio_aggregation_job_schema as job_schema
+from . import source_lifecycle_predicates as lc
 from .database_text_contract import (
     PYTHON_ISO_DATE_TEXT_VALID_SQL,
     PYTHON_ISO_DATETIME_WITH_TIMEZONE_PATTERN_SQL,
@@ -46,19 +47,6 @@ from .financial_reconciliation_schema import (
 )
 from .ingestion_job_schema import ingestion_job_table_args
 from .processed_event_schema import processed_event_table_args
-from .source_lifecycle_predicates import (
-    BENCHMARK_DEFINITION_ACTIVE,
-    CLIENT_INCOME_NEEDS_ACTIVE,
-    CLIENT_RESTRICTION_ACTIVE,
-    CLIENT_TAX_PROFILE_ACTIVE,
-    CLIENT_TAX_RULE_SET_ACTIVE,
-    DPM_DISCRETIONARY_MANDATE_ACTIVE,
-    INDEX_DEFINITION_ACTIVE,
-    LIQUIDITY_RESERVE_ACTIVE,
-    MODEL_PORTFOLIO_TARGET_ACTIVE,
-    PLANNED_WITHDRAWAL_ACTIVE,
-    SUSTAINABILITY_PREFERENCE_ACTIVE,
-)
 
 _REPLAY_CONTROL_PATTERN = r"U&'[\0001-\001F\007F-\009F]'"
 
@@ -829,7 +817,7 @@ class PortfolioMandateBinding(Base):
             "effective_to",
             "portfolio_id",
             "mandate_id",
-            postgresql_where=DPM_DISCRETIONARY_MANDATE_ACTIVE.postgresql_where(),
+            postgresql_where=lc.DPM_DISCRETIONARY_MANDATE_ACTIVE.postgresql_where(),
         ),
     )
 
@@ -963,7 +951,7 @@ class ClientRestrictionProfile(Base):
             observed_at.desc().nulls_last(),
             restriction_version.desc(),
             updated_at.desc(),
-            postgresql_where=CLIENT_RESTRICTION_ACTIVE.postgresql_where(),
+            postgresql_where=lc.CLIENT_RESTRICTION_ACTIVE.postgresql_where(),
         ),
     )
 
@@ -1033,7 +1021,7 @@ class SustainabilityPreferenceProfile(Base):
             observed_at.desc().nulls_last(),
             preference_version.desc(),
             updated_at.desc(),
-            postgresql_where=SUSTAINABILITY_PREFERENCE_ACTIVE.postgresql_where(),
+            postgresql_where=lc.SUSTAINABILITY_PREFERENCE_ACTIVE.postgresql_where(),
         ),
     )
 
@@ -1101,7 +1089,7 @@ class ClientTaxProfile(Base):
             observed_at.desc().nulls_last(),
             profile_version.desc(),
             updated_at.desc(),
-            postgresql_where=CLIENT_TAX_PROFILE_ACTIVE.postgresql_where(),
+            postgresql_where=lc.CLIENT_TAX_PROFILE_ACTIVE.postgresql_where(),
         ),
     )
 
@@ -1177,7 +1165,7 @@ class ClientTaxRuleSet(Base):
             observed_at.desc().nulls_last(),
             rule_version.desc(),
             updated_at.desc(),
-            postgresql_where=CLIENT_TAX_RULE_SET_ACTIVE.postgresql_where(),
+            postgresql_where=lc.CLIENT_TAX_RULE_SET_ACTIVE.postgresql_where(),
         ),
     )
 
@@ -1240,7 +1228,7 @@ class ClientIncomeNeedsSchedule(Base):
             "end_date",
             observed_at.desc().nulls_last(),
             updated_at.desc(),
-            postgresql_where=CLIENT_INCOME_NEEDS_ACTIVE.postgresql_where(),
+            postgresql_where=lc.CLIENT_INCOME_NEEDS_ACTIVE.postgresql_where(),
         ),
     )
 
@@ -1306,7 +1294,7 @@ class LiquidityReserveRequirement(Base):
             observed_at.desc().nulls_last(),
             requirement_version.desc(),
             updated_at.desc(),
-            postgresql_where=LIQUIDITY_RESERVE_ACTIVE.postgresql_where(),
+            postgresql_where=lc.LIQUIDITY_RESERVE_ACTIVE.postgresql_where(),
         ),
     )
 
@@ -1365,7 +1353,7 @@ class PlannedWithdrawalSchedule(Base):
             "withdrawal_schedule_id",
             observed_at.desc().nulls_last(),
             updated_at.desc(),
-            postgresql_where=PLANNED_WITHDRAWAL_ACTIVE.postgresql_where(),
+            postgresql_where=lc.PLANNED_WITHDRAWAL_ACTIVE.postgresql_where(),
         ),
     )
 
@@ -1530,7 +1518,7 @@ class ModelPortfolioTarget(Base):
             "instrument_id",
             effective_from.desc(),
             "effective_to",
-            postgresql_where=MODEL_PORTFOLIO_TARGET_ACTIVE.postgresql_where(),
+            postgresql_where=lc.MODEL_PORTFOLIO_TARGET_ACTIVE.postgresql_where(),
         ),
     )
 
@@ -1572,7 +1560,7 @@ class BenchmarkDefinition(Base):
             "benchmark_id",
             effective_from.desc(),
             "effective_to",
-            postgresql_where=BENCHMARK_DEFINITION_ACTIVE.postgresql_where(),
+            postgresql_where=lc.BENCHMARK_DEFINITION_ACTIVE.postgresql_where(),
         ),
     )
 
@@ -1608,7 +1596,7 @@ class IndexDefinition(Base):
             "index_id",
             effective_from.desc(),
             "effective_to",
-            postgresql_where=INDEX_DEFINITION_ACTIVE.postgresql_where(),
+            postgresql_where=lc.INDEX_DEFINITION_ACTIVE.postgresql_where(),
         ),
     )
 
@@ -1954,6 +1942,7 @@ class Transaction(Base):
     net_cost = Column(ExactNumeric(18, 10), nullable=True)
     realized_gain_loss = Column(ExactNumeric(18, 10), nullable=True)
     transaction_fx_rate = Column(ExactNumeric(18, 10), nullable=True)
+    transaction_fx_rate_origin = Column(String(24), nullable=True)
     net_cost_local = Column(ExactNumeric(18, 10), nullable=True)
     realized_gain_loss_local = Column(ExactNumeric(18, 10), nullable=True)
     economic_event_id = Column(String, nullable=True, index=True)
@@ -2081,6 +2070,11 @@ class Transaction(Base):
             "price >= 0 AND gross_transaction_amount >= 0 AND trade_fee >= 0 "
             "AND transaction_fx_rate > 0",
             name="ck_transactions_trade_values_sign",
+        ),
+        CheckConstraint(
+            "transaction_fx_rate_origin IS NULL OR transaction_fx_rate_origin IN "
+            "('SOURCE_BOOKED', 'REFERENCE_DERIVED', 'LEGACY_UNKNOWN')",
+            name="ck_transactions_fx_rate_origin",
         ),
         _finite_numeric_check_constraint(
             "ck_transactions_income_values_finite",

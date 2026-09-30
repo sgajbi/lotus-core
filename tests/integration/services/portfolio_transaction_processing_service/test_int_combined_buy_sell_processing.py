@@ -20,6 +20,7 @@ from src.services.portfolio_transaction_processing_service.app.application impor
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
+    cash_account_record,
     instrument_record,
     persist_and_process_booked_transaction,
     portfolio_record,
@@ -209,14 +210,29 @@ async def test_auto_generated_buy_cash_leg_traverses_cashflow_and_position_stage
         settlement_cash_account_id="CASH-USD-01",
         settlement_cash_instrument_id="CASH-USD-01",
     )
+    async_db_session.add(portfolio_record(portfolio_id))
+    await async_db_session.flush()
     async_db_session.add_all(
         [
-            portfolio_record(portfolio_id),
             instrument_record(
                 security_id,
                 name="Auto Cash Processing Equity",
                 isin="SG0000000003",
                 currency="USD",
+            ),
+            instrument_record(
+                "CASH-USD-01",
+                name="USD settlement cash",
+                isin="CASHUSD00001",
+                currency="USD",
+                product_type="CASH",
+                asset_class="Cash",
+            ),
+            cash_account_record(
+                "CASH-USD-01",
+                portfolio_id=portfolio_id,
+                security_id="CASH-USD-01",
+                account_currency="USD",
             ),
         ]
     )
