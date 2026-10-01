@@ -3,6 +3,9 @@ from __future__ import annotations
 from collections.abc import Hashable, Iterable, Mapping
 from typing import Any, Literal
 
+from portfolio_common.domain.transaction.interest_economics import (
+    INTEREST_NEGATIVE_PRE_FEE_NET_REASON_CODE,
+)
 from pydantic_core import PydanticCustomError
 
 ValidationSeverity = Literal["error", "warning"]
@@ -20,6 +23,7 @@ INVALID_ALLOCATION_BOUNDS = "INVALID_ALLOCATION_BOUNDS"
 MISSING_PROFILE_SUBSTANCE = "MISSING_PROFILE_SUBSTANCE"
 INVALID_TAX_STATUS_DETAIL = "INVALID_TAX_STATUS_DETAIL"
 BLANK_IDENTIFIER = "BLANK_IDENTIFIER"
+INTEREST_NEGATIVE_PRE_FEE_NET = INTEREST_NEGATIVE_PRE_FEE_NET_REASON_CODE
 
 INGESTION_VALIDATION_TAXONOMY: dict[str, dict[str, str]] = {
     SCHEMA_VALIDATION_FAILED: {
@@ -79,6 +83,13 @@ INGESTION_VALIDATION_TAXONOMY: dict[str, dict[str, str]] = {
     BLANK_IDENTIFIER: {
         "message": "Identifier must not be blank.",
         "remediation": "Provide a non-blank source-owned identifier.",
+    },
+    INTEREST_NEGATIVE_PRE_FEE_NET: {
+        "message": "INTEREST deductions must not exceed gross amount before fees.",
+        "remediation": (
+            "Correct withholding tax and other interest deductions so their total does not "
+            "exceed gross_transaction_amount."
+        ),
     },
 }
 

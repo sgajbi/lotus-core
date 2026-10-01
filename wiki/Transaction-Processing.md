@@ -181,6 +181,13 @@ withholding and other deductions is rejected with
 writes. Historical rows already accepted before this active boundary retain their pre-policy
 economics only when Core supplies them through the explicit position-history rebuild context.
 
+Gross interest less withholding and other deductions must be non-negative before fees. The single
+and batch ingestion DTOs, canonical transaction event, current-booking service, and replayed direct
+processing path reject both omitted and explicit negative forms with
+`INTEREST_018_NEGATIVE_PRE_FEE_NET`; the service rejection is non-retryable and occurs before
+financial writes. A positive expense fee cannot mask a negative pre-fee amount. Zero pre-fee
+expense plus a fee remains a supported fee-only outflow.
+
 ## Shared-Library Boundary
 
 Corporate-action execution releases use owner, token, monotonic fence, and database-clock expiry

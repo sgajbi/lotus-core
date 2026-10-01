@@ -19,7 +19,9 @@ from src.services.portfolio_transaction_processing_service.app.domain.cashflow i
 )
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     BookedTransaction,
+    SettlementCashValidationError,
     calculate_interest_settlement_economics,
+    calculate_settlement_cash_movement,
 )
 from tests.test_support.transaction_economics_reference import (
     evaluate_interest_settlement,
@@ -84,7 +86,7 @@ def test_reference_evaluator_has_no_production_imports() -> None:
 
 def test_interest_vector_pack_declares_governance_metadata() -> None:
     assert _VECTOR_PACK["pack_id"] == "interest-settlement"
-    assert _VECTOR_PACK["pack_version"] == "1.0.0"
+    assert _VECTOR_PACK["pack_version"] == "1.1.0"
     assert _VECTOR_PACK["methodology_policy"] == {
         "id": "interest-settlement-economics",
         "version": "1.0.0",
@@ -97,6 +99,10 @@ def test_interest_vector_pack_declares_governance_metadata() -> None:
         assert vector["tolerance"] == "0"
         assert vector["rationale"]
         assert vector["expected"]["quantity_delta"] == "0"
+
+    for vector in _VECTOR_PACK["rejection_vectors"]:
+        assert vector["vector_id"]
+        assert vector["expected_reason_code"] == "INTEREST_018_NEGATIVE_PRE_FEE_NET"
 
 
 @pytest.mark.parametrize(
@@ -147,3 +153,20 @@ def test_interest_settlement_matches_independent_golden_vector(
     assert cashflow.amount == reference.signed_cashflow_amount
     assert cashflow.cashflow_date.isoformat() == "2026-04-12"
     assert cashflow.timing == expected["cashflow_timing"]
+
+
+@pytest.mark.parametrize(
+    "vector",
+    _VECTOR_PACK["rejection_vectors"],
+    ids=lambda vector: vector["vector_id"],
+)
+def test_negative_pre_fee_interest_matches_independent_rejection_vector(
+    vector: dict[str, Any],
+) -> None:
+    with pytest.raises(ValueError, match="pre-fee net must not be negative"):
+        evaluate_interest_settlement(vector["inputs"])
+
+    with pytest.raises(SettlementCashValidationError) as raised:
+        calculate_settlement_cash_movement(_booked_interest(vector))
+
+    assert raised.value.reason_code.value == vector["expected_reason_code"]

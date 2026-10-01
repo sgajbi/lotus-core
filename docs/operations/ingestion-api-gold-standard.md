@@ -128,6 +128,7 @@ consumer-DLQ record preserve that code in `error_reason_code`. Invalid settlemen
 - `DIVIDEND_014_NEGATIVE_WITHHOLDING_TAX`
 - `DIVIDEND_015_WITHHOLDING_EXCEEDS_GROSS_AMOUNT`
 - `INTEREST_017_NON_POSITIVE_NET_SETTLEMENT`
+- `INTEREST_018_NEGATIVE_PRE_FEE_NET`
 
 These are non-retryable booking-economics failures. Governed ingestion schemas reject negative
 withholding before publishing; `DIVIDEND_014` remains a defense for direct adapters that construct
@@ -138,3 +139,7 @@ inspect raw database rows when source-safe DLQ API evidence is available.
 An explicit INTEREST pre-fee net that does not reconcile to gross interest less withholding and
 other deductions uses `INTEREST_015_NET_RECONCILIATION_MISMATCH`. Correct the source net-interest
 evidence before replay; do not treat a large supplied net as authority over the reconciled amount.
+If withholding plus other interest deductions exceeds gross interest, the single and batch HTTP
+DTOs reject the request with typed 422 code `INTEREST_018_NEGATIVE_PRE_FEE_NET`. Event and direct
+processing defenses retain the same code as a non-retryable rejection. Fees are applied only after
+this pre-fee invariant and cannot turn invalid negative economics into an accepted expense.

@@ -86,6 +86,7 @@ class InterestValidationReasonCode(StrEnum):
     NON_POSITIVE_NET_SETTLEMENT = (
         SettlementCashRejectionReasonCode.INTEREST_NON_POSITIVE_NET_SETTLEMENT.value
     )
+    NEGATIVE_PRE_FEE_NET = SettlementCashRejectionReasonCode.INTEREST_NEGATIVE_PRE_FEE_NET.value
 
 
 TransactionValidationReasonCode = (

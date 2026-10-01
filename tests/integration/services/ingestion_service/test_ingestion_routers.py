@@ -2000,6 +2000,100 @@ async def test_ingest_transactions_rejects_cross_tenant_portfolio_before_job_or_
     mock_kafka_producer.publish_message.assert_not_called()
 
 
+@pytest.mark.parametrize("endpoint", ["/ingest/transaction", "/ingest/transactions"])
+@pytest.mark.parametrize("fee", ["0.5", "1", "2"])
+@pytest.mark.parametrize("net_interest_amount", [None, "-1"])
+async def test_ingest_interest_rejects_negative_pre_fee_net_with_typed_422(
+    endpoint: str,
+    fee: str,
+    net_interest_amount: str | None,
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+) -> None:
+    transaction = _single_transaction_payload(f"INTEREST-NEGATIVE-PRE-FEE-{fee}")
+    transaction.update(
+        {
+            "transaction_type": "INTEREST",
+            "quantity": "0",
+            "price": "0",
+            "gross_transaction_amount": "10",
+            "withholding_tax_amount": "6",
+            "other_interest_deductions_amount": "5",
+            "trade_fee": fee,
+            "interest_direction": "EXPENSE",
+            "settlement_date": "2025-08-14T10:00:00Z",
+        }
+    )
+    if net_interest_amount is not None:
+        transaction["net_interest_amount"] = net_interest_amount
+    payload: object = (
+        transaction if endpoint == "/ingest/transaction" else {"transactions": [transaction]}
+    )
+
+    response = await async_test_client.post(endpoint, json=payload)
+
+    assert response.status_code == 422
+    error = response.json()["detail"][0]
+    assert error["type"] == "INTEREST_018_NEGATIVE_PRE_FEE_NET"
+    expected_loc = ["body"] if endpoint == "/ingest/transaction" else ["body", "transactions", 0]
+    assert error["loc"] == expected_loc
+    assert error["ctx"] == {
+        "code": "INTEREST_018_NEGATIVE_PRE_FEE_NET",
+        "field_path": "withholding_tax_amount,other_interest_deductions_amount",
+        "severity": "error",
+        "remediation": (
+            "Correct withholding tax and other interest deductions so their total does not "
+            "exceed gross_transaction_amount."
+        ),
+        "record_key": None,
+    }
+    assert ingestion_test_harness["fake_job_service"].jobs == {}
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+@pytest.mark.parametrize("endpoint", ["/ingest/transaction", "/ingest/transactions"])
+async def test_ingest_interest_preserves_field_error_for_negative_explicit_net(
+    endpoint: str,
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+) -> None:
+    transaction = _single_transaction_payload("INTEREST-NEGATIVE-EXPLICIT-NET")
+    transaction.update(
+        {
+            "transaction_type": "INTEREST",
+            "quantity": "0",
+            "price": "0",
+            "gross_transaction_amount": "10",
+            "withholding_tax_amount": "2",
+            "other_interest_deductions_amount": "0",
+            "net_interest_amount": "-1",
+            "trade_fee": "1",
+            "interest_direction": "EXPENSE",
+            "settlement_date": "2025-08-14T10:00:00Z",
+        }
+    )
+    payload: object = (
+        transaction if endpoint == "/ingest/transaction" else {"transactions": [transaction]}
+    )
+
+    response = await async_test_client.post(endpoint, json=payload)
+
+    assert response.status_code == 422
+    error = response.json()["detail"][0]
+    assert error["type"] == "greater_than_equal"
+    expected_loc = (
+        ["body", "net_interest_amount"]
+        if endpoint == "/ingest/transaction"
+        else ["body", "transactions", 0, "net_interest_amount"]
+    )
+    assert error["loc"] == expected_loc
+    assert error["ctx"] == {"ge": 0}
+    assert ingestion_test_harness["fake_job_service"].jobs == {}
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
 async def test_ingest_transactions_publishes_truthful_zero_price_redemption(
     async_test_client: httpx.AsyncClient,
     mock_kafka_producer: MagicMock,

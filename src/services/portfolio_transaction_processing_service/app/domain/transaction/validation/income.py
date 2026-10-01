@@ -316,6 +316,8 @@ def _validate_income_settlement(
             reason_code = InterestValidationReasonCode.NET_INTEREST_RECONCILIATION_MISMATCH
             if any(issue.code is reason_code for issue in issues):
                 return
+        elif exc.reason_code is SettlementCashRejectionReasonCode.INTEREST_NEGATIVE_PRE_FEE_NET:
+            reason_code = InterestValidationReasonCode.NEGATIVE_PRE_FEE_NET
         issues.append(
             TransactionValidationIssue(
                 code=reason_code,

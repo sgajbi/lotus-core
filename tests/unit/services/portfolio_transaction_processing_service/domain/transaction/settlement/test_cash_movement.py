@@ -424,6 +424,58 @@ def test_interest_rejects_explicit_net_that_does_not_reconcile() -> None:
     assert raised.value.net_settlement_amount == Decimal("-42")
 
 
+@pytest.mark.parametrize("fee", [Decimal("0.5"), Decimal("1"), Decimal("2")])
+def test_interest_expense_rejects_negative_pre_fee_net_before_fee_application(
+    fee: Decimal,
+) -> None:
+    transaction = _transaction(
+        "INTEREST",
+        gross_transaction_amount=Decimal("10"),
+        withholding_tax_amount=Decimal("6"),
+        other_interest_deductions_amount=Decimal("5"),
+        interest_direction="EXPENSE",
+        trade_fee=fee,
+    )
+
+    with pytest.raises(SettlementCashValidationError) as raised:
+        calculate_settlement_cash_movement(transaction)
+
+    assert raised.value.reason_code is (
+        SettlementCashRejectionReasonCode.INTEREST_NEGATIVE_PRE_FEE_NET
+    )
+    assert raised.value.available_proceeds == Decimal("-1")
+    assert raised.value.fee_amount == fee
+
+
+def test_interest_expense_preserves_zero_pre_fee_fee_only_settlement() -> None:
+    movement = calculate_settlement_cash_movement(
+        _transaction(
+            "INTEREST",
+            gross_transaction_amount=Decimal("10"),
+            withholding_tax_amount=Decimal("6"),
+            other_interest_deductions_amount=Decimal("4"),
+            interest_direction="EXPENSE",
+            trade_fee=Decimal("2"),
+        )
+    )
+
+    assert movement.signed_amount == Decimal("-2")
+
+
+def test_interest_expense_valid_control_remains_signed_cash_outflow() -> None:
+    movement = calculate_settlement_cash_movement(
+        _transaction(
+            "INTEREST",
+            gross_transaction_amount=Decimal("10"),
+            withholding_tax_amount=Decimal("2"),
+            interest_direction="EXPENSE",
+            trade_fee=Decimal("1"),
+        )
+    )
+
+    assert movement.signed_amount == Decimal("-9")
+
+
 def test_decimal_precision_is_not_quantized_by_settlement_policy() -> None:
     movement = calculate_settlement_cash_movement(
         _transaction(

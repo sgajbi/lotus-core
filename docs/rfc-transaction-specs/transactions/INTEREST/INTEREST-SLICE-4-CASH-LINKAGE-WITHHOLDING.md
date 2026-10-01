@@ -45,6 +45,12 @@ applies the resolved fee exactly once: income subtracts the fee and expense adds
 and derived net-interest source shapes must produce the same settlement amount. All deduction and
 fee components are constrained to non-negative values.
 
+The shared pre-fee identity is evaluated with bounded exact-Decimal working precision before fee
+application. If withholding plus other deductions exceeds gross interest, both omitted and explicit
+net source shapes fail with `INTEREST_018_NEGATIVE_PRE_FEE_NET`. This applies to `INCOME` and
+`EXPENSE` and to both cash-entry modes. The separate zero-net expense policy is unchanged: a zero
+pre-fee amount plus a positive fee remains a valid fee-only outflow.
+
 ## Shared-Doc Conformance Note (Slice 4)
 
 Validated shared standards for this slice:

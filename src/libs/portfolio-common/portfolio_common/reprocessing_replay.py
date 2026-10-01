@@ -4,6 +4,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from pydantic import ValidationError
+
 from .config import KAFKA_TRANSACTIONS_PERSISTED_TOPIC
 from .domain.eventing import transaction_partition_key
 from .event_mapping import transaction_event_v1_payload
@@ -15,6 +17,8 @@ TRANSACTION_PROCESSING_INTENT_HEADER = "lotus-transaction-processing-intent"
 TRANSACTION_PROCESSING_REPAIR_VALUE = b"repair"
 TRANSACTION_REPAIR_DELIVERY_ID_HEADER = "lotus-transaction-repair-delivery-id"
 TRANSACTION_REPLAY_SOURCE_FIELD_NAMES = tuple(TransactionEvent.model_fields)
+TRANSACTION_REPLAY_SOURCE_INVALID = "TRANSACTION_REPLAY_SOURCE_INVALID"
+TRANSACTION_REPLAY_DELIVERY_FAILED = "TRANSACTION_REPLAY_DELIVERY_FAILED"
 
 
 class ReprocessingReplayError(RuntimeError):
@@ -23,10 +27,12 @@ class ReprocessingReplayError(RuntimeError):
         message: str,
         failed_transaction_ids: list[str],
         published_record_count: int = 0,
+        reason_code: str = TRANSACTION_REPLAY_DELIVERY_FAILED,
     ):
         super().__init__(message)
         self.failed_transaction_ids = failed_transaction_ids
         self.published_record_count = published_record_count
+        self.reason_code = reason_code
 
 
 class TransactionReplayReader(Protocol):
@@ -94,10 +100,22 @@ def plan_transaction_replay(
     correlation: ReplayCorrelationMetadata,
 ) -> TransactionReplayPlan:
     headers = correlation.headers
-    messages = [
-        _transaction_replay_message(transaction=transaction, headers=headers)
-        for transaction in transactions
-    ]
+    transaction_ids = [str(getattr(transaction, "transaction_id")) for transaction in transactions]
+    try:
+        messages = [
+            _transaction_replay_message(transaction=transaction, headers=headers)
+            for transaction in transactions
+        ]
+    except ValidationError as exc:
+        raise ReprocessingReplayError(
+            (
+                "Persisted transaction replay source is incompatible with the current "
+                "transaction contract. No transaction was republished."
+            ),
+            failed_transaction_ids=transaction_ids,
+            published_record_count=0,
+            reason_code=TRANSACTION_REPLAY_SOURCE_INVALID,
+        ) from exc
     return TransactionReplayPlan(messages=messages)
 
 

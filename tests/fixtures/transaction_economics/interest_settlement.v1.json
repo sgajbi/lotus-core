@@ -1,6 +1,6 @@
 {
   "pack_id": "interest-settlement",
-  "pack_version": "1.0.0",
+  "pack_version": "1.1.0",
   "methodology_policy": {
     "id": "interest-settlement-economics",
     "version": "1.0.0"
@@ -117,6 +117,44 @@
       },
       "tolerance": "0",
       "rationale": "Explicit and derived pre-fee net inputs must produce the same expense payment."
+    }
+  ],
+  "rejection_vectors": [
+    {
+      "vector_id": "interest-negative-pre-fee-withholding-omitted-net",
+      "inputs": {
+        "direction": "EXPENSE",
+        "gross_interest_amount": "10",
+        "withholding_tax_amount": "11",
+        "other_interest_deductions_amount": "0",
+        "transaction_fee_amount": "2",
+        "net_interest_amount": null
+      },
+      "expected_reason_code": "INTEREST_018_NEGATIVE_PRE_FEE_NET"
+    },
+    {
+      "vector_id": "interest-negative-pre-fee-other-explicit-net",
+      "inputs": {
+        "direction": "EXPENSE",
+        "gross_interest_amount": "10",
+        "withholding_tax_amount": "0",
+        "other_interest_deductions_amount": "11",
+        "transaction_fee_amount": "1",
+        "net_interest_amount": "-1"
+      },
+      "expected_reason_code": "INTEREST_018_NEGATIVE_PRE_FEE_NET"
+    },
+    {
+      "vector_id": "interest-negative-pre-fee-mixed-income",
+      "inputs": {
+        "direction": "INCOME",
+        "gross_interest_amount": "10",
+        "withholding_tax_amount": "6",
+        "other_interest_deductions_amount": "5",
+        "transaction_fee_amount": "0.5",
+        "net_interest_amount": null
+      },
+      "expected_reason_code": "INTEREST_018_NEGATIVE_PRE_FEE_NET"
     }
   ]
 }
