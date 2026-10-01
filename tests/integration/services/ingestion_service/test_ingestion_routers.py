@@ -620,6 +620,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         async def list_consumer_dlq_events(
             self,
             *,
+            tenant_id: str,
             limit: int = 100,
             original_topic: str | None = None,
             consumer_group: str | None = None,
@@ -656,7 +657,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 events = [event for event in events if event["consumer_group"] == consumer_group]
             return events[:limit]
 
-        async def get_consumer_dlq_event(self, event_id: str):
+        async def get_consumer_dlq_event(self, event_id: str, *, tenant_id: str):
             if event_id == "cdlq_test_instrument_001":
                 return SimpleNamespace(
                     event_id=event_id,
@@ -1016,6 +1017,8 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         async def find_successful_replay_audit_by_fingerprint(
             self,
             replay_fingerprint: str,
+            *,
+            tenant_id: str,
             recovery_path: str | None = None,
         ) -> dict[str, str] | None:
             row = self.replay_audit.get(replay_fingerprint)
@@ -1033,6 +1036,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         async def record_consumer_dlq_replay_audit(
             self,
             *,
+            tenant_id: str,
             recovery_path: str,
             event_id: str,
             replay_fingerprint: str,
@@ -1071,6 +1075,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         async def list_replay_audits(
             self,
             *,
+            tenant_id: str,
             limit: int = 100,
             recovery_path: str | None = None,
             replay_status: str | None = None,
@@ -1091,7 +1096,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             ]
             return filtered[:limit]
 
-        async def get_replay_audit(self, replay_id: str):
+        async def get_replay_audit(self, replay_id: str, *, tenant_id: str):
             for row in self.replay_audit.values():
                 if row.get("replay_id") == replay_id:
                     return row

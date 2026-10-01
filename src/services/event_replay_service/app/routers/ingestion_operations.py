@@ -993,6 +993,7 @@ async def list_ingestion_stalled_jobs(
     },
 )
 async def list_consumer_dlq_events(
+    request: Request,
     limit: int = Query(
         default=100,
         ge=1,
@@ -1015,7 +1016,10 @@ async def list_consumer_dlq_events(
     ),
 ):
     page = await query_service.list_consumer_dlq_events(
-        limit=limit, original_topic=original_topic, consumer_group=consumer_group
+        tenant_context=request.state.tenant_context,
+        limit=limit,
+        original_topic=original_topic,
+        consumer_group=consumer_group,
     )
     return ConsumerDlqEventListResponse(events=page.events, total=page.total)
 
@@ -1108,6 +1112,7 @@ async def replay_consumer_dlq_event(
     },
 )
 async def list_ingestion_replay_audits(
+    request: Request,
     limit: int = Query(
         default=100,
         ge=1,
@@ -1140,6 +1145,7 @@ async def list_ingestion_replay_audits(
     ),
 ):
     page = await query_service.list_replay_audits(
+        tenant_context=request.state.tenant_context,
         limit=limit,
         recovery_path=recovery_path,
         replay_status=replay_status,
@@ -1172,6 +1178,7 @@ async def list_ingestion_replay_audits(
     },
 )
 async def get_ingestion_replay_audit(
+    request: Request,
     replay_id: str = Path(
         description="Replay audit identifier.",
         examples=["replay_01J5WK1G7S3HBQ7Q3M0E3TMT0P"],
@@ -1181,7 +1188,9 @@ async def get_ingestion_replay_audit(
     ),
 ):
     try:
-        return await query_service.get_replay_audit(replay_id)
+        return await query_service.get_replay_audit(
+            replay_id, tenant_context=request.state.tenant_context
+        )
     except IngestionOperationsNotFound as exc:
         raise _not_found_response(exc) from exc
 

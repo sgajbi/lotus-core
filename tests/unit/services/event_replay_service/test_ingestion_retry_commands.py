@@ -328,6 +328,7 @@ async def test_ingestion_job_retry_duplicate_uses_recovery_detail() -> None:
         await _retry_service(
             ingestion_job_service=ingestion_job_service
         )._block_duplicate_ingestion_job_retry(
+            tenant_id=TENANT_ID,
             job_id="job-001",
             context=context,
             replay_fingerprint="fp-001",
@@ -363,6 +364,7 @@ async def test_ingestion_job_retry_duplicate_audit_failure_is_governed() -> None
         await _retry_service(
             ingestion_job_service=ingestion_job_service
         )._block_duplicate_ingestion_job_retry(
+            tenant_id=TENANT_ID,
             job_id="job-001",
             context=context,
             replay_fingerprint="fp-001",

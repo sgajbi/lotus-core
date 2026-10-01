@@ -51,6 +51,7 @@ async def test_find_successful_replay_audit_by_fingerprint_returns_latest_identi
             )
 
     response = await module.find_successful_replay_audit_by_fingerprint_response(
+        tenant_id="tenant-a",
         replay_fingerprint="fp_123",
         recovery_path="consumer_dlq_replay",
         session_factory=lambda: _SingleSessionAsyncIterable(_FakeSession()),
@@ -68,12 +69,40 @@ async def test_find_successful_replay_audit_by_fingerprint_handles_missing_match
             return None
 
     response = await module.find_successful_replay_audit_by_fingerprint_response(
+        tenant_id="tenant-a",
         replay_fingerprint="fp_missing",
         recovery_path=None,
         session_factory=lambda: _SingleSessionAsyncIterable(_FakeSession()),
     )
 
     assert response is None
+
+
+async def test_list_replay_audits_scopes_tenant_before_limit():
+    statements = []
+
+    class _FakeScalars:
+        def all(self):
+            return []
+
+    class _FakeSession:
+        async def scalars(self, stmt):
+            statements.append(stmt)
+            return _FakeScalars()
+
+    await module.list_replay_audit_responses(
+        tenant_id="tenant-a",
+        limit=1,
+        recovery_path=None,
+        replay_status=None,
+        replay_fingerprint=None,
+        job_id=None,
+        session_factory=lambda: _SingleSessionAsyncIterable(_FakeSession()),
+    )
+
+    compiled = str(statements[0])
+    assert "consumer_dlq_replay_audit.tenant_id =" in compiled
+    assert compiled.index("consumer_dlq_replay_audit.tenant_id =") < compiled.index("LIMIT")
 
 
 async def test_record_consumer_dlq_replay_audit_persists_row_and_metrics(
@@ -105,6 +134,7 @@ async def test_record_consumer_dlq_replay_audit_persists_row_and_metrics(
     monkeypatch.setattr(module, "INGESTION_REPLAY_FAILURE_TOTAL", failure_counter)
 
     replay_id = await module.record_consumer_dlq_replay_audit_response(
+        tenant_id="tenant-a",
         recovery_path="consumer_dlq_replay",
         event_id="event_123",
         replay_fingerprint="fp_123",
@@ -122,6 +152,7 @@ async def test_record_consumer_dlq_replay_audit_persists_row_and_metrics(
 
     assert replay_id.startswith("replay_")
     assert session.added[0].replay_id == replay_id
+    assert session.added[0].tenant_id == "tenant-a"
     assert session.added[0].completed_at.tzinfo is UTC
     assert audit_counter.labels(
         recovery_path="consumer_dlq_replay",
@@ -155,6 +186,7 @@ async def test_record_consumer_dlq_replay_audit_persists_missing_correlation_dia
     session = _FakeSession()
 
     await module.record_consumer_dlq_replay_audit_response(
+        tenant_id="tenant-a",
         recovery_path="consumer_dlq_replay",
         event_id="event_456",
         replay_fingerprint="fp_456",
@@ -185,6 +217,7 @@ async def test_record_consumer_dlq_replay_audit_raises_typed_error_when_no_sessi
 
     with pytest.raises(module.InfrastructureAuditWriteFailed) as exc_info:
         await module.record_consumer_dlq_replay_audit_response(
+            tenant_id="tenant-a",
             recovery_path="consumer_dlq_replay",
             event_id="event_123",
             replay_fingerprint="fp_123",
@@ -216,6 +249,7 @@ async def test_record_consumer_dlq_replay_audit_wraps_persistence_failure():
 
     with pytest.raises(module.InfrastructureAuditWriteFailed) as exc_info:
         await module.record_consumer_dlq_replay_audit_response(
+            tenant_id="tenant-a",
             recovery_path="consumer_dlq_replay",
             event_id="event_123",
             replay_fingerprint="fp_123",

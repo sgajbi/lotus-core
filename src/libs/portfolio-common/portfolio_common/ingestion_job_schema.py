@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import CheckConstraint, Index
+from sqlalchemy import CheckConstraint, Index, UniqueConstraint
 
 from .database_text_contract import PYTHON_STRIP_BOUNDARY_SQL
 
@@ -13,6 +13,7 @@ def ingestion_job_table_args(*, submitted_at: Any, row_id: Any) -> tuple[Any, ..
     """Return the governed ingestion-job integrity and access-path contract."""
 
     return (
+        UniqueConstraint("tenant_id", "job_id", name="uq_ingestion_jobs_tenant_job_id"),
         CheckConstraint(
             f"tenant_id = btrim(tenant_id, {PYTHON_STRIP_BOUNDARY_SQL}) "
             "AND tenant_id <> '' AND char_length(tenant_id) <= 128",

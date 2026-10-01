@@ -9,7 +9,7 @@ from ..DTOs.ingestion_job_dto import ConsumerDlqEventResponse
 def _missing_correlation_reason(event: DBConsumerDlqEvent) -> str | None:
     reason = getattr(event, "correlation_missing_reason", None)
     if reason:
-        return reason
+        return str(reason)
     if event.correlation_id:
         return None
     return "message_correlation_id_absent"
@@ -18,7 +18,7 @@ def _missing_correlation_reason(event: DBConsumerDlqEvent) -> str | None:
 def _alternate_lookup_key(event: DBConsumerDlqEvent) -> str | None:
     lookup_key = getattr(event, "alternate_lookup_key", None)
     if lookup_key:
-        return lookup_key
+        return str(lookup_key)
     if event.correlation_id:
         return None
     original_key = event.original_key or "unkeyed"
@@ -48,6 +48,7 @@ def to_consumer_dlq_event_response(event: DBConsumerDlqEvent) -> ConsumerDlqEven
 
 async def list_consumer_dlq_event_responses(
     *,
+    tenant_id: str,
     limit: int,
     original_topic: str | None,
     consumer_group: str | None,
@@ -56,7 +57,7 @@ async def list_consumer_dlq_event_responses(
     event_ids: tuple[str, ...] | None = None,
 ) -> list[ConsumerDlqEventResponse]:
     async for db in session_factory():
-        stmt = select(DBConsumerDlqEvent)
+        stmt = select(DBConsumerDlqEvent).where(DBConsumerDlqEvent.tenant_id == tenant_id)
         if original_topic:
             stmt = stmt.where(DBConsumerDlqEvent.original_topic == original_topic)
         if consumer_group:
@@ -79,12 +80,18 @@ async def list_consumer_dlq_event_responses(
 
 async def get_consumer_dlq_event_response(
     *,
+    tenant_id: str,
     event_id: str,
     session_factory,
 ) -> ConsumerDlqEventResponse | None:
     async for db in session_factory():
         row = await db.scalar(
-            select(DBConsumerDlqEvent).where(DBConsumerDlqEvent.event_id == event_id).limit(1)
+            select(DBConsumerDlqEvent)
+            .where(
+                DBConsumerDlqEvent.tenant_id == tenant_id,
+                DBConsumerDlqEvent.event_id == event_id,
+            )
+            .limit(1)
         )
         return to_consumer_dlq_event_response(row) if row else None
     return None

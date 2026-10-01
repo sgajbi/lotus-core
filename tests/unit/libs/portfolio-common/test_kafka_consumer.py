@@ -4,11 +4,13 @@ import json
 from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
 import pytest
+from portfolio_common import consumer_dlq_tenant
 from portfolio_common.events import TransactionEvent
 from portfolio_common.exceptions import TransactionSemanticConflictError
 from portfolio_common.ingestion_lineage import ingestion_job_id_var
 from portfolio_common.kafka_consumer import (
     BaseConsumer,
+    ConsumerDlqTenantAttributionError,
     DlqPublicationBudgetExhausted,
     RetryableConsumerError,
     classify_dlq_reason_code,
@@ -20,6 +22,38 @@ from pydantic import ValidationError
 
 pytestmark = pytest.mark.asyncio
 TRACEPARENT = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+
+
+@pytest.mark.parametrize(
+    ("resolved_tenant", "expected_error"),
+    [("tenant-a", None), (None, "unknown ingestion job owner")],
+)
+async def test_dlq_tenant_authority_comes_only_from_durable_job(
+    monkeypatch, resolved_tenant, expected_error
+) -> None:
+    session = AsyncMock()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = resolved_tenant
+    session.execute.return_value = result
+
+    async def sessions():
+        yield session
+
+    monkeypatch.setattr(consumer_dlq_tenant, "get_async_db_session", sessions)
+    if expected_error:
+        with pytest.raises(ConsumerDlqTenantAttributionError, match=expected_error):
+            await consumer_dlq_tenant.resolve_consumer_dlq_tenant_id("job-a")
+    else:
+        assert await consumer_dlq_tenant.resolve_consumer_dlq_tenant_id("job-a") == "tenant-a"
+    session.execute.assert_awaited_once()
+
+
+async def test_dlq_without_job_cannot_query_or_invent_tenant(monkeypatch) -> None:
+    session_factory = MagicMock()
+    monkeypatch.setattr(consumer_dlq_tenant, "get_async_db_session", session_factory)
+    with pytest.raises(ConsumerDlqTenantAttributionError, match="no durable ingestion job"):
+        await consumer_dlq_tenant.resolve_consumer_dlq_tenant_id(None)
+    session_factory.assert_not_called()
 
 
 # A concrete implementation of the abstract BaseConsumer for testing
@@ -76,6 +110,7 @@ def test_consumer(mock_confluent_consumer, mock_kafka_producer) -> ConcreteTestC
             group_id="test-group",
             dlq_topic="test.dlq",
         )
+        consumer._resolve_consumer_dlq_tenant_id = AsyncMock(return_value="tenant-test")
         yield consumer
 
 
@@ -717,7 +752,7 @@ async def test_run_loop_disabled_dlq_budget_stops_after_one_offset_commit_failur
     ) in _consumer_event_outcomes(event_metric)
 
 
-async def test_run_loop_does_not_commit_when_dlq_support_evidence_fails(
+async def test_run_loop_commits_confirmed_dlq_when_database_evidence_indexing_fails(
     test_consumer: ConcreteTestConsumer,
     mock_confluent_consumer: MagicMock,
     mock_kafka_producer: MagicMock,
@@ -734,12 +769,20 @@ async def test_run_loop_does_not_commit_when_dlq_support_evidence_fails(
         side_effect=RuntimeError("support evidence unavailable")
     )
 
-    await test_consumer.run()
+    with patch("portfolio_common.kafka_consumer.observe_kafka_consumer_event") as event_metric:
+        await test_consumer.run()
 
     mock_kafka_producer.publish_message.assert_called_once()
     mock_kafka_producer.flush.assert_any_call(timeout=5)
     test_consumer._record_consumer_dlq_event.assert_awaited_once()
-    mock_confluent_consumer.commit.assert_not_called()
+    mock_confluent_consumer.commit.assert_called_once_with(
+        message=mock_msg,
+        asynchronous=False,
+    )
+    assert (
+        "dlq_published",
+        "database_evidence_indexing_failed",
+    ) in _consumer_event_outcomes(event_metric)
 
 
 async def test_run_loop_dlq_failure_budget_exhaustion_fails_fast_without_commit(
@@ -1423,7 +1466,7 @@ async def test_dlq_payload_is_correct(
     test_consumer._record_consumer_dlq_event.assert_awaited_once()
 
 
-async def test_dlq_unknown_ingestion_owner_is_omitted_before_publish(
+async def test_dlq_unknown_ingestion_owner_preserves_publish_success_without_republication(
     test_consumer: ConcreteTestConsumer,
     mock_kafka_producer: MagicMock,
 ) -> None:
@@ -1433,19 +1476,15 @@ async def test_dlq_unknown_ingestion_owner_is_omitted_before_publish(
         headers=[("ingestion_job_id", b"job-stale")],
     )
     test_consumer._record_consumer_dlq_event = AsyncMock()
-    db = AsyncMock()
-    result = MagicMock()
-    result.scalar_one_or_none.return_value = None
-    db.execute.return_value = result
-
-    async def get_session_gen():
-        yield db
+    test_consumer._resolve_consumer_dlq_tenant_id = AsyncMock(
+        side_effect=ConsumerDlqTenantAttributionError("unknown owner")
+    )
 
     token = ingestion_job_id_var.set("job-stale")
     try:
-        with patch(
-            "portfolio_common.kafka_consumer.get_async_db_session",
-            new=get_session_gen,
+        with (
+            patch("portfolio_common.kafka_consumer.observe_kafka_consumer_event") as event_metric,
+            patch("portfolio_common.kafka_consumer.logger.warning") as warning_log,
         ):
             published = await test_consumer._send_to_dlq_async(
                 mock_msg,
@@ -1457,9 +1496,48 @@ async def test_dlq_unknown_ingestion_owner_is_omitted_before_publish(
     assert published is True
     payload = mock_kafka_producer.publish_message.call_args.kwargs["value"]
     headers = dict(mock_kafka_producer.publish_message.call_args.kwargs["headers"])
-    assert payload["ingestion_job_id"] is None
-    assert "ingestion_job_id" not in headers
-    assert test_consumer._record_consumer_dlq_event.await_args.kwargs["ingestion_job_id"] is None
+    assert payload["ingestion_job_id"] == "job-stale"
+    assert headers["ingestion_job_id"] == b"job-stale"
+    mock_kafka_producer.publish_message.assert_called_once()
+    test_consumer._record_consumer_dlq_event.assert_not_awaited()
+    assert (
+        "dlq_published",
+        "database_evidence_tenant_unavailable",
+    ) in _consumer_event_outcomes(event_metric)
+    assert warning_log.call_args.kwargs["extra"]["status"] == "degraded"
+    assert (
+        warning_log.call_args.kwargs["extra"]["reason_code"]
+        == "database_evidence_tenant_unavailable"
+    )
+
+
+async def test_dlq_database_indexing_failure_preserves_publish_success_without_republication(
+    test_consumer: ConcreteTestConsumer,
+    mock_kafka_producer: MagicMock,
+) -> None:
+    mock_msg = create_mock_message("key-indexing-failure", {"data": "value"})
+    test_consumer._record_consumer_dlq_event = AsyncMock(
+        side_effect=RuntimeError("database unavailable")
+    )
+
+    with (
+        patch("portfolio_common.kafka_consumer.observe_kafka_consumer_event") as event_metric,
+        patch("portfolio_common.kafka_consumer.logger.error") as error_log,
+    ):
+        published = await test_consumer._send_to_dlq_async(
+            mock_msg,
+            ValueError("invalid payload"),
+        )
+
+    assert published is True
+    mock_kafka_producer.publish_message.assert_called_once()
+    test_consumer._record_consumer_dlq_event.assert_awaited_once()
+    assert (
+        "dlq_published",
+        "database_evidence_indexing_failed",
+    ) in _consumer_event_outcomes(event_metric)
+    assert error_log.call_args.kwargs["extra"]["status"] == "degraded"
+    assert error_log.call_args.kwargs["extra"]["reason_code"] == "database_evidence_indexing_failed"
 
 
 async def test_dlq_payload_preserves_bounded_application_reason_code(
@@ -1691,6 +1769,7 @@ async def test_record_consumer_dlq_event_redacts_payload_excerpt(
 
     with patch("portfolio_common.kafka_consumer.get_async_db_session", new=get_session_gen):
         await test_consumer._record_consumer_dlq_event(
+            tenant_id="tenant-test",
             msg=mock_msg,
             error=ValueError("token=event-token"),
             error_reason_code="VALIDATION_ERROR",
@@ -1725,6 +1804,7 @@ async def test_record_consumer_dlq_event_persists_durable_ingestion_job_owner(
 
     with patch("portfolio_common.kafka_consumer.get_async_db_session", new=get_session_gen):
         await test_consumer._record_consumer_dlq_event(
+            tenant_id="tenant-test",
             msg=mock_msg,
             error=ValueError("persistence timeout"),
             error_reason_code="PERSISTENCE_TIMEOUT",
@@ -1759,6 +1839,7 @@ async def test_record_consumer_dlq_event_persists_missing_correlation_diagnostic
 
     with patch("portfolio_common.kafka_consumer.get_async_db_session", new=get_session_gen):
         await test_consumer._record_consumer_dlq_event(
+            tenant_id="tenant-test",
             msg=mock_msg,
             error=ValueError("missing portfolio_id"),
             error_reason_code="VALIDATION_ERROR",
@@ -1793,6 +1874,7 @@ async def test_record_consumer_dlq_event_uses_source_safe_validation_reason(
 
     with patch("portfolio_common.kafka_consumer.get_async_db_session", new=get_session_gen):
         await test_consumer._record_consumer_dlq_event(
+            tenant_id="tenant-test",
             msg=mock_msg,
             error=_transaction_validation_error(payload),
             error_reason_code="VALIDATION_ERROR",

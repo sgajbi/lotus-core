@@ -368,6 +368,14 @@ schema, machine-readable contracts, or executable evidence.
   stateful fences, ledger and derived records, other
   portfolio-owned query paths, replay, and operations are tenant-bound and exact-main proven.
   Global reference and market-data products remain explicitly global.
+- Event Replay consumer-DLQ and replay-audit reads carry the admitted tenant through list,
+  direct-id, job, event-id, and fingerprint selectors and apply tenant authority before limits.
+  Their durable identities are tenant-scoped. Consumer-DLQ database evidence requires an owning
+  ingestion job; unattributable messages remain on the broker DLQ and database indexing is refused
+  with degraded telemetry rather than a fabricated tenant. Migration `c176b2c3d537` backfills only
+  from the durable job/DLQ ownership chain, aborts on orphaned or conflicting history, and refuses
+  downgrade when tenant-scoped identifiers collide. This delivers only #798 Slice 5, not the
+  remaining tenant-isolation families or estate-wide certification.
 - Financial reconciliation run/finding persistence, supported command/read routes, aggregation
   request/completion events, request-consumer fences, QCP support reads, and Bundle A corporate
   action evidence carry typed admitted tenant authority. Filter tenant before pagination or

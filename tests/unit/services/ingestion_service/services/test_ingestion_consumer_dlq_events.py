@@ -107,6 +107,7 @@ async def test_list_consumer_dlq_event_responses_maps_rows() -> None:
             return _FakeScalars([_event(event_id="dlq-1"), _event(event_id="dlq-2")])
 
     result = await list_consumer_dlq_event_responses(
+        tenant_id="tenant-a",
         limit=50,
         original_topic="valuation.jobs",
         consumer_group="valuation-service-group",
@@ -114,6 +115,27 @@ async def test_list_consumer_dlq_event_responses_maps_rows() -> None:
     )
 
     assert [item.event_id for item in result] == ["dlq-1", "dlq-2"]
+
+
+async def test_list_consumer_dlq_event_responses_scopes_before_limit() -> None:
+    statements = []
+
+    class _FakeSession:
+        async def scalars(self, stmt):
+            statements.append(stmt)
+            return _FakeScalars([])
+
+    await list_consumer_dlq_event_responses(
+        tenant_id="tenant-a",
+        limit=1,
+        original_topic=None,
+        consumer_group=None,
+        session_factory=lambda: _SingleSessionAsyncIterator(_FakeSession()),
+    )
+
+    compiled = str(statements[0])
+    assert "consumer_dlq_events.tenant_id =" in compiled
+    assert compiled.index("consumer_dlq_events.tenant_id =") < compiled.index("LIMIT")
 
 
 async def test_list_consumer_dlq_event_responses_filters_by_durable_job_owner() -> None:
@@ -125,6 +147,7 @@ async def test_list_consumer_dlq_event_responses_filters_by_durable_job_owner() 
             return _FakeScalars([])
 
     await list_consumer_dlq_event_responses(
+        tenant_id="tenant-a",
         limit=50,
         original_topic=None,
         consumer_group=None,
@@ -146,6 +169,7 @@ async def test_list_consumer_dlq_event_responses_filters_replay_event_ids() -> N
             return _FakeScalars([])
 
     await list_consumer_dlq_event_responses(
+        tenant_id="tenant-a",
         limit=50,
         original_topic=None,
         consumer_group=None,
@@ -162,6 +186,7 @@ async def test_get_consumer_dlq_event_response_returns_none_when_missing() -> No
             return None
 
     result = await get_consumer_dlq_event_response(
+        tenant_id="tenant-a",
         event_id="missing",
         session_factory=lambda: _SingleSessionAsyncIterator(_FakeSession()),
     )
@@ -174,6 +199,7 @@ async def test_dlq_queries_return_empty_when_session_factory_yields_no_session()
 
     assert (
         await list_consumer_dlq_event_responses(
+            tenant_id="tenant-a",
             limit=50,
             original_topic=None,
             consumer_group=None,
@@ -183,6 +209,7 @@ async def test_dlq_queries_return_empty_when_session_factory_yields_no_session()
     )
     assert (
         await get_consumer_dlq_event_response(
+            tenant_id="tenant-a",
             event_id="missing",
             session_factory=session_factory,
         )

@@ -20,6 +20,12 @@ MIGRATION = (
     / "versions"
     / "c165b2c3d52c_fix_require_portfolio_tenant.py"
 )
+HEAD_DLQ_MIGRATION = (
+    Path(__file__).resolve().parents[2]
+    / "alembic"
+    / "versions"
+    / "c176b2c3d537_scope_dlq_replay_audit_tenant.py"
+)
 
 PORTFOLIO_INSERT = text(
     """
@@ -211,6 +217,10 @@ def test_portfolio_tenant_cutover_rejects_ambiguous_rows_then_applies_and_rolls_
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
 
     with db_engine.begin() as connection:
+        head_schema = connection.begin_nested()
+        head_migration: dict[str, Any] = runpy.run_path(str(HEAD_DLQ_MIGRATION))
+        _bind_operations(head_migration, connection)
+        head_migration["downgrade"]()
         _bind_operations(migration, connection)
         _reset_development_cutover(migration, connection)
         connection.execute(
@@ -360,3 +370,4 @@ def test_portfolio_tenant_cutover_rejects_ambiguous_rows_then_applies_and_rolls_
         assert "tenant_id" not in {
             column["name"] for column in inspect(connection).get_columns("ingestion_jobs")
         }
+        head_schema.rollback()

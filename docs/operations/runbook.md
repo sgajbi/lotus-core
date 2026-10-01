@@ -788,6 +788,27 @@ Operational knobs:
 | `REPROCESSING_WORKER_STALE_TIMEOUT_MINUTES` | `15` | Database-clock lease lifetime for one reset-watermarks or FX reprocessing claim. The worker reads the remaining lease budget from PostgreSQL before scheduling and after each renewal, then uses only that measured budget for its monotonic cancellation deadline. Expiry permits deterministic recovery and fences late writes; renewal loss cancels and rolls back the active domain transaction. |
 | `POSITION_VALUATION_WORKER_COUNT` | `1` (`8` in app-local Compose) | Number of serial Kafka valuation consumers in one position-valuation process. Do not configure more active workers than `valuation.job.requested` partitions. |
 
+### Consumer-DLQ and replay-audit tenant cutover
+
+Migration `c176b2c3d537` is a quiesced writer cutover for `consumer_dlq_events` and
+`consumer_dlq_replay_audit`; it is not safe for mixed old and new writers. Before upgrade, stop all
+consumers that can publish or index consumer-DLQ evidence and stop Event Replay mutations that can
+write replay audit rows. Drain their in-flight work, retain broker offsets and lag evidence, and
+wait for database writer sessions to close. Apply the migration, deploy the complete compatible
+consumer and Event Replay reader/writer set, and only then resume processing from the retained
+offsets.
+
+The migration fails closed when a DLQ row has no durable owning ingestion job, a replay row has no
+provable owner, a retained replay job reference is unknown, or job and linked DLQ ownership
+conflict. Repair authority only from durable source evidence and rerun the migration. Do not invent
+a tenant, assign an estate tenant, delete evidence rows, or bypass the failure.
+
+For rollback, quiesce every new consumer and Event Replay writer again and retain a fresh broker
+offset and lag snapshot. Downgrade is allowed only when tenant-scoped `event_id` and `replay_id`
+values have no cross-tenant collision; the migration refuses otherwise. Reconcile collisions
+through governed evidence or retain the new revision—never delete rows or fabricate ownership to
+force rollback. Deploy the complete old compatibility set before resuming writers.
+
 ### Valuation lease schema cutover
 
 Migration `c156b2c3d523` is an intentional quiesced cutover, not a mixed-version rolling migration.

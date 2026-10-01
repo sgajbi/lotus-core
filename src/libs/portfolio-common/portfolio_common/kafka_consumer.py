@@ -6,7 +6,6 @@ import json
 import logging
 import re
 import time
-import traceback
 from abc import ABC, abstractmethod
 from collections import defaultdict, deque
 from contextlib import contextmanager
@@ -15,8 +14,6 @@ from typing import Dict, Iterator, Optional
 from uuid import uuid4
 
 from confluent_kafka import Consumer, Message, TopicPartition
-from pydantic import ValidationError
-from sqlalchemy import select
 
 from .config import (
     KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS,
@@ -25,7 +22,17 @@ from .config import (
     get_kafka_consumer_runtime_overrides,
 )
 from .connection_security import build_kafka_connection_config
-from .database_models import ConsumerDlqEvent, IngestionJob
+from .consumer_dlq_tenant import (
+    ConsumerDlqTenantAttributionError,
+    resolve_consumer_dlq_tenant_id,
+)
+from .consumer_error_evidence import (
+    source_safe_error_reason as _source_safe_error_reason,
+)
+from .consumer_error_evidence import (
+    source_safe_error_traceback as _source_safe_error_traceback,
+)
+from .database_models import ConsumerDlqEvent
 from .db import get_async_db_session
 from .exceptions import RetryableConsumerError
 from .ingestion_lineage import (
@@ -157,17 +164,6 @@ def _redacted_payload_text(raw_value: str) -> str:
     return json.dumps(redacted, separators=(",", ":"), sort_keys=True)
 
 
-def _source_safe_error_reason(error: Exception) -> str:
-    if isinstance(error, ValidationError):
-        return json.dumps(
-            error.errors(include_input=False),
-            default=str,
-            separators=(",", ":"),
-            sort_keys=True,
-        )
-    return redact_sensitive_text(str(error))
-
-
 def _message_attr_or_unknown(msg: Message, attr_name: str) -> str:
     try:
         value = getattr(msg, attr_name)()
@@ -192,12 +188,6 @@ def _message_bytes_text(value: bytes | None) -> str | None:
     if decoded is not None:
         return decoded
     return f"hex:{value.hex()}"
-
-
-def _source_safe_error_traceback(error: Exception) -> str:
-    if isinstance(error, ValidationError):
-        return f"{error.__class__.__name__}: {_source_safe_error_reason(error)}"
-    return redact_sensitive_text(traceback.format_exc())
 
 
 def _resolve_retryable_failure_budget_value(
@@ -481,9 +471,7 @@ class BaseConsumer(ABC):
         return self._resolve_message_correlation_id(msg)
 
     async def _send_to_dlq_async(self, msg: Message, error: Exception) -> bool:
-        """
-        Sends a message that failed processing to the Dead-Letter Queue.
-        """
+        """Publish a failed message to the broker DLQ before indexing database evidence."""
         if self._metrics:
             self._metrics["dlqd"].labels(
                 topic=self.topic, consumer_group=self._consumer_config["group.id"]
@@ -501,9 +489,7 @@ class BaseConsumer(ABC):
             message_correlation_id = normalize_lineage_value(
                 self._get_message_header_correlation_id(msg)
             )
-            ingestion_job_id = await self._resolve_persistable_ingestion_job_id(
-                normalize_ingestion_job_id(ingestion_job_id_var.get())
-            )
+            ingestion_job_id = normalize_ingestion_job_id(ingestion_job_id_var.get())
             error_reason_code = classify_dlq_reason_code(error)
             dlq_payload = self._build_dlq_payload(
                 msg,
@@ -521,23 +507,6 @@ class BaseConsumer(ABC):
             )
             self._publish_dlq_message(msg, payload=dlq_payload, headers=dlq_headers)
             self._confirm_dlq_delivery()
-            await self._record_consumer_dlq_event(
-                msg=msg,
-                error=error,
-                error_reason_code=error_reason_code,
-                correlation_id=message_correlation_id,
-                ingestion_job_id=ingestion_job_id,
-            )
-            self._record_consumer_event("dlq_published", error_reason_code)
-            self._log_consumer_event(
-                logging.WARNING,
-                "Kafka message published to DLQ.",
-                event_name="kafka.consumer.dlq_published",
-                status="succeeded",
-                reason_code=error_reason_code,
-                dlq_topic=self.dlq_topic,
-            )
-            return True
         except Exception as e:
             self._record_consumer_event("dlq_failed", "dlq_publish_error")
             self._log_consumer_event(
@@ -550,6 +519,51 @@ class BaseConsumer(ABC):
                 exc_info=True,
             )
             return False
+
+        try:
+            tenant_id = await self._resolve_consumer_dlq_tenant_id(ingestion_job_id)
+            await self._record_consumer_dlq_event(
+                msg=msg,
+                error=error,
+                error_reason_code=error_reason_code,
+                correlation_id=message_correlation_id,
+                ingestion_job_id=ingestion_job_id,
+                tenant_id=tenant_id,
+            )
+            self._record_consumer_event("dlq_published", error_reason_code)
+            self._log_consumer_event(
+                logging.WARNING,
+                "Kafka message published to DLQ.",
+                event_name="kafka.consumer.dlq_published",
+                status="succeeded",
+                reason_code=error_reason_code,
+                dlq_topic=self.dlq_topic,
+            )
+            return True
+        except ConsumerDlqTenantAttributionError as e:
+            self._record_consumer_event("dlq_published", "database_evidence_tenant_unavailable")
+            self._log_consumer_event(
+                logging.WARNING,
+                "Kafka DLQ published; database evidence indexing refused because tenant "
+                "attribution is unavailable.",
+                event_name="kafka.consumer.dlq_tenant_attribution_failed",
+                status="degraded",
+                reason_code="database_evidence_tenant_unavailable",
+                error_type=type(e).__name__,
+            )
+            return True
+        except Exception as e:
+            self._record_consumer_event("dlq_published", "database_evidence_indexing_failed")
+            self._log_consumer_event(
+                logging.ERROR,
+                "Kafka DLQ published; database evidence indexing failed.",
+                event_name="kafka.consumer.dlq_evidence_indexing_failed",
+                status="degraded",
+                reason_code="database_evidence_indexing_failed",
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
+            return True
 
     def _build_dlq_payload(
         self,
@@ -596,27 +610,11 @@ class BaseConsumer(ABC):
             dlq_headers.append(("traceparent", normalized_traceparent.encode("utf-8")))
         return dlq_headers
 
-    async def _resolve_persistable_ingestion_job_id(
+    async def _resolve_consumer_dlq_tenant_id(
         self,
         ingestion_job_id: str | None,
-    ) -> str | None:
-        if ingestion_job_id is None:
-            return None
-        async for db in get_async_db_session():
-            result = await db.execute(
-                select(IngestionJob.job_id).where(IngestionJob.job_id == ingestion_job_id)
-            )
-            if result.scalar_one_or_none() is not None:
-                return ingestion_job_id
-            self._log_consumer_event(
-                logging.WARNING,
-                "Kafka message references an unknown ingestion job; DLQ ownership omitted.",
-                event_name="kafka.consumer.ingestion_job_owner_unknown",
-                status="degraded",
-                reason_code="ingestion_job_owner_unknown",
-            )
-            return None
-        raise RuntimeError("Database session unavailable while resolving DLQ ingestion owner.")
+    ) -> str:
+        return await resolve_consumer_dlq_tenant_id(ingestion_job_id)
 
     def _publish_dlq_message(
         self,
@@ -666,6 +664,7 @@ class BaseConsumer(ABC):
         error: Exception,
         error_reason_code: str,
         correlation_id: str | None,
+        tenant_id: str,
         ingestion_job_id: str | None = None,
     ) -> None:
         payload_excerpt = None
@@ -675,6 +674,7 @@ class BaseConsumer(ABC):
         except Exception:
             payload_excerpt = None
         event = ConsumerDlqEvent(
+            tenant_id=tenant_id,
             event_id=f"cdlq_{uuid4().hex}",
             original_topic=msg.topic(),
             consumer_group=self._consumer_config["group.id"],

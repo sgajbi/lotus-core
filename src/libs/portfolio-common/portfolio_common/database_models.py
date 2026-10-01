@@ -23,6 +23,10 @@ from sqlalchemy.orm import relationship
 
 from . import portfolio_aggregation_job_schema as job_schema
 from . import source_lifecycle_predicates as lc
+from .consumer_dlq_schema import (
+    consumer_dlq_event_table_args,
+    consumer_dlq_replay_audit_table_args,
+)
 from .database_text_contract import (
     PYTHON_ISO_DATE_TEXT_VALID_SQL,
     PYTHON_ISO_DATETIME_WITH_TIMEZONE_PATTERN_SQL,
@@ -4788,7 +4792,8 @@ class ConsumerDlqEvent(Base):
     __tablename__ = "consumer_dlq_events"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    event_id = Column(String, unique=True, index=True, nullable=False)
+    event_id = Column(String, nullable=False)
+    tenant_id = Column(String(128), nullable=False)
     original_topic = Column(String, index=True, nullable=False)
     consumer_group = Column(String, index=True, nullable=False)
     dlq_topic = Column(String, index=True, nullable=False)
@@ -4801,35 +4806,22 @@ class ConsumerDlqEvent(Base):
     ingestion_job_id = Column(
         String,
         ForeignKey("ingestion_jobs.job_id"),
-        nullable=True,
+        nullable=False,
     )
     correlation_missing_reason = Column(String, nullable=True)
     alternate_lookup_key = Column(String, nullable=True)
     payload_excerpt = Column(Text, nullable=True)
     observed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
-    __table_args__ = (
-        Index(
-            "ix_consumer_dlq_events_group_topic_observed_at",
-            "consumer_group",
-            "original_topic",
-            observed_at.desc(),
-        ),
-        Index("ix_consumer_dlq_events_alternate_lookup_key", "alternate_lookup_key"),
-        Index(
-            "ix_consumer_dlq_events_job_observed_id",
-            "ingestion_job_id",
-            observed_at.desc(),
-            id.desc(),
-        ),
-    )
+    __table_args__ = consumer_dlq_event_table_args(observed_at=observed_at, row_id=id)
 
 
 class ConsumerDlqReplayAudit(Base):
     __tablename__ = "consumer_dlq_replay_audit"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    replay_id = Column(String, unique=True, index=True, nullable=False)
+    replay_id = Column(String, nullable=False)
+    tenant_id = Column(String(128), nullable=False)
     recovery_path = Column(String, nullable=False, server_default="consumer_dlq_replay", index=True)
     event_id = Column(String, index=True, nullable=False)
     replay_fingerprint = Column(String, index=True, nullable=False)
@@ -4845,28 +4837,7 @@ class ConsumerDlqReplayAudit(Base):
     requested_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
-    __table_args__ = (
-        Index(
-            "ix_consumer_dlq_replay_audit_path_status_requested_at",
-            "recovery_path",
-            "replay_status",
-            requested_at.desc(),
-        ),
-        Index(
-            "ix_consumer_dlq_replay_audit_fingerprint_status_path",
-            "replay_fingerprint",
-            "replay_status",
-            "recovery_path",
-            requested_at.desc(),
-        ),
-        Index("ix_consumer_dlq_replay_audit_alternate_lookup_key", "alternate_lookup_key"),
-        Index(
-            "ix_consumer_dlq_replay_audit_job_requested_id",
-            "job_id",
-            requested_at.desc(),
-            id.desc(),
-        ),
-    )
+    __table_args__ = consumer_dlq_replay_audit_table_args(requested_at=requested_at, row_id=id)
 
 
 class EnterpriseSecurityAuditEvent(Base):

@@ -337,6 +337,19 @@ dispatcher retain application time only for telemetry, poll cadence, and ordinar
 and the configured lease must exceed the measured batch/delivery budget. A host-clock skew therefore
 cannot steal a live claim or authorize a late terminal write.
 
+Migration `c176b2c3d537` requires a quiesced consumer-DLQ and replay-audit writer cutover. Stop all
+consumers that publish or index `consumer_dlq_events` and stop Event Replay mutations that write
+`consumer_dlq_replay_audit`; drain in-flight work, retain broker offsets and lag evidence, and wait
+for database writer sessions to close. Apply the migration, deploy the complete compatible
+consumer and Event Replay reader/writer set, and only then resume from retained offsets. The
+migration fails closed on unattributable history, unknown retained replay jobs, or conflicting job
+and linked-DLQ ownership. Repair only from durable source evidence: never invent an owner, assign an
+estate tenant, delete evidence rows, or bypass the failure. For rollback, quiesce new writers and
+capture fresh offset/lag evidence first. Downgrade proceeds only when tenant-scoped `event_id` and
+`replay_id` values have no cross-tenant collision; otherwise retain the revision or reconcile from
+governed evidence rather than deleting rows or fabricating ownership. Deploy the complete old
+compatibility set before resuming writers.
+
 Migration `c161b2c3d528` requires a quiesced reprocessing queue. Stop old workers and ensure no
 `PROCESSING` rows remain before upgrade; the migration fails closed otherwise. For rollback, stop
 new workers and clear active work through governed recovery or terminal processing before

@@ -100,12 +100,15 @@ class _FakeReplayAuditStore:
     async def find_successful_replay_audit_by_fingerprint(
         self,
         *,
+        tenant_id: str,
         replay_fingerprint: str,
         recovery_path: str | None,
     ) -> dict[str, str] | None:
+        assert tenant_id == TEST_TENANT_ID
         return None
 
     async def record_consumer_dlq_replay_audit(self, record: ReplayAuditRecord) -> str:
+        assert record.tenant_id == TEST_TENANT_ID
         self.records.append(record)
         if self.fail:
             raise InfrastructureAuditWriteFailed(
@@ -114,18 +117,21 @@ class _FakeReplayAuditStore:
             )
         return "replay-001"
 
-    async def get_replay_audit(self, *, replay_id: str):
+    async def get_replay_audit(self, *, tenant_id: str, replay_id: str):
+        assert tenant_id == TEST_TENANT_ID
         return None
 
     async def list_replay_audits(
         self,
         *,
+        tenant_id: str,
         limit: int,
         recovery_path: str | None,
         replay_status: str | None,
         replay_fingerprint: str | None,
         job_id: str | None,
     ):
+        assert tenant_id == TEST_TENANT_ID
         return []
 
 
@@ -153,6 +159,7 @@ async def test_audit_workflow_records_replay_audit_through_port() -> None:
     store = _FakeReplayAuditStore()
     workflow = AuditWorkflow(store)
     record = ReplayAuditRecord(
+        tenant_id=TEST_TENANT_ID,
         recovery_path="consumer_dlq_replay",
         event_id="event-001",
         replay_fingerprint="fp-001",
@@ -177,6 +184,7 @@ async def test_audit_workflow_preserves_fail_closed_audit_error() -> None:
     store = _FakeReplayAuditStore(fail=True)
     workflow = AuditWorkflow(store)
     record = ReplayAuditRecord(
+        tenant_id=TEST_TENANT_ID,
         recovery_path="consumer_dlq_replay",
         event_id="event-001",
         replay_fingerprint="fp-001",

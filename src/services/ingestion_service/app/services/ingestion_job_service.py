@@ -426,59 +426,71 @@ class IngestionJobService:
     async def list_consumer_dlq_events(
         self,
         *,
+        tenant_id: str,
         limit: int = 100,
         original_topic: str | None = None,
         consumer_group: str | None = None,
     ) -> list[ConsumerDlqEventResponse]:
         return await list_consumer_dlq_event_responses(
+            tenant_id=tenant_id,
             limit=limit,
             original_topic=original_topic,
             consumer_group=consumer_group,
-            session_factory=get_async_db_session,
+            session_factory=self._session_factory(),
         )
 
-    async def get_consumer_dlq_event(self, event_id: str) -> ConsumerDlqEventResponse | None:
+    async def get_consumer_dlq_event(
+        self, event_id: str, *, tenant_id: str
+    ) -> ConsumerDlqEventResponse | None:
         return await get_consumer_dlq_event_response(
+            tenant_id=tenant_id,
             event_id=event_id,
-            session_factory=get_async_db_session,
+            session_factory=self._session_factory(),
         )
 
     async def list_consumer_dlq_events_by_job_id(
         self,
         job_id: str,
         *,
+        tenant_id: str,
         limit: int = 500,
     ) -> list[ConsumerDlqEventResponse]:
         return await list_consumer_dlq_event_responses(
+            tenant_id=tenant_id,
             limit=limit,
             original_topic=None,
             consumer_group=None,
             ingestion_job_id=job_id,
-            session_factory=get_async_db_session,
+            session_factory=self._session_factory(),
         )
 
     async def list_consumer_dlq_events_by_event_ids(
         self,
         event_ids: tuple[str, ...],
         *,
+        tenant_id: str,
         limit: int = 500,
     ) -> list[ConsumerDlqEventResponse]:
         if not event_ids:
             return []
         return await list_consumer_dlq_event_responses(
+            tenant_id=tenant_id,
             limit=limit,
             original_topic=None,
             consumer_group=None,
             event_ids=event_ids,
-            session_factory=get_async_db_session,
+            session_factory=self._session_factory(),
         )
 
     async def find_successful_replay_audit_by_fingerprint(
         self,
         replay_fingerprint: str,
+        *,
+        tenant_id: str,
         recovery_path: str | None = None,
     ) -> dict[str, str] | None:
         return await self._replay_audit_store_adapter.find_successful_replay_audit_by_fingerprint(
+            tenant_id=tenant_id,
             replay_fingerprint=replay_fingerprint,
             recovery_path=recovery_path,
         )
@@ -486,6 +498,7 @@ class IngestionJobService:
     async def record_consumer_dlq_replay_audit(
         self,
         *,
+        tenant_id: str,
         recovery_path: str,
         event_id: str,
         replay_fingerprint: str,
@@ -501,6 +514,7 @@ class IngestionJobService:
     ) -> str:
         return await self._audit_workflow.record_replay_audit(
             ReplayAuditRecord(
+                tenant_id=tenant_id,
                 recovery_path=recovery_path,
                 event_id=event_id,
                 replay_fingerprint=replay_fingerprint,
@@ -516,14 +530,18 @@ class IngestionJobService:
             )
         )
 
-    async def get_replay_audit(self, replay_id: str) -> IngestionReplayAuditResponse | None:
+    async def get_replay_audit(
+        self, replay_id: str, *, tenant_id: str
+    ) -> IngestionReplayAuditResponse | None:
         return await self._replay_audit_store_adapter.get_replay_audit(
+            tenant_id=tenant_id,
             replay_id=replay_id,
         )
 
     async def list_replay_audits(
         self,
         *,
+        tenant_id: str,
         limit: int = 100,
         recovery_path: str | None = None,
         replay_status: str | None = None,
@@ -531,6 +549,7 @@ class IngestionJobService:
         job_id: str | None = None,
     ) -> list[IngestionReplayAuditResponse]:
         return await self._replay_audit_store_adapter.list_replay_audits(
+            tenant_id=tenant_id,
             limit=limit,
             recovery_path=recovery_path,
             replay_status=replay_status,

@@ -87,6 +87,12 @@ REQUIRED_PORTFOLIO_TENANT_MIGRATION = (
     / "versions"
     / "c165b2c3d52c_fix_require_portfolio_tenant.py"
 )
+DLQ_REPLAY_TENANT_MIGRATION = (
+    Path(__file__).resolve().parents[2]
+    / "alembic"
+    / "versions"
+    / "c176b2c3d537_scope_dlq_replay_audit_tenant.py"
+)
 
 PORTFOLIO_INSERT = text(
     """
@@ -131,6 +137,15 @@ def _downgrade_dependent_schema(connection) -> list[dict[str, Any]]:
     """Downgrade later schema that deliberately references valuation-book scope."""
 
     dependent_migrations: list[dict[str, Any]] = []
+    if "tenant_id" in {
+        column["name"] for column in inspect(connection).get_columns("consumer_dlq_events")
+    }:
+        dlq_replay_tenant_migration: dict[str, Any] = runpy.run_path(
+            str(DLQ_REPLAY_TENANT_MIGRATION)
+        )
+        _bind_operations(dlq_replay_tenant_migration, connection)
+        dlq_replay_tenant_migration["downgrade"]()
+        dependent_migrations.append(dlq_replay_tenant_migration)
     if "tenant_id" in {
         column["name"] for column in inspect(connection).get_columns("portfolio_aggregation_jobs")
     }:
@@ -369,3 +384,16 @@ def test_portfolio_valuation_book_scope_applies_rolls_back_and_enforces_authorit
                         "legal_book_id": None,
                     },
                 )
+            if any(migration["revision"] == "c176b2c3d537" for migration in dependent_migrations):
+                for table_name, constraint_name in (
+                    ("consumer_dlq_events", "fk_consumer_dlq_events_tenant_job"),
+                    (
+                        "consumer_dlq_replay_audit",
+                        "fk_consumer_dlq_replay_audit_tenant_job",
+                    ),
+                ):
+                    foreign_keys = {
+                        foreign_key["name"]
+                        for foreign_key in inspector.get_foreign_keys(table_name)
+                    }
+                    assert constraint_name in foreign_keys

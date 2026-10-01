@@ -1441,12 +1441,13 @@ section shape and derive the usage line from a fresh scan rather than copying a 
 
 - **Purpose**: Dead-letter event archive.
 - **Description**: Captured failed-consumer events with reason and context.
-- **Relationships**: `ingestion_job_id` -> `ingestion_jobs.job_id`
+- **Relationships**: (`tenant_id`, `ingestion_job_id`) -> (`ingestion_jobs.tenant_id`, `ingestion_jobs.job_id`)
 - **Usage (modules/features)**: `src/services/ingestion_service/app/services/ingestion_job_service.py`, `src/services/event_replay_service/app/routers/ingestion_operations.py`, `src/services/ingestion_service/app/DTOs/ingestion_job_dto.py`, `src/libs/portfolio-common/portfolio_common/kafka_consumer.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
-  - `event_id` (String): Identifier for event.
+  - `tenant_id` (String): Non-null admitted tenant authority; part of the event identity and every supported read selector.
+  - `event_id` (String): Tenant-scoped event identifier, unique with `tenant_id`.
   - `original_topic` (String): Domain attribute used by the owning module.
   - `consumer_group` (String): Domain attribute used by the owning module.
   - `dlq_topic` (String): Domain attribute used by the owning module.
@@ -1463,12 +1464,13 @@ section shape and derive the usage line from a fresh scan rather than copying a 
 
 - **Purpose**: Replay audit trail for DLQ remediation.
 - **Description**: Records replay requests/outcomes for governance and incident forensics.
-- **Relationships**: No explicit foreign-key relationships declared.
+- **Relationships**: Optional (`tenant_id`, `job_id`) -> (`ingestion_jobs.tenant_id`, `ingestion_jobs.job_id`)
 - **Usage (modules/features)**: `src/services/ingestion_service/app/services/ingestion_job_service.py`, `src/services/event_replay_service/app/routers/ingestion_operations.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
-  - `replay_id` (String): Identifier for replay.
+  - `tenant_id` (String): Non-null admitted tenant authority; part of replay identity and all supported reads.
+  - `replay_id` (String): Tenant-scoped replay identifier, unique with `tenant_id`.
   - `recovery_path` (String): Domain attribute used by the owning module.
   - `event_id` (String): Identifier for event.
   - `replay_fingerprint` (String): Domain attribute used by the owning module.
