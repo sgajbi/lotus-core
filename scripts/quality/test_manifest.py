@@ -93,6 +93,8 @@ SUITES: dict[str, list[str]] = {
         "test_source_cut_refresh_statement_has_bounded_actual_tuple_work",
         "tests/integration/services/query_service/test_integration_cashflow_repository.py::"
         "test_cashflow_source_cut_is_stable_across_products_and_rejects_foreign_tenant",
+        "tests/integration/services/query_service/test_liquidity_ladder_postgresql.py::"
+        "test_registered_liquidity_ladder_distinguishes_null_zero_and_positive_postgresql",
         "tests/integration/services/persistence_service/repositories/test_repositories.py::"
         "test_supported_portfolio_upsert_recasts_cashflow_source_cut_currency",
         "tests/integration/services/calculators/position_valuation_calculator/"

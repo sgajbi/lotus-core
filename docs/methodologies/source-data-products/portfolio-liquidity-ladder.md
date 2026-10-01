@@ -86,6 +86,24 @@ MV_t = sum(snapshot.market_value for non-cash positions where instrument.liquidi
 
 Missing tier values are grouped under `UNCLASSIFIED`.
 
+Valuation qualification is fail-closed. A genuine numeric zero in a `VALUED`, `VALUED_CURRENT`, or
+`VALUED_STALE` snapshot remains an observed amount. A null value or any other valuation status is
+unknown, not zero. If any contributing cash valuation is unusable, `C0`, every `CA_k`,
+every `S_k`, projected end cash, and maximum shortfall are null; independently sourced `B_k`,
+`P_k`, and `N_k` remain available. If a non-cash tier contains a null valuation, that tier amount
+and the portfolio non-cash total are null while its position count remains observable. A row with
+no instrument or a null/blank `asset_class` is not assumed to be cash or non-cash, so cash and
+non-cash aggregate totals are null. A known non-cash asset class with no `liquidity_tier` remains an
+`UNCLASSIFIED` tier. Bounded degradation reason codes identify each affected source condition.
+Affected response fields remain required and serialize JSON `null`, so consumers cannot confuse an
+omitted contract field with an observed monetary zero.
+
+Valuation qualification does not alter snapshot chronology. The repository continues to select the
+latest eligible current-epoch snapshot at or before `as_of_date`; an older eligible observation is
+not silently rewritten as a current valuation. Row-level degradation publishes that selected
+snapshot's date and latest evidence timestamp; only an empty-holdings section uses the requested
+as-of date because no row chronology exists.
+
 ## Step-by-Step Computation
 
 1. Resolve the portfolio; fail with 404-equivalent service error when missing.
@@ -107,8 +125,11 @@ Missing tier values are grouped under `UNCLASSIFIED`.
 | Missing portfolio | Raises `Portfolio with id <id> not found`; router maps to HTTP 404. |
 | Missing business date | Raises `No business date is available for liquidity ladder queries.`; router maps to HTTP 400. |
 | Invalid horizon | Raises `horizon_days must be between 0 and 366.`; router and FastAPI validation reject the request. |
-| No source holding rows | Returns `data_quality_status=UNKNOWN`. |
-| Source rows and buckets present | Returns `data_quality_status=COMPLETE`. |
+| No source holding rows | Returns `data_quality_status=UNKNOWN`, null economic totals, and `SOURCE_HOLDINGS_UNAVAILABLE`. |
+| Eligible cash row has null market value or unusable valuation status | Returns `data_quality_status=PARTIAL`, null cash-derived totals, and `CASH_VALUATION_UNAVAILABLE`; booked/projected/net cashflow remains populated. |
+| Confirmed non-cash row has null market value or unusable valuation status | Returns `data_quality_status=PARTIAL`, null affected tier and non-cash total, and `NON_CASH_VALUATION_UNAVAILABLE`. |
+| Instrument reference or asset-class classification is absent/blank | Returns `data_quality_status=PARTIAL`, null cash and non-cash aggregate totals, and `INSTRUMENT_CLASSIFICATION_UNAVAILABLE`. |
+| Source rows and buckets have complete valuation/classification evidence | Returns `data_quality_status=COMPLETE`. |
 
 ## Configuration Options
 

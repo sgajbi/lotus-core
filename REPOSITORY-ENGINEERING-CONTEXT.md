@@ -20,6 +20,14 @@ Core owns source facts and their financial, temporal, tenant, lineage, audit, re
 semantics. Downstream services consume those governed facts; they must not reconstruct competing
 Core truth.
 
+`PortfolioLiquidityLadder:v1` treats a missing value, unusable valuation status, or missing/blank
+asset-class authority as unavailable evidence, never as economic zero. Cash-derived availability
+and shortfall fields remain nullable until opening cash is known; non-cash totals remain nullable
+when valuation or instrument classification is incomplete. Degradation details retain the selected
+snapshot's source chronology rather than substituting the requested as-of date.
+Booked and projected cashflow components retain their independent source truth, and consumers must
+honour bounded degradation reasons before drawing funding conclusions.
+
 For transaction economics, an admitted positive `transaction_fx_rate` is source-booked historical
 cost authority. Cost enrichment derives reference FX only when that field is absent; generated
 settlement cash uses the supplied rate or derives at settlement date, and ordinary replay preserves

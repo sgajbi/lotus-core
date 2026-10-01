@@ -1,5 +1,20 @@
 # Codebase Review Ledger
 
+CR-1733 Liquidity-ladder unknown-valuation qualification (2026-10-01, fixed-local candidate):
+`PortfolioLiquidityLadderService` converted nullable eligible cash and non-cash snapshot values to
+zero, then reported `COMPLETE`. The service now preserves genuine zero, positive, and negative
+values while publishing nullable cash-derived or non-cash totals and bounded degradation reasons
+for absent valuation, unusable valuation status, absent holdings, and missing/blank asset-class
+classification. Row-level degradation retains selected snapshot chronology. Independently known
+booked/projected/net cashflows remain available. Focused unit proof covers the null/zero/positive/
+negative matrix, mixed known/unknown values, empty holdings, and classification gaps. A registered
+query-service route backed by real PostgreSQL proves that the eligible current-epoch, non-zero-
+quantity cash snapshot is selected and serialized differently for null, zero, and 100, while a
+foreign tenant remains indistinguishable from absence. The regression is wired into the bounded
+critical PostgreSQL manifest. This is local test evidence, not canonical runtime, deployment, or
+production certification; PR CI, exact-main validation, wiki publication, and downstream consumer
+acceptance remain separate under #1174.
+
 CR-1732 Historical collective reconciliation controls (2026-09-21, fixed-local candidate):
 canonical `PB_SG_GLOBAL_BAL_001` exposed an old SAP position-history business date at epoch 0
 while a later cash fact raised the required collective control epoch to 1. Existing carry-forward
