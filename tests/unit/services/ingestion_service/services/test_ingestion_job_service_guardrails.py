@@ -580,6 +580,7 @@ async def test_record_consumer_dlq_replay_audit_increments_duplicate_blocked_met
     monkeypatch.setattr(replay_audits_module, "INGESTION_REPLAY_FAILURE_TOTAL", failure_counter)
 
     replay_id = await service.record_consumer_dlq_replay_audit(
+        tenant_id="tenant-a",
         recovery_path="ingestion_job_retry",
         event_id="job:job_123",
         replay_fingerprint="fp_123",
@@ -637,6 +638,7 @@ async def test_record_consumer_dlq_replay_audit_increments_failure_metric(
     monkeypatch.setattr(replay_audits_module, "INGESTION_REPLAY_FAILURE_TOTAL", failure_counter)
 
     await service.record_consumer_dlq_replay_audit(
+        tenant_id="tenant-a",
         recovery_path="consumer_dlq_replay",
         event_id="event_123",
         replay_fingerprint="fp_456",
@@ -712,6 +714,7 @@ async def test_list_replay_audits_maps_ordered_rows(
     )
 
     audits = await service.list_replay_audits(
+        tenant_id="tenant-a",
         limit=2,
         recovery_path="consumer_dlq_replay",
         replay_status="failed",
@@ -758,6 +761,7 @@ async def test_record_consumer_dlq_replay_audit_increments_bookkeeping_failure_m
     monkeypatch.setattr(replay_audits_module, "INGESTION_REPLAY_FAILURE_TOTAL", failure_counter)
 
     await service.record_consumer_dlq_replay_audit(
+        tenant_id="tenant-a",
         recovery_path="consumer_dlq_replay",
         event_id="event_123",
         replay_fingerprint="fp_789",

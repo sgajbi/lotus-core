@@ -69,10 +69,12 @@ class SqlAlchemyReplayAuditStore:
     async def find_successful_replay_audit_by_fingerprint(
         self,
         *,
+        tenant_id: str,
         replay_fingerprint: str,
         recovery_path: str | None,
     ) -> dict[str, str] | None:
         return await find_successful_replay_audit_by_fingerprint_response(
+            tenant_id=tenant_id,
             replay_fingerprint=replay_fingerprint,
             recovery_path=recovery_path,
             session_factory=self._session_factory,
@@ -80,6 +82,7 @@ class SqlAlchemyReplayAuditStore:
 
     async def record_consumer_dlq_replay_audit(self, record: ReplayAuditRecord) -> str:
         return await record_consumer_dlq_replay_audit_response(
+            tenant_id=record.tenant_id,
             recovery_path=record.recovery_path,
             event_id=record.event_id,
             replay_fingerprint=record.replay_fingerprint,
@@ -95,8 +98,9 @@ class SqlAlchemyReplayAuditStore:
             session_factory=self._session_factory,
         )
 
-    async def get_replay_audit(self, *, replay_id: str):
+    async def get_replay_audit(self, *, tenant_id: str, replay_id: str):
         return await get_replay_audit_response(
+            tenant_id=tenant_id,
             replay_id=replay_id,
             session_factory=self._session_factory,
         )
@@ -104,6 +108,7 @@ class SqlAlchemyReplayAuditStore:
     async def list_replay_audits(
         self,
         *,
+        tenant_id: str,
         limit: int,
         recovery_path: str | None,
         replay_status: str | None,
@@ -111,6 +116,7 @@ class SqlAlchemyReplayAuditStore:
         job_id: str | None,
     ):
         return await list_replay_audit_responses(
+            tenant_id=tenant_id,
             limit=limit,
             recovery_path=recovery_path,
             replay_status=replay_status,

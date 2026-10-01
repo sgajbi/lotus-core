@@ -158,6 +158,13 @@ That is why the replay service is a distinct control plane inside core rather th
 - canonical write ingress remains in `ingestion_service`
 - event replay owns replay, DLQ, backlog, ops-mode, and ingestion-health control APIs
 - replay routes must preserve idempotency semantics and durable audit evidence
+- consumer-DLQ and replay-audit list/direct/job/fingerprint reads are tenant-bound before
+  pagination; a foreign identifier receives the same not-found posture as an absent identifier
+- consumer-DLQ database indexing requires a durable owning ingestion job. When attribution is
+  unavailable, the broker DLQ publication remains successful while database indexing is refused
+  with explicit degraded telemetry; no estate tenant or privileged global read is synthesized
+- `event_id` and `replay_id` are unique within tenant authority, so equal opaque identifiers in
+  different tenants do not broaden visibility
 - transaction replay identity covers immutable booking inputs; processor-owned cost/P&L outputs and
   exact Core-generated linkage/policy defaults must not turn an unchanged persisted replay into a
   semantic conflict, while custom linkage and policy values remain material

@@ -25,6 +25,12 @@ MIGRATION = (
     / "versions"
     / "c133b2c3d506_feat_add_ingestion_dlq_job_ownership.py"
 )
+HEAD_DLQ_MIGRATION = (
+    Path(__file__).resolve().parents[2]
+    / "alembic"
+    / "versions"
+    / "c176b2c3d537_scope_dlq_replay_audit_tenant.py"
+)
 
 
 def _bind_operations(migration: dict[str, Any], connection) -> Operations:
@@ -69,6 +75,9 @@ def test_migration_backfills_only_unique_correlation_owner_and_enforces_fk(
 
     with db_engine.begin() as connection:
         head_schema = connection.begin_nested()
+        head_migration: dict[str, Any] = runpy.run_path(str(HEAD_DLQ_MIGRATION))
+        _bind_operations(head_migration, connection)
+        head_migration["downgrade"]()
         operations = _bind_operations(migration, connection)
         _normalize_to_previous_revision(operations, connection)
         evidence_columns, evidence_values = transaction_ingestion_job_insert_fragments(connection)

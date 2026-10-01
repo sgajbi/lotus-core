@@ -175,6 +175,7 @@ async def test_consumer_dlq_mandatory_replay_audit_returns_replay_id() -> None:
     replay_id = await _consumer_service(
         ingestion_job_service=ingestion_job_service
     )._record_mandatory_replay_audit(
+        tenant_id=TENANT_ID,
         event_id="dlq-123",
         replay_fingerprint="fp-456",
         correlation_id="corr-123",
@@ -209,6 +210,7 @@ async def test_consumer_dlq_mandatory_replay_audit_failure_raises_governed_error
         await _consumer_service(
             ingestion_job_service=ingestion_job_service
         )._record_mandatory_replay_audit(
+            tenant_id=TENANT_ID,
             event_id="dlq-123",
             replay_fingerprint="fp-456",
             correlation_id="corr-123",
@@ -267,6 +269,7 @@ async def test_consumer_dlq_not_replayable_records_missing_correlation_diagnosti
     response = await _consumer_service(
         ingestion_job_service=ingestion_job_service
     )._consumer_dlq_not_replayable_result(
+        tenant_id=TENANT_ID,
         event_id="dlq-003",
         correlation_id=None,
         correlation_missing_reason="message_correlation_id_absent",

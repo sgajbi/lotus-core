@@ -78,6 +78,7 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/test_portfolio_valuation_book_scope_migration.py",
         "tests/integration/test_transaction_event_fence_tenant_migration.py",
         "tests/integration/test_transaction_payload_fingerprint_migration.py",
+        "tests/integration/test_ingestion_dlq_replay_tenant_migration.py",
         "tests/integration/services/persistence_service/repositories/"
         "test_transaction_payload_conflict.py",
         "tests/integration/test_aggregation_job_tenant_migration.py",

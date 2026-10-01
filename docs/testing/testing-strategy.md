@@ -16,6 +16,12 @@ This document defines the repository-wide testing architecture used to keep lotu
    1. Validate multi-service workflows and externalized behavior.
    2. Used for release confidence, not for inner-loop iteration.
 
+Database integration fixtures start at the migration head applied by the isolated test stack.
+To test a historical migration directly, restore its predecessor inside a rollback-safe
+transaction/savepoint before invoking its upgrade; never apply the head revision twice.
+Use the governed database engine factory for separate asynchronous test sessions, and
+verify the runtime image contains the same migration bytes as the checkout.
+
 ## Consumer-Boundary Pattern
 
 Use a focused consume-process-persist test pattern to bridge unit and full E2E:

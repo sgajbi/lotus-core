@@ -40,6 +40,7 @@ def to_replay_audit_response(row: DBConsumerDlqReplayAudit) -> IngestionReplayAu
 
 async def list_replay_audit_responses(
     *,
+    tenant_id: str,
     limit: int,
     recovery_path: str | None,
     replay_status: str | None,
@@ -48,7 +49,9 @@ async def list_replay_audit_responses(
     session_factory,
 ) -> list[IngestionReplayAuditResponse]:
     async for db in session_factory():
-        stmt = select(DBConsumerDlqReplayAudit)
+        stmt = select(DBConsumerDlqReplayAudit).where(
+            DBConsumerDlqReplayAudit.tenant_id == tenant_id
+        )
         if recovery_path:
             stmt = stmt.where(DBConsumerDlqReplayAudit.recovery_path == recovery_path)
         if replay_status:
@@ -71,13 +74,17 @@ async def list_replay_audit_responses(
 
 async def get_replay_audit_response(
     *,
+    tenant_id: str,
     replay_id: str,
     session_factory,
 ) -> IngestionReplayAuditResponse | None:
     async for db in session_factory():
         row = await db.scalar(
             select(DBConsumerDlqReplayAudit)
-            .where(DBConsumerDlqReplayAudit.replay_id == replay_id)
+            .where(
+                DBConsumerDlqReplayAudit.tenant_id == tenant_id,
+                DBConsumerDlqReplayAudit.replay_id == replay_id,
+            )
             .limit(1)
         )
         return to_replay_audit_response(row) if row else None
@@ -86,6 +93,7 @@ async def get_replay_audit_response(
 
 async def find_successful_replay_audit_by_fingerprint_response(
     *,
+    tenant_id: str,
     replay_fingerprint: str,
     recovery_path: str | None,
     session_factory,
@@ -93,6 +101,7 @@ async def find_successful_replay_audit_by_fingerprint_response(
     async for db in session_factory():
         stmt = select(DBConsumerDlqReplayAudit).where(
             and_(
+                DBConsumerDlqReplayAudit.tenant_id == tenant_id,
                 DBConsumerDlqReplayAudit.replay_fingerprint == replay_fingerprint,
                 DBConsumerDlqReplayAudit.replay_status.in_(_SUCCESSFUL_REPLAY_AUDIT_STATUSES),
             )
@@ -113,6 +122,7 @@ async def find_successful_replay_audit_by_fingerprint_response(
 
 async def record_consumer_dlq_replay_audit_response(
     *,
+    tenant_id: str,
     recovery_path: str,
     event_id: str,
     replay_fingerprint: str,
@@ -133,6 +143,7 @@ async def record_consumer_dlq_replay_audit_response(
             async with db.begin():
                 db.add(
                     DBConsumerDlqReplayAudit(
+                        tenant_id=tenant_id,
                         replay_id=replay_id,
                         recovery_path=recovery_path,
                         event_id=event_id,

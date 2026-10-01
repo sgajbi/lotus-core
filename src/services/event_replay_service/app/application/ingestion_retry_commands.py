@@ -115,6 +115,7 @@ class IngestionRetryCommandService:
             )
 
         await self._block_duplicate_ingestion_job_retry(
+            tenant_id=tenant_id,
             job_id=job_id,
             context=context,
             replay_fingerprint=replay_fingerprint,
@@ -278,6 +279,7 @@ class IngestionRetryCommandService:
         tenant_id: str,
     ) -> Any:
         await self._record_ingestion_job_retry_audit(
+            tenant_id=tenant_id,
             job_id=job_id,
             context=context,
             replay_fingerprint=replay_fingerprint,
@@ -300,6 +302,7 @@ class IngestionRetryCommandService:
     async def _block_duplicate_ingestion_job_retry(
         self,
         *,
+        tenant_id: str,
         job_id: str,
         context: Any,
         replay_fingerprint: str,
@@ -308,11 +311,13 @@ class IngestionRetryCommandService:
         existing_success = (
             await self.ingestion_job_service.find_successful_replay_audit_by_fingerprint(
                 replay_fingerprint=replay_fingerprint,
+                tenant_id=tenant_id,
                 recovery_path="ingestion_job_retry",
             )
         )
         if existing_success:
             await self._record_ingestion_job_retry_audit(
+                tenant_id=tenant_id,
                 job_id=job_id,
                 context=context,
                 replay_fingerprint=replay_fingerprint,
@@ -365,6 +370,7 @@ class IngestionRetryCommandService:
                 failure_headers=None,
             ).reason
             replay_audit_id = await self._record_ingestion_job_retry_audit(
+                tenant_id=tenant_id,
                 job_id=job_id,
                 context=context,
                 replay_fingerprint=replay_fingerprint,
@@ -423,6 +429,7 @@ class IngestionRetryCommandService:
             )
             if not transitioned:
                 replay_audit_id = await self._record_mandatory_replay_audit(
+                    tenant_id=tenant_id,
                     recovery_path="ingestion_job_retry",
                     event_id=f"job:{job_id}",
                     replay_fingerprint=replay_fingerprint,
@@ -453,6 +460,7 @@ class IngestionRetryCommandService:
                     ),
                 )
             await self._record_ingestion_job_retry_audit(
+                tenant_id=tenant_id,
                 job_id=job_id,
                 context=context,
                 replay_fingerprint=replay_fingerprint,
@@ -470,6 +478,7 @@ class IngestionRetryCommandService:
                 failure_headers=None,
             ).reason
             replay_audit_id = await self._record_mandatory_replay_audit(
+                tenant_id=tenant_id,
                 recovery_path="ingestion_job_retry",
                 event_id=f"job:{job_id}",
                 replay_fingerprint=replay_fingerprint,
@@ -514,6 +523,7 @@ class IngestionRetryCommandService:
     async def _record_ingestion_job_retry_audit(
         self,
         *,
+        tenant_id: str,
         job_id: str,
         context: Any,
         replay_fingerprint: str,
@@ -523,6 +533,7 @@ class IngestionRetryCommandService:
         requested_by: str | None,
     ) -> str:
         return await self._record_mandatory_replay_audit(
+            tenant_id=tenant_id,
             recovery_path=INGESTION_JOB_RETRY_RECOVERY_PATH,
             event_id=f"job:{job_id}",
             replay_fingerprint=replay_fingerprint,
@@ -540,6 +551,7 @@ class IngestionRetryCommandService:
     async def _record_mandatory_replay_audit(
         self,
         *,
+        tenant_id: str,
         recovery_path: str,
         event_id: str,
         replay_fingerprint: str,
@@ -555,6 +567,7 @@ class IngestionRetryCommandService:
     ) -> str:
         try:
             return await self.ingestion_job_service.record_consumer_dlq_replay_audit(
+                tenant_id=tenant_id,
                 recovery_path=recovery_path,
                 event_id=event_id,
                 replay_fingerprint=replay_fingerprint,
