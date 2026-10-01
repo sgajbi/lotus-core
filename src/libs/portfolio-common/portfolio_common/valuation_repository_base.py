@@ -40,6 +40,7 @@ from .valuation_snapshot_contiguity import (
     build_contiguous_snapshot_dates_stmt,
     contiguous_snapshot_dates_by_key,
 )
+from .valuation_snapshot_freshness import snapshot_requires_price_revaluation
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +160,7 @@ class ValuationRepositoryBase:
     async def find_position_keys_requiring_price_revaluation(
         self, security_id: str, a_date: date
     ) -> List[Tuple[str, str, int]]:
-        """Return current epochs whose latest derived authority predates the price."""
+        """Return current epochs whose same-day snapshot does not prove price freshness."""
 
         latest_history_subquery = (
             select(
@@ -167,7 +168,6 @@ class ValuationRepositoryBase:
                 PositionHistory.security_id.label("security_id"),
                 PositionHistory.epoch.label("epoch"),
                 PositionHistory.quantity.label("quantity"),
-                PositionHistory.updated_at.label("updated_at"),
             )
             .where(
                 PositionHistory.security_id == security_id,
@@ -209,11 +209,7 @@ class ValuationRepositoryBase:
             )
             .where(
                 latest_history_subquery.c.quantity != 0,
-                func.coalesce(
-                    DailyPositionSnapshot.updated_at,
-                    latest_history_subquery.c.updated_at,
-                )
-                < MarketPrice.updated_at,
+                snapshot_requires_price_revaluation(),
             )
         )
 

@@ -680,15 +680,13 @@ async def test_find_portfolios_holding_security_on_date(
 
 
 @pytest.mark.parametrize("position_quantity", [Decimal("12"), Decimal("-1000")])
-@pytest.mark.parametrize("source_is_newer", [True, False])
-async def test_price_revaluation_compares_source_with_latest_derived_authority(
+async def test_price_revaluation_uses_snapshot_economics_not_write_order(
     clean_db,
     async_db_session: AsyncSession,
     position_quantity: Decimal,
-    source_is_newer: bool,
 ):
     source_updated_at = datetime(2025, 8, 2, 8, 0, tzinfo=timezone.utc)
-    position_updated_at = source_updated_at + timedelta(seconds=-1 if source_is_newer else 1)
+    position_updated_at = source_updated_at + timedelta(seconds=1)
     async_db_session.add(
         Portfolio(
             tenant_id=TEST_TENANT_ID,
@@ -741,7 +739,7 @@ async def test_price_revaluation_compares_source_with_latest_derived_authority(
             MarketPrice(
                 security_id="S-CURRENT-1",
                 price_date=date(2025, 8, 2),
-                price=Decimal("1"),
+                price=Decimal("180"),
                 currency="USD",
                 created_at=source_updated_at,
                 updated_at=source_updated_at,
@@ -781,18 +779,84 @@ async def test_price_revaluation_compares_source_with_latest_derived_authority(
         date(2025, 8, 2),
     )
 
-    assert keys == ([("P-CURRENT-1", "S-CURRENT-1", 1)] if source_is_newer else [])
+    assert keys == [("P-CURRENT-1", "S-CURRENT-1", 1)]
 
-    async_db_session.add(
-        DailyPositionSnapshot(
-            portfolio_id="P-CURRENT-1",
-            security_id="S-CURRENT-1",
-            date=date(2025, 8, 2),
-            epoch=1,
-            quantity=position_quantity,
-            cost_basis=Decimal("12"),
-            updated_at=max(source_updated_at, position_updated_at) + timedelta(seconds=1),
+    stale_snapshot = DailyPositionSnapshot(
+        portfolio_id="P-CURRENT-1",
+        security_id="S-CURRENT-1",
+        date=date(2025, 8, 2),
+        epoch=1,
+        quantity=position_quantity,
+        cost_basis=Decimal("12"),
+        market_price=Decimal("178"),
+        valuation_status="VALUED_CURRENT",
+        valuation_source_currency="USD",
+        valuation_reporting_currency="USD",
+        updated_at=position_updated_at + timedelta(seconds=1),
+    )
+    async_db_session.add(stale_snapshot)
+    await async_db_session.commit()
+
+    keys = await repo.find_position_keys_requiring_price_revaluation(
+        "S-CURRENT-1",
+        date(2025, 8, 2),
+    )
+
+    assert keys == [("P-CURRENT-1", "S-CURRENT-1", 1)]
+
+    stale_snapshot.market_price = Decimal("180")
+    await async_db_session.commit()
+
+    keys = await repo.find_position_keys_requiring_price_revaluation(
+        "S-CURRENT-1",
+        date(2025, 8, 2),
+    )
+
+    assert keys == []
+
+    await async_db_session.execute(
+        update(DailyPositionSnapshot)
+        .where(DailyPositionSnapshot.id == stale_snapshot.id)
+        .values(updated_at=source_updated_at - timedelta(seconds=1))
+    )
+    await async_db_session.commit()
+
+    keys = await repo.find_position_keys_requiring_price_revaluation(
+        "S-CURRENT-1",
+        date(2025, 8, 2),
+    )
+
+    assert keys == [("P-CURRENT-1", "S-CURRENT-1", 1)]
+
+    stale_snapshot.valuation_source_currency = "EUR"
+    await async_db_session.commit()
+
+    keys = await repo.find_position_keys_requiring_price_revaluation(
+        "S-CURRENT-1",
+        date(2025, 8, 2),
+    )
+
+    assert keys == [("P-CURRENT-1", "S-CURRENT-1", 1)]
+
+    stale_snapshot.valuation_source_currency = "USD"
+    stale_snapshot.valuation_status = "UNVALUED"
+    await async_db_session.commit()
+
+    keys = await repo.find_position_keys_requiring_price_revaluation(
+        "S-CURRENT-1",
+        date(2025, 8, 2),
+    )
+
+    assert keys == [("P-CURRENT-1", "S-CURRENT-1", 1)]
+
+    await async_db_session.execute(
+        update(PositionHistory)
+        .where(
+            PositionHistory.portfolio_id == "P-CURRENT-1",
+            PositionHistory.security_id == "S-CURRENT-1",
+            PositionHistory.epoch == 1,
         )
+        .values(quantity=Decimal("0"))
     )
     await async_db_session.commit()
 

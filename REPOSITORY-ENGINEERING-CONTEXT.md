@@ -300,7 +300,10 @@ schema, machine-readable contracts, or executable evidence.
   Event-driven valuation scheduling does not infer completeness from calendar bounds: an empty
   calendar retains the compatibility fallback, position readiness remains durable, historical
   off-calendar price and FX facts retain replay, and future facts wait for later readiness without
-  terminating a consumer. Analytics continuation scopes include the exact window calendar digest
+  terminating a consumer. A current-date price queues every visible non-zero current epoch whose
+  same-day snapshot is absent, not `VALUED_CURRENT`, price/currency-mismatched, or older than the
+  source; position-history or snapshot write time alone is not valuation-source authority. Analytics
+  continuation scopes include the exact window calendar digest
   and global activation state; calendar drift rejects the next page and requires a restart instead
   of mixing snapshots.
   Calendar codes are trimmed and uppercased at both HTTP ingestion and persisted-event validation,

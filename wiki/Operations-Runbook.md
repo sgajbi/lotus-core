@@ -494,6 +494,9 @@ All canonical assignments therefore use `UNIT_PRICE_MARKET_VALUE` with `UNIT_PRI
 quantity is never relabeled as runtime face authority. Transactions are posted only after that
 fence. This prevents initial history from being misclassified as late corrections while preserving
 durable replay for backdated or future observations against an existing horizon.
+For a current-date price, Core queues source-correction valuation whenever the same-day snapshot is
+missing, not current, price/currency-mismatched, or older than the source. Snapshot and position write times
+do not by themselves prove that the price was consumed.
 
 Cash unit-price facts continue through the latest planned-withdrawal transaction date because those
 future cash legs enter the same exact-scope valuation queue. A canonical authority bundle that ends

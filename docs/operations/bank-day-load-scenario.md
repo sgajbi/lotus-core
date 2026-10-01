@@ -117,9 +117,10 @@ transaction readiness and invalidates attempt-count evidence.
 
 Current-business-date FX and market-price seed facts do not create replay merely because positions
 have not been submitted yet. Later transaction processing emits authoritative valuation readiness
-and reads those committed source facts. A delayed source notification also skips positions whose
-same-day snapshots were materialized after that source row; a later correction updates the source
-freshness and reopens valuation. Backdated and future source facts still require durable replay. A
+and reads those committed source facts. A delayed current-price notification queues source-correction
+work whenever the same-day snapshot is absent, not current, price/currency-mismatched, or older than the
+source; write timestamps alone never prove that a snapshot consumed that price. Backdated and
+future source facts still require durable replay. A
 daily run that creates materially more valuation-snapshot events than source position keys must be
 investigated as work amplification rather than accepted by extending the drain deadline. Capacity
 evidence retains exact topic totals plus bounded `(producer aggregate type, topic, count)` cohorts
