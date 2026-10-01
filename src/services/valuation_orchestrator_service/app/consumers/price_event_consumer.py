@@ -226,8 +226,7 @@ class PriceEventConsumer(BaseConsumer):
         if not schedule.stage_durable_replay:
             if not open_position_keys:
                 logger.info(
-                    "Current price has no visible positions; later position readiness "
-                    "will use the persisted price.",
+                    "Current price has no visible position snapshot requiring revaluation.",
                     extra={
                         "security_id": event.security_id,
                         "price_date": event.price_date,
