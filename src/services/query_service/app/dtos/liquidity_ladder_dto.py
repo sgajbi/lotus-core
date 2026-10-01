@@ -20,9 +20,12 @@ class LiquidityLadderBucket(BaseModel):
         ..., description="Inclusive bucket start date.", examples=["2026-03-29"]
     )
     end_date: date = Field(..., description="Inclusive bucket end date.", examples=["2026-04-03"])
-    opening_cash_balance_portfolio_currency: Decimal = Field(
+    opening_cash_balance_portfolio_currency: Decimal | None = Field(
         ...,
-        description="Portfolio-currency cash balance available at the as-of date.",
+        description=(
+            "Portfolio-currency cash balance available at the as-of date, or null when an "
+            "eligible cash valuation is unavailable."
+        ),
         examples=[250000],
     )
     booked_net_cashflow_portfolio_currency: Decimal = Field(
@@ -43,19 +46,20 @@ class LiquidityLadderBucket(BaseModel):
         description="Booked plus projected cashflow within the bucket in portfolio currency.",
         examples=[-37500],
     )
-    cumulative_cash_available_portfolio_currency: Decimal = Field(
+    cumulative_cash_available_portfolio_currency: Decimal | None = Field(
         ...,
         description=(
             "Opening cash plus cumulative bucket net cashflows through this bucket, in "
-            "portfolio currency."
+            "portfolio currency. Null when opening cash is unavailable."
         ),
         examples=[212500],
     )
-    cash_shortfall_portfolio_currency: Decimal = Field(
+    cash_shortfall_portfolio_currency: Decimal | None = Field(
         ...,
         description=(
             "Positive amount by which cumulative cash availability is below zero after this "
-            "bucket. This is evidence, not a funding recommendation."
+            "bucket. Null when cumulative cash is unavailable. This is evidence, not a "
+            "funding recommendation."
         ),
         examples=[0],
     )
@@ -67,9 +71,12 @@ class AssetLiquidityTierExposure(BaseModel):
         description="Source-owned instrument liquidity tier or UNCLASSIFIED when unavailable.",
         examples=["T1"],
     )
-    market_value_portfolio_currency: Decimal = Field(
+    market_value_portfolio_currency: Decimal | None = Field(
         ...,
-        description="Current non-cash market value in portfolio currency for the tier.",
+        description=(
+            "Current non-cash market value in portfolio currency for the tier, or null when "
+            "any contributing valuation is unavailable."
+        ),
         examples=[850000],
     )
     position_count: int = Field(
@@ -80,29 +87,44 @@ class AssetLiquidityTierExposure(BaseModel):
 
 
 class PortfolioLiquidityLadderTotals(BaseModel):
-    opening_cash_balance_portfolio_currency: Decimal = Field(
+    opening_cash_balance_portfolio_currency: Decimal | None = Field(
         ...,
-        description="Total source cash balance at the as-of date in portfolio currency.",
+        description=(
+            "Total source cash balance at the as-of date in portfolio currency, or null when "
+            "cash evidence is unavailable or cannot be classified."
+        ),
         examples=[250000],
     )
-    projected_cash_available_end_portfolio_currency: Decimal = Field(
+    projected_cash_available_end_portfolio_currency: Decimal | None = Field(
         ...,
-        description="Projected cash available at the end of the returned ladder horizon.",
+        description=(
+            "Projected cash available at the end of the returned ladder horizon, or null when "
+            "opening cash is unavailable."
+        ),
         examples=[212500],
     )
-    maximum_cash_shortfall_portfolio_currency: Decimal = Field(
+    maximum_cash_shortfall_portfolio_currency: Decimal | None = Field(
         ...,
-        description="Largest positive cash shortfall observed across returned buckets.",
+        description=(
+            "Largest positive cash shortfall observed across returned buckets, or null when "
+            "opening cash is unavailable."
+        ),
         examples=[0],
     )
-    non_cash_market_value_portfolio_currency: Decimal = Field(
+    non_cash_market_value_portfolio_currency: Decimal | None = Field(
         ...,
-        description="Total non-cash market value represented by liquidity-tier exposure.",
+        description=(
+            "Total non-cash market value represented by liquidity-tier exposure, or null when "
+            "a contributing valuation or instrument classification is unavailable."
+        ),
         examples=[850000],
     )
-    non_cash_position_count: int = Field(
+    non_cash_position_count: int | None = Field(
         ...,
-        description="Number of non-cash positions represented by liquidity-tier exposure.",
+        description=(
+            "Number of confirmed non-cash positions represented by liquidity-tier exposure, "
+            "or null when instrument classification is incomplete."
+        ),
         examples=[4],
     )
 

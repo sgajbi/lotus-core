@@ -266,6 +266,19 @@ monitoring, reporting, DPM supportability, and client explanation, but must not 
 advice recommendation, client income plan, funding recommendation, OMS execution forecast,
 best-execution assessment, tax methodology, or market-impact model.
 
+The ladder distinguishes observed zero in a usable valued snapshot from unavailable valuation
+evidence. A null value or unusable valuation status makes opening cash, cumulative availability,
+projected end cash, and shortfall null while leaving independently known booked/projected/net
+cashflows visible. Missing non-cash valuation makes the affected tier and aggregate non-cash value
+null. A missing instrument or null/blank asset-class classification leaves both aggregate sides
+unavailable rather
+than assuming a cash/non-cash role. A known non-cash asset class without a liquidity tier remains
+an `UNCLASSIFIED` tier. Row-level degradation retains the selected snapshot's source date and
+evidence timestamp rather than rewriting carried-forward chronology to the requested as-of date.
+Consumers must branch on `data_quality_status` and `degradation.reason_codes`; they must not coerce
+these nulls to zero or infer funding sufficiency from a partial response.
+Qualified monetary fields remain present in the response and serialize as JSON `null`.
+
 `PortfolioTaxLotWindow:v1` is the governed source for effective-dated lot and cost-basis state from
 `position_lot_state`, including open/original quantity, acquisition date, base and local cost basis,
 local currency when source transaction currency is available, source transaction id, calculation

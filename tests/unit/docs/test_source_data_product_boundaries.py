@@ -440,6 +440,20 @@ def test_portfolio_liquidity_ladder_methodology_is_implementation_backed() -> No
     assert "CA_k = C0 + sum(N_i for i <= k)" in methodology
     assert "`instrument.asset_class == CASH`" in methodology
     assert "Missing tier values are grouped under `UNCLASSIFIED`" in methodology
+    assert "A null value or any other valuation status is unknown, not zero" in (
+        normalized_methodology
+    )
+    assert "`VALUED`, `VALUED_CURRENT`, or `VALUED_STALE`" in normalized_methodology
+    assert "null/blank `asset_class`" in methodology
+    assert "selected snapshot's date and latest evidence timestamp" in normalized_methodology
+    assert "`CASH_VALUATION_UNAVAILABLE`" in methodology
+    assert "`NON_CASH_VALUATION_UNAVAILABLE`" in methodology
+    assert "`INSTRUMENT_CLASSIFICATION_UNAVAILABLE`" in methodology
+    assert (
+        "Booked and projected cashflow components retain their independent source truth"
+        in _read("REPOSITORY-ENGINEERING-CONTEXT.md")
+    )
+    assert "Consumers must branch on `data_quality_status`" in _read("wiki/Mesh-Data-Products.md")
     assert "not a client advice recommendation" in normalized_methodology
     assert "| `maximum_cash_shortfall_portfolio_currency` | 35000 |" in methodology
 

@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-09-15T13:13:02.281339+00:00",
+  "generatedAt": "2026-10-01T05:50:19.950610+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -1754,14 +1754,14 @@
       "semanticId": "lotus.cash_shortfall_portfolio_currency",
       "canonicalTerm": "cash_shortfall_portfolio_currency",
       "preferredName": "cash_shortfall_portfolio_currency",
-      "description": "Positive amount by which cumulative cash availability is below zero after this bucket. This is evidence, not a funding recommendation.",
+      "description": "Positive amount by which cumulative cash availability is below zero after this bucket. Null when cumulative cash is unavailable. This is evidence, not a funding recommendation.",
       "example": 0,
-      "type": "string",
+      "type": "object",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "string"
+        "object"
       ]
     },
     {
@@ -2596,14 +2596,14 @@
       "semanticId": "lotus.cumulative_cash_available_portfolio_currency",
       "canonicalTerm": "cumulative_cash_available_portfolio_currency",
       "preferredName": "cumulative_cash_available_portfolio_currency",
-      "description": "Opening cash plus cumulative bucket net cashflows through this bucket, in portfolio currency.",
+      "description": "Opening cash plus cumulative bucket net cashflows through this bucket, in portfolio currency. Null when opening cash is unavailable.",
       "example": 212500,
-      "type": "string",
+      "type": "object",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "string"
+        "object"
       ]
     },
     {
@@ -5096,14 +5096,14 @@
       "semanticId": "lotus.market_value_portfolio_currency",
       "canonicalTerm": "market_value_portfolio_currency",
       "preferredName": "market_value_portfolio_currency",
-      "description": "Current non-cash market value in portfolio currency for the tier.",
+      "description": "Current non-cash market value in portfolio currency for the tier, or null when any contributing valuation is unavailable.",
       "example": 850000,
-      "type": "string",
+      "type": "object",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "string"
+        "object"
       ]
     },
     {
@@ -5222,14 +5222,14 @@
       "semanticId": "lotus.maximum_cash_shortfall_portfolio_currency",
       "canonicalTerm": "maximum_cash_shortfall_portfolio_currency",
       "preferredName": "maximum_cash_shortfall_portfolio_currency",
-      "description": "Largest positive cash shortfall observed across returned buckets.",
+      "description": "Largest positive cash shortfall observed across returned buckets, or null when opening cash is unavailable.",
       "example": 0,
-      "type": "string",
+      "type": "object",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "string"
+        "object"
       ]
     },
     {
@@ -5685,28 +5685,28 @@
       "semanticId": "lotus.non_cash_market_value_portfolio_currency",
       "canonicalTerm": "non_cash_market_value_portfolio_currency",
       "preferredName": "non_cash_market_value_portfolio_currency",
-      "description": "Total non-cash market value represented by liquidity-tier exposure.",
+      "description": "Total non-cash market value represented by liquidity-tier exposure, or null when a contributing valuation or instrument classification is unavailable.",
       "example": 850000,
-      "type": "string",
+      "type": "object",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "string"
+        "object"
       ]
     },
     {
       "semanticId": "lotus.non_cash_position_count",
       "canonicalTerm": "non_cash_position_count",
       "preferredName": "non_cash_position_count",
-      "description": "Number of non-cash positions represented by liquidity-tier exposure.",
+      "description": "Number of confirmed non-cash positions represented by liquidity-tier exposure, or null when instrument classification is incomplete.",
       "example": 4,
-      "type": "integer",
+      "type": "object",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "integer"
+        "object"
       ]
     },
     {
@@ -5919,14 +5919,14 @@
       "semanticId": "lotus.opening_cash_balance_portfolio_currency",
       "canonicalTerm": "opening_cash_balance_portfolio_currency",
       "preferredName": "opening_cash_balance_portfolio_currency",
-      "description": "Total source cash balance at the as-of date in portfolio currency.",
+      "description": "Total source cash balance at the as-of date in portfolio currency, or null when cash evidence is unavailable or cannot be classified.",
       "example": 250000,
-      "type": "string",
+      "type": "object",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "string"
+        "object"
       ]
     },
     {
@@ -6778,14 +6778,14 @@
       "semanticId": "lotus.projected_cash_available_end_portfolio_currency",
       "canonicalTerm": "projected_cash_available_end_portfolio_currency",
       "preferredName": "projected_cash_available_end_portfolio_currency",
-      "description": "Projected cash available at the end of the returned ladder horizon.",
+      "description": "Projected cash available at the end of the returned ladder horizon, or null when opening cash is unavailable.",
       "example": 212500,
-      "type": "string",
+      "type": "object",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "string"
+        "object"
       ]
     },
     {
@@ -16856,7 +16856,7 @@
         "Liquidity Ladder"
       ],
       "summary": "Get source-owned portfolio liquidity ladder evidence",
-      "description": "What: Return the PortfolioLiquidityLadder source-data product for one private-banking portfolio.\nHow: Resolves current cash balances from source holdings, groups non-cash holdings by instrument liquidity tier, and overlays booked plus optional projected settlement-dated cashflows into deterministic cash-availability buckets.\nWhen: Use this route when downstream consumers need source-owned liquidity evidence for portfolio monitoring, DPM supportability, or client reporting. Do not use it as an advice recommendation, OMS execution forecast, tax methodology, best-execution assessment, or predictive market-impact model.",
+      "description": "What: Return the PortfolioLiquidityLadder source-data product for one private-banking portfolio.\nHow: Resolves current cash balances from source holdings, groups non-cash holdings by instrument liquidity tier, and overlays booked plus optional projected settlement-dated cashflows into deterministic cash-availability buckets. Missing contributing valuation value, usable valuation status, or asset-class evidence is qualified through nullable affected totals, PARTIAL or UNKNOWN data quality, and bounded degradation reason codes; it is never coerced to economic zero.\nWhen: Use this route when downstream consumers need source-owned liquidity evidence for portfolio monitoring, DPM supportability, or client reporting. Do not use it as an advice recommendation, OMS execution forecast, tax methodology, best-execution assessment, or predictive market-impact model.",
       "naming": {
         "boundedContext": "liquidity_ladder",
         "canonicalTerms": [
@@ -17292,7 +17292,7 @@
             "name": "totals.opening_cash_balance_portfolio_currency",
             "location": "body",
             "required": true,
-            "type": "string",
+            "type": "object",
             "semanticId": "lotus.opening_cash_balance_portfolio_currency",
             "attributeRef": "lotus.opening_cash_balance_portfolio_currency"
           },
@@ -17300,7 +17300,7 @@
             "name": "totals.projected_cash_available_end_portfolio_currency",
             "location": "body",
             "required": true,
-            "type": "string",
+            "type": "object",
             "semanticId": "lotus.projected_cash_available_end_portfolio_currency",
             "attributeRef": "lotus.projected_cash_available_end_portfolio_currency"
           },
@@ -17308,7 +17308,7 @@
             "name": "totals.maximum_cash_shortfall_portfolio_currency",
             "location": "body",
             "required": true,
-            "type": "string",
+            "type": "object",
             "semanticId": "lotus.maximum_cash_shortfall_portfolio_currency",
             "attributeRef": "lotus.maximum_cash_shortfall_portfolio_currency"
           },
@@ -17316,7 +17316,7 @@
             "name": "totals.non_cash_market_value_portfolio_currency",
             "location": "body",
             "required": true,
-            "type": "string",
+            "type": "object",
             "semanticId": "lotus.non_cash_market_value_portfolio_currency",
             "attributeRef": "lotus.non_cash_market_value_portfolio_currency"
           },
@@ -17324,7 +17324,7 @@
             "name": "totals.non_cash_position_count",
             "location": "body",
             "required": true,
-            "type": "integer",
+            "type": "object",
             "semanticId": "lotus.non_cash_position_count",
             "attributeRef": "lotus.non_cash_position_count"
           },
@@ -17364,7 +17364,7 @@
             "name": "buckets[].opening_cash_balance_portfolio_currency",
             "location": "body",
             "required": true,
-            "type": "string",
+            "type": "object",
             "semanticId": "lotus.opening_cash_balance_portfolio_currency",
             "attributeRef": "lotus.opening_cash_balance_portfolio_currency"
           },
@@ -17396,7 +17396,7 @@
             "name": "buckets[].cumulative_cash_available_portfolio_currency",
             "location": "body",
             "required": true,
-            "type": "string",
+            "type": "object",
             "semanticId": "lotus.cumulative_cash_available_portfolio_currency",
             "attributeRef": "lotus.cumulative_cash_available_portfolio_currency"
           },
@@ -17404,7 +17404,7 @@
             "name": "buckets[].cash_shortfall_portfolio_currency",
             "location": "body",
             "required": true,
-            "type": "string",
+            "type": "object",
             "semanticId": "lotus.cash_shortfall_portfolio_currency",
             "attributeRef": "lotus.cash_shortfall_portfolio_currency"
           },
@@ -17428,7 +17428,7 @@
             "name": "asset_liquidity_tiers[].market_value_portfolio_currency",
             "location": "body",
             "required": true,
-            "type": "string",
+            "type": "object",
             "semanticId": "lotus.market_value_portfolio_currency",
             "attributeRef": "lotus.market_value_portfolio_currency"
           },

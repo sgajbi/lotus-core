@@ -117,6 +117,14 @@ def test_critical_db_coverage_includes_actual_ledger_seed_refresh_work() -> None
     ) in get_suite("critical-db-coverage")
 
 
+def test_critical_db_coverage_executes_registered_liquidity_valuation_qualification() -> None:
+    assert (
+        "tests/integration/services/query_service/test_liquidity_ladder_postgresql.py::"
+        "test_registered_liquidity_ladder_distinguishes_null_zero_and_positive_postgresql"
+        in get_suite("critical-db-coverage")
+    )
+
+
 CASHFLOW_CRITICAL_PROOF_NODES = [
     "tests/integration/services/query_service/test_transaction_ledger_input_evidence_capacity.py::"
     "test_bank_day_seed_refreshes_source_cut_per_physical_statement",
