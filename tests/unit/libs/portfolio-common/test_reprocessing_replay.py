@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 from portfolio_common.config import KAFKA_TRANSACTIONS_PERSISTED_TOPIC
 from portfolio_common.reprocessing_replay import (
+    TRANSACTION_REPLAY_SOURCE_INVALID,
     ReplayCorrelationMetadata,
     ReprocessingReplayError,
     TransactionReplayMessage,
@@ -14,6 +15,7 @@ from portfolio_common.reprocessing_replay import (
     plan_transaction_replay,
     publish_transaction_replay_plan,
 )
+from pydantic import ValidationError
 
 
 def _transaction(
@@ -119,6 +121,30 @@ def test_plan_transaction_replay_keeps_linked_multi_security_legs_together() -> 
         "P1|transaction-group|CA-GROUP-1",
         "P1|transaction-group|CA-GROUP-1",
     ]
+
+
+def test_plan_transaction_replay_maps_historical_source_validation_refusal() -> None:
+    valid = _transaction("TXN_VALID")
+    invalid = _transaction("TXN_HISTORICAL_INVALID")
+    invalid.transaction_type = "INTEREST"
+    invalid.gross_transaction_amount = Decimal("10")
+    invalid.withholding_tax_amount = Decimal("11")
+    invalid.other_interest_deductions_amount = Decimal("0")
+
+    with pytest.raises(ReprocessingReplayError) as exc_info:
+        plan_transaction_replay(
+            transactions=[valid, invalid],
+            correlation=ReplayCorrelationMetadata(correlation_id="corr-001"),
+        )
+
+    assert exc_info.value.reason_code == TRANSACTION_REPLAY_SOURCE_INVALID
+    assert exc_info.value.failed_transaction_ids == ["TXN_VALID", "TXN_HISTORICAL_INVALID"]
+    assert exc_info.value.published_record_count == 0
+    assert str(exc_info.value) == (
+        "Persisted transaction replay source is incompatible with the current transaction "
+        "contract. No transaction was republished."
+    )
+    assert isinstance(exc_info.value.__cause__, ValidationError)
 
 
 def test_publish_transaction_replay_plan_reports_partial_failure_without_kafka() -> None:

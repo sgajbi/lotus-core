@@ -40,6 +40,7 @@ Implemented reason codes:
 - `INTEREST_015_NET_RECONCILIATION_MISMATCH`
 - `INTEREST_016_MISSING_SETTLEMENT_CASH_ACCOUNT`
 - `INTEREST_017_NON_POSITIVE_NET_SETTLEMENT`
+- `INTEREST_018_NEGATIVE_PRE_FEE_NET`
 
 ## Validation Behavior
 
@@ -56,13 +57,17 @@ Implemented reason codes:
 - `cash_entry_mode=UPSTREAM_PROVIDED` requires `external_cash_transaction_id`
 - `cash_entry_mode=AUTO_GENERATE` requires `settlement_cash_account_id`
 - interest direction, deduction signs, and explicit pre-fee net interest reconcile deterministically
+- gross interest less withholding and other deductions must be non-negative before fees for both
+  explicit and derived source shapes
 - income settlement must remain strictly positive after resolved transaction fees
 
 `INTEREST_015_NET_RECONCILIATION_MISMATCH` and
-`INTEREST_017_NON_POSITIVE_NET_SETTLEMENT` are non-retryable runtime rejections performed after
+`INTEREST_017_NON_POSITIVE_NET_SETTLEMENT`, and `INTEREST_018_NEGATIVE_PRE_FEE_NET` are
+non-retryable runtime rejections performed after
 idempotency classification and before financial writes. A mismatched explicit net is not trusted as
 settlement evidence, and non-positive income settlement is not repaired by applying an
-absolute-value inflow sign.
+absolute-value inflow sign. A transaction fee cannot rescue deductions that already exceed gross
+interest. A zero pre-fee net remains valid for an expense whose only settlement outflow is its fee.
 
 ## Shared-Doc Conformance Note (Slice 1)
 

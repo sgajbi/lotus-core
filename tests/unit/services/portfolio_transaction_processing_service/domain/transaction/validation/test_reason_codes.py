@@ -76,4 +76,5 @@ def test_interest_validation_reason_codes_remain_stable() -> None:
         "INTEREST_015_NET_RECONCILIATION_MISMATCH",
         "INTEREST_016_MISSING_SETTLEMENT_CASH_ACCOUNT",
         "INTEREST_017_NON_POSITIVE_NET_SETTLEMENT",
+        "INTEREST_018_NEGATIVE_PRE_FEE_NET",
     ]

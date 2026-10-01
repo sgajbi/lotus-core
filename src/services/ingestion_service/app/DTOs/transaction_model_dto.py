@@ -9,6 +9,10 @@ from portfolio_common.domain.transaction.fee_components import (
     TRANSACTION_FEE_COMPONENT_FIELDS,
     resolve_transaction_trade_fee,
 )
+from portfolio_common.domain.transaction.interest_economics import (
+    INTEREST_NEGATIVE_PRE_FEE_NET_REASON_CODE,
+    has_negative_interest_pre_fee_net,
+)
 from portfolio_common.domain.transaction.numeric_policy import (
     TRANSACTION_COMMAND_DECIMAL_FIELDS,
     require_transaction_persistence_precision,
@@ -33,7 +37,10 @@ from pydantic import (
     model_validator,
 )
 
-from .ingestion_validation_errors import BLANK_IDENTIFIER, raise_ingestion_validation_error
+from .ingestion_validation_errors import (
+    BLANK_IDENTIFIER,
+    raise_ingestion_validation_error,
+)
 
 NonNegativeDecimal = Annotated[Decimal, Field(ge=Decimal(0))]
 PositiveDecimal = Annotated[Decimal, Field(gt=Decimal(0))]
@@ -441,7 +448,7 @@ class Transaction(BaseModel):
     )
     net_interest_amount: Optional[NonNegativeDecimal] = Field(
         default=None,
-        json_schema_extra={"example": "108.20"},
+        json_schema_extra={"example": "108.20", "minimum": 0},
         description=(
             "Interest amount after withholding tax and other interest deductions, "
             "but before separately reported transaction fees; when supplied upstream, "
@@ -960,6 +967,54 @@ class Transaction(BaseModel):
             ),
             field_name="trade_fee",
         )
+        return self
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_negative_interest_pre_fee_net_before_field_validation(
+        cls,
+        value: Any,
+    ) -> Any:
+        if not isinstance(value, dict):
+            return value
+        try:
+            gross = Decimal(str(value.get("gross_transaction_amount")))
+            withholding = (
+                Decimal(str(value["withholding_tax_amount"]))
+                if value.get("withholding_tax_amount") is not None
+                else None
+            )
+            other_deductions = (
+                Decimal(str(value["other_interest_deductions_amount"]))
+                if value.get("other_interest_deductions_amount") is not None
+                else None
+            )
+        except (ArithmeticError, TypeError, ValueError):
+            return value
+        if has_negative_interest_pre_fee_net(
+            transaction_type=str(value.get("transaction_type") or ""),
+            gross_transaction_amount=gross,
+            withholding_tax_amount=withholding,
+            other_interest_deductions_amount=other_deductions,
+        ):
+            raise_ingestion_validation_error(
+                INTEREST_NEGATIVE_PRE_FEE_NET_REASON_CODE,
+                field_path="withholding_tax_amount,other_interest_deductions_amount",
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _reject_negative_interest_pre_fee_net(self) -> "Transaction":
+        if has_negative_interest_pre_fee_net(
+            transaction_type=self.transaction_type,
+            gross_transaction_amount=self.gross_transaction_amount,
+            withholding_tax_amount=self.withholding_tax_amount,
+            other_interest_deductions_amount=self.other_interest_deductions_amount,
+        ):
+            raise_ingestion_validation_error(
+                INTEREST_NEGATIVE_PRE_FEE_NET_REASON_CODE,
+                field_path="withholding_tax_amount,other_interest_deductions_amount",
+            )
         return self
 
     @model_validator(mode="after")

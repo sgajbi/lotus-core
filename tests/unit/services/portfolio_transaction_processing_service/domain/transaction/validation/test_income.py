@@ -102,6 +102,7 @@ def test_interest_validation_reports_every_compatible_reason_code() -> None:
         InterestValidationReasonCode.INVALID_DATE_ORDER,
         InterestValidationReasonCode.MISSING_SETTLEMENT_CASH_ACCOUNT,
         InterestValidationReasonCode.NON_POSITIVE_NET_SETTLEMENT,
+        InterestValidationReasonCode.NEGATIVE_PRE_FEE_NET,
     }
 
 
@@ -255,3 +256,31 @@ def test_interest_income_validation_rejects_non_positive_net_settlement() -> Non
     assert InterestValidationReasonCode.NON_POSITIVE_NET_SETTLEMENT in {
         issue.code for issue in validate_interest_transaction(transaction)
     }
+
+
+@pytest.mark.parametrize(
+    ("withholding_tax", "other_deductions", "fee"),
+    [
+        ("11", "0", "0.50"),
+        ("0", "11", "1"),
+        ("6", "5", "2"),
+    ],
+)
+def test_interest_validation_rejects_negative_pre_fee_net_before_expense_fee(
+    withholding_tax: str,
+    other_deductions: str,
+    fee: str,
+) -> None:
+    transaction = replace(
+        _income("INTEREST"),
+        gross_transaction_amount=Decimal("10"),
+        withholding_tax_amount=Decimal(withholding_tax),
+        other_interest_deductions_amount=Decimal(other_deductions),
+        trade_fee=Decimal(fee),
+        interest_direction="EXPENSE",
+    )
+
+    assert [
+        issue.code.value
+        for issue in validate_interest_transaction(transaction, strict_metadata=True)
+    ] == ["INTEREST_018_NEGATIVE_PRE_FEE_NET"]

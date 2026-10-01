@@ -56,6 +56,8 @@ def evaluate_interest_settlement(
     other_deductions = Decimal(str(inputs["other_interest_deductions_amount"]))
     transaction_fee = Decimal(str(inputs["transaction_fee_amount"]))
     expected_net_interest = gross_interest - withholding_tax - other_deductions
+    if expected_net_interest < 0:
+        raise ValueError("Interest pre-fee net must not be negative")
 
     supplied_net_interest = inputs.get("net_interest_amount")
     net_interest = (

@@ -98,3 +98,19 @@ because calculation truth changed. The repeatable source-shape and fee-direction
 to the platform-owned transaction skill in lotus-platform PR #521. README, API route inventory,
 database catalog, migrations, supported-feature claims, central context, and skill routing do not
 change: entrypoints, shapes, storage, public capability, and task routing remain unchanged.
+
+## 2026-10-01 Follow-up: Negative Pre-Fee Admission
+
+Issue #1175 found a remaining source-shape gap: for an expense, a positive fee could make the final
+settlement magnitude positive after withholding and other deductions had already driven the
+pre-fee net below zero. The correction centralizes exact-Decimal gross-minus-deductions arithmetic
+and enforces `INTEREST_018_NEGATIVE_PRE_FEE_NET` at single/batch DTO, event, canonical validation,
+settlement, direct-processing, retry, and replay reconstruction boundaries. PostgreSQL proof covers
+rollback with no derived transaction, cashflow, position, or idempotency effects across a rebuilt
+worker composition; the valid gross 10/tax 2/fee 1 expense remains cash -9 and duplicate replay is
+idempotent.
+
+Zero pre-fee expense plus a fee remains a valid fee-only outflow. This is an in-process invariant;
+no migration, runtime split, IAM change, route, topic, or persistence shape is required. README,
+supported-feature, repository-context, and platform-skill truth do not change. The owning INTEREST
+RFC pages, ingestion diagnostics, review ledger, and transaction/cashflow wiki source do change.

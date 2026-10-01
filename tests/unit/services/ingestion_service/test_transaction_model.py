@@ -8,6 +8,91 @@ from pydantic import ValidationError
 from src.services.ingestion_service.app.DTOs.transaction_dto import Transaction
 
 
+def _interest_payload(**changes: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "transaction_id": "INTEREST-INGESTION-001",
+        "portfolio_id": "PORT-001",
+        "instrument_id": "BOND-001",
+        "security_id": "BOND-001",
+        "transaction_date": "2026-09-01T10:00:00Z",
+        "settlement_date": "2026-09-03T10:00:00Z",
+        "transaction_type": "INTEREST",
+        "quantity": "0",
+        "price": "0",
+        "gross_transaction_amount": "10",
+        "trade_currency": "USD",
+        "currency": "USD",
+        "trade_fee": "2",
+        "interest_direction": "EXPENSE",
+        "cash_entry_mode": "AUTO_GENERATE",
+        "settlement_cash_account_id": "CASH-USD-001",
+        "economic_event_id": "EVENT-INTEREST-001",
+        "linked_transaction_group_id": "GROUP-INTEREST-001",
+        "calculation_policy_id": "INTEREST_POLICY",
+        "calculation_policy_version": "1.0.0",
+    }
+    payload.update(changes)
+    return payload
+
+
+@pytest.mark.parametrize("interest_direction", ["INCOME", "EXPENSE"])
+@pytest.mark.parametrize("net_interest_amount", [None, "-1"])
+@pytest.mark.parametrize(
+    ("withholding_tax", "other_deductions"),
+    [("11", "0"), ("0", "11"), ("6", "5")],
+)
+def test_transaction_model_rejects_negative_interest_pre_fee_net(
+    interest_direction: str,
+    net_interest_amount: str | None,
+    withholding_tax: str,
+    other_deductions: str,
+) -> None:
+    with pytest.raises(ValidationError) as raised:
+        Transaction.model_validate(
+            _interest_payload(
+                interest_direction=interest_direction,
+                withholding_tax_amount=withholding_tax,
+                other_interest_deductions_amount=other_deductions,
+                net_interest_amount=net_interest_amount,
+            )
+        )
+
+    error = raised.value.errors()[0]
+    assert error["type"] == "INTEREST_018_NEGATIVE_PRE_FEE_NET"
+    assert error["loc"] == ()
+    assert error["ctx"] == {
+        "code": "INTEREST_018_NEGATIVE_PRE_FEE_NET",
+        "field_path": "withholding_tax_amount,other_interest_deductions_amount",
+        "severity": "error",
+        "remediation": (
+            "Correct withholding tax and other interest deductions so their total does not "
+            "exceed gross_transaction_amount."
+        ),
+        "record_key": None,
+    }
+
+
+def test_transaction_model_preserves_field_level_negative_explicit_net_error() -> None:
+    with pytest.raises(ValidationError) as raised:
+        Transaction.model_validate(_interest_payload(net_interest_amount="-1"))
+
+    error = raised.value.errors()[0]
+    assert error["type"] == "greater_than_equal"
+    assert error["loc"] == ("net_interest_amount",)
+    assert error["ctx"] == {"ge": Decimal("0")}
+
+
+def test_transaction_model_accepts_zero_pre_fee_expense_with_fee() -> None:
+    transaction = Transaction.model_validate(
+        _interest_payload(
+            withholding_tax_amount="6",
+            other_interest_deductions_amount="4",
+        )
+    )
+
+    assert transaction.trade_fee == Decimal("2")
+
+
 def test_transaction_model_success():
     """
     Tests that the Transaction model successfully validates a correct data payload.

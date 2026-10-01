@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
+from pydantic_core import PydanticCustomError
 
 from .domain.business_calendar import normalize_business_calendar_code
 from .domain.cost_basis_method import CostBasisMethod, normalize_cost_basis_method
@@ -14,6 +15,10 @@ from .domain.tenant import TenantId
 from .domain.transaction.fee_components import (
     TRANSACTION_FEE_COMPONENT_FIELDS,
     resolve_transaction_trade_fee,
+)
+from .domain.transaction.interest_economics import (
+    INTEREST_NEGATIVE_PRE_FEE_NET_REASON_CODE,
+    has_negative_interest_pre_fee_net,
 )
 from .domain.transaction.numeric_policy import (
     TRANSACTION_EVENT_DECIMAL_FIELDS,
@@ -480,7 +485,6 @@ class TransactionEvent(CoreEventModel):
         "gross_transaction_amount",
         "withholding_tax_amount",
         "other_interest_deductions_amount",
-        "net_interest_amount",
         "synthetic_flow_price_used",
         "synthetic_flow_quantity_used",
     )
@@ -524,6 +528,26 @@ class TransactionEvent(CoreEventModel):
             ),
             field_name="trade_fee",
         )
+        return self
+
+    @model_validator(mode="after")
+    def _reject_negative_interest_pre_fee_net(self) -> "TransactionEvent":
+        if has_negative_interest_pre_fee_net(
+            transaction_type=self.transaction_type,
+            gross_transaction_amount=self.gross_transaction_amount,
+            withholding_tax_amount=self.withholding_tax_amount,
+            other_interest_deductions_amount=self.other_interest_deductions_amount,
+        ):
+            raise PydanticCustomError(
+                INTEREST_NEGATIVE_PRE_FEE_NET_REASON_CODE,
+                "INTEREST deductions must not exceed gross_transaction_amount before fees.",
+                {
+                    "code": INTEREST_NEGATIVE_PRE_FEE_NET_REASON_CODE,
+                    "field_path": "withholding_tax_amount,other_interest_deductions_amount",
+                },
+            )
+        if self.net_interest_amount is not None and self.net_interest_amount < 0:
+            raise ValueError("Amount must be greater than or equal to zero.")
         return self
 
     @model_validator(mode="after")

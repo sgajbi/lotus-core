@@ -71,6 +71,12 @@ positive proceeds. Invalid zero or negative proceeds are rejected before writes 
 amount, and stable reason-code evidence without exposing raw payloads or infrastructure details.
 Do not repair or reconcile such a case by applying `abs()` to the amount.
 
+Before either direction applies fees, gross interest less withholding and other deductions must be
+non-negative. `INTEREST_018_NEGATIVE_PRE_FEE_NET` rejects deductions above gross even when an
+expense fee would otherwise make the final magnitude positive. The boundary is source-shape
+invariant for omitted and explicit net interest. Exactly zero pre-fee expense is distinct and may
+produce a fee-only outflow.
+
 FX cash settlement is stricter because an inline charge has no unambiguous currency or charged leg.
 The calculator rejects every non-zero resolved fee with `FX_025_NON_ZERO_EMBEDDED_FEE` and every
 non-zero inline `withholding_tax_amount` with `FX_026_NON_ZERO_EMBEDDED_TAX` on

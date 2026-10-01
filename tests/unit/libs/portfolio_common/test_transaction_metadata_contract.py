@@ -1,8 +1,62 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
+import pytest
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
+from pydantic import ValidationError
+
+
+def _interest_event(**changes: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "transaction_id": "INTEREST-EVENT-001",
+        "portfolio_id": "PORT-001",
+        "tenant_id": "tenant-test",
+        "instrument_id": "BOND-001",
+        "security_id": "BOND-001",
+        "transaction_date": datetime(2026, 9, 1, 10, 0, tzinfo=timezone.utc),
+        "settlement_date": datetime(2026, 9, 3, 10, 0, tzinfo=timezone.utc),
+        "transaction_type": "INTEREST",
+        "quantity": Decimal(0),
+        "price": Decimal(0),
+        "gross_transaction_amount": Decimal("10"),
+        "trade_currency": "USD",
+        "currency": "USD",
+        "trade_fee": Decimal("2"),
+        "interest_direction": "EXPENSE",
+    }
+    payload.update(changes)
+    return payload
+
+
+@pytest.mark.parametrize(
+    ("cash_entry_mode", "cash_fields"),
+    [
+        ("AUTO_GENERATE", {"settlement_cash_account_id": "CASH-USD-001"}),
+        (
+            "UPSTREAM_PROVIDED",
+            {"external_cash_transaction_id": "EXTERNAL-CASH-001"},
+        ),
+    ],
+)
+@pytest.mark.parametrize("net_interest_amount", [None, Decimal("-1")])
+def test_transaction_event_rejects_negative_interest_pre_fee_net(
+    cash_entry_mode: str,
+    cash_fields: dict[str, str],
+    net_interest_amount: Decimal | None,
+) -> None:
+    with pytest.raises(ValidationError) as raised:
+        TransactionEvent.model_validate(
+            _interest_event(
+                cash_entry_mode=cash_entry_mode,
+                withholding_tax_amount=Decimal("6"),
+                other_interest_deductions_amount=Decimal("5"),
+                net_interest_amount=net_interest_amount,
+                **cash_fields,
+            )
+        )
+
+    assert raised.value.errors()[0]["type"] == "INTEREST_018_NEGATIVE_PRE_FEE_NET"
 
 
 def test_transaction_event_accepts_linkage_and_policy_metadata() -> None:
