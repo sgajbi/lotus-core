@@ -169,17 +169,24 @@ jobs:
       matrix:
         include:
           - suite: unit
-            target: test-unit
+            target: coverage-shard-unit
+            coverage: true
           - suite: unit-db
-            target: test-unit-db
+            target: coverage-shard-unit-db
+            coverage: true
+          - suite: critical-db-coverage
+            target: coverage-shard-critical-db
+            coverage: true
           - suite: critical-lifecycle-db
             target: test-critical-lifecycle-db
           - suite: query-authority-db-contract
             target: test-query-authority-db-contract
           - suite: integration-lite
-            target: test-integration-lite
+            target: coverage-shard-integration-lite
+            coverage: true
           - suite: ops-contract
-            target: test-ops-contract
+            target: coverage-shard-ops-contract
+            coverage: true
           - suite: transaction-buy-contract
             target: test-transaction-buy-contract
           - suite: transaction-sell-contract
@@ -196,9 +203,6 @@ jobs:
             target: test-transaction-processing-contract
     steps:
       - uses: actions/checkout@v6
-        if: matrix.suite != 'unit'
-      - uses: actions/checkout@v6
-        if: matrix.suite == 'unit'
         with:
           fetch-depth: 0
       - uses: actions/setup-python@v6
@@ -208,7 +212,18 @@ jobs:
       - name: Install
         run: make install-ci
       - name: Run ${{ matrix.suite }}
+        id: enforce
+        env:
+          LOTUS_COVERAGE_CHANGED_BASE: HEAD~1
         run: make ${{ matrix.target }}
+      - name: Upload ${{ matrix.suite }} coverage
+        if: matrix.coverage == true
+        uses: actions/upload-artifact@v7
+        with:
+          name: main-releasability-coverage-${{ github.run_id }}-${{ matrix.suite }}-${{ github.sha }}
+          path: output/coverage-shards/*
+          if-no-files-found: error
+          retention-days: 30
 
   coverage-gate:
     name: Main Releasability / Coverage Gate (Combined)
@@ -225,10 +240,17 @@ jobs:
           cache: "pip"
       - name: Install
         run: make install-ci
+      - name: Download exact-run coverage artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: main-releasability-coverage-${{ github.run_id }}-*-${{ github.sha }}
+          path: output/coverage-shards
+          merge-multiple: true
       - name: Enforce combined coverage threshold
+        id: enforce
         env:
           LOTUS_COVERAGE_CHANGED_BASE: HEAD~1
-        run: make coverage-gate
+        run: make coverage-aggregate
 
   docker-build:
     name: Main Releasability / Validate Docker Build

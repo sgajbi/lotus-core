@@ -2526,8 +2526,13 @@ def test_blocking_policy_rejects_workflow_asserted_runtime_image_authority() -> 
         ),
         (
             "actions/download-artifact@v8",
-            {"name": "runtime", "path": "output/runtime", "pattern": ""},
-            "pattern must be non-empty",
+            {"path": "output/runtime", "pattern": ""},
+            "selector must be one non-empty line",
+        ),
+        (
+            "actions/download-artifact@v8",
+            {"name": "runtime", "path": "output/runtime", "pattern": "runtime-*"},
+            "requires exactly one of name or pattern",
         ),
         (
             "actions/download-artifact@v8",
@@ -2704,6 +2709,15 @@ def test_blocking_policy_rejects_unpinned_action_references(
         (
             "actions/download-artifact@v8",
             {"name": "runtime", "path": "output/runtime"},
+            False,
+        ),
+        (
+            "actions/download-artifact@v8",
+            {
+                "pattern": "runtime-*",
+                "path": "output/runtime",
+                "merge-multiple": True,
+            },
             False,
         ),
         (

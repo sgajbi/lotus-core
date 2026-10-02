@@ -68,8 +68,23 @@
     "config-access-guard": [
       "$(REPOSITORY_PYTHON) scripts/quality/config_access_guard.py"
     ],
-    "coverage-gate": [
-      "$(REPOSITORY_PYTHON) scripts/quality/coverage_gate.py"
+    "coverage-aggregate": [
+      "$(REPOSITORY_PYTHON) scripts/quality/coverage_gate.py --aggregate-artifacts output/coverage-shards"
+    ],
+    "coverage-shard-critical-db": [
+      "$(REPOSITORY_PYTHON) scripts/quality/coverage_gate.py --shard critical-db-coverage --artifact-dir output/coverage-shards"
+    ],
+    "coverage-shard-integration-lite": [
+      "$(REPOSITORY_PYTHON) scripts/quality/coverage_gate.py --shard integration-lite --artifact-dir output/coverage-shards"
+    ],
+    "coverage-shard-ops-contract": [
+      "$(REPOSITORY_PYTHON) scripts/quality/coverage_gate.py --shard ops-contract --artifact-dir output/coverage-shards"
+    ],
+    "coverage-shard-unit": [
+      "$(REPOSITORY_PYTHON) scripts/quality/coverage_gate.py --shard unit --artifact-dir output/coverage-shards"
+    ],
+    "coverage-shard-unit-db": [
+      "$(REPOSITORY_PYTHON) scripts/quality/coverage_gate.py --shard unit-db --artifact-dir output/coverage-shards"
     ],
     "critical-path-coverage-guard": [
       "$(REPOSITORY_PYTHON) scripts/quality/critical_path_coverage_guard.py --contract-only"
@@ -326,17 +341,11 @@
     "test-import-root-guard": [
       "$(REPOSITORY_PYTHON) scripts/quality/test_import_root_guard.py"
     ],
-    "test-integration-lite": [
-      "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite integration-lite --quiet"
-    ],
     "test-lane-governance-guard": [
       "$(REPOSITORY_PYTHON) scripts/quality/test_lane_governance_guard.py"
     ],
     "test-latency-gate": [
       "$(REPOSITORY_PYTHON) scripts/operations/latency_profile.py $(LOCAL_RUNTIME_BUILD_ARGUMENT) --enforce --seed-completion-timeout-seconds $(LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS)"
-    ],
-    "test-ops-contract": [
-      "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite ops-contract --quiet"
     ],
     "test-performance-load-gate": [
       "$(REPOSITORY_PYTHON) scripts/operations/performance_load_gate.py $(LOCAL_RUNTIME_BUILD_ARGUMENT) --profile-tier fast --enforce"
@@ -364,12 +373,6 @@
     ],
     "test-transaction-sell-contract": [
       "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite transaction-sell-contract --quiet"
-    ],
-    "test-unit": [
-      "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite unit --quiet"
-    ],
-    "test-unit-db": [
-      "$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite unit-db --quiet"
     ],
     "testability-architecture-guard": [
       "$(REPOSITORY_PYTHON) scripts/quality/testability_architecture_guard.py"

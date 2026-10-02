@@ -108,6 +108,17 @@ baseline and revision identities. Main Releasability checks out each tag, reject
 proves that the revision is reachable from `main`, and only then releases the remaining jobs.
 Per-revision evidence cannot be cancelled by a later dispatch.
 
+PR and main coverage use five parallel owners: unit (with the zero-warning policy), unit database,
+critical database coverage, integration-lite, and operations contract. Each owner publishes one
+non-empty coverage data file plus deterministic metadata from a clean tracked checkout, bound to
+the workflow head SHA, changed-base ref and resolved commit SHA, measured sources, changed-critical
+paths, and coverage configuration digests. The existing
+combined coverage job downloads only artifacts from its run and SHA, rejects missing, duplicate,
+foreign, checksum-invalid, or incompatible evidence, then performs the same branch-aware 98%
+aggregate and changed-critical enforcement. `critical-db-coverage` remains distinct from
+`critical-lifecycle-db`; both execute. Local `make coverage-gate` remains the standalone sequential
+equivalent when CI artifacts are unavailable.
+
 `make main-gate-coverage-audit` audits every revision after the immutable, versioned
 `main-gate-coverage-enforcement-v1` baseline anchored to the fixing PR's exact parent. Concurrent
 dispatcher ordering cannot move that baseline or exempt an earlier revision. An authorized
@@ -145,7 +156,8 @@ ten exact audited checkout, Python/Node setup, cache, artifact, Docker Buildx, a
 references are admitted; setup-Python is runner-specific and each action has an explicit `with:`
 key/value policy. Alternate checkout is limited
 to the credential-free nested platform checkout; cache paths are exact audited directories; artifact
-paths are literal, expression-free destinations below `output/`. The
+paths are literal, expression-free destinations below `output/`; downloads select exactly one
+literal name or one non-empty pattern. The
 Docker image-set producer uses `make build-runtime-image-set`. Every blocking `run` or `uses` step's
 effective workflow/job/step-configured environment keys and exact values must come from the closed
 inventory used by the
@@ -212,8 +224,8 @@ workflow token cannot read branch protection and must not be used; missing read 
 fails exact-main evidence closed. Operators update branch protection only after all manifest-owned
 contexts are green on the exact PR head. Generate the atomic PATCH body with
 `required_status_checks_guard.py --print-desired-protection`; never hand-assemble or incrementally
-mutate the 37-entry set. The generated body explicitly sends an empty legacy `contexts` array so
-check-name-only authority cannot survive alongside the 37 app-bound checks. GitHub mirrors those
+mutate the complete set. The generated body explicitly sends an empty legacy `contexts` array so
+check-name-only authority cannot survive alongside the governed app-bound checks. GitHub mirrors those
 app-bound names into `contexts` on reads, so live verification requires the mirrored list to be
 present, well formed, and set-equal to the check names.
 
@@ -387,6 +399,15 @@ used by release enforcement and does not replace protected PR or exact-main proo
   PR merge gate parity
 - `make ci-main`
   exact-main releasability parity
+- `make coverage-gate`
+  standalone sequential coverage execution and aggregate enforcement
+- `make coverage-shard-unit`, `make coverage-shard-unit-db`,
+  `make coverage-shard-critical-db`, `make coverage-shard-integration-lite`, and
+  `make coverage-shard-ops-contract`
+  CI coverage owners; require `LOTUS_COVERAGE_CHANGED_BASE` and emit exact-source artifacts under
+  `output/coverage-shards/`
+- `make coverage-aggregate`
+  fail-closed verification and combination of the five downloaded shard artifacts
 - `make lint`
   complete-repository Ruff/format/import-boundary proof plus required-check, domain, and contract
   guards

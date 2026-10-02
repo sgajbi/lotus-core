@@ -181,6 +181,40 @@ def test_critical_database_suites_are_protected_in_every_delivery_workflow() -> 
             assert suite in matrix, filename
 
 
+def test_pr_and_main_coverage_is_owned_by_exact_parallel_shards() -> None:
+    expected = {
+        ("unit", "coverage-shard-unit"),
+        ("unit-db", "coverage-shard-unit-db"),
+        ("critical-db-coverage", "coverage-shard-critical-db"),
+        ("integration-lite", "coverage-shard-integration-lite"),
+        ("ops-contract", "coverage-shard-ops-contract"),
+    }
+    for workflow_path in GOVERNED_RUNTIME_WORKFLOWS:
+        workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8")) or {}
+        matrix = workflow["jobs"]["test-suites"]["strategy"]["matrix"]["include"]
+        coverage_rows = {
+            (row["suite"], row["target"]) for row in matrix if row.get("coverage") is True
+        }
+        assert coverage_rows == expected
+        assert {
+            (row["suite"], row["target"])
+            for row in matrix
+            if row["suite"] == "critical-lifecycle-db"
+        } == {("critical-lifecycle-db", "test-critical-lifecycle-db")}
+
+        aggregate = workflow["jobs"]["coverage-gate"]
+        download = next(
+            step
+            for step in aggregate["steps"]
+            if step.get("name") == "Download exact-run coverage artifacts"
+        )
+        assert download["with"]["merge-multiple"] is True
+        assert "${{ github.run_id }}" in download["with"]["pattern"]
+        assert "${{ github.sha }}" in download["with"]["pattern"]
+        enforce = next(step for step in aggregate["steps"] if step.get("id") == "enforce")
+        assert enforce["run"] == "make coverage-aggregate"
+
+
 def test_dependency_health_cache_is_reused_only_before_merge() -> None:
     for workflow_path in (
         Path(".github/workflows/feature-lane.yml"),

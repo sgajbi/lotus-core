@@ -79,16 +79,23 @@ def _validate_cache_inputs(inputs: Mapping[str, Any]) -> None:
 
 def _validate_artifact_inputs(action: str, inputs: Mapping[str, Any]) -> None:
     name = inputs.get("name")
-    if not isinstance(name, str) or not name.strip() or "\n" in name:
+    pattern = inputs.get("pattern")
+    if action == "actions/download-artifact@v8":
+        if (name is None) == (pattern is None):
+            raise RequiredStatusChecksError(
+                "blocking workflow artifact download requires exactly one of name or pattern"
+            )
+        identifier = name if name is not None else pattern
+        if not isinstance(identifier, str) or not identifier.strip() or "\n" in identifier:
+            raise RequiredStatusChecksError(
+                "blocking workflow artifact download selector must be one non-empty line"
+            )
+    elif not isinstance(name, str) or not name.strip() or "\n" in name:
         raise RequiredStatusChecksError(
             "blocking workflow artifact name must be one non-empty line"
         )
     _require_relative_output_path(inputs.get("path"), field="artifact path")
     if action == "actions/download-artifact@v8":
-        if "pattern" in inputs and (
-            not isinstance(inputs["pattern"], str) or not inputs["pattern"].strip()
-        ):
-            raise RequiredStatusChecksError("blocking workflow artifact pattern must be non-empty")
         if "merge-multiple" in inputs and not isinstance(inputs["merge-multiple"], bool):
             raise RequiredStatusChecksError(
                 "blocking workflow artifact merge-multiple must be boolean"

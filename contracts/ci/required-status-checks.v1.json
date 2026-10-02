@@ -51,6 +51,10 @@
       "app_id": 15368
     },
     {
+      "context": "PR Merge Gate / Tests (critical-db-coverage)",
+      "app_id": 15368
+    },
+    {
       "context": "PR Merge Gate / Tests (critical-lifecycle-db)",
       "app_id": 15368
     },
