@@ -291,6 +291,17 @@ def test_redact_sensitive_text_masks_unmatched_parenthesis_in_malformed_scalar()
     assert redacted == "{'password': ***REDACTED***, 'safe': 'visible'}"
 
 
+@pytest.mark.parametrize("quote", ["'''", '"""'])
+def test_redact_sensitive_text_masks_python_triple_quoted_secret_value(quote: str) -> None:
+    marker = "SYNTHETIC_TRIPLE_QUOTED_SECRET_5M"
+    serialized = f"{{'password': {quote}FIRST\n{marker}{quote}, 'safe': 'visible'}}"
+
+    redacted = redact_sensitive_text(serialized)
+
+    assert marker not in redacted
+    assert redacted == f"{{'password': {quote}***REDACTED***{quote}, 'safe': 'visible'}}"
+
+
 @pytest.mark.parametrize(
     "sensitive_value",
     [r"[\"SYNTHETIC_ESCAPED_NON_STRING_6R\"]", r"{\"nested\":true}", "12345"],
