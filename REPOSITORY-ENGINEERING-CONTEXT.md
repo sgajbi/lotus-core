@@ -234,6 +234,22 @@ Completion requires:
 - exact-main validation and clean branch/worktree state;
 - GitHub issues reconciled to what remains.
 
+### Delivery practice
+
+Maintain one active implementation slice and freeze its PR revision while required CI runs. Prepare
+the next three prioritized invariants through read-only analysis, expected figures, and reproducer
+design; do not mutate the candidate to fill wait time or share a mutable financial test stack.
+
+Before pushing, run previously failing inexpensive checks, the complete affected-caller invariant
+matrix, and pinned `make quality-ruff-gate quality-ruff-format-gate` after the final edit. Record the
+exact revision, native exits, CI run IDs, independent acceptance, and separate implementation,
+local-proof, queue/run, and review-rework time. Earlier evidence is reusable only when its source,
+dependencies, fixtures, contract, and environment are unchanged.
+
+Workflow optimizations must preserve required checks, exact-source identity, warning and coverage
+policies, complete main certification, and final wiki parity. A merged-and-validated slice—not a
+passing narrow test or issue count—is the unit of delivery.
+
 ## Standards And RFCs That Govern This Repository
 
 Primary authorities:

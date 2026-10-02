@@ -199,7 +199,7 @@ after fencing Core repository roots.
    on reads; live verification requires the mirrored list to be present, well formed, and set-equal
    to the check names.
 
-Generate the exact reviewed update payload from repository authority; do not hand-copy 37 checks:
+Generate the exact reviewed update payload from repository authority; do not hand-copy checks:
 
 ```powershell
 python scripts/development/repository_python.py `

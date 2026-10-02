@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from scripts.quality import coverage_gate, test_manifest, warning_budget_gate
 from scripts.quality import critical_path_coverage_guard as critical_guard
 from scripts.quality.coverage_evidence import changed_source_evidence
@@ -314,3 +316,172 @@ def test_coverage_scope_deduplicates_changed_files_in_one_source_directory() -> 
     )
 
     assert sources == (test_manifest.SOURCE, "src/services/core/app")
+
+
+def _write_artifact_set(
+    artifact_dir: Path,
+    *,
+    head_sha: str = "a" * 40,
+    base_ref: str = "origin/main",
+) -> None:
+    for suite in coverage_gate.COVERAGE_SUITES:
+        stem = coverage_gate._artifact_stem(suite)
+        data_path = artifact_dir / f"coverage-{stem}.data"
+        data_path.write_bytes(f"coverage:{suite}".encode())
+        (artifact_dir / f"coverage-{stem}.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": coverage_gate.COVERAGE_ARTIFACT_SCHEMA,
+                    "suite": suite,
+                    "head_sha": head_sha,
+                    "base_ref": base_ref,
+                    "base_sha": "c" * 40,
+                    "coverage_sources": ["src/services/query_service/app"],
+                    "critical_paths": ["src/services/core/domain/cost_basis.py"],
+                    "configuration_sha256": {"config": "digest"},
+                    "data_file": data_path.name,
+                    "data_sha256": coverage_gate._sha256(data_path),
+                }
+            ),
+            encoding="utf-8",
+        )
+
+
+def _configure_artifact_validation(monkeypatch, tmp_path: Path) -> Path:
+    _redirect_coverage_output(monkeypatch, tmp_path)
+    artifact_dir = tmp_path / "downloaded"
+    artifact_dir.mkdir()
+    monkeypatch.setattr(coverage_gate, "_source_head", lambda: "a" * 40)
+    monkeypatch.setattr(coverage_gate, "_resolve_revision", lambda _revision: "c" * 40)
+    monkeypatch.setattr(coverage_gate, "_tracked_source_is_clean", lambda: True)
+    monkeypatch.setattr(
+        coverage_gate,
+        "_changed_critical_paths",
+        lambda: ("src/services/core/domain/cost_basis.py",),
+    )
+    monkeypatch.setattr(
+        coverage_gate,
+        "_coverage_sources",
+        lambda _paths: ("src/services/query_service/app",),
+    )
+    monkeypatch.setattr(
+        coverage_gate,
+        "_configuration_digests",
+        lambda: {"config": "digest"},
+    )
+    return artifact_dir
+
+
+def test_coverage_artifact_rejects_dirty_source(monkeypatch, tmp_path: Path) -> None:
+    artifact_dir = _configure_artifact_validation(monkeypatch, tmp_path)
+    monkeypatch.setattr(coverage_gate, "_tracked_source_is_clean", lambda: False)
+
+    with pytest.raises(ValueError, match="clean tracked source checkout"):
+        coverage_gate._write_shard_artifact(
+            suite="unit-db",
+            artifact_dir=artifact_dir,
+            head_sha="a" * 40,
+            base_ref="origin/main",
+        )
+
+
+def test_coverage_shard_writes_exact_identity_and_checksum(monkeypatch, tmp_path: Path) -> None:
+    artifact_dir = _configure_artifact_validation(monkeypatch, tmp_path)
+
+    def run_suite(suite: str, *, coverage_sources: tuple[str, ...], coverage_file: str) -> int:
+        assert suite == "unit-db"
+        assert coverage_sources == ("src/services/query_service/app",)
+        Path(coverage_file).write_bytes(b"real coverage data")
+        return 0
+
+    monkeypatch.setattr(coverage_gate, "_run_coverage_suite", run_suite)
+
+    assert (
+        coverage_gate._write_shard_artifact(
+            suite="unit-db",
+            artifact_dir=artifact_dir,
+            head_sha="a" * 40,
+            base_ref="origin/main",
+        )
+        == 0
+    )
+    metadata = json.loads((artifact_dir / "coverage-unit_db.json").read_text())
+    assert metadata["head_sha"] == "a" * 40
+    assert metadata["base_ref"] == "origin/main"
+    assert metadata["base_sha"] == "c" * 40
+    assert metadata["suite"] == "unit-db"
+    assert metadata["data_sha256"] == coverage_gate._sha256(artifact_dir / "coverage-unit_db.data")
+
+
+def test_coverage_artifact_aggregate_accepts_complete_compatible_set(
+    monkeypatch, tmp_path: Path
+) -> None:
+    artifact_dir = _configure_artifact_validation(monkeypatch, tmp_path)
+    _write_artifact_set(artifact_dir)
+    report_calls: list[list[str]] = []
+    monkeypatch.setattr(coverage_gate, "run", report_calls.append)
+
+    assert (
+        coverage_gate._aggregate_artifacts(
+            artifact_dir=artifact_dir,
+            head_sha="a" * 40,
+            base_ref="origin/main",
+        )
+        == 0
+    )
+    assert len(list(tmp_path.glob(".coverage.*"))) == len(coverage_gate.COVERAGE_SUITES)
+    assert len(report_calls) == 5
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
+        ("missing", "missing coverage artifacts"),
+        ("empty", "missing or empty data"),
+        ("foreign-head", "incompatible head_sha"),
+        ("wrong-base", "incompatible base_ref"),
+        ("wrong-base-sha", "incompatible base_sha"),
+        ("config", "incompatible configuration_sha256"),
+        ("checksum", "failed checksum verification"),
+        ("duplicate", "duplicate coverage artifact"),
+    ),
+)
+def test_coverage_artifact_aggregate_rejects_invalid_evidence(
+    monkeypatch, tmp_path: Path, mutation: str, message: str
+) -> None:
+    artifact_dir = _configure_artifact_validation(monkeypatch, tmp_path)
+    _write_artifact_set(artifact_dir)
+    metadata_path = artifact_dir / "coverage-unit_db.json"
+    data_path = artifact_dir / "coverage-unit_db.data"
+    metadata = json.loads(metadata_path.read_text())
+    if mutation == "missing":
+        metadata_path.unlink()
+        data_path.unlink()
+    elif mutation == "empty":
+        data_path.write_bytes(b"")
+    elif mutation == "foreign-head":
+        metadata["head_sha"] = "b" * 40
+    elif mutation == "wrong-base":
+        metadata["base_ref"] = "HEAD~1"
+    elif mutation == "wrong-base-sha":
+        metadata["base_sha"] = "d" * 40
+    elif mutation == "config":
+        metadata["configuration_sha256"] = {"config": "other"}
+    elif mutation == "checksum":
+        data_path.write_bytes(b"tampered")
+    elif mutation == "duplicate":
+        duplicate_dir = artifact_dir / "duplicate"
+        duplicate_dir.mkdir()
+        duplicate_data = duplicate_dir / data_path.name
+        duplicate_data.write_bytes(data_path.read_bytes())
+        metadata["data_sha256"] = coverage_gate._sha256(duplicate_data)
+        (duplicate_dir / metadata_path.name).write_text(json.dumps(metadata))
+    if mutation not in {"missing", "duplicate"}:
+        metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=message):
+        coverage_gate._validated_artifacts(
+            artifact_dir=artifact_dir,
+            head_sha="a" * 40,
+            base_ref="origin/main",
+        )
