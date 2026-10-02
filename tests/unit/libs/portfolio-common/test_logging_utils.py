@@ -271,6 +271,16 @@ def test_redact_sensitive_text_masks_non_string_json_secret_values(
     assert redacted == '{"password":***REDACTED***,"safe":"visible"}'
 
 
+def test_redact_sensitive_text_masks_complete_python_tuple_secret_value() -> None:
+    marker = "SYNTHETIC_TUPLE_SECRET_41D"
+    serialized = f"{{'password': ('FIRST', '{marker}'), 'safe': 'visible'}}"
+
+    redacted = redact_sensitive_text(serialized)
+
+    assert marker not in redacted
+    assert redacted == "{'password': ***REDACTED***, 'safe': 'visible'}"
+
+
 @pytest.mark.parametrize(
     "sensitive_value",
     [r"[\"SYNTHETIC_ESCAPED_NON_STRING_6R\"]", r"{\"nested\":true}", "12345"],
