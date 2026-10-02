@@ -46,6 +46,15 @@ async def test_malformed_payload_redaction_bounds_scanned_evidence() -> None:
     assert result.endswith("<payload-truncated>")
 
 
+async def test_malformed_payload_redaction_masks_multiline_scalar() -> None:
+    marker = "SYNTHETIC_MULTILINE_SCALAR_4N"
+
+    result = redacted_payload_text(f'{{"password": TOP\n{marker}, "safe": visible}}')
+
+    assert marker not in result
+    assert result == '{"password": ***REDACTED***, "safe": visible}'
+
+
 @pytest.mark.parametrize(
     ("resolved_tenant", "expected_error"),
     [("tenant-a", None), (None, "unknown ingestion job owner")],

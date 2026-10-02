@@ -471,9 +471,10 @@ def test_redact_sensitive_text_masks_multiline_escaped_secret_value() -> None:
     assert redacted == r"body={\"password\":\"***REDACTED***\"}"
 
 
-def test_redact_sensitive_text_masks_complete_malformed_scalar_secret() -> None:
+@pytest.mark.parametrize("separator", [" ", "\n", "\r\n"])
+def test_redact_sensitive_text_masks_complete_malformed_scalar_secret(separator: str) -> None:
     marker = "SYNTHETIC_MALFORMED_SCALAR_8D"
-    serialized = f'{{"password": TOP {marker}, "safe": visible}}'
+    serialized = f'{{"password": TOP{separator}{marker}, "safe": visible}}'
 
     redacted = redact_sensitive_text(serialized)
 
