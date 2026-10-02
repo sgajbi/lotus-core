@@ -75,6 +75,15 @@ async def test_malformed_payload_redaction_masks_complete_python_tuple() -> None
     assert result == "{'password': ***REDACTED***, 'safe': 'visible'}"
 
 
+async def test_malformed_payload_redaction_masks_unmatched_parenthesis_scalar() -> None:
+    marker = "SYNTHETIC_PAREN_PAYLOAD_SECRET_2J"
+
+    result = redacted_payload_text(f"{{'password': TOP){marker}, 'safe': 'visible'}}")
+
+    assert marker not in result
+    assert result == "{'password': ***REDACTED***, 'safe': 'visible'}"
+
+
 @pytest.mark.parametrize(
     ("resolved_tenant", "expected_error"),
     [("tenant-a", None), (None, "unknown ingestion job owner")],
