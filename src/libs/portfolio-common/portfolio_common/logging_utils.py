@@ -289,11 +289,19 @@ def _serialized_secret_value_span(
         return None
     if _is_structural_quote(value, start, escape_width):
         quote = value[start + escape_width]
-        content_start = start + escape_width + 1
-        end = _find_structural_quote(value, content_start, quote, escape_width)
+        quote_width = escape_width + 1
+        quote_count = 3 if _has_structural_quote_run(value, start, quote, escape_width, 3) else 1
+        content_start = start + (quote_width * quote_count)
+        end = _find_structural_quote(
+            value,
+            content_start,
+            quote,
+            escape_width,
+            quote_count=quote_count,
+        )
         if end is None:
             return start, len(value), len(value)
-        close_width = escape_width + 1
+        close_width = quote_width * quote_count
         return content_start, end, end + close_width
 
     end = _json_value_end(value, start, escape_width=escape_width)
@@ -307,16 +315,30 @@ def _find_structural_quote(
     start: int,
     quote: str,
     escape_width: int,
+    *,
+    quote_count: int = 1,
 ) -> int | None:
     cursor = start
     while cursor < len(value):
-        if (
-            _is_structural_quote(value, cursor, escape_width)
-            and value[cursor + escape_width] == quote
-        ):
+        if _has_structural_quote_run(value, cursor, quote, escape_width, quote_count):
             return cursor
         cursor += 1
     return None
+
+
+def _has_structural_quote_run(
+    value: str,
+    start: int,
+    quote: str,
+    escape_width: int,
+    quote_count: int,
+) -> bool:
+    quote_width = escape_width + 1
+    return all(
+        _is_structural_quote(value, start + (offset * quote_width), escape_width)
+        and value[start + (offset * quote_width) + escape_width] == quote
+        for offset in range(quote_count)
+    )
 
 
 def _json_value_end(value: str, start: int, *, escape_width: int) -> int:

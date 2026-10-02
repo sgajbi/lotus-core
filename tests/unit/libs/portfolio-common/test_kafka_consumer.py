@@ -84,6 +84,16 @@ async def test_malformed_payload_redaction_masks_unmatched_parenthesis_scalar() 
     assert result == "{'password': ***REDACTED***, 'safe': 'visible'}"
 
 
+async def test_malformed_payload_redaction_masks_triple_quoted_secret() -> None:
+    marker = "SYNTHETIC_TRIPLE_QUOTED_PAYLOAD_SECRET_8H"
+    raw_value = f"{{'password': '''FIRST\n{marker}''', 'safe': 'visible'}}"
+
+    result = redacted_payload_text(raw_value)
+
+    assert marker not in result
+    assert result == "{'password': '''***REDACTED***''', 'safe': 'visible'}"
+
+
 @pytest.mark.parametrize(
     ("resolved_tenant", "expected_error"),
     [("tenant-a", None), (None, "unknown ingestion job owner")],
