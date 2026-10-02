@@ -75,3 +75,11 @@ Current runtime posture:
    `LOTUS_CORE_INGEST_OPS_STATIC_TOKEN_NON_LOCAL_APPROVED=true` and a non-default token are set,
 13. query-service page tokens use versioned, keyed, expiring envelopes and non-local profiles fail
    closed unless `LOTUS_CORE_PAGE_TOKEN_SECRET` and `LOTUS_CORE_PAGE_TOKEN_KEY_ID` are non-default.
+14. persistence-consumer schema and JSON rejection logs exclude raw input and exception traceback;
+    they retain only bounded schema locations/types/counts, stable reason code and correlation
+    identity, while the shared formatter redacts quoted, non-string, escaped, multiline and
+    truncated values under complete compound, punctuated or JSON-escaped sensitive mapping keys as
+    a bounded-pass backstop across four nested serialization layers without erasing non-sensitive
+    compound diagnostics. Malformed broker payload evidence scans at most 16,384 retained
+    characters, carries an explicit truncation marker, and is reused for the 1,500-character
+    durable excerpt.

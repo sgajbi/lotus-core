@@ -49,7 +49,7 @@
     },
     {
       "path": "src/libs/portfolio-common/portfolio_common/kafka_consumer.py",
-      "lines": 1649,
+      "lines": 1629,
       "owner": "lotus-core maintainers",
       "rationale": "Legacy shared consumer pending lifecycle, decoding, dispatch and telemetry decomposition.",
       "issue": "#462",

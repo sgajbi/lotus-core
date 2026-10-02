@@ -2,7 +2,6 @@
 import asyncio
 import functools
 import inspect
-import json
 import logging
 import re
 import time
@@ -27,11 +26,11 @@ from .consumer_dlq_tenant import (
     resolve_consumer_dlq_tenant_id,
 )
 from .consumer_error_evidence import (
-    source_safe_error_reason as _source_safe_error_reason,
+    redacted_payload_text,
+    source_safe_error_reason,
+    source_safe_error_traceback,
 )
-from .consumer_error_evidence import (
-    source_safe_error_traceback as _source_safe_error_traceback,
-)
+from .consumer_terminal_logging import log_terminal_processing_error
 from .database_models import ConsumerDlqEvent
 from .db import get_async_db_session
 from .exceptions import RetryableConsumerError
@@ -52,7 +51,6 @@ from .logging_utils import (
     log_operation_event,
     normalize_lineage_value,
     normalize_traceparent,
-    redact_sensitive,
     redact_sensitive_text,
     traceparent_var,
 )
@@ -151,17 +149,6 @@ def _combined_error_text(error: Exception) -> str:
 
 def _contains_any_token(text: str, tokens: tuple[str, ...]) -> bool:
     return any(token in text for token in tokens)
-
-
-def _redacted_payload_text(raw_value: str) -> str:
-    try:
-        parsed = json.loads(raw_value)
-    except json.JSONDecodeError:
-        return redact_sensitive_text(raw_value)
-    redacted = redact_sensitive(parsed)
-    if redacted == parsed:
-        return raw_value
-    return json.dumps(redacted, separators=(",", ":"), sort_keys=True)
 
 
 def _message_attr_or_unknown(msg: Message, attr_name: str) -> str:
@@ -529,6 +516,7 @@ class BaseConsumer(ABC):
                 correlation_id=message_correlation_id,
                 ingestion_job_id=ingestion_job_id,
                 tenant_id=tenant_id,
+                redacted_payload_text=str(dlq_payload["original_value"]),
             )
             self._record_consumer_event("dlq_published", error_reason_code)
             self._log_consumer_event(
@@ -584,8 +572,8 @@ class BaseConsumer(ABC):
             "original_value": self._redacted_message_value_text(msg),
             "error_timestamp": datetime.now(timezone.utc).isoformat(),
             "error_reason_code": error_reason_code,
-            "error_reason": _source_safe_error_reason(error),
-            "error_traceback": _source_safe_error_traceback(error),
+            "error_reason": source_safe_error_reason(error),
+            "error_traceback": source_safe_error_traceback(error),
         }
 
     def _build_dlq_headers(
@@ -646,7 +634,7 @@ class BaseConsumer(ABC):
 
     def _redacted_message_value_text(self, msg: Message) -> str:
         raw_value = msg.value().decode("utf-8")
-        return _redacted_payload_text(raw_value)
+        return redacted_payload_text(raw_value)
 
     def _consumer_dlq_alternate_lookup_key(self, msg: Message) -> str:
         original_key = self._message_key_text(msg) or "unkeyed"
@@ -665,14 +653,10 @@ class BaseConsumer(ABC):
         error_reason_code: str,
         correlation_id: str | None,
         tenant_id: str,
+        redacted_payload_text: str,
         ingestion_job_id: str | None = None,
     ) -> None:
-        payload_excerpt = None
-        try:
-            raw_value = self._redacted_message_value_text(msg)
-            payload_excerpt = raw_value[:1500]
-        except Exception:
-            payload_excerpt = None
+        payload_excerpt = redacted_payload_text[:1500]
         event = ConsumerDlqEvent(
             tenant_id=tenant_id,
             event_id=f"cdlq_{uuid4().hex}",
@@ -681,7 +665,7 @@ class BaseConsumer(ABC):
             dlq_topic=self.dlq_topic or "",
             original_key=msg.key().decode("utf-8") if msg.key() else None,
             error_reason_code=error_reason_code,
-            error_reason=_source_safe_error_reason(error),
+            error_reason=source_safe_error_reason(error),
             correlation_id=correlation_id,
             ingestion_job_id=ingestion_job_id,
             correlation_missing_reason=(
@@ -1113,7 +1097,7 @@ class BaseConsumer(ABC):
             status="retryable_failure",
             reason_code="retryable_consumer_error",
             error_type=type(error).__name__,
-            retryable_error_reason=_source_safe_error_reason(error),
+            retryable_error_reason=source_safe_error_reason(error),
             failure_attempts=attempts,
             failure_elapsed_seconds=round(elapsed_seconds, 3),
             retry_backoff_seconds=self.execution_profile.retryable_failure_backoff_seconds,
@@ -1228,14 +1212,10 @@ class BaseConsumer(ABC):
         )
 
     async def _handle_terminal_processing_error(self, msg: Message, error: Exception) -> None:
-        self._log_consumer_event(
-            logging.ERROR,
-            "Kafka message processing failed terminally.",
-            event_name="kafka.consumer.processing_terminal",
-            status="terminal_failure",
+        log_terminal_processing_error(
+            self._log_consumer_event,
+            error,
             reason_code=classify_dlq_reason_code(error),
-            error_type=type(error).__name__,
-            exc_info=True,
         )
         recovered = await self._recover_message_via_dlq(msg, error)
         if recovered:

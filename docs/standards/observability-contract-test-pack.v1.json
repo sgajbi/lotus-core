@@ -97,12 +97,21 @@
       "evidence": [
         "tests/integration/services/ingestion_service/test_ingestion_routers.py",
         "tests/unit/services/ingestion_service/services/test_ingestion_payload_evidence.py",
-        "tests/unit/libs/portfolio-common/test_logging_utils.py"
+        "tests/unit/libs/portfolio-common/test_consumer_error_evidence.py",
+        "tests/unit/libs/portfolio-common/test_kafka_consumer.py",
+        "tests/unit/libs/portfolio-common/test_logging_utils.py",
+        "tests/unit/services/persistence_service/consumers/test_persistence_transaction_consumer.py"
       ],
       "test_evidence": [
         "test_ingestion_idempotency_diagnostics_endpoint",
         "test_source_safe_request_payload_redacts_sensitive_values_without_mutating_input",
-        "test_redacting_json_formatter_masks_message_and_extra_fields"
+        "test_validation_error_diagnostics_retains_only_bounded_schema_identity",
+        "test_redacting_json_formatter_masks_message_and_extra_fields",
+        "test_redacting_json_formatter_masks_quoted_mapping_values_in_tracebacks",
+        "test_redacting_json_formatter_masks_escaped_quoted_secret_suffixes",
+        "test_run_loop_terminal_validation_log_uses_bounded_evidence",
+        "test_process_message_validation_log_excludes_rejected_input",
+        "test_process_message_json_decode_log_excludes_rejected_document"
       ],
       "contract_assertions": [
         "source_safe_diagnostics",

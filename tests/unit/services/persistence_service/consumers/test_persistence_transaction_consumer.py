@@ -1,4 +1,5 @@
 # tests/unit/services/persistence_service/consumers/test_persistence_transaction_consumer.py
+import io
 import json
 import logging
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -10,9 +11,9 @@ from portfolio_common.idempotency_repository import (
     IdempotencyRepository,
     SemanticEventClaimOutcome,
 )
-from portfolio_common.logging_utils import correlation_id_var
+from portfolio_common.logging_utils import RedactingJsonFormatter, correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.persistence_service.app.consumers.transaction_consumer import (
@@ -28,6 +29,7 @@ from src.services.persistence_service.app.repositories.transaction_db_repo impor
 # Mark all tests in this file as asyncio
 pytestmark = pytest.mark.asyncio
 TRANSACTION_CONSUMER_LOGGER = "src.services.persistence_service.app.consumers.transaction_consumer"
+BASE_CONSUMER_LOGGER = "src.services.persistence_service.app.consumers.base_consumer"
 
 
 class _OtherEvent(BaseModel):
@@ -187,6 +189,122 @@ async def test_process_message_success(
         }
         assert semantic_claim["payload_fingerprint"].startswith("sha256:")
         mock_send_to_dlq.assert_not_called()
+
+
+async def test_process_message_validation_log_excludes_rejected_input(
+    transaction_consumer: TransactionPersistenceConsumer,
+) -> None:
+    marker = "SYNTHETIC_REDACTION_PROBE_7X"
+    correlation_id = "synthetic-review-correlation"
+    message = MagicMock()
+    message.value.return_value = json.dumps(
+        {"password": marker, "correlation_id": correlation_id}
+    ).encode("utf-8")
+    message.key.return_value = b"synthetic-invalid-transaction"
+    message.error.return_value = None
+    message.topic.return_value = "transactions.raw.received"
+    message.partition.return_value = 0
+    message.offset.return_value = 496
+    message.headers.return_value = []
+
+    session_requested = False
+
+    async def unexpected_session():
+        nonlocal session_requested
+        session_requested = True
+        raise AssertionError("Validation rejection must happen before database access")
+        yield  # pragma: no cover
+
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(
+        RedactingJsonFormatter(
+            "%(message)s %(event_name)s %(operation)s %(status)s %(reason_code)s "
+            "%(message_correlation_id)s %(validation_error_count)s "
+            "%(validation_error_locations)s %(validation_error_types)s"
+        )
+    )
+    consumer_logger = logging.getLogger(BASE_CONSUMER_LOGGER)
+
+    with (
+        patch(
+            "src.services.persistence_service.app.consumers.base_consumer.get_async_db_session",
+            new=unexpected_session,
+        ),
+        patch.object(consumer_logger, "handlers", [handler]),
+        patch.object(consumer_logger, "propagate", False),
+        patch.object(consumer_logger, "level", logging.ERROR),
+        pytest.raises(ValidationError) as exc_info,
+    ):
+        await transaction_consumer.process_message(message)
+
+    emitted = stream.getvalue()
+    assert marker in str(exc_info.value)
+    assert marker not in emitted
+    assert session_requested is False
+
+    record = json.loads(emitted)
+    assert record["message"] == "Message validation failed."
+    assert record["event_name"] == "persistence.message.validation"
+    assert record["operation"] == "persistence_consume"
+    assert record["status"] == "rejected"
+    assert record["reason_code"] == "schema_validation_failed"
+    assert record["message_correlation_id"] == correlation_id
+    assert record["validation_error_count"] > 0
+    assert "missing" in record["validation_error_types"]
+    assert "transaction_id" in record["validation_error_locations"]
+
+
+async def test_process_message_json_decode_log_excludes_rejected_document(
+    transaction_consumer: TransactionPersistenceConsumer,
+) -> None:
+    marker = "SYNTHETIC_REDACTION_PROBE_7X"
+    message = MagicMock()
+    message.value.return_value = f'{{"password":"{marker}",'.encode()
+    message.key.return_value = b"synthetic-invalid-json"
+    message.error.return_value = None
+    message.topic.return_value = "transactions.raw.received"
+    message.partition.return_value = 0
+    message.offset.return_value = 497
+    message.headers.return_value = [("correlation_id", b"header-correlation")]
+
+    session_requested = False
+
+    async def unexpected_session():
+        nonlocal session_requested
+        session_requested = True
+        raise AssertionError("JSON rejection must happen before database access")
+        yield  # pragma: no cover
+
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(RedactingJsonFormatter())
+    consumer_logger = logging.getLogger(BASE_CONSUMER_LOGGER)
+
+    with (
+        patch(
+            "src.services.persistence_service.app.consumers.base_consumer.get_async_db_session",
+            new=unexpected_session,
+        ),
+        patch.object(consumer_logger, "handlers", [handler]),
+        patch.object(consumer_logger, "propagate", False),
+        patch.object(consumer_logger, "level", logging.ERROR),
+        pytest.raises(json.JSONDecodeError) as exc_info,
+    ):
+        await transaction_consumer.process_message(message)
+
+    emitted = stream.getvalue()
+    assert marker in exc_info.value.doc
+    assert marker not in emitted
+    assert session_requested is False
+
+    record = json.loads(emitted)
+    assert record["reason_code"] == "json_decode_failed"
+    assert record["message_correlation_id"] == "header-correlation"
+    assert record["error_type"] == "JSONDecodeError"
+    assert record["json_line"] == 1
+    assert record["json_column"] > 0
+    assert record["json_position"] > 0
 
 
 async def test_semantic_identity_requires_admitted_transaction(

@@ -461,12 +461,15 @@ async def test_real_postgres_reads_hide_foreign_colliding_identities(
             group_id="persistence-service-group",
             dlq_topic="dlq.persistence_service",
         )
+        message = _ConsumerMessage()
+        redacted_message = consumer._redacted_message_value_text(message)
         await consumer._record_consumer_dlq_event(
-            msg=_ConsumerMessage(),
+            msg=message,
             error=ValueError("invalid payload"),
             error_reason_code="VALIDATION_ERROR",
             correlation_id="corr-supported-write",
             tenant_id="tenant-a",
+            redacted_payload_text=redacted_message,
             ingestion_job_id="tenant-read-job-a",
         )
         with db_engine.connect() as connection:
@@ -492,11 +495,12 @@ async def test_real_postgres_reads_hide_foreign_colliding_identities(
         )
         with pytest.raises(IntegrityError):
             await consumer._record_consumer_dlq_event(
-                msg=_ConsumerMessage(),
+                msg=message,
                 error=ValueError("invalid payload"),
                 error_reason_code="VALIDATION_ERROR",
                 correlation_id="corr-wrong-tenant",
                 tenant_id="tenant-b",
+                redacted_payload_text=redacted_message,
                 ingestion_job_id="tenant-read-job-a",
             )
         with pytest.raises(InfrastructureAuditWriteFailed):

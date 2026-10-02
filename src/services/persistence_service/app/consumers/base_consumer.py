@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, Type
 
 from confluent_kafka import Message
+from portfolio_common.consumer_error_evidence import validation_error_diagnostics
 from portfolio_common.db import get_async_db_session
 from portfolio_common.domain.transaction import TransactionPayloadIdentity
 from portfolio_common.exceptions import RetryableConsumerError, TransactionSemanticConflictError
@@ -13,6 +14,7 @@ from portfolio_common.idempotency_repository import (
     SemanticEventClaimOutcome,
 )
 from portfolio_common.kafka_consumer import BaseConsumer
+from portfolio_common.logging_utils import log_operation_event
 from portfolio_common.outbox_repository import OutboxRepository
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.exc import DBAPIError, IntegrityError, OperationalError
@@ -100,6 +102,7 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
         - For unexpected errors, raises them to be handled by the BaseConsumer.
         """
         event = None
+        message_correlation_id: str | None = None
 
         try:
             decoded_payload = decode_persistence_message_payload(msg)
@@ -107,6 +110,7 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
                 msg,
                 fallback_correlation_id=decoded_payload.fallback_correlation_id,
             ) as correlation_id:
+                message_correlation_id = correlation_id
                 envelope = validate_persistence_event_payload(decoded_payload, self.event_model)
                 event = envelope.event
 
@@ -178,8 +182,36 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
                                 correlation_id=correlation_id, **outbox_details
                             )
 
-        except (json.JSONDecodeError, ValidationError):
-            logger.error("Message validation failed.", exc_info=True)
+        except json.JSONDecodeError as error:
+            with self._message_correlation_context(msg) as correlation_id:
+                log_operation_event(
+                    logger,
+                    logging.ERROR,
+                    "Message validation failed.",
+                    event_name="persistence.message.validation",
+                    operation="persistence_consume",
+                    status="rejected",
+                    reason_code="json_decode_failed",
+                    message_correlation_id=correlation_id,
+                    error_type=type(error).__name__,
+                    json_line=error.lineno,
+                    json_column=error.colno,
+                    json_position=error.pos,
+                )
+            raise
+        except ValidationError as error:
+            log_operation_event(
+                logger,
+                logging.ERROR,
+                "Message validation failed.",
+                event_name="persistence.message.validation",
+                operation="persistence_consume",
+                status="rejected",
+                reason_code="schema_validation_failed",
+                message_correlation_id=message_correlation_id,
+                error_type=type(error).__name__,
+                **validation_error_diagnostics(error),
+            )
             raise
         except (DBAPIError, IntegrityError, OperationalError) as e:
             # This is a transient DB error. Signal the base consumer to retry.
