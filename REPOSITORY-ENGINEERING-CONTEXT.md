@@ -431,6 +431,11 @@ schema, machine-readable contracts, or executable evidence.
 - Managed-gate orchestration failures emit a credential-redacting
   `lotus.managed-gate-orchestration-failure.v1` receipt with `non_certifying_failure` posture; a
   failure receipt is operational evidence, never certification.
+- Persistence-consumer JSON/schema rejection logs carry bounded structured error identity and
+  correlation only. Do not restore raw `ValidationError` tracebacks, input values, validator
+  messages or serialized payloads; the shared formatter is a backstop, not the primary boundary.
+  Malformed broker payload evidence redacts at most 16,384 retained characters, appends an explicit
+  truncation marker, and reuses that result for the 1,500-character durable excerpt.
 - The governed producer capacity profile materializes 10,000 positions and reports
   publication-age p50/p95/p99 plus processed-event throughput. Keep
   `outbox-capacity-profile.v1.json` and

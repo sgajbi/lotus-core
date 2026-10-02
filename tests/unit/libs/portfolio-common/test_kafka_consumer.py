@@ -1,10 +1,13 @@
 # tests/unit/libs/portfolio-common/test_kafka_consumer.py
 import asyncio
+import io
 import json
+import logging
 from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
 import pytest
 from portfolio_common import consumer_dlq_tenant
+from portfolio_common.consumer_error_evidence import redacted_payload_text
 from portfolio_common.events import TransactionEvent
 from portfolio_common.exceptions import TransactionSemanticConflictError
 from portfolio_common.ingestion_lineage import ingestion_job_id_var
@@ -16,12 +19,31 @@ from portfolio_common.kafka_consumer import (
     classify_dlq_reason_code,
 )
 from portfolio_common.kafka_consumer_execution import KafkaConsumerExecutionProfile
-from portfolio_common.logging_utils import correlation_id_var, traceparent_var
+from portfolio_common.logging_utils import (
+    RedactingJsonFormatter,
+    correlation_id_var,
+    redact_sensitive_text,
+    traceparent_var,
+)
 from portfolio_common.runtime_settings import RuntimeConfigurationError
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.asyncio
 TRACEPARENT = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+
+
+async def test_malformed_payload_redaction_bounds_scanned_evidence() -> None:
+    raw_value = '{"password":"TOP SYNTHETIC_BOUNDED_PAYLOAD_6R","safe":"' + ("x" * 1_000_000)
+
+    with patch(
+        "portfolio_common.consumer_error_evidence.redact_sensitive_text",
+        wraps=redact_sensitive_text,
+    ) as redact:
+        result = redacted_payload_text(raw_value)
+
+    assert len(redact.call_args.args[0]) == 16_384
+    assert "SYNTHETIC_BOUNDED_PAYLOAD_6R" not in result
+    assert result.endswith("<payload-truncated>")
 
 
 @pytest.mark.parametrize(
@@ -192,6 +214,56 @@ async def test_run_loop_success_path(
     # ASSERT
     test_consumer.process_message_mock.assert_awaited_once_with(mock_msg)
     mock_confluent_consumer.commit.assert_called_once_with(message=mock_msg, asynchronous=False)
+
+
+async def test_run_loop_terminal_validation_log_uses_bounded_evidence(
+    test_consumer: ConcreteTestConsumer,
+    mock_confluent_consumer: MagicMock,
+) -> None:
+    marker = "SYNTHETIC_OUTER_VALIDATION_6R"
+    invalid_payload = _transaction_event_payload(authorization=f"Bearer {marker}")
+    validation_error = _transaction_validation_error(invalid_payload)
+    mock_msg = create_mock_message("key-terminal-validation", invalid_payload)
+    mock_confluent_consumer.poll.return_value = mock_msg
+    test_consumer.process_message_mock.side_effect = validation_error
+
+    async def publish_and_stop(*_args, **_kwargs) -> bool:
+        test_consumer.shutdown()
+        return True
+
+    test_consumer._send_to_dlq_async = AsyncMock(side_effect=publish_and_stop)
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(RedactingJsonFormatter())
+    consumer_logger = logging.getLogger("portfolio_common.kafka_consumer")
+
+    with (
+        patch.object(consumer_logger, "handlers", [handler]),
+        patch.object(consumer_logger, "propagate", False),
+        patch.object(consumer_logger, "level", logging.ERROR),
+    ):
+        await test_consumer.run()
+
+    emitted = stream.getvalue()
+    assert marker not in emitted
+    terminal_records = [
+        json.loads(line)
+        for line in emitted.splitlines()
+        if json.loads(line).get("event_name") == "kafka.consumer.processing_terminal"
+    ]
+    assert len(terminal_records) == 1
+    terminal_record = terminal_records[0]
+    assert terminal_record["operation"] == "kafka.consume"
+    assert terminal_record["topic"] == "test-topic"
+    assert terminal_record["consumer_group"] == "test-group"
+    assert terminal_record["reason_code"] == "validation_error"
+    assert terminal_record["error_type"] == "ValidationError"
+    assert terminal_record["validation_error_count"] == 1
+    assert terminal_record["validation_error_locations"] == ["<dynamic>"]
+    assert terminal_record["validation_error_types"] == ["extra_forbidden"]
+    assert "exc_info" not in terminal_record
+    assert "error_traceback" not in terminal_record
+    test_consumer._send_to_dlq_async.assert_awaited_once_with(mock_msg, validation_error)
 
 
 async def test_run_loop_uses_configured_poll_timeout(
@@ -775,6 +847,11 @@ async def test_run_loop_commits_confirmed_dlq_when_database_evidence_indexing_fa
     mock_kafka_producer.publish_message.assert_called_once()
     mock_kafka_producer.flush.assert_any_call(timeout=5)
     test_consumer._record_consumer_dlq_event.assert_awaited_once()
+    published_payload = mock_kafka_producer.publish_message.call_args.kwargs["value"]
+    assert (
+        test_consumer._record_consumer_dlq_event.await_args.kwargs["redacted_payload_text"]
+        == published_payload["original_value"]
+    )
     mock_confluent_consumer.commit.assert_called_once_with(
         message=mock_msg,
         asynchronous=False,
@@ -1698,7 +1775,8 @@ async def test_dlq_validation_error_reason_omits_rejected_input_value(
     assert result is True
     dlq_payload = mock_kafka_producer.publish_message.call_args.kwargs["value"]
     assert dlq_payload["error_reason_code"] == "VALIDATION_ERROR"
-    assert "authorization" in dlq_payload["error_reason"]
+    assert '"validation_error_locations":["<dynamic>"]' in dlq_payload["error_reason"]
+    assert "authorization" not in dlq_payload["error_reason"]
     assert "event-drift-token" not in dlq_payload["error_reason"]
     assert "event-drift-token" not in dlq_payload["error_traceback"]
     assert "input_value" not in dlq_payload["error_reason"]
@@ -1774,6 +1852,7 @@ async def test_record_consumer_dlq_event_redacts_payload_excerpt(
             error=ValueError("token=event-token"),
             error_reason_code="VALIDATION_ERROR",
             correlation_id="corr-redacted",
+            redacted_payload_text=test_consumer._redacted_message_value_text(mock_msg),
         )
 
     assert len(added_events) == 1
@@ -1809,6 +1888,7 @@ async def test_record_consumer_dlq_event_persists_durable_ingestion_job_owner(
             error=ValueError("persistence timeout"),
             error_reason_code="PERSISTENCE_TIMEOUT",
             correlation_id="corr-owned",
+            redacted_payload_text=test_consumer._redacted_message_value_text(mock_msg),
             ingestion_job_id="job-owned",
         )
 
@@ -1844,6 +1924,7 @@ async def test_record_consumer_dlq_event_persists_missing_correlation_diagnostic
             error=ValueError("missing portfolio_id"),
             error_reason_code="VALIDATION_ERROR",
             correlation_id=None,
+            redacted_payload_text=test_consumer._redacted_message_value_text(mock_msg),
         )
 
     assert len(added_events) == 1
@@ -1879,10 +1960,12 @@ async def test_record_consumer_dlq_event_uses_source_safe_validation_reason(
             error=_transaction_validation_error(payload),
             error_reason_code="VALIDATION_ERROR",
             correlation_id="corr-validation-persisted",
+            redacted_payload_text=test_consumer._redacted_message_value_text(mock_msg),
         )
 
     assert len(added_events) == 1
-    assert "authorization" in added_events[0].error_reason
+    assert '"validation_error_locations":["<dynamic>"]' in added_events[0].error_reason
+    assert "authorization" not in added_events[0].error_reason
     assert "persisted-validation-token" not in added_events[0].error_reason
     assert "input_value" not in added_events[0].error_reason
     assert "persisted-validation-token" not in added_events[0].payload_excerpt

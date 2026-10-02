@@ -1,10 +1,13 @@
 # libs/portfolio-common/portfolio_common/logging_utils.py
+import ast
+import json
 import logging
 import os
 import re
 import secrets
 import sys
 import uuid
+import warnings
 from contextvars import ContextVar
 from types import TracebackType
 from typing import Any
@@ -43,13 +46,20 @@ _SENSITIVE_KEY_TOKENS = (
     "account_number",
     "client_email",
     "ssn",
+    "input_value",
 )
-_URL_CREDENTIALS_PATTERN = re.compile(
-    r"(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*://)(?P<userinfo>[^\s/@]+)@"
+_SENSITIVE_KEY_PATTERN = "|".join(
+    re.escape(token).replace("_", "[_-]")
+    for token in sorted(_SENSITIVE_KEY_TOKENS, key=len, reverse=True)
 )
+_URL_SCHEME_CHARACTERS = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+.-"
+)
+_SERIALIZED_QUOTE_ESCAPE_WIDTHS = (15, 7, 3, 1, 0)
+_NON_SENSITIVE_EXACT_KEYS = frozenset({"secretariat"})
 _INLINE_SECRET_PATTERN = re.compile(
-    r"(?i)\b(?P<key>authorization|password|passwd|pwd|secret|token|api[_-]?key|"
-    r"database_url|connection_string)\b(?P<separator>\s*[:=]\s*)(?P<value>[^\r\n,;]+)"
+    rf"(?i)\b(?P<key>{_SENSITIVE_KEY_PATTERN})\b"
+    r"(?P<separator>\s*[:=]\s*)(?P<value>[^\r\n,;]+)"
 )
 _LOG_TAXONOMY_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$")
 _LOG_TAXONOMY_FALLBACK = "unspecified"
@@ -142,13 +152,205 @@ def redact_sensitive(value: Any) -> Any:
 
 
 def redact_sensitive_text(value: str) -> str:
-    redacted = _URL_CREDENTIALS_PATTERN.sub(
-        lambda match: f"{match.group('scheme')}{REDACTED_VALUE}@",
-        value,
-    )
+    redacted = value
+    for escape_width in _SERIALIZED_QUOTE_ESCAPE_WIDTHS:
+        for quote in ("'", '"'):
+            if ("\\" * escape_width) + quote not in redacted:
+                continue
+            redacted = _redact_serialized_mapping_secrets(
+                redacted,
+                escape_width=escape_width,
+                quote=quote,
+            )
+    redacted = _redact_url_credentials(redacted)
     return _INLINE_SECRET_PATTERN.sub(
         lambda match: f"{match.group('key')}{match.group('separator')}{REDACTED_VALUE}",
         redacted,
+    )
+
+
+def _redact_url_credentials(value: str) -> str:
+    replacements: list[tuple[int, int]] = []
+    search_from = 0
+    while (scheme_end := value.find("://", search_from)) >= 0:
+        scheme_start = scheme_end - 1
+        while scheme_start >= 0 and value[scheme_start] in _URL_SCHEME_CHARACTERS:
+            scheme_start -= 1
+        scheme_start += 1
+        if scheme_start == scheme_end or not value[scheme_start].isalpha():
+            search_from = scheme_end + 3
+            continue
+        userinfo_start = scheme_end + 3
+        userinfo_end = userinfo_start
+        while userinfo_end < len(value) and value[userinfo_end] not in "\r\n\t /@":
+            userinfo_end += 1
+        if (
+            userinfo_end < len(value)
+            and value[userinfo_end] == "@"
+            and userinfo_end > userinfo_start
+        ):
+            replacements.append((userinfo_start, userinfo_end))
+            search_from = userinfo_end + 1
+        else:
+            search_from = userinfo_start
+    if not replacements:
+        return value
+    parts: list[str] = []
+    previous_end = 0
+    for start, end in replacements:
+        parts.extend((value[previous_end:start], REDACTED_VALUE))
+        previous_end = end
+    parts.append(value[previous_end:])
+    return "".join(parts)
+
+
+def _redact_serialized_mapping_secrets(
+    value: str,
+    *,
+    escape_width: int,
+    quote: str,
+) -> str:
+    replacements: list[tuple[int, int]] = []
+    cursor = 0
+    while cursor < len(value):
+        if (
+            not _is_structural_quote(value, cursor, escape_width)
+            or value[cursor + escape_width] != quote
+        ):
+            cursor += 1
+            continue
+        key_start = cursor + escape_width + 1
+        key_end = _find_structural_quote(value, key_start, quote, escape_width)
+        close_width = escape_width + 1
+        if key_end is None:
+            break
+
+        separator = key_end + close_width
+        while separator < len(value) and value[separator].isspace():
+            separator += 1
+        if separator >= len(value) or value[separator] not in {":", "="}:
+            cursor = key_end + close_width
+            continue
+
+        value_start = separator + 1
+        while value_start < len(value) and value[value_start].isspace():
+            value_start += 1
+        if not _is_sensitive_serialized_key(value[key_start:key_end], quote=quote):
+            cursor = value_start
+            continue
+
+        replacement = _serialized_secret_value_span(
+            value,
+            value_start,
+            escape_width=escape_width,
+        )
+        if replacement is None:
+            cursor = value_start + 1
+            continue
+        replace_start, replace_end, cursor = replacement
+        replacements.append((replace_start, replace_end))
+
+    if not replacements:
+        return value
+    parts: list[str] = []
+    previous_end = 0
+    for start, end in replacements:
+        parts.extend((value[previous_end:start], REDACTED_VALUE))
+        previous_end = end
+    parts.append(value[previous_end:])
+    return "".join(parts)
+
+
+def _serialized_secret_value_span(
+    value: str,
+    start: int,
+    *,
+    escape_width: int,
+) -> tuple[int, int, int] | None:
+    if start >= len(value):
+        return None
+    if _is_structural_quote(value, start, escape_width):
+        quote = value[start + escape_width]
+        content_start = start + escape_width + 1
+        end = _find_structural_quote(value, content_start, quote, escape_width)
+        if end is None:
+            return start, len(value), len(value)
+        close_width = escape_width + 1
+        return content_start, end, end + close_width
+
+    end = _json_value_end(value, start, escape_width=escape_width)
+    if end <= start:
+        return None
+    return start, end, end
+
+
+def _find_structural_quote(
+    value: str,
+    start: int,
+    quote: str,
+    escape_width: int,
+) -> int | None:
+    cursor = start
+    while cursor < len(value):
+        if (
+            _is_structural_quote(value, cursor, escape_width)
+            and value[cursor + escape_width] == quote
+        ):
+            return cursor
+        cursor += 1
+    return None
+
+
+def _json_value_end(value: str, start: int, *, escape_width: int) -> int:
+    opening = value[start]
+    if opening not in "[{":
+        end = start
+        while end < len(value) and value[end] not in ",;}]\r\n":
+            end += 1
+        return end
+
+    expected_closers = ["]" if opening == "[" else "}"]
+    quote: str | None = None
+    escaped = False
+    index = start + 1
+    while index < len(value):
+        character = value[index]
+        if _is_structural_quote(value, index, escape_width):
+            structural_quote = value[index + escape_width]
+            if quote == structural_quote:
+                quote = None
+            elif quote is None:
+                quote = structural_quote
+            index += escape_width + 1
+            continue
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == quote:
+                quote = None
+            index += 1
+            continue
+        if character in {'"', "'"}:
+            quote = character
+        elif character in "[{":
+            expected_closers.append("]" if character == "[" else "}")
+        elif expected_closers and character == expected_closers[-1]:
+            expected_closers.pop()
+            if not expected_closers:
+                return index + 1
+        index += 1
+    return len(value)
+
+
+def _is_structural_quote(value: str, index: int, escape_width: int) -> bool:
+    quote_index = index + escape_width
+    return (
+        quote_index < len(value)
+        and all(character == "\\" for character in value[index:quote_index])
+        and value[quote_index] in {'"', "'"}
+        and (index == 0 or value[index - 1] != "\\")
     )
 
 
@@ -160,8 +362,37 @@ def _redact_dict(value: dict[str, Any]) -> dict[str, Any]:
 
 
 def _is_sensitive_key(key: object) -> bool:
-    normalized = str(key).strip().lower().replace("-", "_")
-    return any(token in normalized for token in _SENSITIVE_KEY_TOKENS)
+    raw_key = str(key).strip()
+    snake_key = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", raw_key)
+    normalized = re.sub(r"[^a-z0-9]+", "_", snake_key.lower()).strip("_")
+    if normalized in _NON_SENSITIVE_EXACT_KEYS or normalized.endswith(("_count", "_policy")):
+        return False
+    padded_key = f"_{normalized}_"
+    collapsed_key = normalized.replace("_", "")
+    return any(
+        f"_{token}_" in padded_key
+        or normalized.endswith(token)
+        or token.replace("_", "") in collapsed_key
+        for token in _SENSITIVE_KEY_TOKENS
+    )
+
+
+def _is_sensitive_serialized_key(key: str, *, quote: str) -> bool:
+    decoded_key = key
+    for _ in range(len(_SERIALIZED_QUOTE_ESCAPE_WIDTHS)):
+        try:
+            candidate = json.loads(f'"{decoded_key}"')
+        except (json.JSONDecodeError, TypeError):
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    candidate = ast.literal_eval(f"{quote}{decoded_key}{quote}")
+            except (SyntaxError, ValueError):
+                break
+        if candidate == decoded_key:
+            break
+        decoded_key = candidate
+    return _is_sensitive_key(decoded_key)
 
 
 def normalize_log_taxonomy_value(value: str | None) -> str:
@@ -202,31 +433,28 @@ def log_operation_event(
     exc_info: bool | tuple[type[BaseException], BaseException, TracebackType | None] = False,
     **fields: Any,
 ) -> None:
-    kwargs = dict(
-        exc_info=exc_info,
-        extra=operation_log_extra(
-            event_name=event_name,
-            operation=operation,
-            status=status,
-            reason_code=reason_code,
-            **fields,
-        ),
+    extra = operation_log_extra(
+        event_name=event_name,
+        operation=operation,
+        status=status,
+        reason_code=reason_code,
+        **fields,
     )
     if level >= logging.CRITICAL:
-        logger.critical(message, **kwargs)
+        logger.critical(message, exc_info=exc_info, extra=extra)
     elif level >= logging.ERROR:
-        logger.error(message, **kwargs)
+        logger.error(message, exc_info=exc_info, extra=extra)
     elif level >= logging.WARNING:
-        logger.warning(message, **kwargs)
+        logger.warning(message, exc_info=exc_info, extra=extra)
     elif level >= logging.INFO:
-        logger.info(message, **kwargs)
+        logger.info(message, exc_info=exc_info, extra=extra)
     else:
-        logger.debug(message, **kwargs)
+        logger.debug(message, exc_info=exc_info, extra=extra)
 
 
 class RedactingJsonFormatter(JsonFormatter):
     def process_log_record(self, log_record: dict[str, Any]) -> dict[str, Any]:
-        return redact_sensitive(log_record)
+        return _redact_dict(log_record)
 
 
 class CorrelationIdFilter(logging.Filter):

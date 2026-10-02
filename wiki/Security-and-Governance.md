@@ -119,6 +119,14 @@ posture evidence, not as a code default.
 - upload preview is source-safe by default: `sample_rows` stays empty unless
   `include_sample_rows=true` is backed by signed `ingestion.uploads.preview_samples.read`, and
   privileged samples are still field-redacted
+- persistence-consumer validation rejection logs retain correlation, stable reason code, bounded
+  schema locations/types and error count, but never raw input values, serialized payloads or
+  `ValidationError` traceback text; the formatter also masks quoted, non-string, escaped,
+  multiline and truncated values under complete compound, punctuated or JSON-escaped sensitive
+  mapping keys through bounded-pass scanning across four nested serialization layers while
+  retaining non-sensitive compound diagnostics; malformed broker evidence scans at most 16,384
+  retained characters, adds a truncation marker, and reuses that result for its 1,500-character
+  durable excerpt
 - upload preview and commit enforce byte, row, column, cell-length, content-type, and rate/abuse
   controls before or during parser work
 - committed fixtures, seed examples, API examples, and generated proof artifacts must pass
