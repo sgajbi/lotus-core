@@ -151,7 +151,11 @@ def redact_sensitive(value: Any) -> Any:
     return value
 
 
-def redact_sensitive_text(value: str) -> str:
+def redact_sensitive_text(
+    value: str,
+    *,
+    redact_trailing_url_userinfo: bool = False,
+) -> str:
     redacted = value
     for escape_width in _SERIALIZED_QUOTE_ESCAPE_WIDTHS:
         for quote in ("'", '"'):
@@ -162,14 +166,21 @@ def redact_sensitive_text(value: str) -> str:
                 escape_width=escape_width,
                 quote=quote,
             )
-    redacted = _redact_url_credentials(redacted)
+    redacted = _redact_url_credentials(
+        redacted,
+        redact_trailing_userinfo=redact_trailing_url_userinfo,
+    )
     return _INLINE_SECRET_PATTERN.sub(
         lambda match: f"{match.group('key')}{match.group('separator')}{REDACTED_VALUE}",
         redacted,
     )
 
 
-def _redact_url_credentials(value: str) -> str:
+def _redact_url_credentials(
+    value: str,
+    *,
+    redact_trailing_userinfo: bool = False,
+) -> str:
     replacements: list[tuple[int, int]] = []
     search_from = 0
     while (scheme_end := value.find("://", search_from)) >= 0:
@@ -191,6 +202,13 @@ def _redact_url_credentials(value: str) -> str:
         ):
             replacements.append((userinfo_start, userinfo_end))
             search_from = userinfo_end + 1
+        elif (
+            redact_trailing_userinfo
+            and userinfo_end == len(value)
+            and userinfo_end > userinfo_start
+        ):
+            replacements.append((userinfo_start, userinfo_end))
+            break
         else:
             search_from = userinfo_start
     if not replacements:

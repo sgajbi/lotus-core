@@ -23,8 +23,12 @@ def redacted_payload_text(raw_value: str) -> str:
         parsed = json.loads(raw_value)
     except json.JSONDecodeError:
         evidence = raw_value[:_MAX_MALFORMED_PAYLOAD_REDACTION_CHARS]
-        redacted = redact_sensitive_text(evidence)
-        if len(raw_value) > len(evidence):
+        truncated = len(raw_value) > len(evidence)
+        redacted = redact_sensitive_text(
+            evidence,
+            redact_trailing_url_userinfo=truncated,
+        )
+        if truncated:
             return f"{redacted}{_MALFORMED_PAYLOAD_TRUNCATION_MARKER}"
         return redacted
     redacted = redact_sensitive(parsed)

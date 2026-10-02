@@ -46,6 +46,17 @@ async def test_malformed_payload_redaction_bounds_scanned_evidence() -> None:
     assert result.endswith("<payload-truncated>")
 
 
+async def test_malformed_payload_redaction_masks_url_cut_before_at_sign() -> None:
+    userinfo = "user:SYNTHETIC_TRUNCATED_URL_SECRET_7P"
+    url_prefix = f"postgresql://{userinfo}"
+    raw_value = ("x" * (16_384 - len(url_prefix))) + url_prefix + "@host/database"
+
+    result = redacted_payload_text(raw_value)
+
+    assert "SYNTHETIC_TRUNCATED_URL_SECRET_7P" not in result
+    assert result.endswith("postgresql://***REDACTED***<payload-truncated>")
+
+
 async def test_malformed_payload_redaction_masks_multiline_scalar() -> None:
     marker = "SYNTHETIC_MULTILINE_SCALAR_4N"
 

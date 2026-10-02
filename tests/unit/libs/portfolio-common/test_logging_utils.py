@@ -132,6 +132,21 @@ def test_redact_sensitive_text_masks_url_credentials_and_inline_tokens():
     )
 
 
+def test_redact_sensitive_text_optionally_masks_trailing_url_userinfo() -> None:
+    value = "postgresql://user:SYNTHETIC_INCOMPLETE_URL_3F"
+    harmless = "health=https://safe.example/path status=degraded"
+
+    assert redact_sensitive_text(value) == value
+    assert (
+        redact_sensitive_text(
+            value,
+            redact_trailing_url_userinfo=True,
+        )
+        == "postgresql://***REDACTED***"
+    )
+    assert redact_sensitive_text(harmless, redact_trailing_url_userinfo=True) == harmless
+
+
 def test_redacting_json_formatter_masks_message_and_extra_fields():
     formatter = RedactingJsonFormatter("%(message)s %(database_url)s %(authorization)s %(safe)s")
     record = logging.LogRecord(
