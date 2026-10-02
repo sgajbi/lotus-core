@@ -90,7 +90,15 @@ That makes valuation supportability a first-class contract, not just a calculati
 - a non-flat bond requires exact effective-dated quote-policy and market-price source authority;
   unscoped bond prices fail closed because numeric magnitude cannot distinguish unit price from
   percent of principal
+- runtime day-count authority must be exact and replayable; Core never infers a latest convention
+  version
 - downstream performance and risk conclusions still belong outside `lotus-core`
+
+The framework-neutral domain kernel retains historical Lotus/SIFMA calendar-basis replay as
+`30/360.US@1` and registers the explicit paired-February EOM policy as `30/360.US@2`. This domain
+availability is not runtime product activation: no runtime, API, or database boundary selects or
+persists version 2 in this slice. Issue #788 owns the supported source-term, persistence, API, and
+consumer integration.
 
 ## Operational hints
 

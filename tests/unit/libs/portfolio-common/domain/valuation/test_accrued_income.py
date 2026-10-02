@@ -112,6 +112,100 @@ def test_ex_coupon_settlement_subtracts_full_coupon_as_rebate_interest() -> None
     assert result.lineage.algorithm_version == 3
 
 
+def test_us_eom_v2_accrues_full_annual_coupon_and_ex_coupon_rebate() -> None:
+    elapsed = _segment(
+        accrual_start=date(2024, 2, 29),
+        accrual_end=date(2025, 2, 27),
+        currency="CHF",
+        signed_accrual_principal=Decimal("10000000"),
+        annual_effective_rate=Decimal("0.03"),
+        day_count_convention="30/360.US",
+        day_count_convention_version=2,
+        icma_reference_periods=(),
+    )
+    full_coupon = replace(elapsed, accrual_end=date(2025, 2, 28))
+
+    result = calculate_segmented_accrued_income(
+        (elapsed,),
+        ex_coupon_entitlement=ExCouponEntitlement(
+            ex_coupon_date=date(2025, 2, 20),
+            next_coupon_payment_date=date(2025, 2, 28),
+            full_coupon_segments=(full_coupon,),
+            entitlement_source=_source("us-eom-ex-coupon-entitlement"),
+        ),
+    )
+
+    assert result.gross_accrued_income == Decimal("297500.0000000000")
+    assert result.ex_coupon_entitlement_adjustment == Decimal("300000.0000000000")
+    assert result.settlement_accrued_income == Decimal("-2500.0000000000")
+    assert result.segments[0].year_fraction == _ratio(357, 360)
+    assert result.lineage.algorithm_version == 3
+
+
+def test_us_eom_v1_replay_is_retained_and_lineage_distinguishes_v2() -> None:
+    v1_segment = _segment(
+        accrual_start=date(2024, 2, 29),
+        accrual_end=date(2025, 2, 28),
+        currency="CHF",
+        signed_accrual_principal=Decimal("10000000"),
+        annual_effective_rate=Decimal("0.03"),
+        day_count_convention="30/360.US",
+        day_count_convention_version=1,
+        icma_reference_periods=(),
+    )
+
+    retained = calculate_segmented_accrued_income((v1_segment,))
+    corrected = calculate_segmented_accrued_income(
+        (replace(v1_segment, day_count_convention_version=2),)
+    )
+
+    assert retained.gross_accrued_income == Decimal("298333.3333333333")
+    assert corrected.gross_accrued_income == Decimal("300000.0000000000")
+    assert retained.lineage.algorithm_version == corrected.lineage.algorithm_version == 3
+    assert retained.lineage.input_content_hash != corrected.lineage.input_content_hash
+    assert retained.lineage.calculation_content_hash != corrected.lineage.calculation_content_hash
+    assert retained.lineage.output_content_hash != corrected.lineage.output_content_hash
+
+
+@pytest.mark.parametrize(
+    ("principal", "rate", "expected"),
+    [
+        ("10000000", "0.03", "300000.0000000000"),
+        ("-10000000", "0.03", "-300000.0000000000"),
+        ("10000000", "-0.01", "-100000.0000000000"),
+        ("0.000001", "0.01", "0.0000000100"),
+        ("0", "0.03", "0E-10"),
+    ],
+)
+def test_us_eom_v2_money_is_signed_and_precision_independent(
+    principal: str,
+    rate: str,
+    expected: str,
+) -> None:
+    segment = _segment(
+        accrual_start=date(2024, 2, 29),
+        accrual_end=date(2025, 2, 28),
+        currency="CHF",
+        signed_accrual_principal=Decimal(principal),
+        annual_effective_rate=Decimal(rate),
+        day_count_convention="30/360.US",
+        day_count_convention_version=2,
+        icma_reference_periods=(),
+    )
+
+    with localcontext() as context:
+        context.prec = 6
+        context.rounding = ROUND_DOWN
+        low_precision = calculate_segmented_accrued_income((segment,))
+    with localcontext() as context:
+        context.prec = 28
+        context.rounding = ROUND_UP
+        high_precision = calculate_segmented_accrued_income((segment,))
+
+    assert low_precision == high_precision
+    assert low_precision.gross_accrued_income == Decimal(expected)
+
+
 def test_ex_coupon_rebate_preserves_short_position_sign() -> None:
     reference_period = IcmaReferencePeriod(date(2026, 1, 1), date(2026, 7, 1), 2)
     elapsed = _segment(

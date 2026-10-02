@@ -146,6 +146,12 @@ _CONVENTIONS = (
         requires_business_day_calendar=False,
     ),
     DayCountConventionDefinition(
+        convention=DayCountConvention.THIRTY_360_US,
+        convention_version=2,
+        denominator=360,
+        requires_business_day_calendar=False,
+    ),
+    DayCountConventionDefinition(
         convention=DayCountConvention.THIRTY_E_360,
         convention_version=1,
         denominator=360,
@@ -221,7 +227,11 @@ def calculate_year_fraction(
     if definition.convention is DayCountConvention.ACTUAL_ACTUAL_ICMA:
         return _actual_actual_icma_fraction(inputs)
     if definition.convention is DayCountConvention.THIRTY_360_US:
-        numerator = _thirty_360_us_days(inputs.period_start, inputs.period_end)
+        numerator = _thirty_360_us_days(
+            inputs.period_start,
+            inputs.period_end,
+            adjust_paired_february_eom=definition.convention_version == 2,
+        )
     elif definition.convention is DayCountConvention.THIRTY_E_360:
         numerator = _thirty_e_360_days(inputs.period_start, inputs.period_end)
     elif definition.convention is DayCountConvention.THIRTY_E_360_ISDA:
@@ -249,11 +259,22 @@ def _business_day_count(inputs: DayCountInputs) -> int:
     )
 
 
-def _thirty_360_us_days(period_start: date, period_end: date) -> int:
+def _thirty_360_us_days(
+    period_start: date,
+    period_end: date,
+    *,
+    adjust_paired_february_eom: bool,
+) -> int:
     start_day = period_start.day
+    end_day = period_end.day
+    if (
+        adjust_paired_february_eom
+        and _is_last_day_of_february(period_start)
+        and _is_last_day_of_february(period_end)
+    ):
+        end_day = 30
     if _is_last_day_of_february(period_start) or start_day == 31:
         start_day = 30
-    end_day = period_end.day
     if start_day == 30 and end_day == 31:
         end_day = 30
     return _thirty_360_numerator(period_start, period_end, start_day, end_day)

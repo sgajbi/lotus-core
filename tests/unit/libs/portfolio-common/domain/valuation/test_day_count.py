@@ -134,6 +134,28 @@ def test_thirty_360_us_applies_sifma_end_of_february_and_31st_rules(
 @pytest.mark.parametrize(
     ("period_start", "period_end", "expected_days"),
     [
+        (date(2024, 2, 29), date(2025, 2, 28), 360),
+        (date(2025, 2, 28), date(2026, 2, 28), 360),
+        (date(2024, 2, 29), date(2024, 8, 31), 180),
+        (date(2024, 8, 31), date(2025, 2, 28), 178),
+        (date(2006, 2, 28), date(2006, 3, 31), 30),
+    ],
+)
+def test_thirty_360_us_v2_applies_explicit_eom_rules(
+    period_start: date,
+    period_end: date,
+    expected_days: int,
+) -> None:
+    assert calculate_year_fraction(
+        convention="30/360.US",
+        convention_version=2,
+        inputs=DayCountInputs(period_start=period_start, period_end=period_end),
+    ) == _ratio(expected_days, 360)
+
+
+@pytest.mark.parametrize(
+    ("period_start", "period_end", "expected_days"),
+    [
         (date(2026, 2, 28), date(2026, 3, 31), 32),
         (date(2026, 1, 31), date(2026, 2, 28), 28),
         (date(2026, 1, 31), date(2026, 3, 31), 60),
@@ -319,16 +341,20 @@ def test_registry_requires_exact_governed_code_and_version() -> None:
         ("ACT/360", 1),
         ("BUS/252", 1),
         ("30/360.US", 1),
+        ("30/360.US", 2),
         ("30E/360", 1),
         ("30E/360.ISDA", 1),
         ("ACT/ACT.ISDA", 1),
         ("ACT/ACT.ICMA", 1),
     ]
     assert resolve_day_count_convention(" act/360 ", 1).denominator == 360
+    assert resolve_day_count_convention(" 30/360.us ", 2).denominator == 360
     with pytest.raises(UnsupportedDayCountError, match="ACT/ACT@1"):
         resolve_day_count_convention("ACT/ACT", 1)
     with pytest.raises(UnsupportedDayCountError, match="ACT/360@2"):
         resolve_day_count_convention("ACT/360", 2)
+    with pytest.raises(UnsupportedDayCountError, match="30/360.US@3"):
+        resolve_day_count_convention("30/360.US", 3)
 
 
 def test_invalid_interval_and_calendar_lineage_fail_before_calculation() -> None:

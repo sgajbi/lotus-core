@@ -127,22 +127,28 @@ before the ex-date remains cum-coupon and must not carry an ex-coupon entitlemen
 
 This is the DMO convention expressed as `elapsed accrued interest - full next coupon` for settlement
 after the ex-dividend date. The source system, not Core, owns market-specific ex-date and payment-date
-determination. The accrued-income lineage algorithm is version 2 because its input and output
+determination. The accrued-income lineage algorithm is version 3 because its input and output
 contracts now bind the entitlement source, full coupon segments, gross accrual, adjustment, and
 settlement accrual separately.
 
-The version-1 registry implements `ACT/365.FIXED`, `ACT/360`, `BUS/252`, `30/360.US`,
-`30E/360`, `30E/360.ISDA`, `ACT/ACT.ISDA`, and `ACT/ACT.ICMA`. `BUS/252` requires a
-versioned source calendar. `30E/360.ISDA` requires the contractual termination date.
+The registry retains version 1 for `ACT/365.FIXED`, `ACT/360`, `BUS/252`, `30/360.US`,
+`30E/360`, `30E/360.ISDA`, `ACT/ACT.ISDA`, and `ACT/ACT.ICMA`, and additionally registers
+`30/360.US` version 2. `BUS/252` requires a versioned source calendar. `30E/360.ISDA` requires
+the contractual termination date.
 `ACT/ACT.ICMA` requires authoritative regular or quasi-coupon reference periods that cover the
 calculation interval exactly once; this is how regular, short-stub, and long-stub periods avoid an
 inferred schedule.
 
-`30/360.US` version 1 follows the SIFMA sequence exactly: change a last-of-February or 31st start
-day to 30, then change the end day only when the adjusted start is 30 and the end day is 31. It does
-not change a February month-end end day; for example, 2024-02-29 to 2025-02-28 is `358/360`. A
-different market convention requires a distinct governed convention identity and version rather
-than an implicit alias.
+`30/360.US` version 1 retains the historical Lotus/SIFMA calendar-basis sequence: change a
+last-of-February or 31st start day to 30, then change the end day only when the adjusted start is 30
+and the end day is 31. It therefore retains 2024-02-29 to 2025-02-28 as `358/360` for historical
+replay. Version 2 is the explicit U.S. EOM (`30U/360 EOM`) policy. Before the version-1 steps, when
+both dates are the last day of February it changes the end day to 30, so the same annual interval is
+`360/360`. Callers must supply the exact version; Core does not resolve a latest version or infer EOM
+authority. The convention version is already part of accrued-income input lineage, so version 2
+changes input, calculation, and output hashes while version-1 results and algorithm version 3 remain
+stable. This is domain-kernel availability, not runtime product activation: issue #788 still owns the
+supported source-term, API, persistence, and consumer wiring.
 
 Day-count, accrued-income, position scaling, aggregation, and FX-conversion intermediates use an
 internal precision of 50 decimal digits,
@@ -209,6 +215,11 @@ Primary ex-coupon methodology references are the UK Debt Management Office
 [gilt transaction convention](https://www.dmo.gov.uk/responsibilities/gilt-market/about-gilts/),
 which describes negative rebate interest after the ex-dividend date, and its
 [official formulae publication](https://www.dmo.gov.uk/publications/gilt-market/formulae-and-examples/).
+The retained version-1 Lotus/SIFMA calendar-basis sequence follows the
+[SIFMA standard formulas](https://www.sifma.org/wp-content/uploads/2017/08/chsf.pdf). The explicit
+version-2 paired-February EOM sequence follows the documented
+[30U/360 EOM policy](https://strata.opengamma.io/day_counts/). These are separate governed versions,
+not interchangeable aliases.
 
 ## 2. Valuation Scheduler Logic
 
