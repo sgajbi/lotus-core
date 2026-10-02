@@ -321,13 +321,13 @@ def _find_structural_quote(
 
 def _json_value_end(value: str, start: int, *, escape_width: int) -> int:
     opening = value[start]
-    if opening not in "[{":
+    if opening not in "[{(":
         end = start
-        while end < len(value) and value[end] not in ",;}]":
+        while end < len(value) and value[end] not in ",;})]":
             end += 1
         return end
 
-    expected_closers = ["]" if opening == "[" else "}"]
+    expected_closers = [{"[": "]", "{": "}", "(": ")"}[opening]]
     quote: str | None = None
     escaped = False
     index = start + 1
@@ -352,8 +352,8 @@ def _json_value_end(value: str, start: int, *, escape_width: int) -> int:
             continue
         if character in {'"', "'"}:
             quote = character
-        elif character in "[{":
-            expected_closers.append("]" if character == "[" else "}")
+        elif character in "[{(":
+            expected_closers.append({"[": "]", "{": "}", "(": ")"}[character])
         elif expected_closers and character == expected_closers[-1]:
             expected_closers.pop()
             if not expected_closers:

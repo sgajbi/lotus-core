@@ -66,6 +66,15 @@ async def test_malformed_payload_redaction_masks_multiline_scalar() -> None:
     assert result == '{"password": ***REDACTED***, "safe": visible}'
 
 
+async def test_malformed_payload_redaction_masks_complete_python_tuple() -> None:
+    marker = "SYNTHETIC_TUPLE_PAYLOAD_SECRET_6V"
+
+    result = redacted_payload_text(f"{{'password': ('FIRST', '{marker}'), 'safe': 'visible'}}")
+
+    assert marker not in result
+    assert result == "{'password': ***REDACTED***, 'safe': 'visible'}"
+
+
 @pytest.mark.parametrize(
     ("resolved_tenant", "expected_error"),
     [("tenant-a", None), (None, "unknown ingestion job owner")],
