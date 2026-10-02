@@ -270,6 +270,12 @@ schema, machine-readable contracts, or executable evidence.
 
 ## Known Constraints And Implementation Notes
 
+- The framework-neutral domain kernel registers exact day-count convention versions.
+  `30/360.US@1` retains historical Lotus/SIFMA calendar-basis replay;
+  `30/360.US@2` is the explicit U.S. EOM policy and adjusts the end day only when both dates are
+  February month-end. Never infer a latest version or rewrite v1 evidence. The version participates
+  in accrued-income input, calculation, and output lineage. No runtime, API, or database boundary
+  selects or persists `30/360.US@2` in this slice; issue #788 owns that integration.
 - QCP snapshot freshness must reuse the already-computed governed collective reconciliation
   scope. Per-security epochs record last mutation and may differ in a valid current portfolio;
   do not introduce a second epoch resolver or default target. Empty/unscoped source evidence
