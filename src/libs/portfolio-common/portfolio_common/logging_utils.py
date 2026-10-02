@@ -305,7 +305,7 @@ def _json_value_end(value: str, start: int, *, escape_width: int) -> int:
     opening = value[start]
     if opening not in "[{":
         end = start
-        while end < len(value) and value[end] not in ",;}]\r\n":
+        while end < len(value) and value[end] not in ",;}]":
             end += 1
         return end
 
