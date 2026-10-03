@@ -126,26 +126,29 @@ class SqlAlchemyDpmReferenceDataReader:
         mandate_id: str | None,
         booking_center_code: str | None,
     ) -> DiscretionaryMandateBindingEvidence | None:
-        authority_statement = select(PortfolioMandateBinding.id).where(
+        authority_predicates = [
             PortfolioMandateBinding.portfolio_id == portfolio_id,
             *effective_discretionary_mandate_predicates(as_of_date),
-        )
+        ]
         if mandate_id:
-            authority_statement = authority_statement.where(
-                PortfolioMandateBinding.mandate_id == mandate_id
-            )
-        authoritative_id = (
-            authority_statement.order_by(*discretionary_mandate_precedence())
-            .limit(1)
-            .scalar_subquery()
+            authority_predicates.append(PortfolioMandateBinding.mandate_id == mandate_id)
+        ranked = ranked_latest_ids(
+            PortfolioMandateBinding,
+            PortfolioMandateBinding.portfolio_id,
+            PortfolioMandateBinding.mandate_id,
+            predicates=authority_predicates,
+            order_by=discretionary_mandate_precedence(),
         )
-        statement = select(PortfolioMandateBinding).where(
-            PortfolioMandateBinding.id == authoritative_id
+        statement = (
+            select(PortfolioMandateBinding)
+            .join(ranked, PortfolioMandateBinding.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
         )
         if booking_center_code:
             statement = statement.where(
                 PortfolioMandateBinding.booking_center_code == booking_center_code
             )
+        statement = statement.order_by(*discretionary_mandate_precedence()).limit(1)
         row = (await self._session.execute(statement)).scalars().first()
         return _mandate_binding(row) if row is not None else None
 

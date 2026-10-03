@@ -492,6 +492,7 @@ async def test_population_filters_only_the_current_effective_mandate_version(
         binding_version=1,
         authority_status="active",
         model_portfolio_id="MODEL_A",
+        booking_center_code="Hong Kong",
         observed_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     independent.update(mandate_id="MANDATE_INDEPENDENT", source_record_id="independent:1")
@@ -500,6 +501,15 @@ async def test_population_filters_only_the_current_effective_mandate_version(
     foreign = dict(independent)
     foreign.update(portfolio_id=PORTFOLIO_B, source_record_id="foreign:1")
     await ingestion.upsert_discretionary_mandate_bindings([independent, foreign])
+    independent_binding = await binding_reader.resolve_discretionary_mandate_binding(
+        portfolio_id=VERSIONED_PORTFOLIO,
+        as_of_date=date(2026, 12, 2),
+        mandate_id=None,
+        booking_center_code="Hong Kong",
+    )
+    assert independent_binding is not None
+    assert independent_binding.mandate_id == "MANDATE_INDEPENDENT"
+    assert independent_binding.binding_version == 1
     assert [row.mandate_id for row in await affected("MODEL_A")] == [
         "MANDATE_INDEPENDENT",
         VERSIONED_MANDATE,
