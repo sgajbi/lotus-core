@@ -53,8 +53,40 @@ class RebalanceBandContext(BaseModel):
     )
     cash_reserve_weight: Decimal | None = Field(
         None,
-        description="Optional target cash reserve weight as a decimal ratio.",
+        ge=0,
+        le=1,
+        description=(
+            "Optional mandate-authoritative target cash reserve as a finite decimal ratio of "
+            "total portfolio market value. Zero is an explicit zero-reserve target; null means "
+            "no usable target is available; supportability distinguishes absent evidence from "
+            "invalid legacy evidence."
+        ),
         examples=["0.0200000000"],
+    )
+    cash_reserve_scope: Literal["TOTAL_PORTFOLIO_MARKET_VALUE"] = Field(
+        ...,
+        description="Denominator used to interpret cash_reserve_weight.",
+    )
+    cash_reserve_currency_basis: Literal["PORTFOLIO_BASE_CURRENCY"] = Field(
+        ...,
+        description=(
+            "Valuation basis for the target. Cash and total portfolio market value are translated "
+            "to the canonical portfolio base currency before the ratio is evaluated."
+        ),
+    )
+    cash_reserve_authority: Literal["MANDATE_BINDING"] = Field(
+        ...,
+        description=(
+            "Authority for the target: the effective mandate binding selected by effective date "
+            "and binding_version."
+        ),
+    )
+    consumer_override_allowed: Literal[False] = Field(
+        ...,
+        description=(
+            "Consumers, policies, and scenarios may not override the source target. A changed "
+            "target requires a new or corrected effective mandate binding."
+        ),
     )
 
     model_config = ConfigDict()

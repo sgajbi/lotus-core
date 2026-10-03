@@ -1354,6 +1354,10 @@ async def test_resolve_discretionary_mandate_binding_success_path() -> None:
             "rebalance_bands": {
                 "default_band": "0.0250000000",
                 "cash_reserve_weight": "0.0200000000",
+                "cash_reserve_scope": "TOTAL_PORTFOLIO_MARKET_VALUE",
+                "cash_reserve_currency_basis": "PORTFOLIO_BASE_CURRENCY",
+                "cash_reserve_authority": "MANDATE_BINDING",
+                "consumer_override_allowed": False,
             },
             "effective_from": "2026-04-01",
             "effective_to": None,

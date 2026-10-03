@@ -2352,6 +2352,20 @@ async def test_openapi_fully_documents_dpm_mandate_binding_schema_family(
         schema,
         DPM_MANDATE_BINDING_SCHEMA_ROOTS,
     )
+    rebalance_context = schema["components"]["schemas"]["RebalanceBandContext"]
+    properties = rebalance_context["properties"]
+
+    assert "finite decimal ratio" in properties["cash_reserve_weight"]["description"]
+    assert properties["cash_reserve_scope"]["const"] == "TOTAL_PORTFOLIO_MARKET_VALUE"
+    assert properties["cash_reserve_currency_basis"]["const"] == "PORTFOLIO_BASE_CURRENCY"
+    assert properties["cash_reserve_authority"]["const"] == "MANDATE_BINDING"
+    assert properties["consumer_override_allowed"]["const"] is False
+    assert {
+        "cash_reserve_scope",
+        "cash_reserve_currency_basis",
+        "cash_reserve_authority",
+        "consumer_override_allowed",
+    }.issubset(rebalance_context["required"])
 
 
 async def test_openapi_fully_documents_dpm_instrument_eligibility_schema_family(

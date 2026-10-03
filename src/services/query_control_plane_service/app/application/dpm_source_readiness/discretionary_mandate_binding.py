@@ -78,11 +78,13 @@ def build_discretionary_mandate_binding_response(
         last_review_date=evidence.last_review_date,
         next_review_due_date=evidence.next_review_due_date,
     )
+    rebalance_bands, cash_reserve_invalid = _rebalance_band_context(evidence)
     supportability = _supportability(
         evidence=evidence,
         request=request,
         authority_status=authority_status,
         review_schedule=review_schedule,
+        cash_reserve_invalid=cash_reserve_invalid,
     )
     lineage = {
         "source_system": evidence.source_system or "unknown",
@@ -109,7 +111,7 @@ def build_discretionary_mandate_binding_response(
         "tax_awareness_allowed": evidence.tax_awareness_allowed,
         "settlement_awareness_required": evidence.settlement_awareness_required,
         "rebalance_frequency": evidence.rebalance_frequency,
-        "rebalance_bands": _rebalance_band_context(evidence).model_dump(mode="json"),
+        "rebalance_bands": rebalance_bands.model_dump(mode="json"),
         "effective_from": evidence.effective_from,
         "effective_to": evidence.effective_to,
         "binding_version": evidence.binding_version,
@@ -138,6 +140,7 @@ def _supportability(
     request: DiscretionaryMandateBindingRequest,
     authority_status: str,
     review_schedule: MandateReviewSchedule,
+    cash_reserve_invalid: bool,
 ) -> DiscretionaryMandateBindingSupportability:
     state: MandateSupportabilityState = "READY"
     reason = "MANDATE_BINDING_READY"
@@ -158,6 +161,10 @@ def _supportability(
         missing.append("mandate_review_schedule")
     elif review_schedule.next_review_due_date < request.as_of_date and state == "READY":
         state, reason = "DEGRADED", "MANDATE_REVIEW_OVERDUE"
+    if cash_reserve_invalid:
+        if state in {"READY", "DEGRADED"}:
+            state, reason = "INCOMPLETE", "MANDATE_CASH_RESERVE_INVALID"
+        missing.append("cash_reserve_target")
     return DiscretionaryMandateBindingSupportability(
         state=state,
         reason=reason,
@@ -167,12 +174,33 @@ def _supportability(
 
 def _rebalance_band_context(
     evidence: DiscretionaryMandateBindingEvidence,
-) -> RebalanceBandContext:
+) -> tuple[RebalanceBandContext, bool]:
+    cash_reserve_weight, cash_reserve_invalid = _cash_reserve_weight(
+        evidence.rebalance_bands.get("cash_reserve_weight")
+    )
     return RebalanceBandContext(
         default_band=_optional_decimal(evidence.rebalance_bands.get("default_band"))
         or Decimal("0"),
-        cash_reserve_weight=_optional_decimal(evidence.rebalance_bands.get("cash_reserve_weight")),
-    )
+        cash_reserve_weight=cash_reserve_weight,
+        cash_reserve_scope="TOTAL_PORTFOLIO_MARKET_VALUE",
+        cash_reserve_currency_basis="PORTFOLIO_BASE_CURRENCY",
+        cash_reserve_authority="MANDATE_BINDING",
+        consumer_override_allowed=False,
+    ), cash_reserve_invalid
+
+
+def _cash_reserve_weight(value: object) -> tuple[Decimal | None, bool]:
+    """Bound legacy persisted evidence without failing the complete source response."""
+
+    if value is None or not str(value).strip():
+        return None, False
+    try:
+        parsed = Decimal(str(value).strip())
+    except InvalidOperation:
+        return None, True
+    if not parsed.is_finite() or not Decimal("0") <= parsed <= Decimal("1"):
+        return None, True
+    return parsed, False
 
 
 def _optional_decimal(value: object) -> Decimal | None:

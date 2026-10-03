@@ -268,6 +268,10 @@ async def async_test_client():
             "rebalance_bands": {
                 "default_band": "0.0250000000",
                 "cash_reserve_weight": "0.0200000000",
+                "cash_reserve_scope": "TOTAL_PORTFOLIO_MARKET_VALUE",
+                "cash_reserve_currency_basis": "PORTFOLIO_BASE_CURRENCY",
+                "cash_reserve_authority": "MANDATE_BINDING",
+                "consumer_override_allowed": False,
             },
             "effective_from": "2026-04-01",
             "effective_to": None,
@@ -1591,6 +1595,10 @@ async def test_mandate_binding_success(async_test_client):
     assert body["policy_pack_id"] == "POLICY_DPM_SG_BALANCED_V1"
     assert body["supportability"]["state"] == "READY"
     assert body["rebalance_bands"]["default_band"] == "0.0250000000"
+    assert body["rebalance_bands"]["cash_reserve_scope"] == "TOTAL_PORTFOLIO_MARKET_VALUE"
+    assert body["rebalance_bands"]["cash_reserve_currency_basis"] == "PORTFOLIO_BASE_CURRENCY"
+    assert body["rebalance_bands"]["cash_reserve_authority"] == "MANDATE_BINDING"
+    assert body["rebalance_bands"]["consumer_override_allowed"] is False
     assert body["reconciliation_status"] == "UNKNOWN"
     assert body["data_quality_status"] == "UNKNOWN"
     call = mock_integration_service.resolve_discretionary_mandate_binding.await_args.kwargs
