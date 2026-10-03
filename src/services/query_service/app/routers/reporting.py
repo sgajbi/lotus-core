@@ -60,11 +60,15 @@ async def query_assets_under_management(
         "How: Computes reporting-currency allocation buckets across Lotus-supported "
         "classification dimensions such as asset class, currency, sector, country, region, "
         "product type, rating, and issuer hierarchy, with explicit look-through capability "
-        "metadata, bounded direct/component contributor lineage, exact bucket reconciliation, "
-        "and deterministic input/calculation/output hashes.\n"
+        "metadata, source-owned valuation coverage, nullable totals and weights when the "
+        "full-scope denominator is not trustworthy, bounded direct/component contributor "
+        "lineage, exact bucket reconciliation for covered values, and deterministic "
+        "input/calculation/output hashes.\n"
         "When: Use this contract when a downstream consumer needs allocation buckets rather than "
         "broad state publication. Prefer this route over mining allocation views from "
-        "`core-snapshot` when the need is report-ready or UI-ready allocation analysis."
+        "`core-snapshot` when the need is report-ready or UI-ready allocation analysis. "
+        "Consumers must honor `valuation_coverage` and must not coerce null monetary values "
+        "or weights to zero."
     ),
 )
 async def query_asset_allocation(

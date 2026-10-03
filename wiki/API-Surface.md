@@ -187,9 +187,15 @@ Allocation buckets retain source-owned contributor lineage. Direct rows identify
 booked security, and exact Core position snapshot. Applied look-through rows additionally identify
 the component security, booked parent, exact component record/effective interval, weight, and
 available upstream source reference. `contributor_limit_per_bucket` bounds response size; the total
-contributor count, truncation flag, and signed omitted-value residual keep every bucket exactly
-reconcilable. The response also carries separate normalized-input, calculation-policy, and output
-SHA-256 hashes. Consumers must not rebuild component lineage from the booked-position route.
+contributor count, truncation flag, and signed omitted-value residual keep every covered bucket
+exactly reconcilable. `valuation_coverage` distinguishes complete, measured-zero,
+carried-forward, loaded-empty, partial, and unavailable source evidence. Missing values, unusable
+valuation status, missing expected open positions, or a missing portfolio snapshot make the
+full-scope total and every allocation weight null; an affected bucket/contributor value is also
+null, while source contributor identity remains present. Algorithm version 2 binds original
+source value, valuation status, coverage decision, and nullable output into the calculation
+lineage. Consumers must not rebuild component lineage from the booked-position route, coerce null
+allocation facts to zero, or create a full-portfolio denominator from only the valued subset.
 
 Effective policy and capabilities use canonical snake_case query parameters:
 

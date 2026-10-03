@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-10-02T23:47:19.453801+00:00",
+  "generatedAt": "2026-10-03T03:06:20.840950+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -2388,7 +2388,7 @@
           "component_effective_to": "2026-02-27",
           "component_source_system": "example_value",
           "component_source_record_id": "example_value",
-          "market_value_reporting_currency": "USD",
+          "market_value_reporting_currency": "example_value",
           "bucket_weight": "example_value"
         }
       ],
@@ -2554,7 +2554,7 @@
       "semanticId": "lotus.coverage_reason",
       "canonicalTerm": "coverage_reason",
       "preferredName": "coverage_reason",
-      "description": "Machine-readable explanation for the coverage state.",
+      "description": "Bounded machine-readable explanation for the coverage decision.",
       "example": "example_coverage_reason",
       "type": "string",
       "locations": [
@@ -3318,7 +3318,7 @@
       "semanticId": "lotus.expected_open_position_count",
       "canonicalTerm": "expected_open_position_count",
       "preferredName": "expected_open_position_count",
-      "description": "Expected open source positions used to detect partial coverage.",
+      "description": "Expected open source positions used to detect missing snapshot rows.",
       "example": 10,
       "type": "integer",
       "locations": [
@@ -5110,14 +5110,14 @@
       "semanticId": "lotus.market_value_reporting_currency",
       "canonicalTerm": "market_value_reporting_currency",
       "preferredName": "market_value_reporting_currency",
-      "description": "Bucket market value in the effective reporting currency.",
+      "description": "Bucket market value in the effective reporting currency, or null when any contributing source valuation is unavailable or unusable.",
       "example": 600000.0,
-      "type": "string",
+      "type": "object",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "string"
+        "object"
       ]
     },
     {
@@ -5863,14 +5863,16 @@
       "semanticId": "lotus.omitted_market_value_reporting_currency",
       "canonicalTerm": "omitted_market_value_reporting_currency",
       "preferredName": "omitted_market_value_reporting_currency",
-      "description": "Signed value of omitted contributors. Returned contributor values plus this residual reconcile exactly to the bucket market value.",
-      "example": "USD",
-      "type": "string",
+      "description": "Signed value of omitted contributors. Returned contributor values plus this residual reconcile exactly to the bucket market value. Null when the bucket contains unknown valuation.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "string"
+        "object"
       ]
     },
     {
@@ -8758,7 +8760,7 @@
       "semanticId": "lotus.snapshot_row_count",
       "canonicalTerm": "snapshot_row_count",
       "preferredName": "snapshot_row_count",
-      "description": "Source snapshot row count observed for the member.",
+      "description": "Latest open-position snapshot rows observed for the scope.",
       "example": 10,
       "type": "integer",
       "locations": [
@@ -10091,13 +10093,14 @@
       "semanticId": "lotus.total_market_value_reporting_currency",
       "canonicalTerm": "total_market_value_reporting_currency",
       "preferredName": "total_market_value_reporting_currency",
-      "description": "Total AUM represented by the allocation views.",
+      "description": "Total market value represented by the allocation views, or null when valuation coverage does not support a full-scope denominator.",
       "example": 1000000.0,
       "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
+        "object",
         "string"
       ]
     },
@@ -10757,8 +10760,8 @@
       "semanticId": "lotus.unvalued_position_count",
       "canonicalTerm": "unvalued_position_count",
       "preferredName": "unvalued_position_count",
-      "description": "Number of snapshot positions still lacking valuation coverage.",
-      "example": 1,
+      "description": "Observed rows with missing monetary value or an unusable valuation status.",
+      "example": 10,
       "type": "integer",
       "locations": [
         "body"
@@ -10846,6 +10849,27 @@
       ]
     },
     {
+      "semanticId": "lotus.valuation_coverage",
+      "canonicalTerm": "valuation_coverage",
+      "preferredName": "valuation_coverage",
+      "description": "Source valuation coverage that distinguishes missing or unusable valuation from a genuine measured zero before allocation weights are consumed.",
+      "example": {
+        "coverage_state": "COMPLETE",
+        "coverage_reason": "example_coverage_reason",
+        "snapshot_row_count": 10,
+        "expected_open_position_count": 10,
+        "valued_position_count": 10,
+        "unvalued_position_count": 10
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "AllocationValuationCoverage"
+      ]
+    },
+    {
       "semanticId": "lotus.valuation_policy_assignments",
       "canonicalTerm": "valuation_policy_assignments",
       "preferredName": "valuation_policy_assignments",
@@ -10908,8 +10932,8 @@
       "semanticId": "lotus.valued_position_count",
       "canonicalTerm": "valued_position_count",
       "preferredName": "valued_position_count",
-      "description": "Number of snapshot positions with non-UNVALUED coverage.",
-      "example": 11,
+      "description": "Rows carrying a usable status and non-null monetary value.",
+      "example": 10,
       "type": "integer",
       "locations": [
         "body"
@@ -10961,12 +10985,12 @@
                   "component_effective_to": "2026-02-27",
                   "component_source_system": "example_value",
                   "component_source_record_id": "example_value",
-                  "market_value_reporting_currency": "USD",
+                  "market_value_reporting_currency": "example_value",
                   "bucket_weight": "example_value"
                 }
               ],
               "contributors_truncated": true,
-              "omitted_market_value_reporting_currency": "USD"
+              "omitted_market_value_reporting_currency": "example_value"
             }
           ]
         }
@@ -11001,13 +11025,12 @@
       "preferredName": "weight",
       "description": "Position weight versus total portfolio market value (0.0 to 1.0).",
       "example": 0.2417,
-      "type": "string",
+      "type": "object",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "object",
-        "string"
+        "object"
       ]
     },
     {
@@ -25703,7 +25726,7 @@
         "Wealth Reporting"
       ],
       "summary": "Query Asset Allocation",
-      "description": "What: Return the strategic allocation views for a resolved reporting scope.\nHow: Computes reporting-currency allocation buckets across Lotus-supported classification dimensions such as asset class, currency, sector, country, region, product type, rating, and issuer hierarchy, with explicit look-through capability metadata, bounded direct/component contributor lineage, exact bucket reconciliation, and deterministic input/calculation/output hashes.\nWhen: Use this contract when a downstream consumer needs allocation buckets rather than broad state publication. Prefer this route over mining allocation views from `core-snapshot` when the need is report-ready or UI-ready allocation analysis.",
+      "description": "What: Return the strategic allocation views for a resolved reporting scope.\nHow: Computes reporting-currency allocation buckets across Lotus-supported classification dimensions such as asset class, currency, sector, country, region, product type, rating, and issuer hierarchy, with explicit look-through capability metadata, source-owned valuation coverage, nullable totals and weights when the full-scope denominator is not trustworthy, bounded direct/component contributor lineage, exact bucket reconciliation for covered values, and deterministic input/calculation/output hashes.\nWhen: Use this contract when a downstream consumer needs allocation buckets rather than broad state publication. Prefer this route over mining allocation views from `core-snapshot` when the need is report-ready or UI-ready allocation analysis. Consumers must honor `valuation_coverage` and must not coerce null monetary values or weights to zero.",
       "naming": {
         "boundedContext": "wealth_reporting",
         "canonicalTerms": [
@@ -25728,10 +25751,13 @@
           "contributor_type",
           "contributors",
           "contributors_truncated",
+          "coverage_reason",
+          "coverage_state",
           "decomposed_position_count",
           "dimension",
           "dimension_value",
           "dimensions",
+          "expected_open_position_count",
           "input_content_hash",
           "intermediate_precision",
           "limitation_reason",
@@ -25750,9 +25776,13 @@
           "scope",
           "scope_type",
           "security_id",
+          "snapshot_row_count",
           "source_snapshot_id",
           "supported",
           "total_market_value_reporting_currency",
+          "unvalued_position_count",
+          "valuation_coverage",
+          "valued_position_count",
           "views",
           "weight",
           "x_tenant_id"
@@ -25906,9 +25936,65 @@
             "name": "total_market_value_reporting_currency",
             "location": "body",
             "required": true,
-            "type": "string",
+            "type": "object",
             "semanticId": "lotus.total_market_value_reporting_currency",
             "attributeRef": "lotus.total_market_value_reporting_currency"
+          },
+          {
+            "name": "valuation_coverage",
+            "location": "body",
+            "required": true,
+            "type": "AllocationValuationCoverage",
+            "semanticId": "lotus.valuation_coverage",
+            "attributeRef": "lotus.valuation_coverage"
+          },
+          {
+            "name": "valuation_coverage.coverage_state",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.coverage_state",
+            "attributeRef": "lotus.coverage_state"
+          },
+          {
+            "name": "valuation_coverage.coverage_reason",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.coverage_reason",
+            "attributeRef": "lotus.coverage_reason"
+          },
+          {
+            "name": "valuation_coverage.snapshot_row_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.snapshot_row_count",
+            "attributeRef": "lotus.snapshot_row_count"
+          },
+          {
+            "name": "valuation_coverage.expected_open_position_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.expected_open_position_count",
+            "attributeRef": "lotus.expected_open_position_count"
+          },
+          {
+            "name": "valuation_coverage.valued_position_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.valued_position_count",
+            "attributeRef": "lotus.valued_position_count"
+          },
+          {
+            "name": "valuation_coverage.unvalued_position_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.unvalued_position_count",
+            "attributeRef": "lotus.unvalued_position_count"
           },
           {
             "name": "look_through",
@@ -26042,7 +26128,7 @@
             "name": "views[].total_market_value_reporting_currency",
             "location": "body",
             "required": true,
-            "type": "string",
+            "type": "object",
             "semanticId": "lotus.total_market_value_reporting_currency",
             "attributeRef": "lotus.total_market_value_reporting_currency"
           },
@@ -26066,7 +26152,7 @@
             "name": "views[].buckets[].market_value_reporting_currency",
             "location": "body",
             "required": true,
-            "type": "string",
+            "type": "object",
             "semanticId": "lotus.market_value_reporting_currency",
             "attributeRef": "lotus.market_value_reporting_currency"
           },
@@ -26074,7 +26160,7 @@
             "name": "views[].buckets[].weight",
             "location": "body",
             "required": true,
-            "type": "string",
+            "type": "object",
             "semanticId": "lotus.weight",
             "attributeRef": "lotus.weight"
           },
@@ -26194,7 +26280,7 @@
             "name": "views[].buckets[].contributors[].market_value_reporting_currency",
             "location": "body",
             "required": true,
-            "type": "string",
+            "type": "object",
             "semanticId": "lotus.market_value_reporting_currency",
             "attributeRef": "lotus.market_value_reporting_currency"
           },
@@ -26218,7 +26304,7 @@
             "name": "views[].buckets[].omitted_market_value_reporting_currency",
             "location": "body",
             "required": true,
-            "type": "string",
+            "type": "object",
             "semanticId": "lotus.omitted_market_value_reporting_currency",
             "attributeRef": "lotus.omitted_market_value_reporting_currency"
           }

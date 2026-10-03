@@ -40,7 +40,7 @@ class ReportingSnapshotRow:
 class SnapshotPresence:
     """Source-owned snapshot presence for one portfolio and an as-of date."""
 
-    snapshot_date: date
+    snapshot_date: date | None
     row_count: int
     expected_open_count: int = 0
 
@@ -335,15 +335,7 @@ class ReportingRepository:
                 DailyPositionSnapshot.portfolio_id.in_(portfolio_ids),
                 DailyPositionSnapshot.date <= as_of_date,
             )
-            .outerjoin(
-                presence_subq,
-                presence_subq.c.portfolio_id == DailyPositionSnapshot.portfolio_id,
-            )
-            .add_columns(presence_subq.c.expected_open_count)
-            .group_by(
-                DailyPositionSnapshot.portfolio_id,
-                presence_subq.c.expected_open_count,
-            )
+            .group_by(DailyPositionSnapshot.portfolio_id)
             .subquery()
         )
         stmt = (
@@ -353,7 +345,7 @@ class ReportingRepository:
                 Instrument,
                 source_presence_subq.c.snapshot_date,
                 source_presence_subq.c.row_count,
-                source_presence_subq.c.expected_open_count,
+                presence_subq.c.expected_open_count,
             )
             .select_from(Portfolio)
             .outerjoin(
@@ -375,6 +367,10 @@ class ReportingRepository:
                 source_presence_subq,
                 source_presence_subq.c.portfolio_id == Portfolio.portfolio_id,
             )
+            .outerjoin(
+                presence_subq,
+                presence_subq.c.portfolio_id == Portfolio.portfolio_id,
+            )
             .where(Portfolio.portfolio_id.in_(portfolio_ids))
             .order_by(
                 Portfolio.portfolio_id.asc(),
@@ -387,7 +383,9 @@ class ReportingRepository:
         result: list[ReportingSnapshotRow] = []
         for result_row in result_rows:
             portfolio, snapshot, instrument, *presence_values = result_row
-            if presence_values and presence_values[0] is not None:
+            if presence_values and (
+                presence_values[0] is not None or int(presence_values[2] or 0) > 0
+            ):
                 presence[str(portfolio.portfolio_id)] = SnapshotPresence(
                     snapshot_date=presence_values[0],
                     row_count=int(presence_values[1] or 0),

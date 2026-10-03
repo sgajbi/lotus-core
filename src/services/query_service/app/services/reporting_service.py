@@ -48,6 +48,13 @@ from ..repositories.reporting_repository import (
     ReportingRepository,
     SnapshotPresence,
 )
+from .allocation_valuation_coverage import (
+    ResolvedAllocationRow,
+    allocation_parent_security_ids,
+    allocation_reporting_values,
+    resolve_allocation_valuation_coverage,
+    resolved_allocation_rows,
+)
 from .cash_balance_service import CashBalanceResolver
 from .control_code_normalization import normalize_control_code
 from .fx_conversion import CachedFxRateConverter
@@ -55,33 +62,6 @@ from .valuation_status import has_usable_valuation_status
 
 ZERO = Decimal("0")
 UNVALUED_STATUS = "UNVALUED"
-ResolvedAllocationRow = tuple[Any, str | None, Decimal]
-
-
-def _allocation_parent_security_ids(rows: list[Any]) -> tuple[list[str], list[str | None]]:
-    parent_security_ids: list[str] = []
-    row_parent_security_ids: list[str | None] = []
-    for row in rows:
-        parent_security_id = normalize_security_id(row.snapshot.security_id)
-        if parent_security_id:
-            parent_security_ids.append(parent_security_id)
-        row_parent_security_ids.append(parent_security_id)
-    return list(dict.fromkeys(parent_security_ids)), row_parent_security_ids
-
-
-def _resolved_allocation_rows(
-    *,
-    reporting_values: list[tuple[Any, Decimal, Decimal]],
-    row_parent_security_ids: list[str | None],
-) -> list[ResolvedAllocationRow]:
-    return [
-        (row, parent_security_id, reporting_value)
-        for (row, _native_value, reporting_value), parent_security_id in zip(
-            reporting_values,
-            row_parent_security_ids,
-            strict=True,
-        )
-    ]
 
 
 def _direct_allocation_rows(
@@ -93,8 +73,16 @@ def _direct_allocation_rows(
             snapshot=row.snapshot,
             market_value_reporting_currency=reporting_value,
             contributor=_direct_allocation_contributor(row, parent_security_id),
+            source_market_value=source_value,
+            source_valuation_status=valuation_status,
         )
-        for row, parent_security_id, reporting_value in resolved_rows
+        for (
+            row,
+            parent_security_id,
+            reporting_value,
+            source_value,
+            valuation_status,
+        ) in resolved_rows
     ]
 
 
@@ -509,9 +497,21 @@ class ReportingService:
             portfolios=portfolios,
             requested_reporting_currency=request.reporting_currency,
         )
+        portfolio_ids = [str(portfolio.portfolio_id) for portfolio in portfolios]
         rows = await self.repo.list_latest_snapshot_rows(
-            portfolio_ids=[portfolio.portfolio_id for portfolio in portfolios],
+            portfolio_ids=portfolio_ids,
             as_of_date=resolved_as_of_date,
+            include_presence=True,
+        )
+        (
+            valuation_coverage,
+            complete_valuation_coverage,
+        ) = await resolve_allocation_valuation_coverage(
+            repository=self.repo,
+            rows=rows,
+            portfolio_ids=portfolio_ids,
+            resolved_as_of_date=resolved_as_of_date,
+            scope_type=request.scope.scope_type,
         )
         allocation_rows, look_through_info = await self._resolve_allocation_rows(
             rows=rows,
@@ -524,6 +524,7 @@ class ReportingService:
             rows=allocation_rows,
             dimensions=request.dimensions,
             contributor_limit_per_bucket=request.contributor_limit_per_bucket,
+            complete_valuation_coverage=complete_valuation_coverage,
             calculation_context={
                 "applied_look_through_mode": look_through_info.applied_mode,
                 "as_of_date": resolved_as_of_date,
@@ -531,6 +532,7 @@ class ReportingService:
                 "requested_look_through_mode": request.look_through_mode,
                 "scope": request.scope.model_dump(mode="python"),
                 "scope_type": request.scope.scope_type,
+                "valuation_coverage": valuation_coverage.model_dump(mode="python"),
             },
         )
 
@@ -568,6 +570,7 @@ class ReportingService:
             total_market_value_reporting_currency=(
                 allocation_result.total_market_value_reporting_currency
             ),
+            valuation_coverage=valuation_coverage,
             look_through=look_through_info,
             calculation_lineage=CalculationLineageResponse(
                 **allocation_result.calculation_lineage.lineage_payload()
@@ -911,18 +914,19 @@ class ReportingService:
         as_of_date: date,
         reporting_currency: str,
     ) -> tuple[list[AllocationInputRow], AllocationLookThroughInfo]:
-        parent_security_ids, row_parent_security_ids = _allocation_parent_security_ids(rows)
-        reporting_values = await self._snapshot_reporting_values(
+        parent_security_ids, row_parent_security_ids = allocation_parent_security_ids(rows)
+        reporting_values = await allocation_reporting_values(
             rows=rows,
             as_of_date=as_of_date,
             reporting_currency=reporting_currency,
+            convert_amount=self._convert_amount,
         )
         component_rows = await self.repo.list_instrument_lookthrough_components(
             parent_security_ids=parent_security_ids,
             as_of_date=as_of_date,
         )
 
-        resolved_rows = _resolved_allocation_rows(
+        resolved_rows = resolved_allocation_rows(
             reporting_values=reporting_values,
             row_parent_security_ids=row_parent_security_ids,
         )
@@ -965,7 +969,13 @@ class ReportingService:
         allocation_rows: list[AllocationInputRow] = []
         decomposed_position_count = 0
         undecomposed_requested_count = 0
-        for row, parent_security_id, reporting_value in resolved_rows:
+        for (
+            row,
+            parent_security_id,
+            reporting_value,
+            source_value,
+            valuation_status,
+        ) in resolved_rows:
             if parent_security_id not in decomposable_parent_ids:
                 allocation_rows.append(
                     AllocationInputRow(
@@ -973,6 +983,8 @@ class ReportingService:
                         snapshot=row.snapshot,
                         market_value_reporting_currency=reporting_value,
                         contributor=_direct_allocation_contributor(row, parent_security_id),
+                        source_market_value=source_value,
+                        source_valuation_status=valuation_status,
                     )
                 )
                 undecomposed_requested_count += self._undecomposed_row_count(row)
@@ -984,6 +996,8 @@ class ReportingService:
                     row,
                     parent_security_id,
                     reporting_value,
+                    source_value,
+                    valuation_status,
                 )
             )
         return allocation_rows, decomposed_position_count, undecomposed_requested_count
@@ -996,13 +1010,17 @@ class ReportingService:
         components: list[InstrumentLookthroughComponentRow],
         row: Any,
         parent_security_id: str,
-        reporting_value: Decimal,
+        reporting_value: Decimal | None,
+        source_value: Decimal | None,
+        valuation_status: str | None,
     ) -> list[AllocationInputRow]:
         return [
             AllocationInputRow(
                 instrument=component.component_instrument,
                 snapshot=SimpleNamespace(security_id=component.component_security_id),
-                market_value_reporting_currency=reporting_value * component_weight,
+                market_value_reporting_currency=(
+                    reporting_value * component_weight if reporting_value is not None else None
+                ),
                 contributor=AllocationContributorInput(
                     contributor_type="look_through_component",
                     portfolio_id=str(row.portfolio.portfolio_id).strip(),
@@ -1016,6 +1034,8 @@ class ReportingService:
                     component_source_system=component.source_system,
                     component_source_record_id=component.source_record_id,
                 ),
+                source_market_value=source_value,
+                source_valuation_status=valuation_status,
             )
             for component in components
             if (component_weight := ReportingService._component_weight(component)) is not None

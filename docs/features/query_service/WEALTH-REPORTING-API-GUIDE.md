@@ -246,18 +246,36 @@ Look-through behavior:
 Behavior:
 
 - returns one allocation view per requested dimension
-- every bucket includes reporting-currency market value, weight, allocation-row count, total
-  contributor count, a bounded contributor list, truncation state, and an omitted-value residual
+- returns `valuation_coverage` with a bounded state/reason and observed, expected, valued, and
+  unvalued position counts; missing value, unusable valuation status, missing expected open
+  position, and missing portfolio snapshot coverage are never normalized to measured zero
+- when coverage is `PARTIAL` or `UNAVAILABLE`, the full-scope total and all bucket weights are
+  null; a bucket value remains numeric only when every contributor in that bucket is valued, while
+  an affected bucket and contributor value are null
+- `COMPLETE`, `MEASURED_ZERO`, `CARRY_FORWARD`, and `LOADED_EMPTY` are calculation-admissible
+  states. Genuine zero, positive, negative, valued-stale, and carried-forward source values retain
+  their signed arithmetic semantics
+- every bucket includes reporting-currency market value or explicit null, weight or explicit null,
+  allocation-row count, total contributor count, a bounded contributor list, truncation state, and
+  an omitted-value residual
 - direct contributors bind portfolio, booked security, and exact daily-position snapshot
 - look-through contributors additionally bind component security to the booked parent, exact
   component record, weight, effective interval, and available upstream source reference
-- returned contributor values plus `omitted_market_value_reporting_currency` reconcile exactly to
-  the signed bucket value; contributor `bucket_weight` is null when the bucket nets to zero
+- for covered buckets, returned contributor values plus
+  `omitted_market_value_reporting_currency` reconcile exactly to the signed bucket value;
+  contributor `bucket_weight` is null when the bucket nets to zero. For unknown buckets, value,
+  residual, and contributor weights are null while contributor identity remains available
 - contributor ordering is descending absolute contribution, then stable portfolio, booked-parent,
   component/direct security, and source identity
 - the response publishes separate normalized-input, algorithm/version/28-digit-precision, and
-  output SHA-256 lineage hashes; correlation IDs do not replace calculation lineage
+  output SHA-256 lineage hashes. Algorithm version 2 binds original source monetary value,
+  valuation status, coverage decision, and nullable calculated output, so missing and genuine zero
+  cannot share input identity; correlation IDs do not replace calculation lineage
 - region is derived from country-of-risk using the source-owned Lotus classification helper
+
+Consumers must treat `valuation_coverage` as authoritative. They must not turn null totals,
+bucket values, contributor values, residuals, or weights into zero, and must not calculate a
+full-portfolio denominator from only the valued subset.
 
 ### Portfolio Summary
 

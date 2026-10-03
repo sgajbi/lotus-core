@@ -97,6 +97,9 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/services/query_service/test_cashflow_projection_fx_postgresql.py",
         "tests/integration/services/query_service/test_liquidity_ladder_postgresql.py::"
         "test_registered_liquidity_ladder_distinguishes_null_zero_and_positive_postgresql",
+        "tests/integration/services/query_service/"
+        "test_reporting_allocation_valuation_coverage_postgresql.py::"
+        "test_registered_allocation_distinguishes_unknown_zero_signed_and_failed_postgresql",
         "tests/integration/services/persistence_service/repositories/test_repositories.py::"
         "test_supported_portfolio_upsert_recasts_cashflow_source_cut_currency",
         "tests/integration/services/calculators/position_valuation_calculator/"
