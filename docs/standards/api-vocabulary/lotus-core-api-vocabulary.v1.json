@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-10-01T05:50:19.950610+00:00",
+  "generatedAt": "2026-10-02T23:47:19.453801+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -16856,7 +16856,7 @@
         "Liquidity Ladder"
       ],
       "summary": "Get source-owned portfolio liquidity ladder evidence",
-      "description": "What: Return the PortfolioLiquidityLadder source-data product for one private-banking portfolio.\nHow: Resolves current cash balances from source holdings, groups non-cash holdings by instrument liquidity tier, and overlays booked plus optional projected settlement-dated cashflows into deterministic cash-availability buckets. Missing contributing valuation value, usable valuation status, or asset-class evidence is qualified through nullable affected totals, PARTIAL or UNKNOWN data quality, and bounded degradation reason codes; it is never coerced to economic zero.\nWhen: Use this route when downstream consumers need source-owned liquidity evidence for portfolio monitoring, DPM supportability, or client reporting. Do not use it as an advice recommendation, OMS execution forecast, tax methodology, best-execution assessment, or predictive market-impact model.",
+      "description": "What: Return the PortfolioLiquidityLadder source-data product for one private-banking portfolio.\nHow: Resolves current cash balances from source holdings, groups non-cash holdings by instrument liquidity tier, and overlays booked plus optional projected settlement-dated cashflows into deterministic cash-availability buckets after exact-date direct FX conversion into portfolio currency. Required missing or invalid FX fails closed. Missing contributing valuation value, usable valuation status, or asset-class evidence is qualified through nullable affected totals, PARTIAL or UNKNOWN data quality, and bounded degradation reason codes; it is never coerced to economic zero.\nWhen: Use this route when downstream consumers need source-owned liquidity evidence for portfolio monitoring, DPM supportability, or client reporting. Do not use it as an advice recommendation, OMS execution forecast, tax methodology, best-execution assessment, or predictive market-impact model.",
       "naming": {
         "boundedContext": "liquidity_ladder",
         "canonicalTerms": [
@@ -23561,7 +23561,7 @@
         "Cashflow Projection"
       ],
       "summary": "Get Portfolio Cashflow Projection",
-      "description": "What: Return the portfolio-level daily net cashflow projection for operational liquidity planning.\nHow: Projects daily net cashflow points from the resolved as-of baseline across the requested horizon, with booked-only mode and projected mode for settlement-dated future external cash movements.\nWhen: Use this route when a downstream consumer needs a dedicated cashflow outlook instead of broad portfolio state or performance interpretation. Keep forecasting, performance analytics, and advisory recommendation logic outside this contract.",
+      "description": "What: Return the portfolio-level daily net cashflow projection for operational liquidity planning.\nHow: Projects daily net cashflow points from the resolved as-of baseline across the requested horizon, with booked-only mode and projected mode for settlement-dated future external cash movements. Native amounts are converted to portfolio currency before aggregation using exact-date direct FX evidence; unavailable required FX fails closed.\nWhen: Use this route when a downstream consumer needs a dedicated cashflow outlook instead of broad portfolio state or performance interpretation. Keep forecasting, performance analytics, and advisory recommendation logic outside this contract.",
       "naming": {
         "boundedContext": "cashflow_projection",
         "canonicalTerms": [

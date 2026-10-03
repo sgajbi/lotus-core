@@ -17,6 +17,10 @@ router = APIRouter(prefix="/portfolios", tags=["Cashflow Projection"])
 
 PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-CF-001 not found"}
 BAD_REQUEST_RESPONSE_EXAMPLE = {"detail": "horizon_days must be between 1 and 366."}
+MISSING_FX_RESPONSE_EXAMPLE = {
+    "detail": "Required exact-date direct FX conversion evidence is unavailable for EUR/USD "
+    "on 2026-03-27."
+}
 
 
 @router.get(
@@ -29,7 +33,14 @@ BAD_REQUEST_RESPONSE_EXAMPLE = {"detail": "horizon_days must be between 1 and 36
         },
         status.HTTP_400_BAD_REQUEST: {
             "description": "Request could not be resolved.",
-            "content": {"application/json": {"example": BAD_REQUEST_RESPONSE_EXAMPLE}},
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "invalid_horizon": {"value": BAD_REQUEST_RESPONSE_EXAMPLE},
+                        "missing_fx": {"value": MISSING_FX_RESPONSE_EXAMPLE},
+                    }
+                }
+            },
         },
     },
     summary="Get Portfolio Cashflow Projection",
@@ -38,7 +49,9 @@ BAD_REQUEST_RESPONSE_EXAMPLE = {"detail": "horizon_days must be between 1 and 36
         "liquidity planning.\n"
         "How: Projects daily net cashflow points from the resolved as-of baseline across the "
         "requested horizon, with booked-only mode and projected mode for settlement-dated "
-        "future external cash movements.\n"
+        "future external cash movements. Native amounts are converted to portfolio currency "
+        "before aggregation using exact-date direct FX evidence; unavailable required FX "
+        "fails closed.\n"
         "When: Use this route when a downstream consumer needs a dedicated cashflow outlook "
         "instead of broad portfolio state or performance interpretation. Keep forecasting, "
         "performance analytics, and advisory recommendation logic outside this contract."

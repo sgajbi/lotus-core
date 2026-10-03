@@ -38,11 +38,15 @@ The endpoint supports an optional `as_of_date`, `horizon_days`, and `include_pro
 | `instrument` | Asset class and source-owned `liquidity_tier`. |
 | `cashflow` | Latest booked net cashflow by date. |
 | `transaction` | Projected settlement-dated external `DEPOSIT` and `WITHDRAWAL` movements. |
+| `fx_rates` | Exact-date direct conversion evidence for foreign booked and projected cashflow components. |
 
 ## Unit Conventions
 
-All returned monetary values are in portfolio base currency. The product does not perform reporting
-currency conversion and does not infer liquidation proceeds or market impact.
+All returned monetary values are in portfolio base currency. Native booked cashflow currency and
+projected transaction trade currency are converted before bucket aggregation using the shared
+cashflow-projection exact-date direct-pair policy. Missing, prior-date, inverse-only, triangulated,
+zero, or negative required rates fail closed. The product does not perform reporting currency
+conversion and does not infer liquidation proceeds or market impact.
 
 ## Variable Dictionary
 
@@ -106,17 +110,21 @@ as-of date because no row chronology exists.
 
 ## Step-by-Step Computation
 
-1. Resolve the portfolio; fail with 404-equivalent service error when missing.
-2. Resolve `A` from the request or latest business date.
-3. Select current snapshot-backed holdings using the same current-epoch reconciliation path as
+1. Establish one read-only repeatable-read database snapshot before the first source read.
+2. Resolve the portfolio; fail with 404-equivalent service error when missing.
+3. Resolve `A` from the request or latest business date.
+4. Select current snapshot-backed holdings using the same current-epoch reconciliation path as
    `HoldingsAsOf`.
-4. Split cash and non-cash rows by `instrument.asset_class == CASH`.
-5. Compute `C0` from cash row market values.
-6. Group non-cash market value by instrument liquidity tier.
-7. Load booked cashflow rows between `A` and `A + H`.
-8. Load projected settlement-dated external cashflows for the same range when requested.
-9. Build deterministic buckets and cumulative cash availability.
-10. Return source-data runtime metadata, evidence timestamp, and deterministic source fingerprint.
+5. Split cash and non-cash rows by `instrument.asset_class == CASH`.
+6. Compute `C0` from cash row market values.
+7. Group non-cash market value by instrument liquidity tier.
+8. Load booked cashflow rows between `A` and `A + H`.
+9. Load projected settlement-dated external cashflows for the same range when requested.
+10. Convert native cashflow components into portfolio currency before aggregation; fail closed when
+   required exact-date direct FX evidence is unavailable or invalid.
+11. Build deterministic buckets and cumulative cash availability inside the same owned 50-digit
+    round-half-even Decimal context used for cashflow conversion.
+12. Return source-data runtime metadata, evidence timestamp, and deterministic source fingerprint.
 
 ## Validation and Failure Behavior
 
@@ -125,6 +133,7 @@ as-of date because no row chronology exists.
 | Missing portfolio | Raises `Portfolio with id <id> not found`; router maps to HTTP 404. |
 | Missing business date | Raises `No business date is available for liquidity ladder queries.`; router maps to HTTP 400. |
 | Invalid horizon | Raises `horizon_days must be between 0 and 366.`; router and FastAPI validation reject the request. |
+| Required cashflow FX evidence is unavailable or invalid | Fails with HTTP 400; no unconverted amount is labelled as portfolio currency. |
 | No source holding rows | Returns `data_quality_status=UNKNOWN`, null economic totals, and `SOURCE_HOLDINGS_UNAVAILABLE`. |
 | Eligible cash row has null market value or unusable valuation status | Returns `data_quality_status=PARTIAL`, null cash-derived totals, and `CASH_VALUATION_UNAVAILABLE`; booked/projected/net cashflow remains populated. |
 | Confirmed non-cash row has null market value or unusable valuation status | Returns `data_quality_status=PARTIAL`, null affected tier and non-cash total, and `NON_CASH_VALUATION_UNAVAILABLE`. |

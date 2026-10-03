@@ -165,6 +165,13 @@ and calculation lineage together. The shared lineage contract includes an option
 `numeric_output_policy` identity when a calculation executes a governed owner-defined output
 boundary; its absence does not imply a default or inferred rounding policy.
 
+Projection preserves booked cashflow currency and projected transaction trade currency until
+conversion. It uses exact-date direct FX evidence for the booked cashflow date or projected UTC
+settlement date and converts before aggregation. Missing, prior-date, inverse-only, triangulated,
+zero, or negative required rates return `400`; consumers must not reconstruct or repair amounts.
+Selected FX facts are bound to projection calculation and content identity, while the comparable
+raw cashflow `source_cut_id` remains independent of reference-rate corrections.
+
 Transaction and settlement request dates are governed UTC event-date windows: Core uses aware
 half-open `[00:00Z, next 00:00Z)` boundaries and buckets projected settlements by their UTC date,
 independent of PostgreSQL session timezone. A booking-centre business date is separate authority

@@ -1,6 +1,6 @@
 import logging
 from datetime import date, timedelta
-from decimal import Decimal, localcontext
+from decimal import Decimal
 from typing import Optional
 
 from portfolio_common.domain.calculation_lineage import build_calculation_lineage
@@ -14,7 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..domain.strict_decimal import decimal_or_zero
 from ..dtos.cashflow_projection_dto import CashflowProjectionPoint, CashflowProjectionResponse
 from ..repositories.cashflow_repository import CashflowRepository
-from .cashflow_evidence_window import read_cashflow_evidence_window
+from .cashflow_evidence_window import (
+    CASHFLOW_INTERMEDIATE_PRECISION,
+    cashflow_arithmetic_context,
+    read_cashflow_evidence_window,
+)
 from .cashflow_product_trust import reconcile_cashflow_window
 from .cashflow_source_cut import build_cashflow_source_cut
 
@@ -23,9 +27,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_HORIZON_DAYS = 10
 MAX_HORIZON_DAYS = 366
 CASHFLOW_PROJECTION_ALGORITHM_ID = "PORTFOLIO_CASHFLOW_PROJECTION"
-CASHFLOW_PROJECTION_ALGORITHM_VERSION = 1
-CASHFLOW_PROJECTION_INTERMEDIATE_PRECISION = 50
-CASHFLOW_PROJECTION_POLICY_VERSION = "cashflow-projection-v1"
+CASHFLOW_PROJECTION_ALGORITHM_VERSION = 2
+CASHFLOW_PROJECTION_INTERMEDIATE_PRECISION = CASHFLOW_INTERMEDIATE_PRECISION
+CASHFLOW_PROJECTION_POLICY_VERSION = "cashflow-projection-v2"
 
 
 class CashflowProjectionService:
@@ -66,6 +70,7 @@ class CashflowProjectionService:
         cashflow_evidence = await read_cashflow_evidence_window(
             repo=self.repo,
             portfolio_id=portfolio_id,
+            portfolio_currency=portfolio_currency,
             start_date=range_start_date,
             end_date=query_end_date,
             include_projected=include_projected,
@@ -82,8 +87,7 @@ class CashflowProjectionService:
             ),
         )
 
-        with localcontext() as calculation_context:
-            calculation_context.prec = CASHFLOW_PROJECTION_INTERMEDIATE_PRECISION
+        with cashflow_arithmetic_context():
             booked_by_date = self._sum_by_date(cashflow_evidence.booked_rows)
             projected_by_date = self._sum_by_date(cashflow_evidence.projected_rows)
             booked_total = Decimal("0")
@@ -160,8 +164,18 @@ class CashflowProjectionService:
                 "portfolio_currency": portfolio_currency,
                 "booked_rows": cashflow_evidence.booked_rows,
                 "projected_rows": cashflow_evidence.projected_rows,
+                "native_booked_rows": cashflow_evidence.native_booked_rows,
+                "native_projected_rows": cashflow_evidence.native_projected_rows,
+                "fx_conversion_evidence": [
+                    evidence.lineage_payload()
+                    for evidence in cashflow_evidence.fx_conversion_evidence
+                ],
                 "source_row_count": source_row_count,
                 "source_component_totals": source_component_totals,
+                "native_source_currency_totals": {
+                    "BOOKED": cashflow_evidence.booked_source_currency_totals,
+                    "PROJECTED": cashflow_evidence.projected_source_currency_totals,
+                },
                 "latest_evidence_timestamp": cashflow_evidence.latest_evidence_timestamp,
             },
             output_payload=response_values,

@@ -1,9 +1,9 @@
 # src/services/query_service/app/repositories/cashflow_repository.py
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, cast
 
 from portfolio_common.business_calendar_sql import business_calendar_code_matches
 from portfolio_common.cashflow_source_cut_models import PortfolioCashflowSourceCut
@@ -15,10 +15,19 @@ from portfolio_common.database_models import (
     PositionState,
     Transaction,
 )
+from portfolio_common.database_models import (
+    FxRate as FxRateModel,
+)
+from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.domain.tenant import TenantId
 from portfolio_common.domain.transaction.type_registry import INCOME_RECOGNITION_TRANSACTION_TYPES
+from portfolio_common.infrastructure.persistence.statement_batching import (
+    StatementBatchOperation,
+    iter_statement_chunks,
+    observe_multi_statement_batch,
+)
 from portfolio_common.utils import async_timed
-from sqlalchemy import and_, case, func, select, text
+from sqlalchemy import and_, case, exists, func, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .date_filters import start_of_day, start_of_next_day
@@ -30,10 +39,57 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class CashflowSeriesEvidence:
-    rows: list[tuple[date, Decimal]]
+    rows: list[tuple[date, str, Decimal]]
     latest_evidence_timestamp: datetime | None
     source_row_count: int = 0
-    source_total: Decimal = Decimal("0")
+    source_currency_totals: dict[str, Decimal] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class CashflowFxRateEvidence:
+    source_id: int
+    from_currency: str
+    to_currency: str
+    rate_date: date
+    rate: Decimal
+    source_updated_at: datetime
+
+    def lineage_payload(self) -> dict[str, int | str]:
+        return {
+            "source_id": self.source_id,
+            "from_currency": self.from_currency,
+            "to_currency": self.to_currency,
+            "rate_date": self.rate_date.isoformat(),
+            "rate": str(self.rate),
+            "source_updated_at": self.source_updated_at.isoformat(),
+            "selection_policy": "EXACT_DATE_DIRECT_PAIR",
+        }
+
+
+CashflowAggregateRow = tuple[date, str, Decimal, int, Decimal, datetime | None]
+
+
+def _cashflow_series_evidence(rows: list[CashflowAggregateRow]) -> CashflowSeriesEvidence:
+    normalized_rows: list[tuple[date, str, Decimal]] = []
+    latest_evidence_timestamp: datetime | None = None
+    source_row_count = 0
+    source_currency_totals: dict[str, Decimal] = {}
+    for row in rows:
+        flow_date, currency, amount, row_count, currency_total, timestamp = row
+        normalized_currency = normalize_currency_code(str(currency))
+        normalized_rows.append((flow_date, normalized_currency, Decimal(str(amount))))
+        source_row_count += int(row_count or 0)
+        source_currency_totals[normalized_currency] = Decimal(str(currency_total or 0))
+        if timestamp is not None and (
+            latest_evidence_timestamp is None or timestamp > latest_evidence_timestamp
+        ):
+            latest_evidence_timestamp = timestamp
+    return CashflowSeriesEvidence(
+        rows=normalized_rows,
+        latest_evidence_timestamp=latest_evidence_timestamp,
+        source_row_count=source_row_count,
+        source_currency_totals=source_currency_totals,
+    )
 
 
 CashMovementSummaryRow = tuple[str, str, str, bool, bool, int, Decimal, datetime | None]
@@ -107,7 +163,10 @@ class CashflowRepository:
         Delegates so the predicate lives in one place; see
         :mod:`portfolio_existence`.
         """
-        return await portfolio_exists_for_tenant(self.db, portfolio_id, tenant_id=tenant_id)
+        return cast(
+            bool,
+            await portfolio_exists_for_tenant(self.db, portfolio_id, tenant_id=tenant_id),
+        )
 
     async def get_portfolio_currency(self, portfolio_id: str, *, tenant_id: TenantId) -> str | None:
         """The base currency of a portfolio the admitted tenant owns.
@@ -124,7 +183,7 @@ class CashflowRepository:
             )
             .limit(1)
         )
-        return (await self.db.execute(stmt)).scalar_one_or_none()
+        return cast(str | None, (await self.db.execute(stmt)).scalar_one_or_none())
 
     async def get_latest_business_date(self) -> Optional[date]:
         stmt = select(func.max(BusinessDate.date)).where(
@@ -132,19 +191,22 @@ class CashflowRepository:
                 BusinessDate.calendar_code, DEFAULT_BUSINESS_CALENDAR_CODE
             )
         )
-        return (await self.db.execute(stmt)).scalar_one_or_none()
+        return cast(date | None, (await self.db.execute(stmt)).scalar_one_or_none())
 
     async def get_portfolio_cashflow_series_with_evidence(
         self, portfolio_id: str, start_date: date, end_date: date, *, tenant_id: TenantId
     ) -> CashflowSeriesEvidence:
-        """Return booked daily cashflows and latest evidence timestamp in one read."""
+        """Return booked cashflows grouped in their authoritative native currency."""
         latest_cashflows = self._latest_cashflows_subquery(portfolio_id=portfolio_id)
         stmt = (
             select(
                 latest_cashflows.c.cashflow_date,
+                latest_cashflows.c.currency,
                 func.sum(latest_cashflows.c.amount).label("net_amount"),
                 func.count().label("source_row_count"),
-                func.sum(func.sum(latest_cashflows.c.amount)).over().label("source_total"),
+                func.sum(func.sum(latest_cashflows.c.amount))
+                .over(partition_by=latest_cashflows.c.currency)
+                .label("source_currency_total"),
                 func.max(latest_cashflows.c.updated_at).label("latest_evidence_timestamp"),
             )
             .join(Portfolio, Portfolio.portfolio_id == latest_cashflows.c.portfolio_id)
@@ -154,29 +216,11 @@ class CashflowRepository:
                 latest_cashflows.c.cashflow_date.between(start_date, end_date),
                 latest_cashflows.c.is_portfolio_flow,
             )
-            .group_by(latest_cashflows.c.cashflow_date)
-            .order_by(latest_cashflows.c.cashflow_date.asc())
+            .group_by(latest_cashflows.c.cashflow_date, latest_cashflows.c.currency)
+            .order_by(latest_cashflows.c.cashflow_date.asc(), latest_cashflows.c.currency.asc())
         )
-        rows = (await self.db.execute(stmt)).all()
-        return CashflowSeriesEvidence(
-            rows=[
-                (flow_date, net_amount)
-                for flow_date, net_amount, _source_row_count, _source_total, _timestamp in rows
-            ],
-            latest_evidence_timestamp=max(
-                (
-                    timestamp
-                    for _flow_date, _net_amount, _source_row_count, _source_total, timestamp in rows
-                    if timestamp
-                ),
-                default=None,
-            ),
-            source_row_count=sum(
-                int(source_row_count or 0)
-                for _flow_date, _net_amount, source_row_count, _source_total, _timestamp in rows
-            ),
-            source_total=Decimal(str(rows[0][3] or 0)) if rows else Decimal("0"),
-        )
+        rows = cast(list[CashflowAggregateRow], (await self.db.execute(stmt)).all())
+        return _cashflow_series_evidence(rows)
 
     async def get_projected_settlement_cashflow_series_with_evidence(
         self,
@@ -186,7 +230,7 @@ class CashflowRepository:
         *,
         tenant_id: TenantId,
     ) -> CashflowSeriesEvidence:
-        """Return projected settlement cashflows and latest evidence timestamp in one read."""
+        """Return unbooked settlement cashflows in authoritative trade currency."""
         # `settlement_date` is an instant.  This product publishes UTC event-date
         # buckets; booking-centre business dates require an explicit separate
         # authority and must not follow the database session's TimeZone.
@@ -205,9 +249,12 @@ class CashflowRepository:
         stmt = (
             select(
                 settlement_date.label("cashflow_date"),
+                Transaction.trade_currency,
                 func.sum(signed_amount).label("net_amount"),
                 func.count().label("source_row_count"),
-                func.sum(func.sum(signed_amount)).over().label("source_total"),
+                func.sum(func.sum(signed_amount))
+                .over(partition_by=Transaction.trade_currency)
+                .label("source_currency_total"),
                 func.max(Transaction.updated_at).label("latest_evidence_timestamp"),
             )
             .join(Portfolio, Portfolio.portfolio_id == Transaction.portfolio_id)
@@ -219,30 +266,73 @@ class CashflowRepository:
                 Transaction.settlement_date >= start_of_day(start_date),
                 Transaction.settlement_date < start_of_next_day(end_date),
                 Transaction.transaction_date < start_of_day(start_date),
+                ~exists(select(1).where(Cashflow.transaction_id == Transaction.transaction_id)),
             )
-            .group_by(settlement_date)
-            .order_by(settlement_date.asc())
+            .group_by(settlement_date, Transaction.trade_currency)
+            .order_by(settlement_date.asc(), Transaction.trade_currency.asc())
         )
-        rows = (await self.db.execute(stmt)).all()
-        return CashflowSeriesEvidence(
-            rows=[
-                (flow_date, net_amount)
-                for flow_date, net_amount, _source_row_count, _source_total, _timestamp in rows
-            ],
-            latest_evidence_timestamp=max(
-                (
-                    timestamp
-                    for _flow_date, _net_amount, _source_row_count, _source_total, timestamp in rows
-                    if timestamp
-                ),
-                default=None,
-            ),
-            source_row_count=sum(
-                int(source_row_count or 0)
-                for _flow_date, _net_amount, source_row_count, _source_total, _timestamp in rows
-            ),
-            source_total=Decimal(str(rows[0][3] or 0)) if rows else Decimal("0"),
+        rows = cast(list[CashflowAggregateRow], (await self.db.execute(stmt)).all())
+        return _cashflow_series_evidence(rows)
+
+    async def get_cashflow_fx_rate_evidence(
+        self,
+        *,
+        required_conversions: set[tuple[str, str, date]],
+    ) -> dict[tuple[str, str, date], CashflowFxRateEvidence]:
+        """Resolve exact-date direct FX evidence for a bounded cashflow window in one read."""
+        normalized = {
+            (
+                normalize_currency_code(from_currency),
+                normalize_currency_code(to_currency),
+                rate_date,
+            )
+            for from_currency, to_currency, rate_date in required_conversions
+            if normalize_currency_code(from_currency) != normalize_currency_code(to_currency)
+        }
+        if not normalized:
+            return {}
+        from_currency_expr = func.upper(func.trim(FxRateModel.from_currency))
+        to_currency_expr = func.upper(func.trim(FxRateModel.to_currency))
+        normalized_keys = sorted(normalized)
+        observe_multi_statement_batch(
+            operation=StatementBatchOperation.CASHFLOW_FX_LOOKUP,
+            item_count=len(normalized_keys),
+            binds_per_row=3,
         )
+        evidence: dict[tuple[str, str, date], CashflowFxRateEvidence] = {}
+        for chunk in iter_statement_chunks(normalized_keys, binds_per_row=3):
+            stmt = (
+                select(
+                    FxRateModel.id,
+                    from_currency_expr,
+                    to_currency_expr,
+                    FxRateModel.rate_date,
+                    FxRateModel.rate,
+                    FxRateModel.updated_at,
+                )
+                .where(
+                    tuple_(from_currency_expr, to_currency_expr, FxRateModel.rate_date).in_(chunk)
+                )
+                .order_by(
+                    FxRateModel.rate_date.asc(),
+                    from_currency_expr.asc(),
+                    to_currency_expr.asc(),
+                    FxRateModel.id.asc(),
+                )
+            )
+            rows = (await self.db.execute(stmt)).all()
+            for row in rows:
+                source_id, from_currency, to_currency, rate_date, rate, source_updated_at = row
+                key = (str(from_currency), str(to_currency), rate_date)
+                evidence[key] = CashflowFxRateEvidence(
+                    source_id=int(source_id),
+                    from_currency=str(from_currency),
+                    to_currency=str(to_currency),
+                    rate_date=rate_date,
+                    rate=Decimal(str(rate)),
+                    source_updated_at=source_updated_at,
+                )
+        return evidence
 
     @async_timed(repository="CashflowRepository", method="get_portfolio_cash_movement_summary")
     async def get_portfolio_cash_movement_summary(
@@ -370,7 +460,7 @@ class CashflowRepository:
             .order_by(latest_cashflows.c.cashflow_date.asc())
         )
         result = await self.db.execute(stmt)
-        return result.all()
+        return cast(List[Tuple[date, Decimal]], result.all())
 
     @async_timed(repository="CashflowRepository", method="get_income_cashflows_for_position")
     async def get_income_cashflows_for_position(
@@ -405,4 +495,4 @@ class CashflowRepository:
             )
         )
         result = await self.db.execute(stmt)
-        return result.scalars().all()
+        return cast(List[Cashflow], result.scalars().all())

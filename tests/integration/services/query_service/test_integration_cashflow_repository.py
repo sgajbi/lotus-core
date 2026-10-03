@@ -397,10 +397,10 @@ async def test_get_portfolio_cashflow_series_uses_latest_cashflow_epoch(
         tenant_id=TenantId(TEST_TENANT_ID),
     )
 
-    assert evidence.rows == [(date(2025, 2, 1), Decimal("-50"))]
+    assert evidence.rows == [(date(2025, 2, 1), "USD", Decimal("-50"))]
     assert evidence.latest_evidence_timestamp is not None
     assert evidence.source_row_count == 1
-    assert evidence.source_total == Decimal("-50")
+    assert evidence.source_currency_totals == {"USD": Decimal("-50")}
 
 
 async def test_cash_movement_summary_returns_exact_source_controls(
@@ -563,9 +563,9 @@ async def test_projected_settlement_window_and_utc_bucket_ignore_session_timezon
             end_date=window_date,
             tenant_id=TenantId(TEST_TENANT_ID),
         )
-        assert evidence.rows == [(window_date, Decimal("20"))]
+        assert evidence.rows == [(window_date, "USD", Decimal("20"))]
         assert evidence.source_row_count == 1
-        assert evidence.source_total == Decimal("20")
+        assert evidence.source_currency_totals == {"USD": Decimal("20")}
         for date_filters, expected_suffixes in (
             ({"start_date": window_date}, ("IN", "EXCLUSIVE")),
             ({"end_date": window_date}, ("BEFORE", "IN")),

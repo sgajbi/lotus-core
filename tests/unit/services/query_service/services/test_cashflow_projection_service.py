@@ -1,6 +1,6 @@
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal
+from decimal import Context, Decimal, localcontext
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -8,10 +8,12 @@ from portfolio_common.domain.tenant import TenantContext, TenantId
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.cashflow_repository import (
+    CashflowFxRateEvidence,
     CashflowRepository,
     CashflowSeriesEvidence,
     CashflowSourceCutEvidence,
 )
+from src.services.query_service.app.services.cashflow_evidence_window import CashflowEvidenceWindow
 from src.services.query_service.app.services.cashflow_projection_service import (
     MAX_HORIZON_DAYS,
     CashflowProjectionService,
@@ -43,12 +45,12 @@ def mock_repo() -> AsyncMock:
 
     async def _series(
         portfolio_id: str, start_date: date, end_date: date, *, tenant_id: TenantId
-    ) -> list[tuple[date, Decimal]]:
+    ) -> list[tuple[date, str, Decimal]]:
         universe = {
             date(2026, 3, 1): Decimal("-1000"),
             date(2026, 3, 3): Decimal("250"),
         }
-        return [(d, amount) for d, amount in universe.items() if start_date <= d <= end_date]
+        return [(d, "USD", amount) for d, amount in universe.items() if start_date <= d <= end_date]
 
     async def _series_with_evidence(
         portfolio_id: str, start_date: date, end_date: date, *, tenant_id: TenantId
@@ -58,7 +60,6 @@ def mock_repo() -> AsyncMock:
             rows=rows,
             latest_evidence_timestamp=datetime(2026, 3, 3, 12, 30, tzinfo=UTC),
             source_row_count=len(rows),
-            source_total=sum((amount for _flow_date, amount in rows), start=Decimal("0")),
         )
 
     repo.get_portfolio_cashflow_series_with_evidence.side_effect = _series_with_evidence
@@ -125,7 +126,7 @@ async def test_projection_defaults_to_latest_business_date(mock_repo: AsyncMock)
         assert response.source_window_trust.supportability_status == "SUPPORTED"
         assert response.request_fingerprint.startswith("cashflow_projection:")
         assert response.snapshot_id.startswith("cashflow_projection:")
-        assert response.policy_version == "cashflow-projection-v1"
+        assert response.policy_version == "cashflow-projection-v2"
         assert response.calculation_lineage.algorithm_id == "PORTFOLIO_CASHFLOW_PROJECTION"
         assert response.calculation_lineage.intermediate_precision == 50
         assert response.points[0].projected_cumulative_cashflow == Decimal("-1000")
@@ -170,6 +171,63 @@ async def test_projection_content_hash_binds_the_common_source_cut(mock_repo: As
     assert refreshed.source_cut_id == restated.source_cut_id
     assert refreshed.generated_at != restated.generated_at
     assert refreshed.content_hash != restated.content_hash
+
+
+async def test_projection_identity_binds_selected_fx_evidence(mock_repo: AsyncMock) -> None:
+    fx_date = date(2026, 3, 1)
+    first_updated_at = datetime(2026, 3, 1, 8, tzinfo=UTC)
+    mock_repo.get_portfolio_cashflow_series_with_evidence.side_effect = None
+    mock_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
+        rows=[(fx_date, "EUR", Decimal("100"))],
+        latest_evidence_timestamp=datetime(2026, 3, 1, 7, tzinfo=UTC),
+        source_row_count=1,
+    )
+    mock_repo.get_cashflow_fx_rate_evidence.return_value = {
+        ("EUR", "USD", fx_date): CashflowFxRateEvidence(
+            source_id=11,
+            from_currency="EUR",
+            to_currency="USD",
+            rate_date=fx_date,
+            rate=Decimal("2"),
+            source_updated_at=first_updated_at,
+        )
+    }
+
+    with patch(
+        "src.services.query_service.app.services.cashflow_projection_service.CashflowRepository",
+        return_value=mock_repo,
+    ):
+        service = CashflowProjectionService(AsyncMock(spec=AsyncSession))
+        first = await service.get_cashflow_projection(
+            portfolio_id="P1",
+            horizon_days=1,
+            as_of_date=fx_date,
+            tenant_context=TEST_TENANT_CONTEXT,
+        )
+        mock_repo.get_cashflow_fx_rate_evidence.return_value = {
+            ("EUR", "USD", fx_date): CashflowFxRateEvidence(
+                source_id=11,
+                from_currency="EUR",
+                to_currency="USD",
+                rate_date=fx_date,
+                rate=Decimal("2.5"),
+                source_updated_at=first_updated_at + timedelta(minutes=1),
+            )
+        }
+        corrected = await service.get_cashflow_projection(
+            portfolio_id="P1",
+            horizon_days=1,
+            as_of_date=fx_date,
+            tenant_context=TEST_TENANT_CONTEXT,
+        )
+
+    assert first.booked_total_net_cashflow == Decimal("200")
+    assert corrected.booked_total_net_cashflow == Decimal("250")
+    assert corrected.source_cut_id == first.source_cut_id
+    assert corrected.request_fingerprint != first.request_fingerprint
+    assert corrected.snapshot_id != first.snapshot_id
+    assert corrected.content_hash != first.content_hash
+    assert corrected.latest_evidence_timestamp > first.latest_evidence_timestamp
 
 
 async def test_projection_reads_currency_and_default_date_sequentially(
@@ -272,10 +330,9 @@ async def test_projection_rejects_unbounded_horizon_before_database_access(
 async def test_projection_includes_future_settlement_dated_external_flows(mock_repo: AsyncMock):
     mock_repo.get_projected_settlement_cashflow_series_with_evidence.return_value = (
         CashflowSeriesEvidence(
-            rows=[(date(2026, 3, 4), Decimal("-18000"))],
+            rows=[(date(2026, 3, 4), "USD", Decimal("-18000"))],
             latest_evidence_timestamp=datetime(2026, 3, 4, 9, tzinfo=UTC),
             source_row_count=1,
-            source_total=Decimal("-18000"),
         )
     )
 
@@ -311,17 +368,15 @@ async def test_projection_adds_same_day_booked_and_projected_movements(
 ) -> None:
     mock_repo.get_portfolio_cashflow_series_with_evidence.side_effect = None
     mock_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
-        rows=[(date(2026, 3, 2), Decimal("400.25"))],
+        rows=[(date(2026, 3, 2), "USD", Decimal("400.25"))],
         latest_evidence_timestamp=datetime(2026, 3, 2, 9, tzinfo=UTC),
         source_row_count=1,
-        source_total=Decimal("400.25"),
     )
     mock_repo.get_projected_settlement_cashflow_series_with_evidence.return_value = (
         CashflowSeriesEvidence(
-            rows=[(date(2026, 3, 2), Decimal("-150.10"))],
+            rows=[(date(2026, 3, 2), "USD", Decimal("-150.10"))],
             latest_evidence_timestamp=datetime(2026, 3, 2, 10, tzinfo=UTC),
             source_row_count=1,
-            source_total=Decimal("-150.10"),
         )
     )
 
@@ -366,10 +421,9 @@ async def test_projection_runs_booked_and_projected_reads_sequentially(
     ) -> CashflowSeriesEvidence:
         call_order.append("booked")
         return CashflowSeriesEvidence(
-            rows=[(start_date, Decimal("10"))],
+            rows=[(start_date, "USD", Decimal("10"))],
             latest_evidence_timestamp=datetime(2026, 3, 1, 9, tzinfo=UTC),
             source_row_count=1,
-            source_total=Decimal("10"),
         )
 
     async def _projected_evidence(
@@ -381,10 +435,9 @@ async def test_projection_runs_booked_and_projected_reads_sequentially(
     ) -> CashflowSeriesEvidence:
         call_order.append("projected")
         return CashflowSeriesEvidence(
-            rows=[(start_date, Decimal("-2"))],
+            rows=[(start_date, "USD", Decimal("-2"))],
             latest_evidence_timestamp=datetime(2026, 3, 1, 10, tzinfo=UTC),
             source_row_count=1,
-            source_total=Decimal("-2"),
         )
 
     mock_repo.get_portfolio_cashflow_series_with_evidence.side_effect = _booked_evidence
@@ -425,17 +478,30 @@ async def test_projection_sum_by_date_treats_blank_and_null_amounts_as_zero() ->
 async def test_projection_fails_closed_when_source_total_does_not_reconcile(
     mock_repo: AsyncMock,
 ) -> None:
-    mock_repo.get_portfolio_cashflow_series_with_evidence.side_effect = None
-    mock_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
-        rows=[(date(2026, 3, 1), Decimal("10"))],
+    mismatched_window = CashflowEvidenceWindow(
+        booked_rows=[(date(2026, 3, 1), Decimal("10"))],
+        projected_rows=[],
         latest_evidence_timestamp=datetime(2026, 3, 1, 9, tzinfo=UTC),
-        source_row_count=1,
-        source_total=Decimal("11"),
+        booked_source_row_count=1,
+        projected_source_row_count=0,
+        booked_source_total=Decimal("11"),
+        projected_source_total=Decimal("0"),
+        booked_source_currency_totals={"USD": Decimal("10")},
+        projected_source_currency_totals={},
+        native_booked_rows=[(date(2026, 3, 1), "USD", Decimal("10"))],
+        native_projected_rows=[],
+        fx_conversion_evidence=[],
     )
 
-    with patch(
-        "src.services.query_service.app.services.cashflow_projection_service.CashflowRepository",
-        return_value=mock_repo,
+    with (
+        patch(
+            "src.services.query_service.app.services.cashflow_projection_service.CashflowRepository",
+            return_value=mock_repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.cashflow_projection_service.read_cashflow_evidence_window",
+            new=AsyncMock(return_value=mismatched_window),
+        ),
     ):
         response = await CashflowProjectionService(
             AsyncMock(spec=AsyncSession)
@@ -478,3 +544,57 @@ async def test_projection_binds_tenant_to_input_calculation_and_output_identity(
     )
     assert tenant_a.content_hash != tenant_b.content_hash
     assert tenant_a.snapshot_id != tenant_b.snapshot_id
+
+
+async def test_projection_values_and_identity_do_not_inherit_ambient_decimal_context(
+    mock_repo: AsyncMock,
+) -> None:
+    flow_date = date(2026, 3, 1)
+    mock_repo.get_portfolio_cashflow_series_with_evidence.side_effect = None
+    mock_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
+        rows=[(flow_date, "EUR", Decimal("12345678.1234567890"))],
+        latest_evidence_timestamp=datetime(2026, 3, 1, 9, tzinfo=UTC),
+        source_row_count=1,
+    )
+    mock_repo.get_projected_settlement_cashflow_series_with_evidence.return_value = (
+        CashflowSeriesEvidence(
+            rows=[(flow_date, "USD", Decimal("12345.6789"))],
+            latest_evidence_timestamp=datetime(2026, 3, 1, 10, tzinfo=UTC),
+            source_row_count=1,
+        )
+    )
+    mock_repo.get_cashflow_fx_rate_evidence.return_value = {
+        ("EUR", "USD", flow_date): CashflowFxRateEvidence(
+            source_id=11,
+            from_currency="EUR",
+            to_currency="USD",
+            rate_date=flow_date,
+            rate=Decimal("12345678.1234567890"),
+            source_updated_at=datetime(2026, 3, 1, 8, tzinfo=UTC),
+        )
+    }
+
+    responses = []
+    with patch(
+        "src.services.query_service.app.services.cashflow_projection_service.CashflowRepository",
+        return_value=mock_repo,
+    ):
+        service = CashflowProjectionService(AsyncMock(spec=AsyncSession))
+        for ambient_precision in (6, 28, 50):
+            with localcontext(Context(prec=ambient_precision)):
+                responses.append(
+                    await service.get_cashflow_projection(
+                        portfolio_id="P1",
+                        horizon_days=1,
+                        as_of_date=flow_date,
+                        tenant_context=TEST_TENANT_CONTEXT,
+                    )
+                )
+
+    expected_booked = Decimal("152415768327999.54305746275019052100")
+    expected_total = Decimal("152415768340345.22195746275019052100")
+    assert {response.booked_total_net_cashflow for response in responses} == {expected_booked}
+    assert {response.total_net_cashflow for response in responses} == {expected_total}
+    assert len({response.request_fingerprint for response in responses}) == 1
+    assert len({response.snapshot_id for response in responses}) == 1
+    assert len({response.content_hash for response in responses}) == 1

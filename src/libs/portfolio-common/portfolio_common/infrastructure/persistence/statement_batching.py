@@ -37,6 +37,7 @@ class StatementBatchOperation(StrEnum):
     AGGREGATION_STALE_FAILED_UPDATE = "aggregation_stale_failed_update"
     AGGREGATION_STALE_REQUEUE_UPDATE = "aggregation_stale_requeue_update"
     FINANCIAL_RECONCILIATION_FX_LOOKUP = "financial_reconciliation_fx_lookup"
+    CASHFLOW_FX_LOOKUP = "cashflow_fx_lookup"
 
 
 def statement_chunk_size(

@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
@@ -41,6 +41,61 @@ async def test_projected_settlement_cashflow_series_limits_to_external_future_se
     assert "transactions.transaction_type = 'BUY'" not in compiled_query
     assert "portfolios.tenant_id = 'tenant-test'" in compiled_query
     assert "max(transactions.updated_at)" in compiled_query.lower()
+    assert "transactions.trade_currency" in compiled_query
+    assert "NOT (EXISTS (SELECT 1" in compiled_query
+    assert "cashflows.transaction_id = transactions.transaction_id" in compiled_query
+
+
+async def test_cashflow_fx_evidence_uses_one_exact_date_direct_pair_read(
+    mock_db_session: AsyncMock,
+) -> None:
+    evidence_timestamp = datetime(2026, 3, 27, 8, tzinfo=UTC)
+    mock_db_session.execute.return_value = MagicMock(
+        all=lambda: [(11, "EUR", "USD", date(2026, 3, 27), Decimal("2"), evidence_timestamp)]
+    )
+    repository = CashflowRepository(mock_db_session)
+
+    evidence = await repository.get_cashflow_fx_rate_evidence(
+        required_conversions={
+            ("eur", "usd", date(2026, 3, 27)),
+            ("USD", "USD", date(2026, 3, 27)),
+        }
+    )
+
+    assert evidence[("EUR", "USD", date(2026, 3, 27))].rate == Decimal("2")
+    stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "fx_rates.rate_date" in compiled_query
+    assert "<= '2026-03-27'" not in compiled_query
+    assert "('EUR', 'USD', '2026-03-27')" in compiled_query
+    assert mock_db_session.execute.await_count == 1
+
+
+async def test_cashflow_fx_evidence_bounds_maximum_supported_window_reads(
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_db_session.execute.return_value = MagicMock(all=lambda: [])
+    repository = CashflowRepository(mock_db_session)
+    required_conversions = {
+        (
+            f"{chr(65 + currency // 26)}{chr(65 + currency % 26)}X",
+            "USD",
+            date(2026, 1, 1) + timedelta(days=day),
+        )
+        for day in range(367)
+        for currency in range(60)
+    }
+
+    evidence = await repository.get_cashflow_fx_rate_evidence(
+        required_conversions=required_conversions
+    )
+
+    assert evidence == {}
+    assert mock_db_session.execute.await_count == 23
+    for call in mock_db_session.execute.await_args_list:
+        compiled = call.args[0].compile()
+        assert len(compiled.params["param_1"]) <= 1_000
+        assert len(compiled.params["param_1"]) * 3 <= 32_000
 
 
 async def test_latest_cashflows_subquery_prefers_highest_epoch_per_transaction() -> None:
@@ -120,8 +175,8 @@ async def test_cashflow_repository_portfolio_cashflow_series_filters_to_portfoli
     second_timestamp = datetime(2026, 4, 19, 10, 45, tzinfo=UTC)
     mock_db_session.execute.return_value = MagicMock(
         all=lambda: [
-            (date(2026, 4, 18), 10, 2, 8, first_timestamp),
-            (date(2026, 4, 19), -2, 1, 8, second_timestamp),
+            (date(2026, 4, 18), "USD", 10, 2, 8, first_timestamp),
+            (date(2026, 4, 19), "USD", -2, 1, 8, second_timestamp),
         ]
     )
     repository = CashflowRepository(mock_db_session)
@@ -133,10 +188,13 @@ async def test_cashflow_repository_portfolio_cashflow_series_filters_to_portfoli
         tenant_id=TEST_TENANT_CONTEXT.tenant_id,
     )
 
-    assert evidence.rows == [(date(2026, 4, 18), 10), (date(2026, 4, 19), -2)]
+    assert evidence.rows == [
+        (date(2026, 4, 18), "USD", Decimal("10")),
+        (date(2026, 4, 19), "USD", Decimal("-2")),
+    ]
     assert evidence.latest_evidence_timestamp == second_timestamp
     assert evidence.source_row_count == 3
-    assert evidence.source_total == Decimal("8")
+    assert evidence.source_currency_totals == {"USD": Decimal("8")}
     stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "anon_1.portfolio_id = 'P1'" in compiled_query
@@ -145,7 +203,7 @@ async def test_cashflow_repository_portfolio_cashflow_series_filters_to_portfoli
     assert "portfolios.tenant_id = 'tenant-test'" in compiled_query
     assert "sum(anon_1.amount)" in compiled_query.lower()
     assert "count(*)" in compiled_query.lower()
-    assert "sum(sum(anon_1.amount)) OVER ()" in compiled_query
+    assert "sum(sum(anon_1.amount)) OVER (PARTITION BY anon_1.currency)" in compiled_query
     assert "max(anon_1.updated_at)" in compiled_query.lower()
 
 
