@@ -447,6 +447,16 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     )
     assert "PortfolioLiquidityLadder source-data product" in liquidity_ladder_query["description"]
     assert "Do not use it as an advice recommendation" in liquidity_ladder_query["description"]
+    liquidity_bad_request_examples = liquidity_ladder_query["responses"]["400"]["content"][
+        "application/json"
+    ]["examples"]
+    assert liquidity_bad_request_examples["invalid_horizon"]["value"]["detail"] == (
+        "horizon_days must be between 0 and 366."
+    )
+    assert liquidity_bad_request_examples["missing_fx"]["value"]["detail"] == (
+        "Required exact-date direct FX conversion evidence is unavailable for EUR/USD "
+        "on 2026-03-27."
+    )
     assert "strategic historical portfolio summary" in portfolio_summary_query["description"]
     assert (
         "Prefer this route over downstream reconstruction from holdings rows or `core-snapshot`"
@@ -941,8 +951,14 @@ async def test_openapi_describes_cashflow_projection_contract_examples(async_tes
 
     not_found = projection["responses"]["404"]["content"]["application/json"]["example"]
     assert not_found["detail"] == "Portfolio with id PORT-CF-001 not found"
-    bad_request = projection["responses"]["400"]["content"]["application/json"]["example"]
-    assert bad_request["detail"] == "horizon_days must be between 1 and 366."
+    bad_request_examples = projection["responses"]["400"]["content"]["application/json"]["examples"]
+    assert bad_request_examples["invalid_horizon"]["value"]["detail"] == (
+        "horizon_days must be between 1 and 366."
+    )
+    assert bad_request_examples["missing_fx"]["value"]["detail"] == (
+        "Required exact-date direct FX conversion evidence is unavailable for EUR/USD "
+        "on 2026-03-27."
+    )
     projection_response = schema["components"]["schemas"]["CashflowProjectionResponse"]
     assert projection_response["properties"]["range_start_date"]["description"] == (
         "Inclusive cashflow-date start of the projection range."

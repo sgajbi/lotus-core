@@ -4,6 +4,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from typing import cast
 
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.domain.tenant import TenantContext
@@ -24,7 +25,7 @@ from ..dtos.liquidity_ladder_dto import (
 )
 from ..repositories.cashflow_repository import CashflowRepository
 from ..repositories.reporting_repository import ReportingRepository, ReportingSnapshotRow
-from .cashflow_evidence_window import read_cashflow_evidence_window
+from .cashflow_evidence_window import cashflow_arithmetic_context, read_cashflow_evidence_window
 from .control_code_normalization import normalize_control_code
 from .snapshot_evidence import latest_snapshot_evidence_timestamp
 from .valuation_status import has_usable_valuation_status
@@ -67,6 +68,7 @@ class PortfolioLiquidityLadderService:
         if horizon_days < 0 or horizon_days > MAX_HORIZON_DAYS:
             raise ValueError(f"horizon_days must be between 0 and {MAX_HORIZON_DAYS}.")
 
+        await self.cashflow_repo.establish_cashflow_source_read_snapshot()
         portfolio = await self.reporting_repo.get_portfolio_by_id(
             portfolio_id, tenant_id=tenant_context.tenant_id
         )
@@ -89,41 +91,43 @@ class PortfolioLiquidityLadderService:
         cashflow_evidence = await read_cashflow_evidence_window(
             repo=self.cashflow_repo,
             portfolio_id=portfolio.portfolio_id,
+            portfolio_currency=str(portfolio.base_currency),
             start_date=resolved_as_of_date,
             end_date=range_end_date,
             include_projected=include_projected,
             tenant_id=tenant_context.tenant_id,
         )
 
-        cash_rows, non_cash_rows, unclassified_rows = self._partition_snapshot_rows(rows)
-        opening_cash_balance = self._opening_cash_balance(
-            rows=rows,
-            cash_rows=cash_rows,
-            unclassified_rows=unclassified_rows,
-        )
-        tier_exposures = self._build_asset_liquidity_tier_exposures(non_cash_rows)
-        degradation = self._degradation_summary(
-            rows=rows,
-            cash_rows=cash_rows,
-            non_cash_rows=non_cash_rows,
-            unclassified_rows=unclassified_rows,
-            as_of_date=resolved_as_of_date,
-        )
+        with cashflow_arithmetic_context():
+            cash_rows, non_cash_rows, unclassified_rows = self._partition_snapshot_rows(rows)
+            opening_cash_balance = self._opening_cash_balance(
+                rows=rows,
+                cash_rows=cash_rows,
+                unclassified_rows=unclassified_rows,
+            )
+            tier_exposures = self._build_asset_liquidity_tier_exposures(non_cash_rows)
+            degradation = self._degradation_summary(
+                rows=rows,
+                cash_rows=cash_rows,
+                non_cash_rows=non_cash_rows,
+                unclassified_rows=unclassified_rows,
+                as_of_date=resolved_as_of_date,
+            )
 
-        buckets = self._build_ladder_buckets(
-            as_of_date=resolved_as_of_date,
-            horizon_days=horizon_days,
-            opening_cash_balance=opening_cash_balance,
-            booked_series=dict(cashflow_evidence.booked_rows),
-            projected_series=dict(cashflow_evidence.projected_rows),
-        )
-        totals = self._build_totals(
-            opening_cash_balance=opening_cash_balance,
-            buckets=buckets,
-            tier_exposures=tier_exposures,
-            rows=rows,
-            unclassified_rows=unclassified_rows,
-        )
+            buckets = self._build_ladder_buckets(
+                as_of_date=resolved_as_of_date,
+                horizon_days=horizon_days,
+                opening_cash_balance=opening_cash_balance,
+                booked_series=dict(cashflow_evidence.booked_rows),
+                projected_series=dict(cashflow_evidence.projected_rows),
+            )
+            totals = self._build_totals(
+                opening_cash_balance=opening_cash_balance,
+                buckets=buckets,
+                tier_exposures=tier_exposures,
+                rows=rows,
+                unclassified_rows=unclassified_rows,
+            )
         latest_snapshot_evidence = latest_snapshot_evidence_timestamp(rows)
 
         return PortfolioLiquidityLadderResponse(
@@ -422,7 +426,7 @@ def _row_degradation_detail(
 
 
 def _has_usable_snapshot_valuation(row: ReportingSnapshotRow) -> bool:
-    return has_usable_valuation_status(getattr(row.snapshot, "valuation_status", None))
+    return cast(bool, has_usable_valuation_status(getattr(row.snapshot, "valuation_status", None)))
 
 
 def _cash_qualified_fields() -> list[str]:

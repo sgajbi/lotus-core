@@ -18,6 +18,10 @@ router = APIRouter(prefix="/portfolios", tags=["Liquidity Ladder"])
 
 PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-001 not found"}
 BAD_REQUEST_RESPONSE_EXAMPLE = {"detail": "horizon_days must be between 0 and 366."}
+MISSING_FX_RESPONSE_EXAMPLE = {
+    "detail": "Required exact-date direct FX conversion evidence is unavailable for EUR/USD "
+    "on 2026-03-27."
+}
 
 
 @router.get(
@@ -30,7 +34,14 @@ BAD_REQUEST_RESPONSE_EXAMPLE = {"detail": "horizon_days must be between 0 and 36
         },
         status.HTTP_400_BAD_REQUEST: {
             "description": "Request could not be resolved.",
-            "content": {"application/json": {"example": BAD_REQUEST_RESPONSE_EXAMPLE}},
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "invalid_horizon": {"value": BAD_REQUEST_RESPONSE_EXAMPLE},
+                        "missing_fx": {"value": MISSING_FX_RESPONSE_EXAMPLE},
+                    }
+                }
+            },
         },
     },
     summary="Get source-owned portfolio liquidity ladder evidence",
@@ -39,7 +50,9 @@ BAD_REQUEST_RESPONSE_EXAMPLE = {"detail": "horizon_days must be between 0 and 36
         "portfolio.\n"
         "How: Resolves current cash balances from source holdings, groups non-cash holdings by "
         "instrument liquidity tier, and overlays booked plus optional projected settlement-dated "
-        "cashflows into deterministic cash-availability buckets. Missing contributing valuation "
+        "cashflows into deterministic cash-availability buckets after exact-date direct FX "
+        "conversion into portfolio currency. Required missing or invalid FX fails closed. "
+        "Missing contributing valuation "
         "value, usable valuation status, or asset-class evidence is qualified through nullable "
         "affected totals, PARTIAL or "
         "UNKNOWN data quality, and bounded degradation reason codes; it is never coerced to "

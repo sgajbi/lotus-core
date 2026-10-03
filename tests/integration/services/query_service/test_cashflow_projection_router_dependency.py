@@ -40,7 +40,7 @@ def _trust_fields(*, output_group_count: int = 0) -> dict[str, object]:
         },
         "calculation_lineage": {
             "algorithm_id": "PORTFOLIO_CASHFLOW_PROJECTION",
-            "algorithm_version": 1,
+            "algorithm_version": 2,
             "intermediate_precision": 50,
             "input_content_hash": "a" * 64,
             "calculation_content_hash": "b" * 64,

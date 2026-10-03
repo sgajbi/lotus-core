@@ -135,6 +135,7 @@ async def test_registered_liquidity_ladder_distinguishes_null_zero_and_positive_
             base_url="http://test",
         ) as client:
             unknown = await _request(client, tenant_headers=TEST_TENANT_HEADERS)
+            await async_db_session.rollback()
 
             await async_db_session.execute(
                 update(DailyPositionSnapshot)
@@ -146,6 +147,7 @@ async def test_registered_liquidity_ladder_distinguishes_null_zero_and_positive_
             )
             await async_db_session.commit()
             zero = await _request(client, tenant_headers=TEST_TENANT_HEADERS)
+            await async_db_session.rollback()
 
             await async_db_session.execute(
                 update(DailyPositionSnapshot)
@@ -157,6 +159,7 @@ async def test_registered_liquidity_ladder_distinguishes_null_zero_and_positive_
             )
             await async_db_session.commit()
             positive = await _request(client, tenant_headers=TEST_TENANT_HEADERS)
+            await async_db_session.rollback()
 
             await async_db_session.execute(
                 update(DailyPositionSnapshot)
@@ -168,6 +171,7 @@ async def test_registered_liquidity_ladder_distinguishes_null_zero_and_positive_
             )
             await async_db_session.commit()
             failed_status = await _request(client, tenant_headers=TEST_TENANT_HEADERS)
+            await async_db_session.rollback()
 
             await async_db_session.execute(
                 update(DailyPositionSnapshot)
@@ -184,6 +188,7 @@ async def test_registered_liquidity_ladder_distinguishes_null_zero_and_positive_
             )
             await async_db_session.commit()
             blank_asset_class = await _request(client, tenant_headers=TEST_TENANT_HEADERS)
+            await async_db_session.rollback()
             foreign = await _request(
                 client,
                 tenant_headers={"X-Tenant-Id": "tenant-foreign"},

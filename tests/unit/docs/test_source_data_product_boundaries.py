@@ -336,7 +336,11 @@ def test_portfolio_cashflow_projection_methodology_is_implementation_backed() ->
     assert "transaction dates before the projection start date" in methodology
     assert "Only the latest cashflow row per transaction contributes to `B_d`" in methodology
     assert "Same-day booked and projected movements exist" in methodology
-    assert "No FX conversion, tax methodology, liquidity bucketing" in normalized_methodology
+    assert "Required foreign-currency evidence is an exact-date direct pair" in (
+        normalized_methodology
+    )
+    assert "Prior-date, future-date, inverse-only, triangulated" in normalized_methodology
+    assert "No tax methodology, liquidity bucketing" in normalized_methodology
     assert "`points[].booked_net_cashflow`" in methodology
     assert "`projected_settlement_total_cashflow`" in methodology
     assert "| `points[2026-03-04].net_cashflow` | -18000 |" in methodology

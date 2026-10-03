@@ -1,12 +1,15 @@
 from datetime import UTC, date, datetime
-from decimal import Decimal
+from decimal import Context, Decimal, localcontext
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.query_service.app.repositories.cashflow_repository import CashflowSeriesEvidence
+from src.services.query_service.app.repositories.cashflow_repository import (
+    CashflowFxRateEvidence,
+    CashflowSeriesEvidence,
+)
 from src.services.query_service.app.repositories.reporting_repository import ReportingSnapshotRow
 from src.services.query_service.app.services.liquidity_ladder_service import (
     MAX_HORIZON_DAYS,
@@ -81,16 +84,16 @@ async def test_liquidity_ladder_builds_cash_buckets_and_asset_tier_exposure() ->
     ]
     cashflow_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
         rows=[
-            (date(2026, 3, 27), Decimal("-25000")),
-            (date(2026, 3, 30), Decimal("5000")),
+            (date(2026, 3, 27), "USD", Decimal("-25000")),
+            (date(2026, 3, 30), "USD", Decimal("5000")),
         ],
         latest_evidence_timestamp=datetime(2026, 3, 27, 9, 45, tzinfo=UTC),
     )
     cashflow_repo.get_projected_settlement_cashflow_series_with_evidence.return_value = (
         CashflowSeriesEvidence(
             rows=[
-                (date(2026, 3, 28), Decimal("-90000")),
-                (date(2026, 4, 4), Decimal("-25000")),
+                (date(2026, 3, 28), "USD", Decimal("-90000")),
+                (date(2026, 4, 4), "USD", Decimal("-25000")),
             ],
             latest_evidence_timestamp=datetime(2026, 3, 27, 10, 15, tzinfo=UTC),
         )
@@ -152,7 +155,7 @@ async def test_liquidity_ladder_booked_only_omits_projected_cashflows() -> None:
         )
     ]
     cashflow_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
-        rows=[(date(2026, 3, 27), Decimal("-100"))],
+        rows=[(date(2026, 3, 27), "USD", Decimal("-100"))],
         latest_evidence_timestamp=None,
     )
 
@@ -203,7 +206,7 @@ async def test_liquidity_ladder_runs_booked_and_projected_reads_sequentially() -
     ) -> CashflowSeriesEvidence:
         call_order.append("booked")
         return CashflowSeriesEvidence(
-            rows=[(start_date, Decimal("-100"))],
+            rows=[(start_date, "USD", Decimal("-100"))],
             latest_evidence_timestamp=datetime(2026, 3, 27, 9, tzinfo=UTC),
         )
 
@@ -216,7 +219,7 @@ async def test_liquidity_ladder_runs_booked_and_projected_reads_sequentially() -
     ) -> CashflowSeriesEvidence:
         call_order.append("projected")
         return CashflowSeriesEvidence(
-            rows=[(start_date, Decimal("-50"))],
+            rows=[(start_date, "USD", Decimal("-50"))],
             latest_evidence_timestamp=datetime(2026, 3, 27, 10, tzinfo=UTC),
         )
 
@@ -281,7 +284,7 @@ async def test_liquidity_ladder_reads_snapshot_and_cashflow_evidence_sequentiall
         assert start_date == date(2026, 3, 27)
         assert end_date == date(2026, 3, 27)
         return CashflowSeriesEvidence(
-            rows=[(start_date, Decimal("-100"))],
+            rows=[(start_date, "USD", Decimal("-100"))],
             latest_evidence_timestamp=None,
         )
 
@@ -297,7 +300,7 @@ async def test_liquidity_ladder_reads_snapshot_and_cashflow_evidence_sequentiall
         assert start_date == date(2026, 3, 27)
         assert end_date == date(2026, 3, 27)
         return CashflowSeriesEvidence(
-            rows=[(start_date, Decimal("-50"))],
+            rows=[(start_date, "USD", Decimal("-50"))],
             latest_evidence_timestamp=None,
         )
 
@@ -407,11 +410,18 @@ async def test_liquidity_ladder_explicit_date_skips_default_date_lookup() -> Non
 
 async def test_liquidity_ladder_raises_when_portfolio_missing() -> None:
     reporting_repo = AsyncMock()
+    cashflow_repo = AsyncMock()
     reporting_repo.get_portfolio_by_id.return_value = None
 
-    with patch(
-        "src.services.query_service.app.services.liquidity_ladder_service.ReportingRepository",
-        return_value=reporting_repo,
+    with (
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.ReportingRepository",
+            return_value=reporting_repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.CashflowRepository",
+            return_value=cashflow_repo,
+        ),
     ):
         service = PortfolioLiquidityLadderService(AsyncMock(spec=AsyncSession))
         with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
@@ -436,12 +446,19 @@ async def test_liquidity_ladder_rejects_invalid_horizon_before_database_access()
 
 async def test_liquidity_ladder_raises_when_business_date_missing() -> None:
     reporting_repo = AsyncMock()
+    cashflow_repo = AsyncMock()
     reporting_repo.get_portfolio_by_id.return_value = _portfolio("P1")
     reporting_repo.get_latest_business_date.return_value = None
 
-    with patch(
-        "src.services.query_service.app.services.liquidity_ladder_service.ReportingRepository",
-        return_value=reporting_repo,
+    with (
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.ReportingRepository",
+            return_value=reporting_repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.CashflowRepository",
+            return_value=cashflow_repo,
+        ),
     ):
         service = PortfolioLiquidityLadderService(AsyncMock(spec=AsyncSession))
         with pytest.raises(
@@ -537,7 +554,7 @@ async def test_liquidity_ladder_distinguishes_known_cash_from_unknown_valuation(
         )
     ]
     cashflow_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
-        rows=[(date(2026, 3, 27), Decimal("-25"))], latest_evidence_timestamp=None
+        rows=[(date(2026, 3, 27), "USD", Decimal("-25"))], latest_evidence_timestamp=None
     )
     cashflow_repo.get_projected_settlement_cashflow_series_with_evidence.return_value = (
         CashflowSeriesEvidence(rows=[], latest_evidence_timestamp=None)
@@ -598,11 +615,11 @@ async def test_liquidity_ladder_preserves_carried_forward_degradation_chronology
         )
     ]
     cashflow_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
-        rows=[(date(2026, 3, 27), Decimal("-25"))], latest_evidence_timestamp=None
+        rows=[(date(2026, 3, 27), "USD", Decimal("-25"))], latest_evidence_timestamp=None
     )
     cashflow_repo.get_projected_settlement_cashflow_series_with_evidence.return_value = (
         CashflowSeriesEvidence(
-            rows=[(date(2026, 3, 27), Decimal("40"))],
+            rows=[(date(2026, 3, 27), "USD", Decimal("40"))],
             latest_evidence_timestamp=None,
         )
     )
@@ -904,3 +921,127 @@ async def test_liquidity_ladder_partitions_cash_rows_with_single_classification_
     assert non_cash_rows == [rows[1], rows[2]]
     assert unclassified_rows == []
     assert calls == ["CASH", "EQUITY", "BOND"]
+
+
+async def test_liquidity_ladder_converts_native_cashflows_before_bucketing() -> None:
+    reporting_repo = AsyncMock()
+    cashflow_repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    reporting_repo.get_portfolio_by_id.return_value = portfolio
+    reporting_repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("CASH_USD", market_value="100"),
+            instrument=_instrument("CASH_USD", asset_class="CASH", liquidity_tier=None),
+        )
+    ]
+    cashflow_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
+        rows=[(date(2026, 3, 27), "EUR", Decimal("10"))],
+        latest_evidence_timestamp=datetime(2026, 3, 27, 9, tzinfo=UTC),
+        source_row_count=1,
+    )
+    cashflow_repo.get_projected_settlement_cashflow_series_with_evidence.return_value = (
+        CashflowSeriesEvidence(rows=[], latest_evidence_timestamp=None)
+    )
+    cashflow_repo.get_cashflow_fx_rate_evidence.return_value = {
+        ("EUR", "USD", date(2026, 3, 27)): CashflowFxRateEvidence(
+            source_id=1,
+            from_currency="EUR",
+            to_currency="USD",
+            rate_date=date(2026, 3, 27),
+            rate=Decimal("2"),
+            source_updated_at=datetime(2026, 3, 27, 8, tzinfo=UTC),
+        )
+    }
+
+    with (
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.ReportingRepository",
+            return_value=reporting_repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.CashflowRepository",
+            return_value=cashflow_repo,
+        ),
+    ):
+        response = await PortfolioLiquidityLadderService(
+            AsyncMock(spec=AsyncSession)
+        ).get_liquidity_ladder(
+            portfolio_id="P1",
+            as_of_date=date(2026, 3, 27),
+            horizon_days=0,
+            tenant_context=TEST_TENANT_CONTEXT,
+        )
+
+    assert response.buckets[0].booked_net_cashflow_portfolio_currency == Decimal("20")
+    assert response.buckets[0].cumulative_cash_available_portfolio_currency == Decimal("120")
+
+
+@pytest.mark.parametrize("ambient_precision", [6, 28, 50])
+async def test_liquidity_ladder_cashflow_totals_do_not_inherit_ambient_decimal_context(
+    ambient_precision: int,
+) -> None:
+    reporting_repo = AsyncMock()
+    cashflow_repo = AsyncMock()
+    flow_date = date(2026, 3, 27)
+    portfolio = _portfolio("P1")
+    reporting_repo.get_portfolio_by_id.return_value = portfolio
+    reporting_repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot("CASH_USD", market_value="12345.6789"),
+            instrument=_instrument("CASH_USD", asset_class="CASH", liquidity_tier=None),
+        )
+    ]
+    cashflow_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
+        rows=[(flow_date, "EUR", Decimal("12345678.1234567890"))],
+        latest_evidence_timestamp=datetime(2026, 3, 27, 9, tzinfo=UTC),
+        source_row_count=1,
+    )
+    cashflow_repo.get_projected_settlement_cashflow_series_with_evidence.return_value = (
+        CashflowSeriesEvidence(
+            rows=[(flow_date, "USD", Decimal("12345.6789"))],
+            latest_evidence_timestamp=datetime(2026, 3, 27, 10, tzinfo=UTC),
+            source_row_count=1,
+        )
+    )
+    cashflow_repo.get_cashflow_fx_rate_evidence.return_value = {
+        ("EUR", "USD", flow_date): CashflowFxRateEvidence(
+            source_id=11,
+            from_currency="EUR",
+            to_currency="USD",
+            rate_date=flow_date,
+            rate=Decimal("12345678.1234567890"),
+            source_updated_at=datetime(2026, 3, 27, 8, tzinfo=UTC),
+        )
+    }
+
+    with (
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.ReportingRepository",
+            return_value=reporting_repo,
+        ),
+        patch(
+            "src.services.query_service.app.services.liquidity_ladder_service.CashflowRepository",
+            return_value=cashflow_repo,
+        ),
+        localcontext(Context(prec=ambient_precision)),
+    ):
+        response = await PortfolioLiquidityLadderService(
+            AsyncMock(spec=AsyncSession)
+        ).get_liquidity_ladder(
+            portfolio_id="P1",
+            as_of_date=flow_date,
+            horizon_days=0,
+            tenant_context=TEST_TENANT_CONTEXT,
+        )
+
+    bucket = response.buckets[0]
+    assert bucket.booked_net_cashflow_portfolio_currency == Decimal(
+        "152415768327999.54305746275019052100"
+    )
+    assert bucket.projected_settlement_cashflow_portfolio_currency == Decimal("12345.6789")
+    assert bucket.net_cashflow_portfolio_currency == Decimal("152415768340345.22195746275019052100")
+    assert bucket.cumulative_cash_available_portfolio_currency == Decimal(
+        "152415768352690.90085746275019052100"
+    )

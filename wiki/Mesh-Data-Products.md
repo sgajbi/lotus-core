@@ -257,6 +257,15 @@ before the projection start date. Same-day booked and projected movements are ad
 separately visible through component fields, empty days carry forward the prior cumulative value, and
 all monetary fields remain in the portfolio base currency.
 
+Core preserves booked cashflow currency and projected transaction trade currency until each amount
+is converted. Conversion uses only an exact-date direct pair for the cashflow date or UTC
+settlement date and occurs before aggregation. A missing, prior-date, inverse-only, triangulated,
+zero, or negative required rate fails closed; consumers must not repair or re-convert the result.
+Transactions with persisted cashflows are excluded from the projected component to prevent double
+counting. Selected FX row identity, pair, date, rate, and revision chronology are bound to the
+projection calculation and content identities; the shared raw cashflow `source_cut_id` remains
+FX-independent.
+
 `PortfolioLiquidityLadder:v1` is the governed source for cash-availability ladder evidence. It
 starts from source cash balances, overlays booked and optional projected settlement-dated external
 cashflows, groups the result into deterministic liquidity buckets, reports cumulative cash
