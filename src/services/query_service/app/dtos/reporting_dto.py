@@ -27,6 +27,14 @@ SnapshotCoverageState = Literal[
     "UNAVAILABLE",
 ]
 LookThroughMode = Literal["direct_only", "prefer_look_through"]
+AllocationValuationCoverageState = Literal[
+    "COMPLETE",
+    "MEASURED_ZERO",
+    "CARRY_FORWARD",
+    "LOADED_EMPTY",
+    "PARTIAL",
+    "UNAVAILABLE",
+]
 
 
 class ReportingScope(BaseModel):
@@ -386,9 +394,12 @@ class AllocationContributor(BaseModel):
             "Upstream component source-record identity when supplied; null means unavailable."
         ),
     )
-    market_value_reporting_currency: Decimal = Field(
+    market_value_reporting_currency: Decimal | None = Field(
         ...,
-        description="Signed contribution value in the response reporting currency.",
+        description=(
+            "Signed contribution value in the response reporting currency, or null when the "
+            "source valuation is unavailable or unusable."
+        ),
     )
     bucket_weight: Decimal | None = Field(
         ...,
@@ -405,14 +416,20 @@ class AllocationBucket(BaseModel):
         description="Resolved classification label for the allocation bucket.",
         examples=["Equity"],
     )
-    market_value_reporting_currency: Decimal = Field(
+    market_value_reporting_currency: Decimal | None = Field(
         ...,
-        description="Bucket market value in the effective reporting currency.",
+        description=(
+            "Bucket market value in the effective reporting currency, or null when any "
+            "contributing source valuation is unavailable or unusable."
+        ),
         examples=[600000.0],
     )
-    weight: Decimal = Field(
+    weight: Decimal | None = Field(
         ...,
-        description="Bucket market-value weight versus the total AUM of the scope.",
+        description=(
+            "Bucket market-value weight versus the total scope value, or null when either "
+            "the bucket or full-scope denominator is not trustworthy."
+        ),
         examples=[0.6],
     )
     position_count: int = Field(
@@ -439,11 +456,12 @@ class AllocationBucket(BaseModel):
         ...,
         description="Whether contributor rows beyond the requested per-bucket limit were omitted.",
     )
-    omitted_market_value_reporting_currency: Decimal = Field(
+    omitted_market_value_reporting_currency: Decimal | None = Field(
         ...,
         description=(
             "Signed value of omitted contributors. Returned contributor values plus this residual "
-            "reconcile exactly to the bucket market value."
+            "reconcile exactly to the bucket market value. Null when the bucket contains "
+            "unknown valuation."
         ),
     )
 
@@ -454,13 +472,46 @@ class AllocationView(BaseModel):
         description="Classification dimension.",
         examples=["asset_class"],
     )
-    total_market_value_reporting_currency: Decimal = Field(
+    total_market_value_reporting_currency: Decimal | None = Field(
         ...,
-        description="Total market value represented by this view.",
+        description=(
+            "Total market value represented by this view, or null when source valuation "
+            "coverage is incomplete."
+        ),
         examples=[1000000.0],
     )
     buckets: list[AllocationBucket] = Field(
         ..., description="Allocation buckets for the requested dimension."
+    )
+
+
+class AllocationValuationCoverage(BaseModel):
+    coverage_state: AllocationValuationCoverageState = Field(
+        ...,
+        description=(
+            "Source-owned valuation coverage for allocation: COMPLETE, MEASURED_ZERO, "
+            "CARRY_FORWARD, LOADED_EMPTY, PARTIAL, or UNAVAILABLE."
+        ),
+    )
+    coverage_reason: str = Field(
+        ...,
+        description="Bounded machine-readable explanation for the coverage decision.",
+    )
+    snapshot_row_count: int = Field(
+        ..., ge=0, description="Latest open-position snapshot rows observed for the scope."
+    )
+    expected_open_position_count: int = Field(
+        ...,
+        ge=0,
+        description="Expected open source positions used to detect missing snapshot rows.",
+    )
+    valued_position_count: int = Field(
+        ..., ge=0, description="Rows carrying a usable status and non-null monetary value."
+    )
+    unvalued_position_count: int = Field(
+        ...,
+        ge=0,
+        description="Observed rows with missing monetary value or an unusable valuation status.",
     )
 
 
@@ -477,10 +528,20 @@ class AssetAllocationResponse(BaseModel):
         description="Effective reporting currency.",
         examples=["USD"],
     )
-    total_market_value_reporting_currency: Decimal = Field(
+    total_market_value_reporting_currency: Decimal | None = Field(
         ...,
-        description="Total AUM represented by the allocation views.",
+        description=(
+            "Total market value represented by the allocation views, or null when valuation "
+            "coverage does not support a full-scope denominator."
+        ),
         examples=[1000000.0],
+    )
+    valuation_coverage: AllocationValuationCoverage = Field(
+        ...,
+        description=(
+            "Source valuation coverage that distinguishes missing or unusable valuation from "
+            "a genuine measured zero before allocation weights are consumed."
+        ),
     )
     look_through: "AllocationLookThroughInfo" = Field(
         ...,

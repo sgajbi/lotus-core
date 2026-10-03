@@ -1,3 +1,4 @@
+import logging
 from datetime import date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -17,6 +18,9 @@ from src.services.query_service.app.repositories.reporting_repository import (
     InstrumentLookthroughComponentRow,
     ReportingSnapshotRow,
     SnapshotPresence,
+)
+from src.services.query_service.app.services.allocation_valuation_coverage import (
+    evaluate_allocation_valuation_coverage,
 )
 from src.services.query_service.app.services.reporting_service import (
     ReportingService,
@@ -76,7 +80,7 @@ def _instrument(
 def _snapshot(
     security_id: str,
     *,
-    market_value: str,
+    market_value: str | None,
     snapshot_id: int = 1,
     market_value_local: str | None = None,
     quantity: str = "1",
@@ -89,8 +93,12 @@ def _snapshot(
         id=snapshot_id,
         security_id=security_id,
         date=snapshot_date,
-        market_value=Decimal(market_value),
-        market_value_local=Decimal(market_value_local or market_value),
+        market_value=Decimal(market_value) if market_value is not None else None,
+        market_value_local=(
+            Decimal(market_value_local)
+            if market_value_local is not None
+            else (Decimal(market_value) if market_value is not None else None)
+        ),
         quantity=Decimal(quantity),
         valuation_status=valuation_status,
         created_at=created_at,
@@ -359,6 +367,205 @@ async def test_get_asset_allocation_groups_requested_dimensions_with_fx_conversi
     assert equity_bucket.omitted_market_value_reporting_currency == Decimal("0")
     assert response.calculation_lineage.algorithm_id == "PORTFOLIO_ALLOCATION"
     assert response.calculation_lineage.intermediate_precision == 28
+
+
+async def test_get_asset_allocation_qualifies_missing_valuation_and_binds_source_facts(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.services.query_service.app.services.allocation_valuation_coverage",
+    )
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    repo.list_portfolios.return_value = [portfolio]
+    repo.list_snapshot_presence.return_value = {
+        "P1": SnapshotPresence(
+            snapshot_date=date(2026, 3, 27),
+            row_count=2,
+            expected_open_count=2,
+        )
+    }
+    equity = ReportingSnapshotRow(
+        portfolio=portfolio,
+        snapshot=_snapshot(
+            "SEC1",
+            market_value="100",
+            valuation_status="VALUED_CURRENT",
+        ),
+        instrument=_instrument("SEC1", asset_class="EQUITY"),
+    )
+    unknown_bond = ReportingSnapshotRow(
+        portfolio=portfolio,
+        snapshot=_snapshot(
+            "SEC2",
+            market_value=None,
+            snapshot_id=2,
+            valuation_status="UNVALUED",
+        ),
+        instrument=_instrument("SEC2", asset_class="BOND"),
+    )
+    repo.list_latest_snapshot_rows.return_value = [equity, unknown_bond]
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        unknown = await service.get_asset_allocation(
+            AssetAllocationQueryRequest(
+                scope=ReportingScope(portfolio_id="P1"),
+                dimensions=["asset_class"],
+            ),
+            tenant_context=TEST_TENANT_CONTEXT,
+        )
+        repo.list_latest_snapshot_rows.return_value = [
+            equity,
+            ReportingSnapshotRow(
+                portfolio=portfolio,
+                snapshot=_snapshot(
+                    "SEC2",
+                    market_value="0",
+                    snapshot_id=2,
+                    valuation_status="VALUED_CURRENT",
+                ),
+                instrument=_instrument("SEC2", asset_class="BOND"),
+            ),
+        ]
+        measured_zero = await service.get_asset_allocation(
+            AssetAllocationQueryRequest(
+                scope=ReportingScope(portfolio_id="P1"),
+                dimensions=["asset_class"],
+            ),
+            tenant_context=TEST_TENANT_CONTEXT,
+        )
+
+    unknown_buckets = {bucket.dimension_value: bucket for bucket in unknown.views[0].buckets}
+    assert unknown.valuation_coverage.coverage_state == "PARTIAL"
+    assert unknown.valuation_coverage.coverage_reason == "market_value_missing"
+    assert unknown.valuation_coverage.valued_position_count == 1
+    assert unknown.valuation_coverage.unvalued_position_count == 1
+    assert unknown.total_market_value_reporting_currency is None
+    assert unknown_buckets["EQUITY"].market_value_reporting_currency == Decimal("100")
+    assert unknown_buckets["EQUITY"].weight is None
+    assert unknown_buckets["BOND"].market_value_reporting_currency is None
+    assert unknown_buckets["BOND"].weight is None
+    assert measured_zero.valuation_coverage.coverage_state == "COMPLETE"
+    assert measured_zero.total_market_value_reporting_currency == Decimal("100")
+    assert (
+        unknown.calculation_lineage.input_content_hash
+        != measured_zero.calculation_lineage.input_content_hash
+    )
+    assert any(
+        getattr(record, "event_name", None) == "query.reporting.asset_allocation_valuation_degraded"
+        and getattr(record, "reason_code", None) == "market_value_missing"
+        for record in caplog.records
+    )
+
+
+@pytest.mark.parametrize(
+    ("rows", "presence", "expected_state", "expected_reason"),
+    [
+        (
+            [
+                ReportingSnapshotRow(
+                    portfolio=_portfolio("P1"),
+                    snapshot=_snapshot("SEC1", market_value=None, valuation_status="UNVALUED"),
+                    instrument=_instrument("SEC1"),
+                )
+            ],
+            SnapshotPresence(date(2026, 3, 27), 1, 1),
+            "PARTIAL",
+            "market_value_missing",
+        ),
+        (
+            [
+                ReportingSnapshotRow(
+                    portfolio=_portfolio("P1"),
+                    snapshot=_snapshot("SEC1", market_value="20", valuation_status="FAILED"),
+                    instrument=_instrument("SEC1"),
+                )
+            ],
+            SnapshotPresence(date(2026, 3, 27), 1, 1),
+            "PARTIAL",
+            "valuation_status_not_valued",
+        ),
+        (
+            [
+                ReportingSnapshotRow(
+                    portfolio=_portfolio("P1"),
+                    snapshot=_snapshot("SEC1", market_value="100"),
+                    instrument=_instrument("SEC1"),
+                )
+            ],
+            SnapshotPresence(date(2026, 3, 27), 1, 2),
+            "PARTIAL",
+            "open_position_coverage_gap",
+        ),
+        (
+            [
+                ReportingSnapshotRow(
+                    portfolio=_portfolio("P1"),
+                    snapshot=_snapshot("SEC1", market_value="0"),
+                    instrument=_instrument("SEC1"),
+                )
+            ],
+            SnapshotPresence(date(2026, 3, 27), 1, 1),
+            "MEASURED_ZERO",
+            "source_measured_zero",
+        ),
+        (
+            [
+                ReportingSnapshotRow(
+                    portfolio=_portfolio("P1"),
+                    snapshot=_snapshot(
+                        "SEC1",
+                        market_value="-20",
+                        snapshot_date=date(2026, 3, 26),
+                    ),
+                    instrument=_instrument("SEC1"),
+                )
+            ],
+            SnapshotPresence(date(2026, 3, 26), 1, 1),
+            "CARRY_FORWARD",
+            "latest_source_snapshot_precedes_as_of_date",
+        ),
+        (
+            [],
+            SnapshotPresence(date(2026, 3, 27), 0, 0),
+            "LOADED_EMPTY",
+            "source_snapshot_has_no_open_positions",
+        ),
+    ],
+)
+async def test_allocation_valuation_coverage_classifies_source_truth(
+    rows: list[ReportingSnapshotRow],
+    presence: SnapshotPresence,
+    expected_state: str,
+    expected_reason: str,
+) -> None:
+    coverage = evaluate_allocation_valuation_coverage(
+        rows=rows,
+        presence_by_portfolio={"P1": presence},
+        portfolio_ids=["P1"],
+        resolved_as_of_date=date(2026, 3, 27),
+    )
+
+    assert coverage.coverage_state == expected_state
+    assert coverage.coverage_reason == expected_reason
+
+
+async def test_allocation_valuation_coverage_refuses_missing_portfolio_snapshot() -> None:
+    coverage = evaluate_allocation_valuation_coverage(
+        rows=[],
+        presence_by_portfolio={},
+        portfolio_ids=["P1"],
+        resolved_as_of_date=date(2026, 3, 27),
+    )
+
+    assert coverage.coverage_state == "UNAVAILABLE"
+    assert coverage.coverage_reason == "no_source_snapshot"
 
 
 async def test_get_portfolio_summary_returns_historical_restated_totals() -> None:
@@ -1205,6 +1412,67 @@ async def test_get_asset_allocation_applies_region_and_partial_lookthrough() -> 
     ) + north_america_bucket.omitted_market_value_reporting_currency == (
         north_america_bucket.market_value_reporting_currency
     )
+
+
+async def test_get_asset_allocation_keeps_unknown_parent_unknown_through_lookthrough() -> None:
+    repo = AsyncMock()
+    portfolio = _portfolio("P1", base_currency="USD")
+    repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    repo.list_portfolios.return_value = [portfolio]
+    repo.list_latest_snapshot_rows.return_value = [
+        ReportingSnapshotRow(
+            portfolio=portfolio,
+            snapshot=_snapshot(
+                "FUND1",
+                market_value=None,
+                valuation_status="UNVALUED",
+            ),
+            instrument=_instrument("FUND1", asset_class="FUND", country_of_risk="LU"),
+        )
+    ]
+    repo.list_snapshot_presence.return_value = {"P1": SnapshotPresence(date(2026, 3, 27), 1, 1)}
+    repo.list_instrument_lookthrough_components.return_value = [
+        InstrumentLookthroughComponentRow(
+            parent_security_id="FUND1",
+            component_security_id="ETF1",
+            component_weight=Decimal("0.6"),
+            component_instrument=_instrument("ETF1", asset_class="EQUITY"),
+            component_record_id=101,
+            effective_from=date(2026, 1, 1),
+        ),
+        InstrumentLookthroughComponentRow(
+            parent_security_id="FUND1",
+            component_security_id="ETF2",
+            component_weight=Decimal("0.4"),
+            component_instrument=_instrument("ETF2", asset_class="BOND"),
+            component_record_id=102,
+            effective_from=date(2026, 1, 1),
+        ),
+    ]
+
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        response = await ReportingService(AsyncMock(spec=AsyncSession)).get_asset_allocation(
+            AssetAllocationQueryRequest(
+                scope=ReportingScope(portfolio_id="P1"),
+                dimensions=["asset_class"],
+                look_through_mode="prefer_look_through",
+            ),
+            tenant_context=TEST_TENANT_CONTEXT,
+        )
+
+    assert response.valuation_coverage.coverage_state == "PARTIAL"
+    assert response.look_through.applied_mode == "prefer_look_through"
+    assert response.total_market_value_reporting_currency is None
+    buckets = {bucket.dimension_value: bucket for bucket in response.views[0].buckets}
+    assert buckets["EQUITY"].market_value_reporting_currency is None
+    assert buckets["BOND"].market_value_reporting_currency is None
+    assert {item.security_id for bucket in buckets.values() for item in bucket.contributors} == {
+        "ETF1",
+        "ETF2",
+    }
 
 
 async def test_get_asset_allocation_reports_lookthrough_capability_in_direct_mode() -> None:

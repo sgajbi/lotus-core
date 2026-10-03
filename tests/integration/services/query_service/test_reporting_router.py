@@ -76,6 +76,14 @@ async def test_query_asset_allocation(async_test_client):
         "resolved_as_of_date": date(2026, 3, 27),
         "reporting_currency": "USD",
         "total_market_value_reporting_currency": Decimal("150"),
+        "valuation_coverage": {
+            "coverage_state": "COMPLETE",
+            "coverage_reason": "all_source_positions_covered",
+            "snapshot_row_count": 1,
+            "expected_open_position_count": 1,
+            "valued_position_count": 1,
+            "unvalued_position_count": 0,
+        },
         "look_through": {
             "requested_mode": "direct_only",
             "applied_mode": "direct_only",
@@ -85,7 +93,7 @@ async def test_query_asset_allocation(async_test_client):
         },
         "calculation_lineage": {
             "algorithm_id": "PORTFOLIO_ALLOCATION",
-            "algorithm_version": 1,
+            "algorithm_version": 2,
             "intermediate_precision": 28,
             "input_content_hash": "a" * 64,
             "calculation_content_hash": "b" * 64,

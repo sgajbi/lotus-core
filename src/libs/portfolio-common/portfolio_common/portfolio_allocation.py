@@ -34,7 +34,7 @@ AllocationDimension = Literal[
 ZERO = Decimal("0")
 UNCLASSIFIED_BUCKET = "UNCLASSIFIED"
 ALLOCATION_ALGORITHM_ID = "PORTFOLIO_ALLOCATION"
-ALLOCATION_ALGORITHM_VERSION = 1
+ALLOCATION_ALGORITHM_VERSION = 2
 ALLOCATION_INTERMEDIATE_PRECISION = 28
 
 AllocationContributorType = Literal["direct_position", "look_through_component"]
@@ -114,39 +114,41 @@ class AllocationContributorInput:
 class AllocationInputRow:
     instrument: Any | None
     snapshot: Any
-    market_value_reporting_currency: Decimal
+    market_value_reporting_currency: Decimal | None
     contributor: AllocationContributorInput | None = None
+    source_market_value: Decimal | None = None
+    source_valuation_status: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class AllocationContributorResult:
     contributor: AllocationContributorInput
-    market_value_reporting_currency: Decimal
+    market_value_reporting_currency: Decimal | None
     bucket_weight: Decimal | None
 
 
 @dataclass(frozen=True, slots=True)
 class AllocationBucketResult:
     dimension_value: str
-    market_value_reporting_currency: Decimal
-    weight: Decimal
+    market_value_reporting_currency: Decimal | None
+    weight: Decimal | None
     position_count: int
     contributor_count: int
     contributors: tuple[AllocationContributorResult, ...]
     contributors_truncated: bool
-    omitted_market_value_reporting_currency: Decimal
+    omitted_market_value_reporting_currency: Decimal | None
 
 
 @dataclass(frozen=True, slots=True)
 class AllocationViewResult:
     dimension: AllocationDimension
-    total_market_value_reporting_currency: Decimal
+    total_market_value_reporting_currency: Decimal | None
     buckets: tuple[AllocationBucketResult, ...]
 
 
 @dataclass(frozen=True, slots=True)
 class AllocationCalculationResult:
-    total_market_value_reporting_currency: Decimal
+    total_market_value_reporting_currency: Decimal | None
     views: tuple[AllocationViewResult, ...]
     calculation_lineage: CalculationLineage
 
@@ -157,7 +159,7 @@ class _RankedContributor:
 
     rank: tuple[object, ...]
     contributor: AllocationContributorInput
-    market_value_reporting_currency: Decimal
+    market_value_reporting_currency: Decimal | None
 
     def __lt__(self, other: "_RankedContributor") -> bool:
         return self.rank > other.rank
@@ -166,12 +168,16 @@ class _RankedContributor:
 @dataclass(slots=True)
 class _BucketAccumulator:
     market_value_reporting_currency: Decimal = ZERO
+    has_unknown_market_value: bool = False
     position_count: int = 0
     contributor_count: int = 0
     retained: list[_RankedContributor] = field(default_factory=list)
 
     def add(self, row: AllocationInputRow, contributor_limit: int) -> None:
-        self.market_value_reporting_currency += row.market_value_reporting_currency
+        if row.market_value_reporting_currency is None:
+            self.has_unknown_market_value = True
+        else:
+            self.market_value_reporting_currency += row.market_value_reporting_currency
         self.position_count += 1
         if row.contributor is None:
             return
@@ -235,10 +241,11 @@ def _allocation_bucket_key(dimension: AllocationDimension, raw_value: object | N
 
 def _contributor_rank(
     contributor: AllocationContributorInput,
-    market_value_reporting_currency: Decimal,
+    market_value_reporting_currency: Decimal | None,
 ) -> tuple[object, ...]:
     return (
-        -abs(market_value_reporting_currency),
+        market_value_reporting_currency is not None,
+        -abs(market_value_reporting_currency or ZERO),
         contributor.portfolio_id,
         contributor.booked_security_id,
         contributor.security_id,
@@ -253,14 +260,18 @@ def _contributor_rank(
 def _retained_contributors(
     accumulator: _BucketAccumulator,
 ) -> tuple[AllocationContributorResult, ...]:
+    bucket_value = (
+        None
+        if accumulator.has_unknown_market_value
+        else accumulator.market_value_reporting_currency
+    )
     return tuple(
         AllocationContributorResult(
             contributor=candidate.contributor,
             market_value_reporting_currency=candidate.market_value_reporting_currency,
             bucket_weight=(
-                candidate.market_value_reporting_currency
-                / accumulator.market_value_reporting_currency
-                if accumulator.market_value_reporting_currency
+                candidate.market_value_reporting_currency / bucket_value
+                if candidate.market_value_reporting_currency is not None and bucket_value
                 else None
             ),
         )
@@ -272,8 +283,13 @@ def _row_lineage_payload(
     row: AllocationInputRow,
     dimensions: list[AllocationDimension],
 ) -> dict[str, object]:
-    if not row.market_value_reporting_currency.is_finite():
+    if (
+        row.market_value_reporting_currency is not None
+        and not row.market_value_reporting_currency.is_finite()
+    ):
         raise ValueError("allocation market value must be finite")
+    if row.source_market_value is not None and not row.source_market_value.is_finite():
+        raise ValueError("allocation source market value must be finite")
     return {
         "classifications": {
             dimension: _allocation_bucket_key(
@@ -285,12 +301,14 @@ def _row_lineage_payload(
         "contributor": row.contributor.lineage_payload() if row.contributor else None,
         "market_value_reporting_currency": row.market_value_reporting_currency,
         "security_id": str(getattr(row.snapshot, "security_id", "")).strip(),
+        "source_market_value": row.source_market_value,
+        "source_valuation_status": row.source_valuation_status,
     }
 
 
 def _allocation_output_payload(
     *,
-    total_market_value: Decimal,
+    total_market_value: Decimal | None,
     views: list[AllocationViewResult],
 ) -> dict[str, object]:
     return {
@@ -336,6 +354,7 @@ def calculate_allocation_views(
     rows: list[AllocationInputRow],
     dimensions: list[AllocationDimension],
     contributor_limit_per_bucket: int = 0,
+    complete_valuation_coverage: bool = True,
     calculation_context: Mapping[str, object] | None = None,
 ) -> AllocationCalculationResult:
     if contributor_limit_per_bucket < 0:
@@ -345,9 +364,21 @@ def calculate_allocation_views(
 
     with localcontext() as context:
         context.prec = ALLOCATION_INTERMEDIATE_PRECISION
-        total_market_value = sum(
-            (row.market_value_reporting_currency for row in rows),
+        known_total_market_value = sum(
+            (
+                row.market_value_reporting_currency
+                for row in rows
+                if row.market_value_reporting_currency is not None
+            ),
             ZERO,
+        )
+        total_market_value = (
+            None
+            if (
+                not complete_valuation_coverage
+                or any(row.market_value_reporting_currency is None for row in rows)
+            )
+            else known_total_market_value
         )
         views_payload: dict[
             AllocationDimension,
@@ -369,27 +400,38 @@ def calculate_allocation_views(
             buckets: list[AllocationBucketResult] = []
             for bucket_key, accumulator in sorted(views_payload[dimension].items()):
                 contributors = _retained_contributors(accumulator)
+                bucket_market_value = (
+                    None
+                    if accumulator.has_unknown_market_value
+                    else accumulator.market_value_reporting_currency
+                )
                 retained_market_value = sum(
-                    (contributor.market_value_reporting_currency for contributor in contributors),
+                    (
+                        contributor.market_value_reporting_currency
+                        for contributor in contributors
+                        if contributor.market_value_reporting_currency is not None
+                    ),
                     ZERO,
                 )
                 buckets.append(
                     AllocationBucketResult(
                         dimension_value=bucket_key,
-                        market_value_reporting_currency=(
-                            accumulator.market_value_reporting_currency
-                        ),
+                        market_value_reporting_currency=bucket_market_value,
                         weight=(
-                            accumulator.market_value_reporting_currency / total_market_value
-                            if total_market_value
+                            bucket_market_value / total_market_value
+                            if bucket_market_value is not None and total_market_value
                             else ZERO
+                            if total_market_value == ZERO and bucket_market_value is not None
+                            else None
                         ),
                         position_count=accumulator.position_count,
                         contributor_count=accumulator.contributor_count,
                         contributors=contributors,
                         contributors_truncated=(accumulator.contributor_count > len(contributors)),
                         omitted_market_value_reporting_currency=(
-                            accumulator.market_value_reporting_currency - retained_market_value
+                            bucket_market_value - retained_market_value
+                            if bucket_market_value is not None
+                            else None
                         ),
                     )
                 )
@@ -411,6 +453,7 @@ def calculate_allocation_views(
             intermediate_precision=ALLOCATION_INTERMEDIATE_PRECISION,
             input_payload={
                 "calculation_context": dict(calculation_context or {}),
+                "complete_valuation_coverage": complete_valuation_coverage,
                 "contributor_limit_per_bucket": contributor_limit_per_bucket,
                 "dimensions": dimensions,
                 "rows": input_rows,

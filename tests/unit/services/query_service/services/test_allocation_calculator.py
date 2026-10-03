@@ -124,6 +124,61 @@ def test_calculate_allocation_views_groups_weights_and_position_counts() -> None
     assert buckets["BOND"].position_count == 1
 
 
+def test_calculate_allocation_views_qualifies_unknown_value_without_inventing_zero() -> None:
+    result = calculate_allocation_views(
+        rows=[
+            AllocationInputRow(
+                instrument=_instrument("SEC1", asset_class="EQUITY"),
+                snapshot=_snapshot("SEC1"),
+                market_value_reporting_currency=Decimal("100"),
+                source_market_value=Decimal("100"),
+                source_valuation_status="VALUED_CURRENT",
+                contributor=_direct_contributor("SEC1", 1),
+            ),
+            AllocationInputRow(
+                instrument=_instrument("SEC2", asset_class="BOND"),
+                snapshot=_snapshot("SEC2"),
+                market_value_reporting_currency=None,
+                source_market_value=None,
+                source_valuation_status="UNVALUED",
+                contributor=_direct_contributor("SEC2", 2),
+            ),
+        ],
+        dimensions=["asset_class"],
+        contributor_limit_per_bucket=50,
+    )
+
+    buckets = {bucket.dimension_value: bucket for bucket in result.views[0].buckets}
+    assert result.total_market_value_reporting_currency is None
+    assert buckets["EQUITY"].market_value_reporting_currency == Decimal("100")
+    assert buckets["EQUITY"].weight is None
+    assert buckets["BOND"].market_value_reporting_currency is None
+    assert buckets["BOND"].weight is None
+    assert buckets["BOND"].contributors[0].market_value_reporting_currency is None
+    assert buckets["BOND"].contributors[0].bucket_weight is None
+    assert buckets["BOND"].omitted_market_value_reporting_currency is None
+
+
+def test_calculate_allocation_views_nulls_weights_for_missing_scope_coverage() -> None:
+    result = calculate_allocation_views(
+        rows=[
+            AllocationInputRow(
+                instrument=_instrument("SEC1", asset_class="EQUITY"),
+                snapshot=_snapshot("SEC1"),
+                market_value_reporting_currency=Decimal("100"),
+                contributor=_direct_contributor("SEC1", 1),
+            )
+        ],
+        dimensions=["asset_class"],
+        complete_valuation_coverage=False,
+    )
+
+    assert result.total_market_value_reporting_currency is None
+    assert result.views[0].total_market_value_reporting_currency is None
+    assert result.views[0].buckets[0].market_value_reporting_currency == Decimal("100")
+    assert result.views[0].buckets[0].weight is None
+
+
 def test_calculate_allocation_views_canonicalizes_bucket_keys_by_dimension() -> None:
     result = calculate_allocation_views(
         rows=[
@@ -291,6 +346,37 @@ def test_calculate_allocation_views_bounds_and_reconciles_contributors() -> None
         == bucket.market_value_reporting_currency
     )
     assert bucket.omitted_market_value_reporting_currency == Decimal("50")
+
+
+def test_bounded_allocation_retains_unknown_contributor_identity() -> None:
+    rows = [
+        AllocationInputRow(
+            instrument=_instrument("KNOWN", asset_class="EQUITY"),
+            snapshot=_snapshot("KNOWN"),
+            market_value_reporting_currency=Decimal("100"),
+            contributor=_direct_contributor("KNOWN", 1),
+        ),
+        AllocationInputRow(
+            instrument=_instrument("UNVALUED", asset_class="EQUITY"),
+            snapshot=_snapshot("UNVALUED"),
+            market_value_reporting_currency=None,
+            contributor=_direct_contributor("UNVALUED", 2),
+        ),
+    ]
+
+    result = calculate_allocation_views(
+        rows=rows,
+        dimensions=["asset_class"],
+        contributor_limit_per_bucket=1,
+        complete_valuation_coverage=False,
+    )
+    bucket = result.views[0].buckets[0]
+
+    assert bucket.market_value_reporting_currency is None
+    assert bucket.contributors_truncated is True
+    assert [item.contributor.security_id for item in bucket.contributors] == ["UNVALUED"]
+    assert bucket.contributors[0].market_value_reporting_currency is None
+    assert bucket.omitted_market_value_reporting_currency is None
 
 
 def test_allocation_lineage_is_order_independent_and_binds_source_identity() -> None:

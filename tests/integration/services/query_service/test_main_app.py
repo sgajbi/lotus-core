@@ -500,6 +500,7 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     aum_request = components["AssetsUnderManagementQueryRequest"]
     allocation_request = components["AssetAllocationQueryRequest"]
     allocation_response = components["AssetAllocationResponse"]
+    allocation_valuation_coverage = components["AllocationValuationCoverage"]
     allocation_bucket = components["AllocationBucket"]
     allocation_contributor = components["AllocationContributor"]
     cash_response = components["CashBalancesResponse"]
@@ -533,6 +534,24 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     assert allocation_response["properties"]["look_through"]["description"].startswith(
         "Applied look-through mode"
     )
+    assert allocation_response["properties"]["valuation_coverage"]["description"].startswith(
+        "Source valuation coverage"
+    )
+    assert allocation_valuation_coverage["properties"]["coverage_state"]["enum"] == [
+        "COMPLETE",
+        "MEASURED_ZERO",
+        "CARRY_FORWARD",
+        "LOADED_EMPTY",
+        "PARTIAL",
+        "UNAVAILABLE",
+    ]
+    assert allocation_valuation_coverage["properties"]["coverage_reason"]["description"].startswith(
+        "Bounded machine-readable"
+    )
+    assert {item.get("type") for item in allocation_bucket["properties"]["weight"]["anyOf"]} == {
+        "string",
+        "null",
+    }
     assert allocation_request["properties"]["contributor_limit_per_bucket"]["default"] == 50
     assert allocation_request["properties"]["contributor_limit_per_bucket"]["maximum"] == 250
     assert allocation_bucket["properties"]["position_count"]["description"].startswith(

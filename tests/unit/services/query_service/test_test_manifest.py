@@ -125,6 +125,31 @@ def test_critical_db_coverage_executes_registered_liquidity_valuation_qualificat
     )
 
 
+ALLOCATION_VALUATION_CRITICAL_PROOF_NODE = (
+    "tests/integration/services/query_service/"
+    "test_reporting_allocation_valuation_coverage_postgresql.py::"
+    "test_registered_allocation_distinguishes_unknown_zero_signed_and_failed_postgresql"
+)
+
+
+def test_critical_db_coverage_executes_registered_allocation_valuation_qualification() -> None:
+    assert ALLOCATION_VALUATION_CRITICAL_PROOF_NODE in get_suite("critical-db-coverage")
+
+
+def test_allocation_valuation_manifest_guard_rejects_missing_proof(monkeypatch) -> None:
+    monkeypatch.setitem(
+        SUITES,
+        "critical-db-coverage",
+        [
+            path
+            for path in get_suite("critical-db-coverage")
+            if path != ALLOCATION_VALUATION_CRITICAL_PROOF_NODE
+        ],
+    )
+    with pytest.raises(AssertionError):
+        test_critical_db_coverage_executes_registered_allocation_valuation_qualification()
+
+
 CASHFLOW_CRITICAL_PROOF_NODES = [
     "tests/integration/services/query_service/test_transaction_ledger_input_evidence_capacity.py::"
     "test_bank_day_seed_refreshes_source_cut_per_physical_statement",
