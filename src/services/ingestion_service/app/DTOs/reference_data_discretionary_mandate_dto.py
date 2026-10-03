@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal, InvalidOperation
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -113,6 +114,22 @@ class DiscretionaryMandateBindingRecord(SourceObservationLineage):
     def validate_effective_window(self) -> "DiscretionaryMandateBindingRecord":
         if self.effective_to is not None and self.effective_to < self.effective_from:
             raise ValueError("effective_to must be on or after effective_from")
+        cash_reserve_source = self.rebalance_bands.get("cash_reserve_weight")
+        if cash_reserve_source is not None and cash_reserve_source.strip():
+            try:
+                cash_reserve_weight = Decimal(cash_reserve_source.strip())
+            except InvalidOperation as error:
+                raise ValueError(
+                    "cash_reserve_weight must be a finite decimal ratio between 0 and 1"
+                ) from error
+            if (
+                not cash_reserve_weight.is_finite()
+                or cash_reserve_weight < 0
+                or cash_reserve_weight > 1
+            ):
+                raise ValueError(
+                    "cash_reserve_weight must be a finite decimal ratio between 0 and 1"
+                )
         return self
 
     model_config = ConfigDict()

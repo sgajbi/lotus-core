@@ -29,6 +29,31 @@ The control-plane response includes source-data runtime metadata, `supportabilit
 Inactive authority or missing policy pack is surfaced as `INCOMPLETE` supportability rather than
 being hidden by local fallback truth.
 
+### Cash-reserve target contract
+
+`rebalance_bands.cash_reserve_weight` is the mandate-authoritative target cash reserve, expressed
+as a finite decimal ratio from `0` through `1`, inclusive. Its denominator is total portfolio
+market value after cash and portfolio value have been translated to the canonical portfolio base
+currency. An explicit `0` means the mandate has a zero-reserve target; `null` means the selected
+effective mandate binding has no usable target. Ingestion rejects non-finite and out-of-range
+values instead of admitting ambiguous policy evidence. For legacy persisted rows that predate
+that validation, an invalid value is returned as `null` with `INCOMPLETE` supportability,
+`MANDATE_CASH_RESERVE_INVALID`, and missing family `cash_reserve_target`; the remaining binding
+evidence stays available instead of failing the complete response.
+
+The response makes those semantics machine-readable through:
+
+1. `cash_reserve_scope = TOTAL_PORTFOLIO_MARKET_VALUE`,
+2. `cash_reserve_currency_basis = PORTFOLIO_BASE_CURRENCY`,
+3. `cash_reserve_authority = MANDATE_BINDING`,
+4. `consumer_override_allowed = false`.
+
+The authoritative row is selected using `effective_from`, `effective_to`, and `binding_version`,
+with `source_system`, `source_record_id`, observation timestamps, quality status, and response
+lineage preserving the source revision evidence. A consumer policy or scenario may calculate a
+separate analytical assumption, but it must not replace or relabel the source target. A changed
+authoritative target requires a new effective binding or a versioned source correction.
+
 ## Local Validation
 
 Focused proof commands:
@@ -83,3 +108,6 @@ branch. Required live check:
 
 This slice does not enable full `lotus-manage` stateful execution. Eligibility, tax-lot, market-data
 coverage, DPM readiness, and complete live canonical proof remain future RFC-087 slices.
+
+The cash-reserve target is source policy evidence. It does not by itself value the portfolio,
+calculate available cash, recommend a trade, approve a rebalance, or authorize execution.

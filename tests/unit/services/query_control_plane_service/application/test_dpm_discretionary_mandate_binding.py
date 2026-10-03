@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import UTC, date, datetime
+from decimal import Decimal
 
 import pytest
 
@@ -87,7 +88,45 @@ def test_active_complete_mandate_is_ready_and_current() -> None:
     assert response.source_batch_fingerprint is None
     assert response.source_digest == response.content_hash
     assert response.rebalance_bands.default_band.as_tuple().exponent == -10
+    assert response.rebalance_bands.cash_reserve_weight == Decimal("0.0200000000")
+    assert response.rebalance_bands.cash_reserve_scope == "TOTAL_PORTFOLIO_MARKET_VALUE"
+    assert response.rebalance_bands.cash_reserve_currency_basis == "PORTFOLIO_BASE_CURRENCY"
+    assert response.rebalance_bands.cash_reserve_authority == "MANDATE_BINDING"
+    assert response.rebalance_bands.consumer_override_allowed is False
     assert response.source_lineage["source_owner"] == "lotus-core"
+
+
+@pytest.mark.parametrize(
+    ("source_value", "expected"),
+    [("0", Decimal("0")), ("", None), (None, None)],
+)
+def test_cash_reserve_weight_distinguishes_explicit_zero_from_absence(
+    source_value: object,
+    expected: Decimal | None,
+) -> None:
+    evidence = replace(
+        _evidence(),
+        rebalance_bands={"default_band": "0.025", "cash_reserve_weight": source_value},
+    )
+
+    assert _build(evidence).rebalance_bands.cash_reserve_weight == expected
+
+
+@pytest.mark.parametrize("source_value", ["-0.01", "1.01", "NaN", "Infinity", "not-a-number"])
+def test_invalid_legacy_cash_reserve_evidence_is_bounded_as_incomplete(
+    source_value: object,
+) -> None:
+    evidence = replace(
+        _evidence(),
+        rebalance_bands={"default_band": "0.025", "cash_reserve_weight": source_value},
+    )
+
+    response = _build(evidence)
+
+    assert response.rebalance_bands.cash_reserve_weight is None
+    assert response.supportability.state == "INCOMPLETE"
+    assert response.supportability.reason == "MANDATE_CASH_RESERVE_INVALID"
+    assert response.supportability.missing_data_families == ["cash_reserve_target"]
 
 
 def test_policy_pack_can_be_excluded_without_degrading_supportability() -> None:

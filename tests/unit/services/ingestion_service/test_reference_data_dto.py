@@ -788,6 +788,43 @@ def test_mandate_binding_record_validates_effective_window() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "cash_reserve_weight",
+    ["-0.0000000001", "1.0000000001", "NaN", "Infinity", "not-a-decimal"],
+)
+def test_mandate_binding_record_rejects_invalid_cash_reserve_weight(
+    cash_reserve_weight: str,
+) -> None:
+    with pytest.raises(
+        ValidationError,
+        match="cash_reserve_weight must be a finite decimal ratio between 0 and 1",
+    ):
+        DiscretionaryMandateBindingRecord.model_validate(
+            _mandate_binding(
+                rebalance_bands={
+                    "default_band": "0.0250000000",
+                    "cash_reserve_weight": cash_reserve_weight,
+                }
+            )
+        )
+
+
+@pytest.mark.parametrize("cash_reserve_weight", ["0", "1", ""])
+def test_mandate_binding_record_preserves_valid_cash_reserve_states(
+    cash_reserve_weight: str,
+) -> None:
+    record = DiscretionaryMandateBindingRecord.model_validate(
+        _mandate_binding(
+            rebalance_bands={
+                "default_band": "0.0250000000",
+                "cash_reserve_weight": cash_reserve_weight,
+            }
+        )
+    )
+
+    assert record.rebalance_bands["cash_reserve_weight"] == cash_reserve_weight
+
+
 def test_mandate_binding_ingestion_rejects_duplicate_effective_bindings() -> None:
     duplicate = _mandate_binding()
 

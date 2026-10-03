@@ -65,7 +65,7 @@
         "source-owned mandate objective",
         "risk profile and investment horizon",
         "review cadence and review dates",
-        "rebalance constraints",
+        "rebalance constraints with bounded mandate-authoritative cash-reserve target semantics",
         "source lineage"
       ],
       "implementation_slice": "Slice 5"
