@@ -7,6 +7,11 @@ from portfolio_common.source_data_product_metadata import (
     SourceDataDegradationSummary,
 )
 
+from ..application.holdings_reconciliation import (
+    FinancialReconciliationControl,
+    HoldingsReconciliationScopes,
+    holdings_reconciliation_status,
+)
 from ..dtos.position_dto import Position
 from ..repositories.identifier_normalization import normalize_security_id
 from .position_holdings import PositionRowResult, position_requires_market_price_freshness
@@ -37,8 +42,16 @@ def holdings_degradation_summary(
     valuation_fx_rate_dates: dict[str, date | None],
     missing_currency_lineage_security_ids: Collection[str],
     latest_evidence_timestamp: datetime | None,
+    reconciliation_scopes: HoldingsReconciliationScopes | None = None,
+    reconciliation_controls: list[FinancialReconciliationControl] | None = None,
 ) -> SourceDataDegradationSummary:
-    details: list[SourceDataDegradationDetail] = []
+    details = (
+        _reconciliation_degradation_details(
+            scopes=reconciliation_scopes, controls=reconciliation_controls or []
+        )
+        if reconciliation_scopes is not None
+        else []
+    )
     if not positions:
         details.append(
             _holdings_degradation_detail(
@@ -103,6 +116,68 @@ def holdings_degradation_summary(
                 )
             )
     return _degradation_summary(details)
+
+
+def _reconciliation_degradation_details(
+    *,
+    scopes: HoldingsReconciliationScopes,
+    controls: list[FinancialReconciliationControl],
+) -> list[SourceDataDegradationDetail]:
+    """Explain exact control qualification using the same policy as the top-level status."""
+    details: list[SourceDataDegradationDetail] = []
+    for scope in scopes.items:
+        status = holdings_reconciliation_status(
+            scopes=HoldingsReconciliationScopes(items=(scope,)), controls=controls
+        )
+        if status == "COMPLETE":
+            continue
+        details.append(
+            _reconciliation_degradation_detail(
+                status=status,
+                business_date=scope.business_date,
+                epoch=scope.epoch,
+                evidence_timestamp=scope.latest_evidence_timestamp,
+            )
+        )
+    if scopes.unscoped_source_row_count:
+        details.append(
+            _reconciliation_degradation_detail(
+                status="UNKNOWN", business_date=None, epoch=None, evidence_timestamp=None
+            )
+        )
+    return details
+
+
+def _reconciliation_degradation_detail(
+    *,
+    status: str,
+    business_date: date | None,
+    epoch: int | None,
+    evidence_timestamp: datetime | None,
+) -> SourceDataDegradationDetail:
+    reasons = {
+        "STALE": "HOLDINGS_RECONCILIATION_EVIDENCE_NEWER_THAN_CONTROL",
+        "UNRECONCILED": "HOLDINGS_RECONCILIATION_CONTROL_MISSING",
+        "PARTIAL": "HOLDINGS_RECONCILIATION_INCOMPLETE",
+        "BLOCKED": "HOLDINGS_RECONCILIATION_BLOCKED",
+        "UNKNOWN": "HOLDINGS_RECONCILIATION_UNKNOWN",
+    }
+    return _holdings_degradation_detail(
+        section="reconciliation",
+        record_key=(
+            f"business_date:{business_date.isoformat()}:epoch:{epoch}"
+            if business_date is not None
+            else None
+        ),
+        affected_fields=["reconciliation_status", "source_evidence_current"],
+        source_kind="UNAVAILABLE" if status in {"UNRECONCILED", "UNKNOWN"} else "AUTHORITATIVE",
+        source_as_of_date=business_date,
+        latest_evidence_timestamp=evidence_timestamp,
+        freshness_status=(
+            "STALE" if status == "STALE" else "UNKNOWN" if status == "UNKNOWN" else "UNAVAILABLE"
+        ),
+        reason_code=reasons[status],
+    )
 
 
 def _position_state_degradation_details(

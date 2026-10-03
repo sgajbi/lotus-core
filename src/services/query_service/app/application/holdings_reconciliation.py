@@ -20,6 +20,7 @@ __all__ = [
     "HoldingsReconciliationScopes",
     "holdings_reconciliation_scopes",
     "holdings_reconciliation_status",
+    "dated_holdings_evidence_timestamp",
 ]
 
 
@@ -34,16 +35,27 @@ def holdings_reconciliation_scopes(
                 business_date=_source_business_date(position_row),
                 row_epoch=getattr(position_row, "epoch", None),
                 state_epoch=getattr(position_state, "epoch", None),
-                latest_evidence_timestamp=_latest_timestamp(
-                    *(
-                        getattr(source, field_name, None)
-                        for source in (position_row, instrument, position_state)
-                        for field_name in ("created_at", "updated_at")
-                    )
+                latest_evidence_timestamp=dated_holdings_evidence_timestamp(
+                    position_row, instrument
                 ),
             )
             for position_row, instrument, position_state in source_rows
         ]
+    )
+
+
+def dated_holdings_evidence_timestamp(position_row: Any, instrument: Any) -> datetime | None:
+    """Project selected dated facts/reference evidence, not shared replay bookkeeping.
+
+    State epoch remains part of exact scope admission and state status remains part of
+    holdings qualification. Its completion timestamps do not date historical economics.
+    """
+    return _latest_timestamp(
+        *(
+            getattr(source, field_name, None)
+            for source in (position_row, instrument)
+            for field_name in ("created_at", "updated_at")
+        )
     )
 
 

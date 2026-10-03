@@ -90,6 +90,11 @@ respective Lotus services.
 - Source-effective valuation readiness is tied to current source facts, valuation epoch, and
   reconciliation state. Benign bookkeeping cannot invalidate unchanged facts; reprocessing,
   changed facts, or epoch mismatch cannot reuse stale evidence.
+- Historical position reads share one dated snapshot/history-and-instrument timestamp projection
+  for reconciliation scopes and public evidence identity; shared PositionState completion timestamps
+  are excluded, while epoch/status qualification remains material. Exact control failures have
+  reconciliation-scoped degradation reasons. See the [Holdings As Of methodology](docs/methodologies/source-data-products/holdings-as-of.md);
+  cash-balance timestamp semantics are unchanged.
 - Source-data product declarations, feature status, route families, RFC status, and runtime
   validation are machine-checked. A declaration or local test is not production certification.
 

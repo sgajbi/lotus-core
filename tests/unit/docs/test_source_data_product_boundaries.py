@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -235,6 +236,30 @@ def test_holdings_as_of_methodology_is_implementation_backed() -> None:
     assert "held_since_date" in methodology
     assert "No performance return, risk exposure, liquidity ladder" in normalized_methodology
     assert "| `data_quality_status` | `PARTIAL` |" in methodology
+
+
+def test_holdings_reconciliation_documentation_matches_executable_reason_contract() -> None:
+    from src.services.query_service.app.services.position_holdings_degradation import (
+        _reconciliation_degradation_detail,
+    )
+
+    methodology = _read("docs/methodologies/source-data-products/holdings-as-of.md")
+    operator_guide = _read("wiki/Support-and-Lineage.md")
+    for status in ("STALE", "UNRECONCILED", "PARTIAL", "BLOCKED", "UNKNOWN"):
+        detail = _reconciliation_degradation_detail(
+            status=status,
+            business_date=date(2026, 4, 10),
+            epoch=1,
+            evidence_timestamp=datetime(2026, 4, 10, 12, tzinfo=UTC),
+        )
+        assert detail.reason_code in methodology, status
+        assert detail.reason_code in operator_guide, status
+        assert detail.section == "reconciliation"
+        assert detail.affected_fields == ["reconciliation_status", "source_evidence_current"]
+    assert "control timestamps are not hashed into `r_h`" in _single_line(methodology).lower()
+    assert "shared PositionState completion timestamps" in _read(
+        "REPOSITORY-ENGINEERING-CONTEXT.md"
+    )
 
 
 def test_market_data_coverage_window_methodology_is_implementation_backed() -> None:
