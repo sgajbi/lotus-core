@@ -69,6 +69,29 @@ def test_critical_db_coverage_includes_financial_reconciliation_repository() -> 
     )
 
 
+HOLDINGS_COMPLETION_CRITICAL_PROOF_FILE = (
+    "tests/integration/services/query_service/test_holdings_reconciliation_completion_postgresql.py"
+)
+
+
+def test_critical_db_coverage_executes_historical_holdings_completion_proof() -> None:
+    assert HOLDINGS_COMPLETION_CRITICAL_PROOF_FILE in get_suite("critical-db-coverage")
+
+
+def test_holdings_completion_manifest_guard_rejects_missing_proof(monkeypatch) -> None:
+    monkeypatch.setitem(
+        SUITES,
+        "critical-db-coverage",
+        [
+            path
+            for path in get_suite("critical-db-coverage")
+            if path != HOLDINGS_COMPLETION_CRITICAL_PROOF_FILE
+        ],
+    )
+    with pytest.raises(AssertionError):
+        test_critical_db_coverage_executes_historical_holdings_completion_proof()
+
+
 MODEL_DEFINITION_IDENTITY_CRITICAL_PROOF_NODE = (
     "tests/integration/services/ingestion_service/"
     "test_model_definition_identity_postgresql.py::"

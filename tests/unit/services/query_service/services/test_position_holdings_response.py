@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock
 
@@ -20,7 +20,8 @@ from src.services.query_service.app.services.position_holdings_response import (
 pytestmark = pytest.mark.asyncio
 
 
-async def test_portfolio_holdings_response_assembles_snapshot_holdings() -> None:
+@pytest.mark.parametrize("control_minute", [4, 6])
+async def test_portfolio_holdings_response_assembles_snapshot_holdings(control_minute: int) -> None:
     repository = AsyncMock()
     snapshot = DailyPositionSnapshot(
         security_id=" SEC_A ",
@@ -62,7 +63,7 @@ async def test_portfolio_holdings_response_assembles_snapshot_holdings() -> None
             business_date=date(2025, 1, 1),
             epoch=7,
             status="COMPLETED",
-            updated_at=datetime(2025, 1, 1, 10, 6, tzinfo=UTC),
+            updated_at=datetime(2025, 1, 1, 10, control_minute, tzinfo=UTC),
         )
     ]
 
@@ -95,7 +96,7 @@ async def test_portfolio_holdings_response_assembles_snapshot_holdings() -> None
     assert response.source_evidence_current is True
     assert response.snapshot_id is not None
     assert response.policy_version == "holdings-as-of-v1"
-    assert response.latest_evidence_timestamp == datetime(2025, 1, 1, 10, 5, tzinfo=UTC)
+    assert response.latest_evidence_timestamp == datetime(2025, 1, 1, 10, 0, tzinfo=UTC)
     assert response.source_batch_fingerprint is None
     assert response.content_hash.startswith("sha256:")
     assert response.source_digest == response.content_hash
@@ -108,6 +109,54 @@ async def test_portfolio_holdings_response_assembles_snapshot_holdings() -> None
     assert response.positions[0].security_id == "SEC_A"
     assert response.positions[0].weight == Decimal("1")
     assert response.positions[0].held_since_date == date(2024, 12, 31)
+
+    state.updated_at += timedelta(minutes=10)
+    repeated = await portfolio_holdings_response(
+        repository=repository, portfolio_id="P1", effective_as_of_date=date(2025, 1, 1)
+    )
+    assert repeated.content_hash == response.content_hash
+    assert repeated.snapshot_id == response.snapshot_id
+    assert repeated.source_lineage == response.source_lineage
+    assert repeated.positions == response.positions
+    assert repeated.source_refs == response.source_refs
+    assert repeated.reconciliation_status == "COMPLETE"
+    assert repeated.source_evidence_current is True
+
+    state.status = "REPROCESSING"
+    replaying = await portfolio_holdings_response(
+        repository=repository, portfolio_id="P1", effective_as_of_date=date(2025, 1, 1)
+    )
+    assert replaying.content_hash != repeated.content_hash
+    assert replaying.source_evidence_current is False
+    assert "POSITION_STATE_NOT_CURRENT" in replaying.degradation.reason_codes
+
+    state.status = "CURRENT"
+    state.epoch = 8
+    mismatched = await portfolio_holdings_response(
+        repository=repository, portfolio_id="P1", effective_as_of_date=date(2025, 1, 1)
+    )
+    assert mismatched.reconciliation_status == "UNKNOWN"
+    assert mismatched.content_hash != repeated.content_hash
+    assert mismatched.source_evidence_current is False
+    assert "HOLDINGS_RECONCILIATION_UNKNOWN" in mismatched.degradation.reason_codes
+    state.epoch = 7
+
+    snapshot.updated_at = datetime(2025, 1, 1, 11, 0, tzinfo=UTC)
+    changed = await portfolio_holdings_response(
+        repository=repository, portfolio_id="P1", effective_as_of_date=date(2025, 1, 1)
+    )
+    assert changed.reconciliation_status == "STALE"
+    assert changed.content_hash != repeated.content_hash
+    assert changed.source_evidence_current is False
+    assert changed.degradation.reason_codes == [
+        "HOLDINGS_RECONCILIATION_EVIDENCE_NEWER_THAN_CONTROL"
+    ]
+    detail = changed.degradation.details[0]
+    assert detail.section == "reconciliation"
+    assert detail.record_key == "business_date:2025-01-01:epoch:7"
+    assert detail.source_as_of_date == date(2025, 1, 1)
+    assert detail.latest_evidence_timestamp == snapshot.updated_at
+    assert detail.affected_fields == ["reconciliation_status", "source_evidence_current"]
 
 
 async def test_portfolio_holdings_response_marks_prior_date_fx_evidence_stale() -> None:
@@ -279,10 +328,18 @@ async def test_portfolio_holdings_response_exposes_fallback_degradation_metadata
     assert response.freshness_status == "UNAVAILABLE"
     assert response.source_evidence_current is False
     assert response.source_batch_fingerprint is None
-    assert response.degradation.status == "PARTIAL"
-    assert response.degradation.reason_codes == ["HOLDINGS_VALUATION_FALLBACK"]
-    assert response.degradation.details[0].record_key == "security_id:HIST_A"
-    assert response.degradation.details[0].source_kind == "FALLBACK"
+    assert response.degradation.status == "UNAVAILABLE"
+    assert response.degradation.reason_codes == [
+        "HOLDINGS_RECONCILIATION_CONTROL_MISSING",
+        "HOLDINGS_VALUATION_FALLBACK",
+    ]
+    fallback_detail = next(
+        detail
+        for detail in response.degradation.details
+        if detail.reason_code == "HOLDINGS_VALUATION_FALLBACK"
+    )
+    assert fallback_detail.record_key == "security_id:HIST_A"
+    assert fallback_detail.source_kind == "FALLBACK"
 
 
 async def test_portfolio_holdings_response_preserves_unknown_for_fallback_missing_lineage() -> None:

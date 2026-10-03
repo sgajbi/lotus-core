@@ -116,5 +116,7 @@ async def portfolio_holdings_response(
             valuation_fx_rate_dates=valuation_fx_rate_dates,
             missing_currency_lineage_security_ids=missing_currency_lineage_security_ids,
             latest_evidence_timestamp=latest_evidence_timestamp,
+            reconciliation_scopes=reconciliation_scopes,
+            reconciliation_controls=reconciliation_controls,
         ),
     )

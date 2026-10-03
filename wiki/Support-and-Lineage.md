@@ -125,6 +125,27 @@ metrics.
 Freshness is reported separately through `freshness_bucket` so a ready portfolio can still be
 distinguished from a stale evidence snapshot.
 
+### Historical holdings reconciliation
+
+For `GET /portfolios/{portfolio_id}/positions`, the evidence timestamp comes from selected dated
+snapshot/history and instrument facts, not shared position-state completion chronology. A later
+bookkeeping completion alone does not invalidate an unchanged, exactly reconciled economic cut or
+revise its material identity. Genuine newer facts, epoch mismatch, replay/status, missing valuation
+or FX authority, and incomplete controls still fail closed; query reads never complete a control.
+
+| Holdings reason | First response |
+| --- | --- |
+| `HOLDINGS_RECONCILIATION_EVIDENCE_NEWER_THAN_CONTROL` | Compare selected economic/reference evidence with the exact dated control; investigate genuine newer facts. |
+| `HOLDINGS_RECONCILIATION_CONTROL_MISSING` | Inspect the required portfolio-day/epoch control rather than treating absent evidence as complete. |
+| `HOLDINGS_RECONCILIATION_INCOMPLETE` | Inspect pending/running control work and owned queues. |
+| `HOLDINGS_RECONCILIATION_BLOCKED` | Inspect failed or replay-required controls and their source-owned refusal evidence. |
+| `HOLDINGS_RECONCILIATION_UNKNOWN` | Inspect unknown control status or unscoped row/state epoch evidence; do not infer a completed date. |
+
+These reasons complement existing valuation, market-price and position-state degradation. See the
+[Holdings As Of methodology](https://github.com/sgajbi/lotus-core/blob/main/docs/methodologies/source-data-products/holdings-as-of.md)
+for exact scope, identity and field semantics. This qualification contract is not downstream or
+production certification.
+
 Drill deeper with:
 
 - `GET /support/portfolios/{portfolio_id}/control-stages`

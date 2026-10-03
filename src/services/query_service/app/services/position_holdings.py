@@ -21,6 +21,7 @@ from portfolio_common.source_data_product_metadata import (
     stable_content_hash,
 )
 
+from ..application.holdings_reconciliation import dated_holdings_evidence_timestamp
 from ..domain.strict_decimal import decimal_or_zero
 from ..dtos.position_dto import PortfolioPositionsResponse, Position
 from ..dtos.valuation_dto import ValuationData
@@ -535,19 +536,15 @@ def holdings_content_hash(
 def latest_holdings_evidence_timestamp(
     db_results: list[PositionRowResult],
 ) -> datetime | None:
-    timestamps: list[datetime] = []
-    for position_row, instrument, pos_state in db_results:
-        for candidate in (
-            getattr(position_row, "updated_at", None),
-            getattr(position_row, "created_at", None),
-            getattr(instrument, "updated_at", None),
-            getattr(instrument, "created_at", None),
-            getattr(pos_state, "updated_at", None),
-            getattr(pos_state, "created_at", None),
-        ):
-            if isinstance(candidate, datetime):
-                timestamps.append(candidate)
-    return max(timestamps) if timestamps else None
+    return max(
+        (
+            timestamp
+            for position_row, instrument, _state in db_results
+            if (timestamp := dated_holdings_evidence_timestamp(position_row, instrument))
+            is not None
+        ),
+        default=None,
+    )
 
 
 def holdings_response_as_of_date(

@@ -196,7 +196,8 @@ async def test_get_latest_positions(mock_position_repo: AsyncMock):
         assert response.restatement_version == "current"
         assert response.reconciliation_status == "UNKNOWN"
         assert response.data_quality_status == "UNKNOWN"
-        assert response.latest_evidence_timestamp == datetime(2025, 1, 1, 10, 5, tzinfo=UTC)
+        # Snapshot economics are dated 10:00; shared state completion at 10:05 is bookkeeping.
+        assert response.latest_evidence_timestamp == datetime(2025, 1, 1, 10, 0, tzinfo=UTC)
         assert response.correlation_id is None
 
 

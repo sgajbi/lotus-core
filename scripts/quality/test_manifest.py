@@ -70,6 +70,8 @@ SUITES: dict[str, list[str]] = {
         "test_redemption_correction_clears_superseded_terms_and_interest_cash_link",
     ],
     "critical-db-coverage": [
+        "tests/integration/services/query_service/"
+        "test_holdings_reconciliation_completion_postgresql.py",
         "tests/integration/services/ingestion_service/"
         "test_model_definition_identity_postgresql.py::"
         "test_model_definition_identity_refusal_has_no_job_or_database_side_effects",

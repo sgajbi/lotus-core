@@ -205,3 +205,30 @@ def test_empty_holdings_without_control_scope_are_unreconciled() -> None:
         )
         == UNRECONCILED
     )
+
+
+@pytest.mark.parametrize("control_seconds", [10, 30])
+def test_completed_economic_scope_survives_later_state_bookkeeping(control_seconds: int) -> None:
+    row = _source_row()
+    row[2].updated_at = EVIDENCE_AT + timedelta(seconds=20)
+    scopes = holdings_reconciliation_scopes([row])
+    assert (
+        holdings_reconciliation_status(
+            scopes=scopes,
+            controls=[_control(updated_at=EVIDENCE_AT + timedelta(seconds=control_seconds))],
+        )
+        == COMPLETE
+    )
+    original_hash = scopes.content_hash()
+    row[2].updated_at += timedelta(minutes=1)
+    assert holdings_reconciliation_scopes([row]).content_hash() == original_hash
+
+
+@pytest.mark.parametrize("source_index", [0, 1])
+def test_newer_selected_economic_or_reference_evidence_remains_stale(source_index: int) -> None:
+    row = _source_row()
+    original = holdings_reconciliation_scopes([row]).content_hash()
+    row[source_index].updated_at = EVIDENCE_AT + timedelta(minutes=1)
+    scopes = holdings_reconciliation_scopes([row])
+    assert scopes.content_hash() != original
+    assert holdings_reconciliation_status(scopes=scopes, controls=[_control()]) == STALE

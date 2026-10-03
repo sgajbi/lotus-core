@@ -53,10 +53,10 @@ contract described by this methodology.
 | --- | --- | --- |
 | `portfolios` | `portfolio_id`, `base_currency` | Portfolio must exist. Base currency is used for cash reporting defaults. |
 | `business_dates` | `date`, `calendar_code` | Supplies default effective `as_of_date` for booked holdings and cash reads. |
-| `position_state` | `portfolio_id`, `security_id`, `epoch`, `status`, `created_at`, `updated_at` | Constrains holdings to the active epoch for each portfolio-security key and supplies reprocessing supportability. |
-| `position_history` | `security_id`, `position_date`, `quantity`, `cost_basis`, `cost_basis_local`, `epoch` | Authoritative booked quantity and cost-basis stream. Also supplements missing snapshot rows when snapshot materialization lags. |
+| `position_state` | `portfolio_id`, `security_id`, `epoch`, `status`, timestamps | Constrains holdings to the active epoch and supplies reprocessing supportability. Shared completion timestamps do not date position-response economics; cash-balance evidence timestamp handling is unchanged. |
+| `position_history` | `security_id`, `position_date`, `quantity`, `cost_basis`, `cost_basis_local`, `epoch`, timestamps | Authoritative booked quantity and cost-basis stream. Also supplements missing snapshot rows and supplies the selected dated evidence timestamp when snapshot materialization lags. |
 | `daily_position_snapshots` | `security_id`, `date`, `quantity`, valuation fields, `market_value`, local valuation fields, valuation source/reporting currencies, `valuation_fx_rate`, `valuation_fx_rate_date`, `epoch`, timestamps | Supplies current or as-of snapshot-backed holdings, valuation fields, persisted valuation-time currency/FX authority, cash rows, and evidence timestamps. Snapshot rows must reconcile to latest current-epoch history quantity for positions. |
-| `instruments` | name, asset class, currency, ISIN, sector, country of risk, product type, rating, liquidity tier, maturity date | Adds instrument descriptors, source-owned maturity lifecycle dates for maturity-bearing holdings, and cash classification. |
+| `instruments` | name, asset class, currency, ISIN, sector, country of risk, product type, rating, liquidity tier, maturity date, timestamps | Adds instrument descriptors, source-owned maturity lifecycle dates, cash classification, and selected reference-evidence chronology. |
 | `cash_account_masters` | cash account identity, display name, currency, lifecycle status, effective dates | Supplies stable account identity for cash-balance rows where active and effective as of the response date. |
 | `transactions` | `settlement_cash_account_id`, `settlement_cash_instrument_id`, `transaction_date` | Supplies a last-known fallback cash-account mapping only when the settlement account id validates against active/effective `cash_account_masters` for the same portfolio and cash instrument. |
 | `fx_rates` | `from_currency`, `to_currency`, `rate_date`, `rate` | Used only for optional cash reporting-currency restatement. |
@@ -132,7 +132,8 @@ adjustment, execution-quality assessment, or OMS status inference is performed b
 | `W_c` | `source_reported_cash_weight` | Core-owned cash weight, `sum(C_p) / D_mv`, or null when blocked. |
 | `Q` | `data_quality_status` | Source quality reduced with exact reconciliation trust: `COMPLETE`, `PARTIAL`, `STALE`, `UNKNOWN`, or `BLOCKED`. |
 | `R` | `reconciliation_status` | Fail-closed aggregate trust posture for each returned portfolio-day at its collective target epoch. |
-| `R_h` | `reconciliation_scope_hash` | Deterministic hash of the collective reconciliation scopes and control evidence used by the response. |
+| `R_h` | `reconciliation_scope_hash` | Deterministic hash of collective dated scopes: business date, target epoch, latest economic/reference evidence timestamp, source-row count, and unscoped-row count. Control outcomes qualify `R` separately; control timestamps are not hashed into `R_h`. |
+| `T_h` | Position-response `latest_evidence_timestamp` | Maximum `created_at` / `updated_at` of selected snapshot/history rows and their instruments; excludes shared position-state completion timestamps. |
 
 ## Methodology and Formulas
 
@@ -201,15 +202,18 @@ supportability posture is one of:
 7. Compute position weights from returned position values.
 8. Resolve `held_since_date` as the earliest position-history date in the current continuous non-zero holding period after the last zero-quantity break in the active epoch. If no epoch exists, use the row position date.
 9. Fetch latest market-price dates for non-cash positions that have market prices and compare them with response `A`. Independently compare every persisted valuation-time FX authority date with `A`; do not query the mutable current FX table to reconstruct historical valuation truth.
-10. Group returned rows by business date, set each collective target epoch to the maximum selected
-    row epoch, and retain the latest evidence timestamp across every row. Read and aggregate every
-    exact financial-reconciliation control for those collective portfolio-day target scopes, then
-    derive `R` and `R_h` without per-position queries. A row/state epoch mismatch remains unscoped.
+10. Project selected snapshot/history and instrument `created_at` / `updated_at` into dated
+    economic/reference evidence, excluding shared position-state completion timestamps. Group
+    returned rows by business date at the maximum selected portfolio-state epoch and retain each
+    day's latest projected timestamp. Read and aggregate every exact financial-reconciliation
+    control for those collective scopes to derive `R`; hash the dated scope projection as `R_h`
+    without per-position queries. A row/state epoch mismatch remains unscoped. A completed control
+    older than genuine selected economic/reference evidence remains `STALE`.
 11. Reduce source-row quality with `R` using fail-closed precedence: `BLOCKED`, `STALE`, `UNKNOWN`
     for unknown or unreconciled evidence, `PARTIAL`, then `COMPLETE` only when both inputs are
     complete.
 12. Hash the normalized returned positions, reduced data quality, `R`, `R_h`, latest evidence
-    timestamp, and degradation details. Use that digest for content, source-batch, source-digest,
+    timestamp, and degradation details. Use that digest for content, source-digest,
     and snapshot identity, then return positions with `HoldingsAsOf:v1` metadata.
 13. For cash balances, read all HoldingsAsOf snapshot rows for the resolved portfolio/date, filter
     cash instruments for account balances, join active/effective cash-account master rows, and read
@@ -242,7 +246,13 @@ supportability posture is one of:
 | Multiple financial-reconciliation controls exist for one business-date/epoch scope | Aggregates every control using fail-closed precedence `BLOCKED`, `STALE`, `UNRECONCILED`, `UNKNOWN`, `PARTIAL`, `COMPLETE`; row order cannot hide an adverse control. |
 | Returned securities have different last-mutation epochs on the same business date | Uses one collective scope at the maximum selected epoch. The corresponding position-valuation reconciliation evaluates the latest row per security at or below that target epoch; older superseded rows are excluded. |
 | Source rows are otherwise complete but reconciliation is missing/unknown, partial/running, stale, or blocked/failed | Returns reduced `data_quality_status=UNKNOWN`, `PARTIAL`, `STALE`, or `BLOCKED` respectively; `COMPLETE` requires complete source quality and complete reconciliation. |
-| Reconciliation status changes or exact scope/control evidence is corrected | Position-response `content_hash`, `source_digest`, `source_batch_fingerprint`, and `snapshot_id` all change even when returned position values are unchanged. |
+| Completed control predates genuine selected row/reference evidence | Returns reconciliation `STALE` and reason `HOLDINGS_RECONCILIATION_EVIDENCE_NEWER_THAN_CONTROL`. |
+| Exact portfolio-day/epoch control is missing | Returns reconciliation `UNRECONCILED` and reason `HOLDINGS_RECONCILIATION_CONTROL_MISSING`; source quality cannot be complete. |
+| Exact control is pending, running, processing, or queued | Returns reconciliation `PARTIAL` and reason `HOLDINGS_RECONCILIATION_INCOMPLETE`. |
+| Exact control is failed, requires replay, or blocked | Returns reconciliation `BLOCKED` and reason `HOLDINGS_RECONCILIATION_BLOCKED`. |
+| Exact control status is unknown or row/state epoch evidence is unscoped | Returns reconciliation `UNKNOWN` and reason `HOLDINGS_RECONCILIATION_UNKNOWN`. Unscoped evidence has no invented dated record key. |
+| Only shared state completion timestamps change, with selected economics/reference facts and material qualification unchanged | Position-response `content_hash`, `source_digest`, `source_batch_fingerprint`, `snapshot_id`, source refs and lineage remain stable; completion order cannot make a completed economic cut stale. |
+| Selected economics/reference evidence, epoch scope or material reconciliation/data-quality status changes | Position-response material identity changes even when displayed amounts happen to match; no stale or replaying evidence is promoted to current. |
 | Cash balance response has no account records | Returns `data_quality_status=UNKNOWN`. |
 | Cash account records exist but no cash snapshot rows back them | Returns `data_quality_status=UNKNOWN`. |
 | Any cash account record uses `cash_account_id_source=cash_security_fallback` | Returns `data_quality_status=PARTIAL`. |
@@ -280,11 +290,12 @@ supportability posture is one of:
 | `totals.source_reported_cash_weight_supportability` | Cash-weight supportability posture. |
 | `as_of_date` | Effective booked-state cap or resolved response date. |
 | `data_quality_status` | Completeness and freshness posture for returned holdings or cash balances. |
-| `degradation` | Row- and field-scoped source posture. Position responses expose missing persisted valuation-currency lineage, FX staleness, or missing-date evidence without re-deriving historical facts from current master or rate data. |
-| `latest_evidence_timestamp` | Latest durable position, position-state, instrument, or cash snapshot timestamp used by the response. |
+| `degradation` | Row- and field-scoped source posture, including exact reconciliation-control reasons, persisted valuation-currency lineage, FX staleness and missing-date evidence. Reconciliation details use section `reconciliation`, record key `business_date:YYYY-MM-DD:epoch:N` when scoped, and affected fields `reconciliation_status` / `source_evidence_current`; query reads do not create completed controls. |
+| `latest_evidence_timestamp` | Positions: `T_h`, the latest selected dated snapshot/history or instrument timestamp, not shared state completion. Cash balances retain their existing durable cash/source evidence timestamp policy. |
 | `reconciliation_status` | Fail-closed collective portfolio-day reconciliation posture for position responses. |
-| `source_lineage.reconciliation_scope_hash` | Collective target-epoch scope/control identity used to classify a position response. |
-| `content_hash`, `source_digest`, `source_batch_fingerprint` | For position responses, one deterministic digest over returned rows plus data quality, reconciliation status/scope, latest evidence, and degradation. Cash responses retain their deterministic cash-account/totals/supportability evidence fingerprint. |
+| `source_lineage.reconciliation_scope_hash` | `R_h`, the collective dated target-epoch scope identity; exact control outcomes are independently reflected in reconciliation status. |
+| `content_hash`, `source_digest` | For position responses, one deterministic digest over returned rows plus data quality, reconciliation status/scope, latest evidence, and degradation. Cash responses retain their deterministic cash-account/totals/supportability evidence fingerprint. |
+| `source_batch_fingerprint` | Optional upstream-batch identity. Position responses currently leave this null; their content digest must not be described as a supplied source-batch fingerprint. |
 | `snapshot_id` | Deterministic `holdings_as_of:<fingerprint-prefix>` identity for position responses or `holdings_as_of_cash_balances:<fingerprint>` for cash responses. |
 
 ## Worked Example

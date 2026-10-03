@@ -8,6 +8,11 @@ from portfolio_common.database_models import (
     PositionHistory,
     PositionState,
 )
+from portfolio_common.domain.holdings_reconciliation import (
+    FinancialReconciliationControl,
+    HoldingsReconciliationScope,
+    HoldingsReconciliationScopes,
+)
 from portfolio_common.source_data_product_metadata import (
     SOURCE_METADATA_UNAVAILABLE_HASH,
 )
@@ -1420,7 +1425,7 @@ async def test_holdings_degradation_summary_reports_empty_holdings_unavailable()
     assert summary.details[0].affected_fields == ["positions"]
 
 
-async def test_latest_holdings_evidence_timestamp_uses_latest_row_or_state_timestamp() -> None:
+async def test_latest_holdings_evidence_timestamp_excludes_shared_completion_bookkeeping() -> None:
     position_row = DailyPositionSnapshot(
         security_id="SEC_A",
         date=date(2025, 1, 1),
@@ -1433,5 +1438,76 @@ async def test_latest_holdings_evidence_timestamp_uses_latest_row_or_state_times
     )
 
     assert latest_holdings_evidence_timestamp([(position_row, None, state)]) == datetime(
-        2025, 1, 1, 10, 5, tzinfo=UTC
+        2025, 1, 1, 10, 0, tzinfo=UTC
     )
+
+
+@pytest.mark.parametrize(
+    "control_status,reason_code",
+    [
+        (None, "HOLDINGS_RECONCILIATION_CONTROL_MISSING"),
+        ("PENDING", "HOLDINGS_RECONCILIATION_INCOMPLETE"),
+        ("RUNNING", "HOLDINGS_RECONCILIATION_INCOMPLETE"),
+        ("REQUIRES_REPLAY", "HOLDINGS_RECONCILIATION_BLOCKED"),
+        ("FAILED", "HOLDINGS_RECONCILIATION_BLOCKED"),
+        ("legacy", "HOLDINGS_RECONCILIATION_UNKNOWN"),
+    ],
+)
+async def test_control_only_degradation_explains_non_ready_holdings(
+    control_status: str | None, reason_code: str
+) -> None:
+    day = date(2025, 1, 1)
+    evidence_at = datetime(2025, 1, 1, 10, tzinfo=UTC)
+    position = Position(
+        security_id="CONTROL_A",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("100"),
+        position_date=day,
+        instrument_name="Current equity",
+        asset_class="Equity",
+        reprocessing_status="CURRENT",
+        valuation=ValuationData(market_price=Decimal("100"), market_value=Decimal("100")),
+    )
+    controls = (
+        [FinancialReconciliationControl(day, 2, control_status, evidence_at)]
+        if control_status is not None
+        else []
+    )
+    summary = holdings_degradation_summary(
+        positions=[position],
+        history_supplements=[],
+        fallback_valuation_map={},
+        response_as_of_date=day,
+        latest_market_price_dates={"CONTROL_A": day},
+        valuation_fx_rate_dates={},
+        missing_currency_lineage_security_ids=set(),
+        latest_evidence_timestamp=evidence_at,
+        reconciliation_scopes=HoldingsReconciliationScopes(
+            items=(HoldingsReconciliationScope(day, 2, evidence_at, 1),)
+        ),
+        reconciliation_controls=controls,
+    )
+    assert summary.reason_codes == [reason_code]
+    assert summary.status in {"UNKNOWN", "UNAVAILABLE"}
+    detail = summary.details[0]
+    assert detail.section == "reconciliation"
+    assert detail.record_key == "business_date:2025-01-01:epoch:2"
+    assert detail.source_as_of_date == day
+    assert detail.latest_evidence_timestamp == evidence_at
+
+
+async def test_unscoped_epoch_is_explicit_reconciliation_degradation() -> None:
+    summary = holdings_degradation_summary(
+        positions=[],
+        history_supplements=[],
+        fallback_valuation_map={},
+        response_as_of_date=date(2025, 1, 1),
+        latest_market_price_dates={},
+        valuation_fx_rate_dates={},
+        missing_currency_lineage_security_ids=set(),
+        latest_evidence_timestamp=None,
+        reconciliation_scopes=HoldingsReconciliationScopes(items=(), unscoped_source_row_count=1),
+    )
+    assert "HOLDINGS_RECONCILIATION_UNKNOWN" in summary.reason_codes
+    assert summary.details[0].section == "reconciliation"
+    assert summary.details[0].record_key is None
