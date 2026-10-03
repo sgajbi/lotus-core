@@ -35,6 +35,7 @@ from src.services.ingestion_service.app.DTOs.reference_data_dto import (
     InstrumentEligibilityProfileRecord,
     LiquidityReserveRequirementIngestionRequest,
     LiquidityReserveRequirementRecord,
+    ModelPortfolioDefinitionIngestionRequest,
     ModelPortfolioDefinitionRecord,
     ModelPortfolioTargetIngestionRequest,
     ModelPortfolioTargetRecord,
@@ -754,6 +755,59 @@ def test_model_portfolio_target_record_validates_target_band_order() -> None:
 
     with pytest.raises(ValidationError, match="max_weight must be greater than or equal"):
         ModelPortfolioTargetRecord.model_validate(_target_record(max_weight="0.1100000000"))
+
+
+@pytest.mark.parametrize("conflicting", [False, True])
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("include_distinct", [False, True])
+def test_model_definition_request_rejects_duplicate_identities(
+    conflicting: bool, reverse: bool, include_distinct: bool
+) -> None:
+    records = [
+        _model_portfolio_definition(approval_status="approved"),
+        _model_portfolio_definition(approval_status="suspended" if conflicting else "approved"),
+    ]
+    if reverse:
+        records.reverse()
+    if include_distinct:
+        records.insert(1, _model_portfolio_definition(model_portfolio_id="MODEL_DISTINCT"))
+
+    with pytest.raises(ValidationError) as caught:
+        ModelPortfolioDefinitionIngestionRequest.model_validate({"model_portfolios": records})
+
+    error = caught.value.errors()[0]
+    assert error["type"] == DUPLICATE_SOURCE_KEY
+    assert error["ctx"]["field_path"] == "model_portfolios"
+
+
+@pytest.mark.parametrize(
+    "distinct_identity",
+    [
+        {"model_portfolio_id": "MODEL_DISTINCT"},
+        {"model_portfolio_version": "2026.04"},
+        {"effective_from": "2026-04-01"},
+    ],
+)
+def test_model_definition_request_accepts_distinct_identities(
+    distinct_identity: dict[str, object],
+) -> None:
+    records = [_model_portfolio_definition(), _model_portfolio_definition(**distinct_identity)]
+    request = ModelPortfolioDefinitionIngestionRequest.model_validate({"model_portfolios": records})
+
+    assert len(request.model_portfolios) == 2
+    persisted_record = request.model_dump(mode="json")["model_portfolios"][1]
+    for field, expected in distinct_identity.items():
+        assert persisted_record[field] == expected
+
+
+def test_model_definition_request_documents_batch_identity_and_refusal() -> None:
+    description = ModelPortfolioDefinitionIngestionRequest.model_json_schema()["properties"][
+        "model_portfolios"
+    ]["description"]
+
+    assert "(model_portfolio_id, model_portfolio_version, effective_from)" in description
+    assert "HTTP 422 DUPLICATE_SOURCE_KEY before job creation or persistence" in description
+    assert "Identical or conflicting duplicates reject the entire batch" in description
 
 
 def test_model_portfolio_target_ingestion_request_rejects_duplicate_targets() -> None:

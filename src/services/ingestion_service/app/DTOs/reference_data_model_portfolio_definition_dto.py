@@ -4,8 +4,9 @@ from datetime import date, datetime
 from typing import Literal, cast
 
 from portfolio_common.domain.currency import normalize_currency_code
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .ingestion_validation_errors import validate_unique_records
 from .reference_data_source_observation_dto import SourceObservationLineage
 
 
@@ -80,7 +81,13 @@ class ModelPortfolioDefinitionRecord(SourceObservationLineage):
 class ModelPortfolioDefinitionIngestionRequest(BaseModel):
     model_portfolios: list[ModelPortfolioDefinitionRecord] = Field(
         ...,
-        description="Model portfolio definition records to ingest or upsert.",
+        description=(
+            "Model portfolio definition records to ingest or upsert. Each "
+            "(model_portfolio_id, model_portfolio_version, effective_from) identity must "
+            "occur once per request. Identical or conflicting duplicates reject the entire "
+            "batch with HTTP 422 DUPLICATE_SOURCE_KEY before job creation or persistence; "
+            "request idempotency is a separate concern."
+        ),
         min_length=1,
         examples=[
             [
@@ -98,5 +105,16 @@ class ModelPortfolioDefinitionIngestionRequest(BaseModel):
             ]
         ],
     )
+
+    @model_validator(mode="after")
+    def validate_definition_uniqueness(self) -> "ModelPortfolioDefinitionIngestionRequest":
+        validate_unique_records(
+            (
+                (record.model_portfolio_id, record.model_portfolio_version, record.effective_from)
+                for record in self.model_portfolios
+            ),
+            field_path="model_portfolios",
+        )
+        return self
 
     model_config = ConfigDict()

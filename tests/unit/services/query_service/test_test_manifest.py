@@ -69,6 +69,31 @@ def test_critical_db_coverage_includes_financial_reconciliation_repository() -> 
     )
 
 
+MODEL_DEFINITION_IDENTITY_CRITICAL_PROOF_NODE = (
+    "tests/integration/services/ingestion_service/"
+    "test_model_definition_identity_postgresql.py::"
+    "test_model_definition_identity_refusal_has_no_job_or_database_side_effects"
+)
+
+
+def test_critical_db_coverage_executes_model_definition_identity_refusal() -> None:
+    assert MODEL_DEFINITION_IDENTITY_CRITICAL_PROOF_NODE in get_suite("critical-db-coverage")
+
+
+def test_model_definition_identity_manifest_guard_rejects_missing_proof(monkeypatch) -> None:
+    monkeypatch.setitem(
+        SUITES,
+        "critical-db-coverage",
+        [
+            path
+            for path in get_suite("critical-db-coverage")
+            if path != MODEL_DEFINITION_IDENTITY_CRITICAL_PROOF_NODE
+        ],
+    )
+    with pytest.raises(AssertionError):
+        test_critical_db_coverage_executes_model_definition_identity_refusal()
+
+
 TENANT_RECONCILIATION_CRITICAL_PROOF_NODES = [
     "tests/integration/services/query_control_plane_service/"
     "test_int_operations_service.py::"

@@ -25,6 +25,20 @@ Slice 4 implemented the first active DPM source-data product in `lotus-core`:
 
 ## Critical Behavior Covered
 
+### Imported model-definition batch identity
+
+`POST /ingest/model-portfolios` requires one definition per
+`(model_portfolio_id, model_portfolio_version, effective_from)` within a request. Identical
+duplicates and conflicting duplicates are both rejected with HTTP 422 and
+`DUPLICATE_SOURCE_KEY` at `model_portfolios`, before ingestion job creation or persistence.
+The entire malformed batch is refused, including any otherwise valid distinct records.
+Different model identifiers, versions, or effective start dates remain distinct identities.
+Source lineage and currency validation continue to apply to each record.
+
+This within-request uniqueness rule is separate from request idempotency and supported upsert
+corrections submitted in later valid requests. It does not transfer native model authoring or
+approval ownership to Core.
+
 1. target band validation rejects invalid `min_weight`, `target_weight`, `max_weight` ordering,
 2. model target ingestion rejects duplicate model/version/instrument/effective-date records,
 3. ingestion service uses deterministic conflict keys for definitions and target rows,
