@@ -250,6 +250,14 @@ Workflow optimizations must preserve required checks, exact-source identity, war
 policies, complete main certification, and final wiki parity. A merged-and-validated slice—not a
 passing narrow test or issue count—is the unit of delivery.
 
+DPM mandate population readers resolve one effective authoritative revision per portfolio and
+mandate within the admitted tenant before applying model, booking-center, or authority-status
+membership filters. Reuse the authority predicates and precedence in
+`effective_mandate_sources.py` for per-portfolio binding and population selection. A same-date
+observed correction replaces the earlier revision for that effective interval; a future-effective
+change remains invisible before its start date. Keep real PostgreSQL and registered-route proof in
+the `query-authority-db-contract` suite when changing this selection boundary.
+
 ## Standards And RFCs That Govern This Repository
 
 Primary authorities:
