@@ -1,13 +1,41 @@
 """Shared SQL selection for effective discretionary mandate identity."""
 
 from datetime import date
+from typing import Any
 
 from portfolio_common.database_models import PortfolioMandateBinding
 from portfolio_common.source_lifecycle_predicates import DISCRETIONARY_MANDATE_TYPE
-from sqlalchemy import and_, or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..domain.effective_mandate import EffectiveMandateBinding
+from .effective_profile_queries import effective_on
+
+
+def effective_discretionary_mandate_predicates(as_of_date: date) -> tuple[Any, ...]:
+    """Return only predicates that determine effective mandate authority."""
+
+    return (
+        PortfolioMandateBinding.mandate_type == DISCRETIONARY_MANDATE_TYPE,
+        effective_on(
+            PortfolioMandateBinding.effective_from,
+            PortfolioMandateBinding.effective_to,
+            as_of_date,
+        ),
+    )
+
+
+def discretionary_mandate_precedence() -> tuple[Any, ...]:
+    """Return the canonical deterministic precedence for effective mandate revisions."""
+
+    return (
+        PortfolioMandateBinding.effective_from.desc(),
+        PortfolioMandateBinding.observed_at.desc().nulls_last(),
+        PortfolioMandateBinding.binding_version.desc(),
+        PortfolioMandateBinding.updated_at.desc(),
+        PortfolioMandateBinding.created_at.desc(),
+        PortfolioMandateBinding.id.desc(),
+    )
 
 
 class SqlAlchemyEffectiveMandateReader:
@@ -44,21 +72,9 @@ async def resolve_effective_mandate_binding(
         select(PortfolioMandateBinding)
         .where(
             PortfolioMandateBinding.portfolio_id == portfolio_id,
-            PortfolioMandateBinding.mandate_type == DISCRETIONARY_MANDATE_TYPE,
-            and_(
-                PortfolioMandateBinding.effective_from <= as_of_date,
-                or_(
-                    PortfolioMandateBinding.effective_to.is_(None),
-                    PortfolioMandateBinding.effective_to >= as_of_date,
-                ),
-            ),
+            *effective_discretionary_mandate_predicates(as_of_date),
         )
-        .order_by(
-            PortfolioMandateBinding.effective_from.desc(),
-            PortfolioMandateBinding.observed_at.desc().nulls_last(),
-            PortfolioMandateBinding.binding_version.desc(),
-            PortfolioMandateBinding.updated_at.desc(),
-        )
+        .order_by(*discretionary_mandate_precedence())
         .limit(1)
     )
     if mandate_id:

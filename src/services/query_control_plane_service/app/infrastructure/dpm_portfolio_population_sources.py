@@ -9,16 +9,17 @@ from portfolio_common.database_models import (
     PortfolioMandateBinding,
 )
 from portfolio_common.domain.tenant import TenantId
-from portfolio_common.source_lifecycle_predicates import (
-    DISCRETIONARY_MANDATE_TYPE,
-    DPM_DISCRETIONARY_MANDATE_ACTIVE,
-)
+from portfolio_common.source_lifecycle_predicates import DPM_DISCRETIONARY_MANDATE_ACTIVE
 from sqlalchemy import func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..domain.dpm_portfolio_population import (
     ApprovedModelPortfolio,
     DiscretionaryMandatePopulationMember,
+)
+from .effective_mandate_sources import (
+    discretionary_mandate_precedence,
+    effective_discretionary_mandate_predicates,
 )
 from .effective_profile_queries import effective_on
 
@@ -63,13 +64,16 @@ class SqlAlchemyDpmPortfolioPopulationReader:
         booking_center_code: str | None,
         include_inactive_mandates: bool,
     ) -> list[DiscretionaryMandatePopulationMember]:
-        predicates = _mandate_predicates(
-            as_of_date=as_of_date,
+        membership_predicates = _mandate_membership_predicates(
             booking_center_code=booking_center_code,
             model_portfolio_ids=(model_portfolio_id,),
             include_inactive_mandates=include_inactive_mandates,
         )
-        rows = await self._list_ranked_mandates(predicates=predicates, tenant_id=tenant_id)
+        rows = await self._list_ranked_mandates(
+            authority_predicates=list(effective_discretionary_mandate_predicates(as_of_date)),
+            membership_predicates=membership_predicates,
+            tenant_id=tenant_id,
+        )
         return [_mandate_member(row) for row in rows]
 
     async def list_universe_candidates(
@@ -83,14 +87,14 @@ class SqlAlchemyDpmPortfolioPopulationReader:
         after_sort_key: tuple[str, str] | None,
         limit: int,
     ) -> list[DiscretionaryMandatePopulationMember]:
-        predicates = _mandate_predicates(
-            as_of_date=as_of_date,
+        membership_predicates = _mandate_membership_predicates(
             booking_center_code=booking_center_code,
             model_portfolio_ids=model_portfolio_ids,
             include_inactive_mandates=include_inactive_mandates,
         )
         rows = await self._list_ranked_mandates(
-            predicates=predicates,
+            authority_predicates=list(effective_discretionary_mandate_predicates(as_of_date)),
+            membership_predicates=membership_predicates,
             tenant_id=tenant_id,
             after_sort_key=after_sort_key,
             limit=limit,
@@ -100,7 +104,8 @@ class SqlAlchemyDpmPortfolioPopulationReader:
     async def _list_ranked_mandates(
         self,
         *,
-        predicates: list[Any],
+        authority_predicates: list[Any],
+        membership_predicates: list[Any],
         tenant_id: TenantId,
         after_sort_key: tuple[str, str] | None = None,
         limit: int | None = None,
@@ -114,25 +119,18 @@ class SqlAlchemyDpmPortfolioPopulationReader:
                         PortfolioMandateBinding.portfolio_id,
                         PortfolioMandateBinding.mandate_id,
                     ),
-                    order_by=(
-                        PortfolioMandateBinding.effective_from.desc(),
-                        PortfolioMandateBinding.observed_at.desc().nullslast(),
-                        PortfolioMandateBinding.binding_version.desc(),
-                        PortfolioMandateBinding.updated_at.desc(),
-                        PortfolioMandateBinding.created_at.desc(),
-                        PortfolioMandateBinding.id.desc(),
-                    ),
+                    order_by=discretionary_mandate_precedence(),
                 )
                 .label("rn"),
             )
             .join(Portfolio, PortfolioMandateBinding.portfolio_id == Portfolio.portfolio_id)
-            .where(Portfolio.tenant_id == tenant_id.value, *predicates)
+            .where(Portfolio.tenant_id == tenant_id.value, *authority_predicates)
             .subquery()
         )
         statement = (
             select(PortfolioMandateBinding)
             .join(ranked, PortfolioMandateBinding.id == ranked.c.id)
-            .where(ranked.c.rn == 1)
+            .where(ranked.c.rn == 1, *membership_predicates)
             .order_by(
                 PortfolioMandateBinding.portfolio_id.asc(),
                 PortfolioMandateBinding.mandate_id.asc(),
@@ -152,21 +150,13 @@ class SqlAlchemyDpmPortfolioPopulationReader:
         return list(result.scalars().all())
 
 
-def _mandate_predicates(
+def _mandate_membership_predicates(
     *,
-    as_of_date: date,
     booking_center_code: str | None,
     model_portfolio_ids: tuple[str, ...],
     include_inactive_mandates: bool,
 ) -> list[Any]:
-    predicates = [
-        PortfolioMandateBinding.mandate_type == DISCRETIONARY_MANDATE_TYPE,
-        effective_on(
-            PortfolioMandateBinding.effective_from,
-            PortfolioMandateBinding.effective_to,
-            as_of_date,
-        ),
-    ]
+    predicates: list[Any] = []
     if booking_center_code:
         predicates.append(PortfolioMandateBinding.booking_center_code == booking_center_code)
     if model_portfolio_ids:

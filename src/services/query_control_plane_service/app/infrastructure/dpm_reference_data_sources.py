@@ -18,10 +18,7 @@ from portfolio_common.infrastructure.persistence.statement_batching import (
     iter_statement_chunks,
     observe_multi_statement_batch,
 )
-from portfolio_common.source_lifecycle_predicates import (
-    DISCRETIONARY_MANDATE_TYPE,
-    MODEL_PORTFOLIO_TARGET_ACTIVE,
-)
+from portfolio_common.source_lifecycle_predicates import MODEL_PORTFOLIO_TARGET_ACTIVE
 from sqlalchemy import and_, func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,6 +32,10 @@ from ..domain.dpm_source_readiness import (
     ModelPortfolioTargetEvidence,
 )
 from ..ports.dpm_source_readiness import ModelPortfolioTargetReadResult
+from .effective_mandate_sources import (
+    discretionary_mandate_precedence,
+    effective_discretionary_mandate_predicates,
+)
 from .effective_profile_queries import effective_on, ranked_latest_ids
 
 
@@ -125,27 +126,22 @@ class SqlAlchemyDpmReferenceDataReader:
         mandate_id: str | None,
         booking_center_code: str | None,
     ) -> DiscretionaryMandateBindingEvidence | None:
-        statement = (
-            select(PortfolioMandateBinding)
-            .where(
-                PortfolioMandateBinding.portfolio_id == portfolio_id,
-                PortfolioMandateBinding.mandate_type == DISCRETIONARY_MANDATE_TYPE,
-                effective_on(
-                    PortfolioMandateBinding.effective_from,
-                    PortfolioMandateBinding.effective_to,
-                    as_of_date,
-                ),
-            )
-            .order_by(
-                PortfolioMandateBinding.effective_from.desc(),
-                PortfolioMandateBinding.observed_at.desc().nulls_last(),
-                PortfolioMandateBinding.binding_version.desc(),
-                PortfolioMandateBinding.updated_at.desc(),
-            )
-            .limit(1)
+        authority_statement = select(PortfolioMandateBinding.id).where(
+            PortfolioMandateBinding.portfolio_id == portfolio_id,
+            *effective_discretionary_mandate_predicates(as_of_date),
         )
         if mandate_id:
-            statement = statement.where(PortfolioMandateBinding.mandate_id == mandate_id)
+            authority_statement = authority_statement.where(
+                PortfolioMandateBinding.mandate_id == mandate_id
+            )
+        authoritative_id = (
+            authority_statement.order_by(*discretionary_mandate_precedence())
+            .limit(1)
+            .scalar_subquery()
+        )
+        statement = select(PortfolioMandateBinding).where(
+            PortfolioMandateBinding.id == authoritative_id
+        )
         if booking_center_code:
             statement = statement.where(
                 PortfolioMandateBinding.booking_center_code == booking_center_code

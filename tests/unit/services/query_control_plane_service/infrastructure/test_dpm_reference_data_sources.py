@@ -133,6 +133,9 @@ async def test_mandate_binding_applies_requested_disambiguators() -> None:
     sql = str(session.execute.await_args.args[0])
     assert "portfolio_mandate_bindings.mandate_id" in sql
     assert "portfolio_mandate_bindings.booking_center_code" in sql
+    authority_sql, outer_membership_sql = sql.rsplit("WHERE", 1)
+    assert "portfolio_mandate_bindings.booking_center_code =" not in authority_sql
+    assert "portfolio_mandate_bindings.booking_center_code =" in outer_membership_sql
 
 
 @pytest.mark.asyncio

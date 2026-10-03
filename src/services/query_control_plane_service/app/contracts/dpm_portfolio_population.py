@@ -28,14 +28,18 @@ class CioModelChangeAffectedCohortRequest(BaseModel):
     )
     booking_center_code: str | None = Field(
         None,
-        description="Optional booking-center filter for regional CIO model-change rollout.",
+        description=(
+            "Optional booking-center filter applied after the current effective mandate version "
+            "has been selected for regional CIO model-change rollout."
+        ),
         examples=["Singapore"],
     )
     include_inactive_mandates: bool = Field(
         False,
         description=(
-            "When false, only active discretionary authority bindings are returned. Inactive "
-            "bindings remain source-visible future scope for exception dashboards."
+            "When false, only mandates whose selected current effective version has active "
+            "discretionary authority are returned. Inactive current versions remain "
+            "source-visible future scope for exception dashboards."
         ),
     )
     model_config = ConfigDict()
@@ -157,23 +161,27 @@ class DpmPortfolioUniverseCandidateRequest(BaseModel):
     )
     booking_center_code: str | None = Field(
         None,
-        description="Optional booking-center filter for regional DPM universe discovery.",
+        description=(
+            "Optional booking-center filter applied after the current effective mandate version "
+            "has been selected for regional DPM universe discovery."
+        ),
         examples=["Singapore"],
     )
     model_portfolio_ids: list[str] = Field(
         default_factory=list,
         description=(
-            "Optional approved model portfolio identifiers used to narrow the DPM candidate "
-            "universe. Empty means all effective discretionary mandate bindings in scope."
+            "Optional approved model portfolio identifiers applied to each mandate's selected "
+            "current effective version. Empty means all effective discretionary mandate "
+            "bindings in scope."
         ),
         examples=[["MODEL_PB_SG_GLOBAL_BAL_DPM", "MODEL_PB_SG_INCOME_DPM"]],
     )
     include_inactive_mandates: bool = Field(
         False,
         description=(
-            "When false, only active discretionary authority bindings are returned. Inactive "
-            "bindings remain source-visible for exception dashboards only when explicitly "
-            "requested."
+            "When false, only mandates whose selected current effective version has active "
+            "discretionary authority are returned. Inactive current versions remain "
+            "source-visible for exception dashboards only when explicitly requested."
         ),
     )
     page: ReferencePageRequest = Field(

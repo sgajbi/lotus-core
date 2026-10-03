@@ -88,12 +88,19 @@ async def test_affected_mandates_use_effective_discretionary_population_predicat
 
     assert records[0].binding_version == 7
     sql = str(session.execute.await_args.args[0])
+    ranked_sql, outer_membership_sql = sql.rsplit("WHERE", 1)
     assert "portfolio_mandate_bindings.mandate_type" in sql
     assert "portfolio_mandate_bindings.model_portfolio_id IN" in sql
     assert "portfolio_mandate_bindings.booking_center_code" in sql
     assert "portfolio_mandate_bindings.discretionary_authority_status" in sql
     assert "portfolios.tenant_id" in sql
     assert "ORDER BY portfolio_mandate_bindings.portfolio_id ASC" in sql
+    assert "portfolio_mandate_bindings.model_portfolio_id IN" not in ranked_sql
+    assert "portfolio_mandate_bindings.booking_center_code =" not in ranked_sql
+    assert "portfolio_mandate_bindings.discretionary_authority_status =" not in ranked_sql
+    assert "portfolio_mandate_bindings.model_portfolio_id IN" in outer_membership_sql
+    assert "portfolio_mandate_bindings.booking_center_code =" in outer_membership_sql
+    assert "portfolio_mandate_bindings.discretionary_authority_status =" in outer_membership_sql
 
 
 @pytest.mark.asyncio
@@ -113,10 +120,13 @@ async def test_universe_applies_cursor_and_fetch_limit() -> None:
 
     statement = session.execute.await_args.args[0]
     sql = str(statement)
+    ranked_sql, outer_membership_sql = sql.rsplit("WHERE", 1)
     assert "portfolio_mandate_bindings.model_portfolio_id IN" in sql
     assert "portfolios.tenant_id" in sql
     assert (
         "(portfolio_mandate_bindings.portfolio_id, portfolio_mandate_bindings.mandate_id) >" in sql
     )
     assert "portfolio_mandate_bindings.discretionary_authority_status =" not in sql
+    assert "portfolio_mandate_bindings.model_portfolio_id IN" not in ranked_sql
+    assert "portfolio_mandate_bindings.model_portfolio_id IN" in outer_membership_sql
     assert statement._limit_clause.value == 251

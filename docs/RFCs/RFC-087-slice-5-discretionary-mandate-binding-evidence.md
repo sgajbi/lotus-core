@@ -54,6 +54,25 @@ lineage preserving the source revision evidence. A consumer policy or scenario m
 separate analytical assumption, but it must not replace or relabel the source target. A changed
 authoritative target requires a new effective binding or a versioned source correction.
 
+### Temporal authority and population membership
+
+Point-in-time binding resolution and both population products use one authority order. Tenant and
+the requested business date first admit eligible source rows. Core then selects exactly one row per
+portfolio and mandate by descending `effective_from`, `observed_at`, `binding_version`,
+`updated_at`, `created_at`, and persistent identifier. Model portfolio, authority status, and
+booking-center filters are applied only to that selected row. A matching predecessor therefore
+cannot re-enter a cohort after the authoritative version is suspended, reassigned, or moved to a
+different booking center.
+
+A later `effective_from` is a prospective change and is invisible before that date. A later
+observed revision for the same effective date is a correction to that effective interval; exact
+observation-time ties prefer the higher binding version and then the deterministic persistence
+tie-breakers. History and original source lineage remain stored. `include_inactive_mandates=true`
+may expose the selected inactive row for exception handling, but it never substitutes an older
+active row. These rules keep `DiscretionaryMandateBinding:v1`,
+`CioModelChangeAffectedCohort:v1`, and `DpmPortfolioUniverseCandidate:v1` on the same authoritative
+version without implying suitability approval or trade-release authority.
+
 ## Local Validation
 
 Focused proof commands:
