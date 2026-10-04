@@ -16,6 +16,13 @@
    `PerformanceComponentEconomics:v1`.
 
 Canonical supported-feature truth is maintained in
+the supported-feature contract below. Fresh applicable `UPSTREAM_PROVIDED` FX ingestion requires
+both local/base FX P&L, including explicit zero. Incomplete sources return
+`FX_UPSTREAM_SOURCE_INCOMPLETE`; this is a bounded admission rule, not historical source-presence,
+correction, live-broker or deployment certification. See the
+[FX admission policy](../rfc-transaction-specs/transactions/FX/FX-SLICE-6-PNL-SEMANTICS.md#fresh-source-admission).
+
+The machine-readable source is
 `contracts/supported-features/lotus-core-supported-features.v1.json` and validated by:
 
 ```powershell

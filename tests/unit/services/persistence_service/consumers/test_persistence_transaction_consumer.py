@@ -5,6 +5,7 @@ import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from portfolio_common.domain.transaction.fx_source_admission import IncompleteFxSourceError
 from portfolio_common.events import TransactionEvent
 from portfolio_common.exceptions import TransactionSemanticConflictError
 from portfolio_common.idempotency_repository import (
@@ -119,10 +120,79 @@ def mock_dependencies():
         ),
     ):
         yield {
+            "db_session": mock_db_session,
             "repo": mock_repo,
             "outbox_repo": mock_outbox_repo,
             "idempotency_repo": mock_idempotency_repo,
         }
+
+
+@pytest.mark.parametrize(
+    "claim",
+    [SemanticEventClaimOutcome.PHYSICAL_DUPLICATE, SemanticEventClaimOutcome.SEMANTIC_DUPLICATE],
+)
+async def test_incomplete_historical_fx_duplicate_skips_fresh_admission(
+    transaction_consumer, valid_transaction_event, mock_kafka_message, mock_dependencies, claim
+) -> None:
+    event = valid_transaction_event.model_copy(
+        update={
+            "transaction_type": "FX_FORWARD",
+            "component_type": "FX_CONTRACT_CLOSE",
+            "fx_realized_pnl_mode": "UPSTREAM_PROVIDED",
+        }
+    )
+    mock_kafka_message.value.return_value = event.model_dump_json().encode()
+    mock_dependencies["idempotency_repo"].claim_semantic_event_processing.return_value = claim
+    await transaction_consumer.process_message(mock_kafka_message)
+    mock_dependencies["repo"].qualifies_identical_durable_replay.assert_not_awaited()
+    mock_dependencies["repo"].create_or_update_transaction.assert_not_awaited()
+    mock_dependencies["outbox_repo"].create_outbox_event.assert_not_awaited()
+
+
+async def test_fresh_incomplete_fx_refuses_after_claim_inside_rollback_uow(
+    transaction_consumer, valid_transaction_event, mock_kafka_message, mock_dependencies
+) -> None:
+    event = valid_transaction_event.model_copy(
+        update={
+            "transaction_type": "FX_FORWARD",
+            "component_type": "FX_CONTRACT_CLOSE",
+            "fx_realized_pnl_mode": "UPSTREAM_PROVIDED",
+        }
+    )
+    mock_kafka_message.value.return_value = event.model_dump_json().encode()
+    mock_dependencies[
+        "idempotency_repo"
+    ].claim_semantic_event_processing.return_value = SemanticEventClaimOutcome.CLAIMED
+    mock_dependencies["repo"].qualifies_identical_durable_replay.return_value = False
+    with pytest.raises(IncompleteFxSourceError) as raised:
+        await transaction_consumer.process_message(mock_kafka_message)
+    assert raised.value.missing_fields == ("realized_fx_pnl_local", "realized_fx_pnl_base")
+    mock_dependencies["idempotency_repo"].claim_semantic_event_processing.assert_awaited_once()
+    exit_args = mock_dependencies["db_session"].begin.return_value.__aexit__.await_args.args
+    assert exit_args[0] is IncompleteFxSourceError
+    mock_dependencies["repo"].create_or_update_transaction.assert_not_awaited()
+    mock_dependencies["outbox_repo"].create_outbox_event.assert_not_awaited()
+
+
+async def test_incomplete_historical_fx_exact_durable_replay_after_fence_expiry(
+    transaction_consumer, valid_transaction_event, mock_kafka_message, mock_dependencies
+) -> None:
+    event = valid_transaction_event.model_copy(
+        update={
+            "transaction_type": "FX_FORWARD",
+            "component_type": "FX_CONTRACT_CLOSE",
+            "fx_realized_pnl_mode": "UPSTREAM_PROVIDED",
+        }
+    )
+    mock_kafka_message.value.return_value = event.model_dump_json().encode()
+    mock_dependencies[
+        "idempotency_repo"
+    ].claim_semantic_event_processing.return_value = SemanticEventClaimOutcome.CLAIMED
+    mock_dependencies["repo"].qualifies_identical_durable_replay.return_value = True
+    await transaction_consumer.process_message(mock_kafka_message)
+    mock_dependencies["repo"].qualifies_identical_durable_replay.assert_awaited_once()
+    mock_dependencies["repo"].create_or_update_transaction.assert_not_awaited()
+    mock_dependencies["outbox_repo"].create_outbox_event.assert_not_awaited()
 
 
 async def test_process_message_success(

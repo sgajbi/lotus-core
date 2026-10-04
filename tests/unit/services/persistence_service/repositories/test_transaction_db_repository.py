@@ -1,6 +1,6 @@
 from datetime import date
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from portfolio_common.database_models import Transaction as DBTransaction
@@ -8,6 +8,9 @@ from portfolio_common.domain.transaction import (
     build_transaction_payload_identity,
     canonical_transaction_identity_record_values,
     transaction_identity_ownership,
+)
+from portfolio_common.domain.transaction.payload_identity import (
+    transaction_payload_legacy_fingerprint,
 )
 from portfolio_common.events import TransactionEvent
 from portfolio_common.exceptions import TransactionSemanticConflictError
@@ -22,6 +25,103 @@ from src.services.persistence_service.app.adapters.event_record_mapper import (
 from src.services.persistence_service.app.repositories.transaction_db_repo import (
     TransactionDBRepository,
 )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("durable", ["absent", "identical", "changed", "foreign"])
+async def test_qualified_durable_fx_replay_never_inserts_or_trusts_mutable_amounts(
+    durable: str,
+) -> None:
+    event = TransactionEvent(
+        transaction_id="FX-DURABLE-REPLAY",
+        portfolio_id="P1",
+        tenant_id="tenant-test",
+        instrument_id="I1",
+        security_id="S1",
+        transaction_date="2026-05-28T10:00:00Z",
+        transaction_type="FX_FORWARD",
+        component_type="FX_CONTRACT_CLOSE",
+        fx_realized_pnl_mode="UPSTREAM_PROVIDED",
+        quantity=Decimal(0),
+        price=Decimal(0),
+        gross_transaction_amount=Decimal(0),
+        trade_currency="USD",
+        currency="USD",
+    )
+    identity = build_transaction_payload_identity(
+        event.model_dump(mode="python"), tenant_id=event.tenant_id
+    )
+    # Enrichment has changed mutable P&L columns; immutable fingerprint is the authority.
+    existing = DBTransaction(
+        transaction_id=event.transaction_id,
+        portfolio_id="FOREIGN" if durable == "foreign" else "P1",
+        payload_fingerprint="sha256:changed"
+        if durable == "changed"
+        else identity.payload_fingerprint,
+        realized_fx_pnl_local=Decimal(100),
+        realized_fx_pnl_base=Decimal(100),
+    )
+    db = AsyncMock(spec=AsyncSession)
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None if durable == "absent" else existing
+    db.execute.return_value = result
+    repo = TransactionDBRepository(db)
+    with patch.object(repo, "resolve_portfolio_tenant", AsyncMock(return_value="foreign-tenant")):
+        if durable in {"changed", "foreign"}:
+            expected = (
+                TransactionSemanticConflictError
+                if durable == "changed"
+                else GeneratedTransactionIdentityCollisionError
+            )
+            with pytest.raises(expected):
+                await repo.qualifies_identical_durable_replay(event)
+        else:
+            assert await repo.qualifies_identical_durable_replay(event) is (durable == "identical")
+    db.execute.assert_awaited_once()
+    assert "FOR UPDATE" in str(db.execute.await_args.args[0])
+    db.flush.assert_not_awaited()
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", [None, Decimal("0"), Decimal("12"), Decimal("-12")])
+async def test_legacy_booked_rate_match_cannot_qualify_ambiguous_upstream_pnl(
+    value: Decimal | None,
+) -> None:
+    event = TransactionEvent(
+        transaction_id="FX-LEGACY",
+        portfolio_id="P1",
+        tenant_id="tenant-test",
+        instrument_id="I1",
+        security_id="S1",
+        transaction_date="2026-05-28T10:00:00Z",
+        transaction_type="FX_FORWARD",
+        quantity=Decimal(0),
+        price=Decimal(0),
+        gross_transaction_amount=Decimal(0),
+        trade_currency="USD",
+        currency="USD",
+        transaction_fx_rate=Decimal("1.1"),
+        transaction_fx_rate_origin="SOURCE_BOOKED",
+        fx_realized_pnl_mode="UPSTREAM_PROVIDED",
+        realized_fx_pnl_base=value,
+    )
+    legacy_hash = transaction_payload_legacy_fingerprint(event.model_dump(mode="python"))
+    existing = DBTransaction(
+        transaction_id=event.transaction_id,
+        portfolio_id=event.portfolio_id,
+        transaction_fx_rate=event.transaction_fx_rate,
+        transaction_fx_rate_origin="LEGACY_UNKNOWN",
+        payload_fingerprint=legacy_hash,
+    )
+    repo = TransactionDBRepository(AsyncMock(spec=AsyncSession))
+    with patch.object(repo, "resolve_portfolio_tenant", AsyncMock(return_value="tenant-test")):
+        assert not await repo._is_qualified_legacy_fx_replay(
+            existing=existing,
+            incoming_event=event,
+            incoming_tenant_id="tenant-test",
+            legacy_payload_fingerprint=legacy_hash,
+        )
 
 
 @pytest.mark.asyncio
@@ -45,6 +145,7 @@ async def test_create_or_update_transaction_requires_admitted_tenant() -> None:
     with pytest.raises(ValueError, match="requires an admitted tenant"):
         await TransactionDBRepository(db).create_or_update_transaction(event)
 
+    assert await TransactionDBRepository(db).qualifies_identical_durable_replay(event) is False
     db.execute.assert_not_awaited()
 
 

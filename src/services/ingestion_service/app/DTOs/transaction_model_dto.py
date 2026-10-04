@@ -9,6 +9,13 @@ from portfolio_common.domain.transaction.fee_components import (
     TRANSACTION_FEE_COMPONENT_FIELDS,
     resolve_transaction_trade_fee,
 )
+from portfolio_common.domain.transaction.fx_source_admission import (
+    FX_NON_REALIZING_SOURCE_COMPONENTS,
+    FX_REALIZED_SOURCE_FIELDS,
+    FX_SOURCE_ADMISSION_TYPES,
+    FX_UPSTREAM_SOURCE_INCOMPLETE,
+    missing_fx_upstream_source_fields,
+)
 from portfolio_common.domain.transaction.interest_economics import (
     INTEREST_NEGATIVE_PRE_FEE_NET_REASON_CODE,
     has_negative_interest_pre_fee_net,
@@ -133,6 +140,33 @@ def _document_transaction_numeric_contract(schema: dict[str, Any]) -> None:
     )
     schema["allOf"].extend(
         [
+            {
+                "if": {
+                    "required": ["transaction_type", "fx_realized_pnl_mode"],
+                    "properties": {
+                        "transaction_type": _normalized_control_code_schema(
+                            *sorted(FX_SOURCE_ADMISSION_TYPES)
+                        ),
+                        "fx_realized_pnl_mode": _normalized_control_code_schema(
+                            "UPSTREAM_PROVIDED"
+                        ),
+                    },
+                    "not": {
+                        "required": ["component_type"],
+                        "properties": {
+                            "component_type": _normalized_control_code_schema(
+                                *sorted(FX_NON_REALIZING_SOURCE_COMPONENTS)
+                            )
+                        },
+                    },
+                },
+                "then": {
+                    "required": list(FX_REALIZED_SOURCE_FIELDS),
+                    "properties": {
+                        field: {"not": {"type": "null"}} for field in FX_REALIZED_SOURCE_FIELDS
+                    },
+                },
+            },
             {
                 "if": {
                     "properties": {
@@ -600,7 +634,9 @@ class Transaction(BaseModel):
         json_schema_extra={"example": "UPSTREAM_PROVIDED"},
         description=(
             "Policy-driven mode for realized FX P&L population, for example "
-            "NONE or UPSTREAM_PROVIDED."
+            "NONE or UPSTREAM_PROVIDED. Fresh applicable UPSTREAM_PROVIDED FX sources require "
+            "both realized_fx_pnl_local and realized_fx_pnl_base; explicit zero is valid. "
+            "FX_CONTRACT_OPEN is non-realizing. Totals cannot replace missing FX evidence."
         ),
     )
     allocated_cost_basis_local: Optional[NonNegativeDecimal] = Field(
@@ -957,6 +993,21 @@ class Transaction(BaseModel):
                 "zero-price redemption"
             )
         return value
+
+    @model_validator(mode="after")
+    def _reject_incomplete_fx_upstream_source(self) -> "Transaction":
+        missing_fields = missing_fx_upstream_source_fields(
+            transaction_type=self.transaction_type,
+            component_type=self.component_type,
+            fx_realized_pnl_mode=self.fx_realized_pnl_mode,
+            realized_fx_pnl_local=self.realized_fx_pnl_local,
+            realized_fx_pnl_base=self.realized_fx_pnl_base,
+        )
+        if missing_fields:
+            raise_ingestion_validation_error(
+                FX_UPSTREAM_SOURCE_INCOMPLETE, field_path=",".join(missing_fields)
+            )
+        return self
 
     @model_validator(mode="after")
     def _aggregate_fee_components(self) -> "Transaction":

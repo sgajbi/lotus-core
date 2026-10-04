@@ -9,9 +9,17 @@ from decimal import Decimal
 from hashlib import sha256
 from typing import Any, Mapping
 
+from .fx_source_admission import FX_SOURCE_ADMISSION_TYPES
+
 TRANSACTION_PAYLOAD_IDENTITY_VERSION = "v1"
 TRANSACTION_PAYLOAD_SOURCE_BOOKED_IDENTITY_VERSION = "v2"
+TRANSACTION_PAYLOAD_UPSTREAM_FX_IDENTITY_VERSION = "v3"
 _SOURCE_BOOKED_FX_ORIGIN = "SOURCE_BOOKED"
+FX_UPSTREAM_PNL_FIELDS = tuple(
+    f"realized_{component}_pnl_{basis}"
+    for basis in ("local", "base")
+    for component in ("capital", "fx", "total")
+)
 
 # Every TransactionEvent field must be classified by the contract test.  These fields
 # are source economic or source-identity facts whose change requires an explicit
@@ -179,9 +187,13 @@ def build_transaction_payload_identity(
         raise ValueError("transaction_id is required for transaction payload identity")
     origin = str(payload.get("transaction_fx_rate_origin") or "").strip().upper()
     identity_version = (
-        TRANSACTION_PAYLOAD_SOURCE_BOOKED_IDENTITY_VERSION
-        if origin == _SOURCE_BOOKED_FX_ORIGIN
-        else TRANSACTION_PAYLOAD_IDENTITY_VERSION
+        TRANSACTION_PAYLOAD_UPSTREAM_FX_IDENTITY_VERSION
+        if has_upstream_fx_pnl_authority(payload)
+        else (
+            TRANSACTION_PAYLOAD_SOURCE_BOOKED_IDENTITY_VERSION
+            if origin == _SOURCE_BOOKED_FX_ORIGIN
+            else TRANSACTION_PAYLOAD_IDENTITY_VERSION
+        )
     )
     return TransactionPayloadIdentity(
         semantic_key=(
@@ -202,6 +214,26 @@ def transaction_payload_fingerprint(payload: Mapping[str, Any]) -> str:
     return _transaction_payload_fingerprint(
         payload,
         include_source_booked_fx=include_source_booked_fx,
+        include_upstream_fx_pnl=has_upstream_fx_pnl_authority(payload),
+    )
+
+
+def has_upstream_fx_pnl_authority(payload: Mapping[str, Any]) -> bool:
+    """Classify raw upstream source amounts, never infer authority from a receipt."""
+    return (
+        str(payload.get("transaction_type") or "").strip().upper() in FX_SOURCE_ADMISSION_TYPES
+        and str(payload.get("fx_realized_pnl_mode") or "").strip().upper() == "UPSTREAM_PROVIDED"
+    )
+
+
+def transaction_payload_pre_upstream_fingerprint(payload: Mapping[str, Any]) -> str:
+    """Retain the exact pre-v3 hash for refusal/compatibility tests, not promotion."""
+    return _transaction_payload_fingerprint(
+        payload,
+        include_source_booked_fx=str(payload.get("transaction_fx_rate_origin") or "")
+        .strip()
+        .upper()
+        == _SOURCE_BOOKED_FX_ORIGIN,
     )
 
 
@@ -215,6 +247,7 @@ def _transaction_payload_fingerprint(
     payload: Mapping[str, Any],
     *,
     include_source_booked_fx: bool,
+    include_upstream_fx_pnl: bool = False,
 ) -> str:
     """Hash the complete classified payload under an explicit compatibility policy."""
 
@@ -229,6 +262,12 @@ def _transaction_payload_fingerprint(
     if include_source_booked_fx:
         material_payload["transaction_fx_rate"] = _canonical_value(
             payload.get("transaction_fx_rate")
+        )
+    if include_upstream_fx_pnl:
+        # This boundary hashes original raw source only. Derived/enriched ledger
+        # amounts and caller calculation receipts cannot reconstruct missing source.
+        material_payload.update(
+            {name: _canonical_value(payload.get(name)) for name in FX_UPSTREAM_PNL_FIELDS}
         )
     canonical = json.dumps(
         material_payload,

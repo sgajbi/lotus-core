@@ -21,6 +21,7 @@ from portfolio_common.domain.transaction import (
     canonical_transaction_identity_record_values,
     transaction_identity_ownership,
 )
+from portfolio_common.domain.transaction.payload_identity import has_upstream_fx_pnl_authority
 from portfolio_common.events import TransactionEvent
 from portfolio_common.exceptions import TransactionSemanticConflictError
 from portfolio_common.infrastructure.persistence.transaction_identity_guard import (
@@ -175,7 +176,8 @@ class TransactionDBRepository:
         """Allow only an economically identical replay of an UNKNOWN pre-c175 row."""
 
         if (
-            existing.transaction_fx_rate_origin not in {None, "LEGACY_UNKNOWN"}
+            has_upstream_fx_pnl_authority(incoming_event.model_dump(mode="python"))
+            or existing.transaction_fx_rate_origin not in {None, "LEGACY_UNKNOWN"}
             or incoming_event.transaction_fx_rate_origin != "SOURCE_BOOKED"
             or existing.portfolio_id != incoming_event.portfolio_id
             or existing.transaction_fx_rate is None
@@ -252,6 +254,38 @@ class TransactionDBRepository:
         ):
             return False
         return await self.qualifies_legacy_fx_replay(event)
+
+    async def qualifies_identical_durable_replay(self, event: TransactionEvent) -> bool:
+        """Qualify a replay after fence expiry without admitting a fresh ledger write.
+
+        Reuse the immutable write-boundary identity/ownership checks under the
+        same row lock. Caller lineage or mutable enriched values grant no bypass.
+        A changed or foreign durable identity retains its existing refusal.
+        """
+        if event.tenant_id is None:
+            return False
+        ownership = transaction_identity_ownership(event)
+        existing = (
+            await self.db.execute(
+                select(DBTransaction)
+                .where(DBTransaction.transaction_id == ownership.transaction_id)
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if existing is None:
+            return False
+        canonical_payload = canonical_transaction_identity_record_values(
+            event.model_dump(mode="python"), ownership
+        )
+        identity = build_transaction_payload_identity(canonical_payload, tenant_id=event.tenant_id)
+        await self._require_identical_durable_replay(
+            existing=existing,
+            incoming_ownership=ownership,
+            incoming_tenant_id=event.tenant_id,
+            incoming_payload_identity=identity,
+            incoming_event=event,
+        )
+        return True
 
     async def create_or_update_transaction(
         self,

@@ -107,6 +107,14 @@ Current router groups inside `query_control_plane_service` are:
 
 Write-ingress contracts for source-data and adapter upload flows.
 
+Fresh applicable FX `UPSTREAM_PROVIDED` sources require both local/base FX P&L; zero is valid.
+Incomplete single requests and invalid mixed batches return HTTP 422 /
+`FX_UPSTREAM_SOURCE_INCOMPLETE` before publication/job creation, including historical HTTP
+resubmissions. `FX_CONTRACT_OPEN`/`NONE` are exempt. This is strict-forward admission, not a
+historical reader or correction upgrade. See the
+[FX admission policy](https://github.com/sgajbi/lotus-core/blob/main/docs/rfc-transaction-specs/transactions/FX/FX-SLICE-6-PNL-SEMANTICS.md#fresh-source-admission)
+for raw identity, replay limits and required native database evidence.
+
 See also:
 
 - [Ingestion Service](Ingestion-Service)

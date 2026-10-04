@@ -56,6 +56,16 @@ server-resolved cash security remains derived context and never rewrites source 
 
 ## Business And Domain Responsibility
 
+Fresh applicable canonical FX `UPSTREAM_PROVIDED` ingestion requires both local/base FX P&L;
+explicit zero is source evidence and totals cannot replace missing FX. Shared domain admission
+governs HTTP and raw persistence; `FX_CONTRACT_OPEN`/`NONE` are exempt. HTTP resubmission is
+strict-forward. Broker duplicates precede admission inside the existing UOW; fresh refusal must
+leave no ledger/outbox/fence. Locked immutable v3 durable identity can qualify exact replay after
+fence expiry. Raw upstream v3 hashes all six original P&L fields; ambiguous P&L-excluding v1/v2
+identity cannot qualify upstream replay or promote stored zero. No historical row, calculation,
+reader, receipt or correction command changes. Native candidate-specific PG proof is routed through
+`transaction-fx-contract` and `critical-db-coverage`; unit mocks are not durable evidence.
+
 Core owns:
 
 1. tenant-owned portfolio, account, holding, instrument, mandate, and transaction records;

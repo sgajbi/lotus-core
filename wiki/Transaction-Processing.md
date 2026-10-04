@@ -19,6 +19,15 @@ transaction domain; valuation, timeseries, and downstream analytics remain separ
 
 ## Processing Flow
 
+Before processing, fresh applicable FX `UPSTREAM_PROVIDED` sources require local/base FX P&L;
+zero and signed amounts are valid. HTTP rejects incomplete sources before publication. Raw
+persistence handles exact duplicates first, then admission in the existing UOW; fresh refusal
+leaves no ledger/outbox/fence. Exact locked v3 durable replay may qualify after fence expiry;
+ambiguous P&L-excluding pre-v3 identity cannot promote stored zero. No reader, calculation or
+historical row is rewritten. A complete source after first refusal is first booking, not correction.
+See the [FX admission policy](https://github.com/sgajbi/lotus-core/blob/main/docs/rfc-transaction-specs/transactions/FX/FX-SLICE-6-PNL-SEMANTICS.md#fresh-source-admission)
+and its candidate-specific PG matrix. Captured publication is not live Kafka certification.
+
 1. The live or replay-request consumer receives the existing governed transaction event.
 2. Infrastructure maps the event DTO to immutable `BookedTransaction` domain data.
 3. The application use case coordinates cost, cashflow, and position modules through ports.

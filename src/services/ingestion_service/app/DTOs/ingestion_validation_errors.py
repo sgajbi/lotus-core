@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Hashable, Iterable, Mapping
 from typing import Any, Literal
 
+from portfolio_common.domain.transaction.fx_source_admission import FX_UPSTREAM_SOURCE_INCOMPLETE
 from portfolio_common.domain.transaction.interest_economics import (
     INTEREST_NEGATIVE_PRE_FEE_NET_REASON_CODE,
 )
@@ -26,6 +27,13 @@ BLANK_IDENTIFIER = "BLANK_IDENTIFIER"
 INTEREST_NEGATIVE_PRE_FEE_NET = INTEREST_NEGATIVE_PRE_FEE_NET_REASON_CODE
 
 INGESTION_VALIDATION_TAXONOMY: dict[str, dict[str, str]] = {
+    FX_UPSTREAM_SOURCE_INCOMPLETE: {
+        "message": "Applicable UPSTREAM_PROVIDED FX source requires local and base FX P&L.",
+        "remediation": (
+            "Provide realized_fx_pnl_local and realized_fx_pnl_base, including explicit zero "
+            "when supplied by the source. Totals do not replace missing FX evidence."
+        ),
+    },
     SCHEMA_VALIDATION_FAILED: {
         "message": "Payload failed schema validation.",
         "remediation": "Correct the field value according to the published ingestion schema.",

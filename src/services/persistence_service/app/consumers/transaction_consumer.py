@@ -9,6 +9,10 @@ from portfolio_common.domain.transaction import (
     TransactionPayloadIdentity,
     build_transaction_payload_identity,
 )
+from portfolio_common.domain.transaction.fx_source_admission import (
+    IncompleteFxSourceError,
+    missing_fx_upstream_source_fields,
+)
 from portfolio_common.event_mapping import transaction_event_v1_payload
 from portfolio_common.events import TransactionEvent
 from portfolio_common.logging_utils import log_operation_event
@@ -125,6 +129,19 @@ class TransactionPersistenceConsumer(GenericPersistenceConsumer):
         Returns the event for outbox creation.
         """
         repo = TransactionDBRepository(db_session)
+        # GenericPersistenceConsumer has already handled exact duplicates. A fresh
+        # refusal raises inside its UOW, rolling back the attempted event claim.
+        missing_fields = missing_fx_upstream_source_fields(
+            transaction_type=event.transaction_type,
+            component_type=event.component_type,
+            fx_realized_pnl_mode=event.fx_realized_pnl_mode,
+            realized_fx_pnl_local=event.realized_fx_pnl_local,
+            realized_fx_pnl_base=event.realized_fx_pnl_base,
+        )
+        if missing_fields:
+            if await repo.qualifies_identical_durable_replay(event) is True:
+                return None
+            raise IncompleteFxSourceError(missing_fields)
         reference_availability = await repo.resolve_transaction_reference_availability(
             portfolio_id=event.portfolio_id,
             tenant_id=event.tenant_id,
