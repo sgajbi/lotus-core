@@ -305,7 +305,37 @@ A new rights-election type belongs at rank 1, before delivery and refund. Left u
 Nothing errors; the legs simply process in the wrong order, and cost and position results follow
 that order. Add the rank and cover it with both cost-ordering and position-ordering tests.
 
-## 3. Testing
+## 3. Acquisition Lot Dependency Admission
+
+An incremental disposal can include an earlier acquisition in its cost-history prefix even when
+that acquisition is not an incoming transaction. Before reconciling disposal allocations, the
+cost-persistence plan admits eligible lot-opening prefix transactions through
+`ensure_acquisition_lot_parent()`. This is dependency admission, not a replay of the acquisition's
+settlement cash, cashflow, or other child effects.
+
+The PostgreSQL adapter locks the durable acquisition transaction and its portfolio, verifies the
+incoming stream's resolved tenant and the source's portfolio, security, instrument, date, quantity,
+and transaction type, then inserts the canonical opening-lot payload only if its unique identity is
+absent. An existing matching parent is not refreshed: residual quantity, basis, amortized carry,
+lineage, and audit timestamps remain owned by the existing lot-state transitions. Conflicting
+source or lot identities fail closed. Admission and subsequent disposal persistence share the
+caller's transaction, so a later refusal rolls the parent insertion back.
+
+Do not use this boundary to reseed financial state or to force a failed runtime into recovery.
+Initial acquisitions and ordinary existing-lot disposal/delivery retry keep their normal paths.
+The allocation dependency FK (`23503`, `fk_lot_disposal_allocation_lot_scope`) is classified as
+`MissingSourceLotDisposalDependencyError`, separately from the recognized receipt-version unique
+collisions (`23505`, `ConflictingLotDisposalReceiptError`); unrelated integrity errors propagate.
+
+Real PostgreSQL regression coverage lives in
+`tests/integration/services/portfolio_transaction_processing_service/test_cost_basis_lot_disposal_admission_postgresql.py`
+and is selected by `critical-db-coverage`. It covers missing and present parents, tenant/source
+refusal, rollback, initial acquisition, incremental disposal, repeated delivery, and real FK versus
+receipt-version collision diagnostics. Unit proof alone does not establish PostgreSQL locking or
+constraint behavior; neither this regression nor a repaired-worker ingress/replay campaign proves
+a same-database baseline-to-upgraded-worker failure checkpoint.
+
+## 4. Testing
 
 ```bash
 pytest tests/unit/services/portfolio_transaction_processing_service/domain/cost_basis/

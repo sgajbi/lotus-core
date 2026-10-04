@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock, call
+from unittest.mock import AsyncMock, Mock, call
 
 import pytest
 
@@ -53,6 +53,7 @@ def _calculated_transaction(
         trade_currency="USD",
         portfolio_base_currency="USD",
         fees={"brokerage": fee},
+        tenant_id="TENANT-1",
     )
 
 
@@ -119,6 +120,9 @@ async def test_full_rebuild_persists_missing_prefix_economics_without_replaying_
     incoming = _calculated_transaction("BUY-BACKDATED")
     later = _calculated_transaction("SELL-LATER", transaction_type="SELL")
     repository, lot_states, income_offsets, observer = _ports()
+    writes = Mock()
+    writes.attach_mock(lot_states.ensure_acquisition_lot_parent, "parent")
+    writes.attach_mock(repository.apply_transaction_costs_and_replace_breakdown, "economics")
     repository.apply_transaction_costs_and_replace_breakdown.side_effect = [
         _booked_transaction(prior),
         _booked_transaction(incoming),
@@ -144,6 +148,32 @@ async def test_full_rebuild_persists_missing_prefix_economics_without_replaying_
     ]
     lot_states.upsert_buy_lot_state.assert_awaited_once_with(incoming)
     income_offsets.upsert_accrued_income_offset.assert_awaited_once_with(incoming)
+    lot_states.ensure_acquisition_lot_parent.assert_awaited_once_with(prior, tenant_id="TENANT-1")
+    assert writes.mock_calls[:2] == [
+        call.parent(prior, tenant_id="TENANT-1"),
+        call.economics(prior),
+    ]
+
+
+async def test_parent_admission_refuses_unresolved_command_tenant_before_writes() -> None:
+    prior = _calculated_transaction("BUY-PRIOR")
+    incoming = _calculated_transaction("SELL-INCOMING", transaction_type="SELL")
+    incoming.tenant_id = None
+    repository, lot_states, income_offsets, observer = _ports()
+    with pytest.raises(ValueError, match="resolved incoming stream tenant"):
+        await persist_cost_basis_transactions(
+            processed=[prior, incoming],
+            incoming_transaction_ids={incoming.transaction_id},
+            transactions=repository,
+            lot_states=lot_states,
+            income_offsets=income_offsets,
+            observer=observer,
+            persistence_scope=CostBasisTransactionPersistenceScope.REBUILD_AUTHORITY,
+            missing_authority_transaction_ids={prior.transaction_id},
+        )
+    repository.apply_transaction_costs_and_replace_breakdown.assert_not_awaited()
+    lot_states.ensure_acquisition_lot_parent.assert_not_awaited()
+    income_offsets.upsert_accrued_income_offset.assert_not_awaited()
 
 
 async def test_persistence_rejects_timeline_without_incoming_transaction_before_writes() -> None:

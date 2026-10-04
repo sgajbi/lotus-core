@@ -56,7 +56,22 @@ async def persist_cost_basis_transactions(
     affected_transaction_ids = {
         transaction.transaction_id for transaction in persistence_plan.child_state_transactions
     }
+    acquisition_parent_ids = {
+        transaction.transaction_id
+        for transaction in persistence_plan.acquisition_parent_transactions
+    }
     for transaction in persistence_plan.economics_transactions:
+        if transaction.transaction_id in acquisition_parent_ids:
+            # Dependency admission is not child-effect replay. The caller's UOW owns
+            # this absent-only write and the subsequent disposal reconciliation.
+            await lot_states.ensure_acquisition_lot_parent(
+                transaction,
+                tenant_id=_acquisition_parent_tenant(
+                    transaction,
+                    processed=processed,
+                    incoming_transaction_ids=incoming_transaction_ids,
+                ),
+            )
         persisted = await _persist_cost_basis_transaction(
             transaction=transaction,
             transactions=transactions,
@@ -74,6 +89,30 @@ async def persist_cost_basis_transactions(
         if transaction.transaction_id in incoming_transaction_ids:
             newly_persisted.append(persisted)
     return tuple(newly_persisted)
+
+
+def _acquisition_parent_tenant(
+    parent: CostBasisTransaction,
+    *,
+    processed: list[CostBasisTransaction],
+    incoming_transaction_ids: set[str],
+) -> str:
+    # Historical DB transactions carry no tenant column. Borrow only the resolved
+    # incoming command authority for the same stream; the adapter verifies it
+    # against the source's durable portfolio owner before inserting a parent.
+    tenant_ids = {
+        getattr(transaction, "tenant_id", None)
+        for transaction in processed
+        if transaction.transaction_id in incoming_transaction_ids
+        and transaction.portfolio_id == parent.portfolio_id
+        and transaction.security_id == parent.security_id
+    }
+    if len(tenant_ids) != 1:
+        raise ValueError("Acquisition lot parent requires one incoming stream tenant")
+    tenant_id = tenant_ids.pop()
+    if not isinstance(tenant_id, str) or not tenant_id.strip():
+        raise ValueError("Acquisition lot parent requires a resolved incoming stream tenant")
+    return tenant_id
 
 
 async def _persist_cost_basis_transaction(

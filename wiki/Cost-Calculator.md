@@ -199,6 +199,14 @@ lineage with set-based exact-residual SQL. Full rebuilds, basis transfers, and u
 actions retain complete snapshots. Existing AVCO portfolios require governed historical backfill
 before source evidence can be declared current after cutover.
 
+Incremental disposals admit an absent, tenant-qualified acquisition lot from the earlier cost
+history before persisting allocations. This does not replay the acquisition's cash or other child
+effects, and a matching existing lot is preserved rather than reset. Conflicting source/lot identity
+fails closed in the same transaction. See the
+[acquisition lot dependency boundary](https://github.com/sgajbi/lotus-core/blob/main/docs/features/cost_calculator/05_Developer_Guide.md#3-acquisition-lot-dependency-admission)
+for PostgreSQL regression coverage and the distinction from baseline-to-upgraded-worker recovery
+certification.
+
 Same-instrument splits, reverse splits, consolidations, bonus issues, and stock dividends restate
 both original and open FIFO/AVCO lot quantity using one exact before/after ratio. Local and base
 basis remain unchanged, so later disposals consume the restated per-unit cost. If even one lot would

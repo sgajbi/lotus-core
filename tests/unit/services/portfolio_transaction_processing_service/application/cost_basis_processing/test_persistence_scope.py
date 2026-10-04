@@ -71,6 +71,7 @@ def test_rebuild_authority_scope_includes_only_ungoverned_calculated_prefix() ->
 
     assert plan.economics_transactions == (earlier, incoming, later)
     assert plan.child_state_transactions == (incoming, later)
+    assert plan.acquisition_parent_transactions == (earlier,)
 
 
 def test_rebuild_authority_scope_does_not_rewrite_governed_prefix() -> None:
@@ -86,6 +87,7 @@ def test_rebuild_authority_scope_does_not_rewrite_governed_prefix() -> None:
 
     assert plan.economics_transactions == (incoming, later)
     assert plan.child_state_transactions == (incoming, later)
+    assert plan.acquisition_parent_transactions == ()
 
 
 def test_affected_suffix_scope_preserves_incremental_write_boundary() -> None:
@@ -101,3 +103,18 @@ def test_affected_suffix_scope_preserves_incremental_write_boundary() -> None:
 
     assert plan.economics_transactions == (incoming, later)
     assert plan.child_state_transactions == (incoming, later)
+    assert plan.acquisition_parent_transactions == ()
+
+
+def test_parent_admission_excludes_missing_prefix_disposals_and_incremental_history() -> None:
+    earlier = _transaction("SELL-EARLIER", 1)
+    earlier.transaction_type = "SELL"
+    incoming = _transaction("BUY-INCOMING", 2)
+    for scope in CostBasisTransactionPersistenceScope:
+        plan = build_cost_basis_persistence_plan(
+            processed=[earlier, incoming],
+            incoming_transaction_ids={incoming.transaction_id},
+            scope=scope,
+            missing_authority_transaction_ids={earlier.transaction_id, incoming.transaction_id},
+        )
+        assert plan.acquisition_parent_transactions == ()

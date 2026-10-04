@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -18,6 +19,7 @@ from portfolio_common.domain.cost_basis_method import CostBasisMethod
 from portfolio_common.domain.cost_basis_receipt_integrity import (
     canonical_cost_basis_output_payload,
 )
+from sqlalchemy.exc import IntegrityError
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     AmortizedCostAllocationEvidence,
@@ -30,6 +32,48 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     lot_disposal_repository,
 )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "sqlstate,constraint,expected",
+    [
+        ("23503", "fk_lot_disposal_allocation_lot_scope", "dependency"),
+        ("23505", "uq_lot_disposal_receipt_version", "version"),
+        ("23505", "uq_lot_disposal_transaction_version", "version"),
+        ("23505", "uq_lot_disposal_receipt_scope_version", "version"),
+        ("23503", "different_foreign_key", "original"),
+        ("23505", "different_unique_constraint", "original"),
+        ("23514", "fk_lot_disposal_allocation_lot_scope", "original"),
+        ("23503", None, "original"),
+        (None, None, "original"),
+    ],
+)
+async def test_append_classifies_only_structured_known_integrity_failures(
+    sqlstate, constraint, expected, monkeypatch
+) -> None:
+    driver = Exception("message is not diagnostic authority")
+    driver.sqlstate = sqlstate
+    driver.diag = SimpleNamespace(constraint_name=constraint)
+    wrapper = Exception("asyncpg wrapper")
+    wrapper.__cause__ = driver
+    original = IntegrityError("INSERT", {}, wrapper)
+    session = AsyncMock()
+    session.execute.side_effect = original
+    repository = lot_disposal_repository.SqlAlchemyCostBasisLotDisposalRepository(session)
+    monkeypatch.setattr(repository, "_load_receipt_chains", AsyncMock(return_value={}))
+    monkeypatch.setattr(repository, "_load_allocations", AsyncMock(return_value={}))
+    error_type = {
+        "dependency": lot_disposal_repository.MissingSourceLotDisposalDependencyError,
+        "version": lot_disposal_repository.ConflictingLotDisposalReceiptError,
+        "original": IntegrityError,
+    }[expected]
+    with pytest.raises(error_type) as raised:
+        await repository.reconcile_disposal_receipts(receipt_states=(_active_state(),))
+    if expected == "original":
+        assert raised.value is original
+    else:
+        assert raised.value.__cause__ is original
 
 
 def _lineage(algorithm_id: str) -> CalculationLineage:

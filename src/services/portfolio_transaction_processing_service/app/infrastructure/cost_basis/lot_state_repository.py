@@ -3,21 +3,28 @@
 from decimal import Decimal
 from typing import cast
 
-from portfolio_common.database_models import PositionLotState
+from portfolio_common.database_models import Portfolio, PositionLotState
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.domain.calculation_lineage import (
     CalculationLineage,
     calculation_lineage_from_payload,
 )
+from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
 from portfolio_common.identifiers import normalize_lookup_identifier
 from portfolio_common.utils import async_timed
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.postgresql.dml import Insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
-from ...domain.cost_basis import AmortizedCostCarryState, CostBasisTransaction, OpenLotState
+from ...domain.cost_basis import (
+    LOT_OPENING_BEHAVIORS,
+    AmortizedCostCarryState,
+    CostBasisTransaction,
+    OpenLotState,
+    transaction_lot_behavior,
+)
 from ...domain.cost_basis.state_lineage import (
     CostBasisStateTransitionEvidence,
     build_cost_basis_state_lineage,
@@ -88,6 +95,62 @@ class SqlAlchemyCostBasisLotRepository:
         """Idempotently persist the lot opened by a purchase transaction."""
 
         await self._session.execute(buy_lot_state_upsert_statement(transaction))
+
+    async def ensure_acquisition_lot_parent(
+        self, transaction: CostBasisTransaction, *, tenant_id: str
+    ) -> None:
+        """Validate durable source authority, then insert only an absent acquisition lot.
+
+        A conflicting existing lot is never repaired or refreshed here. In particular,
+        residual quantity, amortized carry, lineage and audit timestamps remain owned
+        by the existing complete/selected lot-state transitions.
+        """
+        source_tenant_assertion = getattr(transaction, "tenant_id", None)
+        if (
+            transaction_lot_behavior(transaction.transaction_type) not in LOT_OPENING_BEHAVIORS
+            or not transaction.quantity.is_finite()
+            or transaction.quantity <= 0
+            or not isinstance(tenant_id, str)
+            or not tenant_id.strip()
+            or (source_tenant_assertion is not None and source_tenant_assertion != tenant_id)
+        ):
+            raise ValueError("Acquisition lot parent requires an eligible tenant-scoped source")
+        source = (
+            await self._session.execute(
+                select(DBTransaction, Portfolio)
+                .join(Portfolio, Portfolio.portfolio_id == DBTransaction.portfolio_id)
+                .where(DBTransaction.transaction_id == transaction.transaction_id)
+                .with_for_update(of=(DBTransaction, Portfolio))
+                .execution_options(populate_existing=True)
+            )
+        ).one_or_none()
+        if source is None:
+            raise ValueError("Acquisition lot parent requires a durable source transaction")
+        source_transaction, portfolio = source
+        _require_acquisition_source_identity(transaction, source_transaction, portfolio, tenant_id)
+
+        inserted = await self._session.execute(acquisition_lot_parent_insert_statement(transaction))
+        if inserted.scalar_one_or_none() is not None:
+            return
+        existing = (
+            (
+                await self._session.execute(
+                    select(PositionLotState)
+                    .where(
+                        or_(
+                            PositionLotState.source_transaction_id == transaction.transaction_id,
+                            PositionLotState.lot_id == f"LOT-{transaction.transaction_id}",
+                        )
+                    )
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if len(existing) != 1 or not _same_acquisition_parent_identity(existing[0], transaction):
+            raise ValueError("Acquisition lot parent conflicts with durable source identity")
 
     @async_timed(repository="CostBasisLotRepository", method="update_open_lot_states")
     async def update_open_lot_states(
@@ -236,6 +299,48 @@ def buy_lot_state_upsert_statement(transaction: CostBasisTransaction) -> Insert:
     return statement.on_conflict_do_update(
         index_elements=["source_transaction_id"],
         set_=mutable_lot_state_fields(statement),
+    )
+
+
+def acquisition_lot_parent_insert_statement(transaction: CostBasisTransaction) -> Insert:
+    """Use canonical opening-lot payload and refuse to overwrite any unique identity."""
+    return (
+        pg_insert(PositionLotState)
+        .values(**buy_lot_state_payload(transaction))
+        .on_conflict_do_nothing()
+        .returning(PositionLotState.lot_id)
+    )
+
+
+def _require_acquisition_source_identity(
+    candidate: CostBasisTransaction,
+    source: DBTransaction,
+    portfolio: Portfolio,
+    tenant_id: str,
+) -> None:
+    if (
+        portfolio.tenant_id != tenant_id
+        or source.portfolio_id != candidate.portfolio_id
+        or source.security_id != candidate.security_id
+        or source.instrument_id != candidate.instrument_id
+        or source.transaction_date != candidate.transaction_date
+        or source.quantity != candidate.quantity
+        or normalize_transaction_control_code(source.transaction_type)
+        != normalize_transaction_control_code(candidate.transaction_type)
+    ):
+        raise ValueError("Acquisition lot parent conflicts with durable source scope")
+
+
+def _same_acquisition_parent_identity(
+    lot: PositionLotState, transaction: CostBasisTransaction
+) -> bool:
+    return bool(
+        lot.lot_id == f"LOT-{transaction.transaction_id}"
+        and lot.source_transaction_id == transaction.transaction_id
+        and lot.portfolio_id == transaction.portfolio_id
+        and lot.security_id == transaction.security_id
+        and lot.instrument_id == transaction.instrument_id
+        and lot.acquisition_date == transaction.transaction_date.date()
     )
 
 
