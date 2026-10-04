@@ -101,6 +101,60 @@ async def test_get_position_lots(mock_buy_state_repo: AsyncMock):
         )
 
 
+@pytest.mark.parametrize(
+    "quantity",
+    [
+        "100.0000000000",
+        "0.1234567890",
+        "0.0000000001",
+        "12345678.1234567890",
+        "99999999.9999999998",
+        "99999999.9999999999",
+        "0.0000000000",
+    ],
+)
+async def test_get_position_lots_preserves_exact_quantities(mock_buy_state_repo, quantity):
+    source = mock_buy_state_repo.get_position_lots.return_value[0]
+    source.original_quantity = Decimal(quantity)
+    source.open_quantity = Decimal(quantity)
+    source.economic_event_id = "EVT-1"
+    source.source_system = "OMS_PRIMARY"
+    with patch(
+        "src.services.query_service.app.services.buy_state_service.BuyStateRepository",
+        return_value=mock_buy_state_repo,
+    ):
+        response = await BuyStateService(AsyncMock()).get_position_lots(
+            "PORT-1", "US0378331005", tenant_context=TEST_TENANT_CONTEXT
+        )
+    lot = response.lots[0]
+    assert Decimal(str(lot.original_quantity)) == source.original_quantity
+    assert Decimal(str(lot.open_quantity)) == source.open_quantity
+    assert isinstance(lot.original_quantity, Decimal)
+    assert isinstance(lot.open_quantity, Decimal)
+    assert lot.original_quantity == source.original_quantity
+    assert lot.open_quantity == source.open_quantity
+    assert lot.lot_cost_local == source.lot_cost_local
+    assert lot.lot_cost_base == source.lot_cost_base
+    assert lot.economic_event_id == "EVT-1"
+    assert lot.source_system == "OMS_PRIMARY"
+
+
+async def test_get_position_lots_refuses_foreign_portfolio_before_read(mock_buy_state_repo):
+    mock_buy_state_repo.portfolio_exists.return_value = False
+    with patch(
+        "src.services.query_service.app.services.buy_state_service.BuyStateRepository",
+        return_value=mock_buy_state_repo,
+    ):
+        with pytest.raises(LookupError, match="Portfolio with id PORT-1 not found"):
+            await BuyStateService(AsyncMock()).get_position_lots(
+                "PORT-1", "US0378331005", tenant_context=TEST_TENANT_CONTEXT
+            )
+    mock_buy_state_repo.portfolio_exists.assert_awaited_once_with(
+        "PORT-1", tenant_id=TEST_TENANT_CONTEXT.tenant_id
+    )
+    mock_buy_state_repo.get_position_lots.assert_not_awaited()
+
+
 async def test_get_position_lots_uses_shared_portfolio_validation(
     mock_buy_state_repo: AsyncMock,
 ) -> None:
