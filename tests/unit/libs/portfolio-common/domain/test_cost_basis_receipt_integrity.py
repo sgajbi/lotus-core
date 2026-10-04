@@ -5,12 +5,69 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+from portfolio_common.domain.calculation_lineage import build_calculation_lineage
 from portfolio_common.domain.cost_basis_receipt_integrity import (
+    LOT_DISPOSAL_LINEAGE_ALGORITHM_ID,
+    LOT_DISPOSAL_LINEAGE_ALGORITHM_VERSION,
     basis_transfer_lineage_input_payload,
     basis_transfer_lineage_output_payload,
+    lot_disposal_lineage_input_payload,
+    lot_disposal_lineage_output_payload,
     receipt_version_content_hash,
+    verify_active_lot_disposal_lineage,
     verify_cost_basis_receipt_version_chain,
 )
+from portfolio_common.domain.transaction.numeric_policy import COST_BASIS_STATE_LEDGER_OUTPUT_V1
+
+
+@pytest.mark.parametrize(
+    "violation,reason",
+    [
+        ("missing", "lacks disposal lineage"),
+        ("algorithm", "algorithm identity"),
+        ("version", "algorithm identity"),
+        ("policy", "numeric policy"),
+        ("precision", "numeric policy"),
+        ("input", "persisted inputs"),
+        ("output", "persisted outputs"),
+        ("valid", None),
+    ],
+)
+def test_active_disposal_lineage_is_bound_to_governed_persisted_facts(violation, reason) -> None:
+    allocations = [{"source_lot_id": "LOT-1", "consumed_quantity": Decimal("2")}]
+    lineage = build_calculation_lineage(
+        algorithm_id=("foreign" if violation == "algorithm" else LOT_DISPOSAL_LINEAGE_ALGORITHM_ID),
+        algorithm_version=(1 if violation == "version" else LOT_DISPOSAL_LINEAGE_ALGORITHM_VERSION),
+        intermediate_precision=(
+            1 if violation == "precision" else COST_BASIS_STATE_LEDGER_OUTPUT_V1.working_precision
+        ),
+        numeric_output_policy=(
+            None if violation == "policy" else COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity()
+        ),
+        input_payload=(
+            {"source": "unrelated"}
+            if violation == "input"
+            else lot_disposal_lineage_input_payload(allocations)
+        ),
+        output_payload=lot_disposal_lineage_output_payload(
+            consumed_cost_base=Decimal("24"),
+            consumed_cost_local=Decimal("20"),
+            consumed_quantity=Decimal("3" if violation == "output" else "2"),
+        ),
+    )
+    kwargs = dict(
+        allocation_payloads=allocations,
+        consumed_cost_base=Decimal("24.0000000000"),
+        consumed_cost_local=Decimal("20.0000000000"),
+        consumed_quantity=Decimal("2.0000000000"),
+    )
+    if reason is None:
+        verify_active_lot_disposal_lineage(lineage, **kwargs)
+    else:
+        with pytest.raises(ValueError, match=reason):
+            verify_active_lot_disposal_lineage(
+                None if violation == "missing" else lineage, **kwargs
+            )
 
 
 @dataclass(frozen=True)

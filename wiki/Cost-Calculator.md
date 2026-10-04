@@ -314,6 +314,20 @@ read from the immutable receipt evidence already covered by its content hash; th
 if persisted evidence cannot be reconstructed. Nullable fields remain absent for legacy or
 non-amortized allocations.
 
+Persisted ACTIVE disposal evidence is admitted through one shared worker/query predicate: the
+governed algorithm and numeric policy must match, and lineage hashes must bind the actual ordered
+allocations and consumed quantity/local/base costs. Retry and correction inspect every retained
+version, so a valid latest receipt cannot hide corrupt earlier ACTIVE evidence. Existing scope,
+outer hashes, and version-chain guards remain; VOIDED evidence keeps its separate zero-value,
+no-lineage contract. Valid governed ledger-scale history remains admissible without rewriting it.
+
+On refusal, roll back the local financial unit of work and obtain an owning-issue recovery
+disposition; do not delete or rehash history to bypass admission. See
+[Persisted Disposal-Lineage Admission](https://github.com/sgajbi/lotus-core/blob/main/docs/features/cost_calculator/05_Developer_Guide.md#persisted-disposal-lineage-admission)
+for exact versions, numerical policy, and evidence requirements. Authored PostgreSQL controls
+require actual execution, not collection, before runtime qualification. This boundary does not
+claim whole-issue #481 provenance closure or AVCO qualification.
+
 ## Why it matters
 
 If cost calculation is wrong:

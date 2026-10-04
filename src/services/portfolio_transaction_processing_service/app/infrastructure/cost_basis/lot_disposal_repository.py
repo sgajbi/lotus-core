@@ -15,6 +15,7 @@ from portfolio_common.domain.calculation_lineage import (
 )
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
 from portfolio_common.domain.cost_basis_receipt_integrity import (
+    verify_active_lot_disposal_lineage,
     verify_cost_basis_receipt_version_chain,
 )
 from sqlalchemy import select
@@ -295,6 +296,16 @@ def _verified_state(
         )
         if str(record.receipt_content_hash) != expected_receipt_hash:
             raise ValueError("receipt content hash does not match reconstructed version")
+        if state.status is LotDisposalReceiptStatus.ACTIVE:
+            verify_active_lot_disposal_lineage(
+                state.disposal_calculation_lineage,
+                allocation_payloads=[
+                    source_lot_disposal_allocation_payload(item) for item in state.allocations
+                ],
+                consumed_cost_base=state.consumed_cost_base,
+                consumed_cost_local=state.consumed_cost_local,
+                consumed_quantity=state.consumed_quantity,
+            )
         return state
     except (TypeError, ValueError) as exc:
         raise CorruptLotDisposalReceiptError(
