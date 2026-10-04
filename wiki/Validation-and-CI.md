@@ -21,6 +21,14 @@ smallest evidence command for a change, then cite generated artifacts from the r
 
 ## Full integration diagnostics
 
+Main Releasability admits Integration Full alongside its test/coverage matrix after
+lint/typecheck/contracts/security, with the existing Windows lock and exact-SHA admission chain.
+It uses its own hosted runner and consumes no coverage artifact. The complete suite, runtime
+isolation, 90-minute timeout and diagnostics below are unchanged. Combined coverage still gates
+Docker build and downstream runtime jobs; successful integration does not override a failed
+coverage or other required release job. Compare exact-revision job timestamps and total makespan
+before claiming a speed improvement; overlapping admission alone is not measured acceleration.
+
 From the `lotus-core` repository root, `make test-integration-all` retains individual test progress,
 prints Python thread stacks after a test has run for 120 seconds, and writes completed test results
 to `output/integration-all/integration-all-results.xml`. It also appends each started test and

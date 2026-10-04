@@ -411,7 +411,7 @@ jobs:
 
   integration-all:
     name: Main Releasability / Integration Full
-    needs: [coverage-gate]
+    needs: [lint-typecheck-contracts-security]
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:

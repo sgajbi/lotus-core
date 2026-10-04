@@ -326,6 +326,14 @@ Workflow optimizations must preserve required checks, exact-source identity, war
 policies, complete main certification, and final wiki parity. A merged-and-validated slice—not a
 passing narrow test or issue count—is the unit of delivery.
 
+Main Releasability starts Integration Full alongside the test/coverage matrix after the existing
+lint/typecheck/contracts/security prerequisite. That prerequisite retains Windows lock replay and
+exact-revision admission. Integration Full consumes no coverage artifact; its complete selector,
+isolated runtime and diagnostics remain unchanged. Combined coverage still gates Docker build and
+its downstream runtime jobs. A passing integration job alone cannot establish release success:
+coverage and every other applicable release job must also pass. Measure hosted makespan before
+claiming a scheduling improvement; earlier admission is not a smaller certification scope.
+
 DPM mandate population readers resolve one effective authoritative revision per portfolio and
 mandate within the admitted tenant before applying model, booking-center, or authority-status
 membership filters. Reuse the authority predicates and precedence in
