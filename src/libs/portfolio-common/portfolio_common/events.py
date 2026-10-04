@@ -1,7 +1,7 @@
 # libs/portfolio-common/portfolio_common/events.py
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 from pydantic_core import PydanticCustomError
@@ -29,7 +29,13 @@ from .domain.transaction_control_codes import (
     normalize_optional_transaction_control_code,
     normalize_transaction_control_code,
 )
-from .domain.valuation.source_facts import ValuationBookScope
+from .domain.valuation import canonical_content_hash
+from .domain.valuation.source_facts import (
+    MarketPriceQuoteBasis,
+    MarketPriceSourceFact,
+    MarketPriceSourceFactStatus,
+    ValuationBookScope,
+)
 from .pydantic_financial_numeric import ExactDecimal18_10
 from .temporal import standardize_governed_datetime
 
@@ -73,6 +79,149 @@ def event_business_payload(
     if not include_traceparent:
         exclude.add("traceparent")
     return event.model_dump(mode=mode, exclude=exclude)
+
+
+class MarketPriceAuthorityRevision(BaseModel):
+    """Source-owned revision summary; no event-supplied monetary value is authoritative."""
+
+    model_config = ConfigDict(extra="forbid")
+    tenant_id: str = Field(min_length=1)
+    legal_book_id: str = Field(min_length=1)
+    security_id: str = Field(min_length=1)
+    price_date: date
+    source_system: str = Field(min_length=1)
+    source_record_id: str = Field(min_length=1)
+    fact_version: int = Field(ge=1, strict=True)
+    source_revision: str = Field(min_length=1)
+    source_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    fact_status: MarketPriceSourceFactStatus
+    quote_basis: MarketPriceQuoteBasis
+    currency: str
+    observed_at: datetime
+
+    @field_validator(
+        "tenant_id",
+        "legal_book_id",
+        "security_id",
+        "source_system",
+        "source_record_id",
+        "source_revision",
+        mode="before",
+    )
+    @classmethod
+    def _nonblank_identity(cls, value: object) -> str:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("authority identity must be nonblank text")
+        return value.strip()
+
+    @field_validator("currency", mode="before")
+    @classmethod
+    def _currency(cls, value: object) -> str:
+        return normalize_currency_code(value)
+
+    @field_validator("observed_at")
+    @classmethod
+    def _aware_observation(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("source observation must be timezone-aware")
+        return value.astimezone(timezone.utc)
+
+    @property
+    def authority_key(self) -> tuple[str, str, str, date]:
+        return self.tenant_id, self.legal_book_id, self.security_id, self.price_date
+
+    @classmethod
+    def from_fact(cls, fact: MarketPriceSourceFact) -> "MarketPriceAuthorityRevision":
+        source = fact.source_reference
+        return cls(
+            tenant_id=fact.scope.tenant_id,
+            legal_book_id=fact.scope.legal_book_id,
+            security_id=fact.scope.security_id,
+            price_date=fact.price_date,
+            source_system=source.source_system,
+            source_record_id=source.source_record_id,
+            fact_version=fact.fact_version,
+            source_revision=source.source_revision,
+            source_content_hash=source.source_content_hash,
+            fact_status=fact.fact_status,
+            quote_basis=fact.quote_basis,
+            currency=fact.currency,
+            observed_at=source.observed_at,
+        )
+
+
+class AuthoritativeMarketPriceAuthorityChangedEvent(CoreEventModel):
+    """One exact old/new authority impact, delivered by the existing price runtime."""
+
+    event_type: Literal["AuthoritativeMarketPriceAuthorityChanged"] = (
+        "AuthoritativeMarketPriceAuthorityChanged"
+    )
+    schema_version: Literal["1.0.0"] = GOVERNED_EVENT_SCHEMA_VERSION
+    tenant_id: str = Field(min_length=1)
+    legal_book_id: str = Field(min_length=1)
+    security_id: str = Field(min_length=1)
+    price_date: date
+    previous: MarketPriceAuthorityRevision | None = None
+    accepted: MarketPriceAuthorityRevision
+    correction_id: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+
+    @property
+    def authority_key(self) -> tuple[str, str, str, date]:
+        return self.tenant_id, self.legal_book_id, self.security_id, self.price_date
+
+    @model_validator(mode="after")
+    def _validate_impact(self) -> "AuthoritativeMarketPriceAuthorityChangedEvent":
+        authorities = {self.accepted.authority_key}
+        if self.previous is not None:
+            authorities.add(self.previous.authority_key)
+            if (self.previous.source_system, self.previous.source_record_id) != (
+                self.accepted.source_system,
+                self.accepted.source_record_id,
+            ) or self.previous.fact_version >= self.accepted.fact_version:
+                raise ValueError("correction must retain source identity and increase version")
+        if self.authority_key not in authorities:
+            raise ValueError("impact scope must be an exact old or accepted authority")
+        if self.correction_id != self.identity_for(self.model_dump(mode="json")):
+            raise ValueError("correction identity does not bind the declared source impact")
+        return self
+
+    @staticmethod
+    def identity_for(payload: dict[str, Any]) -> str:
+        return "sha256:" + canonical_content_hash(
+            {
+                key: payload[key]
+                for key in (
+                    "tenant_id",
+                    "legal_book_id",
+                    "security_id",
+                    "price_date",
+                    "previous",
+                    "accepted",
+                )
+            }
+        )
+
+    @classmethod
+    def from_facts(
+        cls,
+        *,
+        authority: tuple[str, str, str, date],
+        previous: MarketPriceSourceFact | None,
+        accepted: MarketPriceSourceFact,
+    ) -> "AuthoritativeMarketPriceAuthorityChangedEvent":
+        payload = {
+            "tenant_id": authority[0],
+            "legal_book_id": authority[1],
+            "security_id": authority[2],
+            "price_date": authority[3].isoformat(),
+            "previous": (
+                MarketPriceAuthorityRevision.from_fact(previous).model_dump(mode="json")
+                if previous is not None
+                else None
+            ),
+            "accepted": MarketPriceAuthorityRevision.from_fact(accepted).model_dump(mode="json"),
+        }
+        return cls.model_validate({**payload, "correction_id": cls.identity_for(payload)})
 
 
 class BusinessDateEvent(CoreEventModel):

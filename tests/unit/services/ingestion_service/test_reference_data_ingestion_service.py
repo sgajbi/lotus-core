@@ -953,6 +953,7 @@ async def test_append_authoritative_market_price_source_facts_ignores_empty_batc
 async def test_append_authoritative_market_price_source_facts_commits_atomically() -> None:
     db = AsyncMock(spec=AsyncSession)
     writer = AsyncMock()
+    writer.append_many.return_value = ()
     service = ReferenceDataIngestionService(db)
 
     with patch(
@@ -974,6 +975,70 @@ async def test_append_authoritative_market_price_source_facts_commits_atomically
     assert appended_facts[0].price == Decimal("99.250000000000000001")
     db.commit.assert_awaited_once()
     db.rollback.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fail_outbox", [False, True])
+async def test_authoritative_price_impact_outbox_shares_source_commit(fail_outbox):
+    from src.services.ingestion_service.app.DTOs.market_price_dto import (
+        AuthoritativeMarketPriceSourceFact,
+    )
+    from src.services.ingestion_service.app.services.market_price_source_fact_writer import (
+        MarketPriceAuthorityChange,
+    )
+
+    db = AsyncMock(spec=AsyncSession)
+    writer, outbox = AsyncMock(), AsyncMock()
+    fact = AuthoritativeMarketPriceSourceFact.model_validate(
+        {**_authoritative_market_price_record(), "price": "99.250000000000000001"},
+    ).to_domain()
+    writer.append_many.return_value = (MarketPriceAuthorityChange(None, fact),)
+    if fail_outbox:
+        outbox.create_outbox_event.side_effect = RuntimeError("outbox stage failed")
+    module = "src.services.ingestion_service.app.services.reference_data_ingestion_service"
+    with (
+        patch(f"{module}.MarketPriceSourceFactWriter", return_value=writer),
+        patch(
+            f"{module}.OutboxRepository",
+            return_value=outbox,
+        ),
+    ):
+        service = ReferenceDataIngestionService(db)
+        if fail_outbox:
+            with pytest.raises(RuntimeError, match="outbox stage failed"):
+                await service.append_authoritative_market_price_source_facts(
+                    [_authoritative_market_price_record()],
+                )
+            db.commit.assert_not_awaited()
+            db.rollback.assert_awaited_once()
+        else:
+            await service.append_authoritative_market_price_source_facts(
+                [_authoritative_market_price_record()],
+            )
+            db.commit.assert_awaited_once()
+            payload = outbox.create_outbox_event.await_args.kwargs
+            assert payload["event_type"] == "AuthoritativeMarketPriceAuthorityChanged"
+            assert payload["partition_key"] == fact.scope.security_id
+            assert payload["payload"]["tenant_id"] == fact.scope.tenant_id
+            assert payload["payload"]["legal_book_id"] == fact.scope.legal_book_id
+
+
+@pytest.mark.asyncio
+async def test_authoritative_price_duplicate_changes_do_not_emit_work():
+    db, writer, outbox = AsyncMock(spec=AsyncSession), AsyncMock(), AsyncMock()
+    writer.append_many.return_value = ()
+    module = "src.services.ingestion_service.app.services.reference_data_ingestion_service"
+    with (
+        patch(f"{module}.MarketPriceSourceFactWriter", return_value=writer),
+        patch(
+            f"{module}.OutboxRepository",
+            return_value=outbox,
+        ),
+    ):
+        await ReferenceDataIngestionService(db).append_authoritative_market_price_source_facts(
+            [_authoritative_market_price_record()],
+        )
+    outbox.create_outbox_event.assert_not_awaited()
 
 
 @pytest.mark.asyncio

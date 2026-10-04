@@ -205,6 +205,13 @@ authority return `409 MARKET_PRICE_SOURCE_FACT_CONFLICT`. The route does not alt
 unscoped `market_prices` projection and does not by itself activate the staged valuation runtime
 cutover.
 
+Accepted authoritative price changes also stage `AuthoritativeMarketPriceAuthorityChanged`
+on the existing `market_prices.persisted` outbox in the same database transaction. Each intent
+names one affected tenant, legal book, security and price date, with previous/accepted source
+revision evidence. A moved source creates intents for both authorities; withdrawal retains its
+affected scope. Exact source replay creates no second intent. An outbox failure rolls back the
+source write. The event carries authority evidence, not a financial amount for calculation.
+
 ## Operational notes
 
 - the service starts with a Kafka producer and will fail startup if producer initialization fails

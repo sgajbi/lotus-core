@@ -25,7 +25,7 @@
     {
       "path": "src/libs/portfolio-common/portfolio_common/valuation_repository_base.py",
       "rank": "C",
-      "mi": 4.630881807565158,
+      "mi": 6.535744588393695,
       "owner": "lotus-core maintainers",
       "rationale": "Existing valuation repository hotspot; baseline has zero growth headroom.",
       "issue": "#462"

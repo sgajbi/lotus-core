@@ -27,6 +27,16 @@ visible as bounded or unavailable states; this page does not claim independent p
 
 ## Reader Map
 
+Authoritative price correction intents use the existing price consumer with a strict scoped
+discriminator. For an admitted business date, it pages all held current-epoch positions within
+the named tenant/book/security/date and stages valuation jobs plus the intent claim in one
+transaction. A later-page failure rolls back every page. Completed jobs can be rearmed and
+processing jobs request requeue through the existing job contract. The worker resolves current
+persisted source authority; duplicate or delayed intents do not provide an old event price.
+This bounded path does not certify future/calendar propagation, derived consumers, or latest
+revision publication. QCP `READY` remains date coherence; overall current qualification still
+requires reconciliation and data quality evidence.
+
 | Reader need | Start with |
 | --- | --- |
 | Follow a valuation job | Runtime role |

@@ -236,6 +236,22 @@ directly, and job creation in those flows must be diagnosed there rather than in
 | `ProcessFxRateCorrection.execute()` | FX rate corrections. |
 | `ValuationReadinessConsumer.process_message()` | Readiness-driven valuation and position-readiness jobs. |
 
+### Scoped authoritative price correction
+
+`AuthoritativeMarketPriceAuthorityChanged` is emitted atomically with an accepted append-only
+source fact on the existing price outbox. Its deterministic correction identity binds the
+affected authority and previous/accepted source revisions. It includes no financial price.
+Source moves emit old and new scope intents; withdrawn versions also invalidate their scope.
+The strict scoped consumer rejects malformed or unknown discriminators without legacy fallback.
+
+For an admitted business date, current-epoch held positions are selected by exact tenant,
+legal book, security and date. Keyset pages and all job writes share one consumer transaction
+with idempotency: no page limit can commit a claim while dropping remaining positions.
+Existing completion/requeue controls apply; the worker resolves current persisted authority.
+This correction path does not use security-global watermark resets or the unscoped price
+projection. Future/calendar and derived propagation remain unqualified. Date-coherent QCP
+`READY` does not certify latest source revisions; reconciliation and quality remain required.
+
 ### Scheduler's Main Loop
 
 1.  **Process Instrument Triggers:** The scheduler first checks the `instrument_reprocessing_state` table. If it finds triggers from back-dated price events, it fans out by finding all affected portfolios and resetting their watermarks in the `position_state` table.
