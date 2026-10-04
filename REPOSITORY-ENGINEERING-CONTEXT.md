@@ -12,6 +12,15 @@ and the task routes below to load only relevant specialist context.
 
 ## Repository Role
 
+`ClientRestrictionProfile:v1` ranks effective authoritative revisions before the active-only
+filter. Preserve inactive/suspended version and lineage in the inclusive view, and keep empty
+current evidence INCOMPLETE. Restriction admission trims selectors and rejects any blank element;
+legacy unusable scoped evidence remains retained and qualifies the profile UNAVAILABLE/INVALID
+rather than broadening into a READY global rule. Intentional selector-free client/mandate controls
+and the existing OR across populated selector families remain supported. The owning contract is
+[client restriction authority](docs/integration/client-restriction-profile.md); this does not
+extend the existing QCP restriction family's tenant-isolation claim.
+
 `lotus-core` is the authoritative financial system of record for foundational portfolio,
 account, holding, mandate, transaction, position, cash, valuation, cashflow, and historical state
 used by the Lotus ecosystem.

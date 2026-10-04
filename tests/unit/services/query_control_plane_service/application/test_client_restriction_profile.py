@@ -1,5 +1,6 @@
 """Behavior tests for QCP-owned client restriction profile resolution."""
 
+from dataclasses import replace
 from datetime import UTC, date, datetime
 
 import pytest
@@ -186,3 +187,35 @@ async def test_snapshot_identity_is_deterministic_for_same_business_scope() -> N
 
     assert first is not None and second is not None
     assert first.snapshot_id == second.snapshot_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("values", [(), ("",), ("private_credit", " ")])
+async def test_legacy_unusable_scoped_selectors_are_unavailable_with_lineage(values) -> None:
+    record = replace(_restriction(), asset_classes=values)
+    reader = _Reader(binding=_binding(), restrictions=[record])
+    service = ClientRestrictionProfileService(
+        mandate_reader=reader, reader=reader, clock=_FixedClock()
+    )
+    response = await service.get_client_restriction_profile(
+        portfolio_id="PB_SG_GLOBAL_BAL_001", request=_request()
+    )
+    assert response is not None
+    assert response.supportability.state == "UNAVAILABLE"
+    assert response.supportability.reason == "CLIENT_RESTRICTION_PROFILE_INVALID_SELECTORS"
+    assert response.supportability.missing_data_families == ["client_restrictions"]
+    assert response.data_quality_status == "INVALID"
+    assert response.restrictions[0].source_record_id == record.source_record_id
+    assert response.restrictions[0].restriction_version == record.restriction_version
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scope", ["client", "mandate"])
+async def test_intentional_global_controls_remain_ready(scope) -> None:
+    record = replace(_restriction(), restriction_scope=scope, asset_classes=())
+    reader = _Reader(binding=_binding(), restrictions=[record])
+    response = await ClientRestrictionProfileService(
+        mandate_reader=reader, reader=reader, clock=_FixedClock()
+    ).get_client_restriction_profile(portfolio_id="PB_SG_GLOBAL_BAL_001", request=_request())
+    assert response is not None
+    assert response.supportability.state == "READY"

@@ -27,3 +27,10 @@ class ClientRestrictionSourceRecord:
     updated_at: datetime | None
     source_system: str | None = None
     quality_status: str = "accepted"
+
+    def has_usable_selectors(self) -> bool:
+        """Preserve intentional global rules while refusing malformed scoped evidence."""
+        selectors = self.instrument_ids + self.asset_classes + self.issuer_ids + self.country_codes
+        if any(not value.strip() for value in selectors):
+            return False
+        return bool(selectors) or self.restriction_scope in {"client", "mandate"}

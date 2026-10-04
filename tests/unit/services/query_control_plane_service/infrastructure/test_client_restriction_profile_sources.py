@@ -51,7 +51,7 @@ def _restriction_row() -> SimpleNamespace:
         applies_to_buy=True,
         applies_to_sell=False,
         instrument_ids=None,
-        asset_classes=["private_credit", ""],
+        asset_classes=["private_credit"],
         issuer_ids=[],
         country_codes=[],
         effective_from=date(2026, 1, 1),
@@ -108,6 +108,9 @@ async def test_selects_latest_active_restriction_per_scope_and_code() -> None:
     sql = str(session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
     assert "row_number() OVER (PARTITION BY client_restriction_profiles.restriction_scope" in sql
     assert "client_restriction_profiles.restriction_status = 'active'" in sql
+    ranked_query, outer_filter = sql.split("WHERE anon_1.rn = 1", maxsplit=1)
+    assert "client_restriction_profiles.restriction_status = 'active'" not in ranked_query
+    assert "client_restriction_profiles.restriction_status = 'active'" in outer_filter
     assert "client_restriction_profiles.mandate_id IS NULL" in sql
     assert "client_restriction_profiles.mandate_id = 'MANDATE_PB_SG_GLOBAL_BAL_001'" in sql
 
@@ -128,3 +131,19 @@ async def test_inactive_filter_is_omitted_only_when_explicitly_requested() -> No
 
     sql = str(session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
     assert "client_restriction_profiles.restriction_status = 'active'" not in sql
+
+
+@pytest.mark.asyncio
+async def test_reader_preserves_legacy_blank_selector_evidence_for_qualification() -> None:
+    row = _restriction_row()
+    row.asset_classes = [" private_credit ", " \t "]
+    session = AsyncMock(spec=AsyncSession)
+    session.execute.return_value = _Result([row])
+    restrictions = await SqlAlchemyClientRestrictionProfileSourceReader(session).list_restrictions(
+        portfolio_id="P1",
+        client_id="C1",
+        as_of_date=date(2026, 5, 3),
+        mandate_id=None,
+        include_inactive_restrictions=False,
+    )
+    assert restrictions[0].asset_classes == ("private_credit", "")

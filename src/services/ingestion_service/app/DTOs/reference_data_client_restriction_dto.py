@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .reference_data_source_observation_dto import SourceObservationLineage
 
@@ -35,6 +35,14 @@ class ClientRestrictionProfileRecord(SourceObservationLineage):
     effective_from: date = Field(..., description="Restriction effective start date.")
     effective_to: date | None = Field(None, description="Restriction effective end date.")
     restriction_version: int = Field(1, ge=1)
+
+    @field_validator("instrument_ids", "asset_classes", "issuer_ids", "country_codes")
+    @classmethod
+    def validate_selectors(cls, values: list[str]) -> list[str]:
+        normalized = [value.strip() for value in values]
+        if any(not value for value in normalized):
+            raise ValueError("restriction selectors must not contain blank identifiers")
+        return normalized
 
     @model_validator(mode="after")
     def validate_profile(self) -> "ClientRestrictionProfileRecord":

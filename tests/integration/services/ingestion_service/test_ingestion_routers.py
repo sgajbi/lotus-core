@@ -3,7 +3,7 @@ import base64
 import hashlib
 import hmac
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from io import BytesIO
 from types import SimpleNamespace
@@ -30,6 +30,7 @@ from src.services.ingestion_service.app.dependencies import (
     get_business_date_ingestion_policy,
     get_ingestion_idempotency_replay_reader,
     get_ingestion_service,
+    get_reference_data_ingestion_command_handler,
     get_transaction_reprocessing_target_resolver,
 )
 from src.services.ingestion_service.app.domain import TransactionReprocessingTarget
@@ -7078,6 +7079,167 @@ async def test_ingest_portfolio_bundle_returns_failed_record_keys_when_publish_f
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
     assert failure_history.json()["failures"][0]["failed_record_keys"] == ["P1"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field", ["instrument_ids", "issuer_ids", "country_codes", "asset_classes"]
+)
+@pytest.mark.parametrize("values", [[" \t "], ["VALID", ""]])
+async def test_client_restriction_blank_selectors_are_422_before_command_dispatch(field, values):
+    handler = SimpleNamespace(ingest_reference_data=AsyncMock())
+    previous = app.dependency_overrides.get(get_reference_data_ingestion_command_handler)
+    app.dependency_overrides[get_reference_data_ingestion_command_handler] = lambda: handler
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.post(
+                "/ingest/client-restriction-profiles",
+                json={
+                    "restriction_profiles": [
+                        {
+                            "client_id": "CLIENT",
+                            "portfolio_id": "PORTFOLIO",
+                            "restriction_scope": "instrument",
+                            "restriction_code": "BLANK-SELECTOR",
+                            "restriction_source": "client_mandate",
+                            "effective_from": "2026-01-01",
+                            field: values,
+                        }
+                    ],
+                },
+                headers={"X-Tenant-Id": "default"},
+            )
+        assert response.status_code == 422
+        errors = response.json()["detail"]
+        assert any(
+            error["loc"][-1] == field and "must not contain blank identifiers" in error["msg"]
+            for error in errors
+        )
+        handler.ingest_reference_data.assert_not_awaited()
+    finally:
+        if previous is None:
+            app.dependency_overrides.pop(get_reference_data_ingestion_command_handler, None)
+        else:
+            app.dependency_overrides[get_reference_data_ingestion_command_handler] = previous
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "scope,selectors",
+    [
+        ("instrument", {"instrument_ids": [" TARGET "]}),
+        ("issuer", {"issuer_ids": [" ISSUER "]}),
+        ("country", {"country_codes": [" SG "]}),
+        ("asset_class", {"asset_classes": [" Equity "]}),
+        ("client", {}),
+        ("mandate", {}),
+        # The declared family does not narrow the supported OR across selector families.
+        ("issuer", {"asset_classes": [" Equity "]}),
+    ],
+)
+async def test_client_restriction_valid_selector_families_and_global_controls_dispatch(
+    scope,
+    selectors,
+):
+    handler = SimpleNamespace(
+        ingest_reference_data=AsyncMock(
+            return_value=SimpleNamespace(
+                message="accepted",
+                entity_type="client_restriction_profile",
+                job_id="restriction-job",
+                accepted_count=1,
+                idempotency_key=None,
+                replayed=False,
+            )
+        )
+    )
+    previous = app.dependency_overrides.get(get_reference_data_ingestion_command_handler)
+    app.dependency_overrides[get_reference_data_ingestion_command_handler] = lambda: handler
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.post(
+                "/ingest/client-restriction-profiles",
+                json={
+                    "restriction_profiles": [
+                        {
+                            "client_id": "CLIENT",
+                            "portfolio_id": "PORTFOLIO",
+                            "mandate_id": "MANDATE",
+                            "restriction_scope": scope,
+                            "restriction_code": "VALID-SELECTOR",
+                            "restriction_source": "client_mandate",
+                            "effective_from": "2026-01-01",
+                            "effective_to": "2026-01-01",
+                            "restriction_version": 2,
+                            "source_record_id": "selector:2",
+                            **selectors,
+                        }
+                    ],
+                },
+                headers={"X-Tenant-Id": "default"},
+            )
+        assert response.status_code == 202, response.text
+        handler.ingest_reference_data.assert_awaited_once()
+        admitted = handler.ingest_reference_data.await_args.args[0].request.restriction_profiles[0]
+        assert admitted.restriction_version == 2
+        assert admitted.source_record_id == "selector:2"
+        assert admitted.effective_from == admitted.effective_to == date(2026, 1, 1)
+        assert admitted.client_id == "CLIENT" and admitted.mandate_id == "MANDATE"
+        for field, values in selectors.items():
+            assert getattr(admitted, field) == [value.strip() for value in values]
+    finally:
+        if previous is None:
+            app.dependency_overrides.pop(get_reference_data_ingestion_command_handler, None)
+        else:
+            app.dependency_overrides[get_reference_data_ingestion_command_handler] = previous
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid_case", ["empty_scoped", "effective_window", "duplicate"])
+async def test_client_restriction_invalid_source_boundaries_refuse_before_dispatch(invalid_case):
+    record = {
+        "client_id": "CLIENT",
+        "portfolio_id": "PORTFOLIO",
+        "restriction_scope": "instrument",
+        "restriction_code": "INVALID-RECORD",
+        "restriction_source": "client_mandate",
+        "effective_from": "2026-01-01",
+        "instrument_ids": ["TARGET"],
+    }
+    expected = {
+        "empty_scoped": "scoped restrictions must include",
+        "effective_window": "effective_to must be on or after",
+        "duplicate": "duplicate effective records",
+    }[invalid_case]
+    if invalid_case == "empty_scoped":
+        record["instrument_ids"] = []
+    elif invalid_case == "effective_window":
+        record["effective_to"] = "2025-12-31"
+    records = [record, dict(record)] if invalid_case == "duplicate" else [record]
+    handler = SimpleNamespace(ingest_reference_data=AsyncMock())
+    previous = app.dependency_overrides.get(get_reference_data_ingestion_command_handler)
+    app.dependency_overrides[get_reference_data_ingestion_command_handler] = lambda: handler
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.post(
+                "/ingest/client-restriction-profiles",
+                json={"restriction_profiles": records},
+                headers={"X-Tenant-Id": "default"},
+            )
+        assert response.status_code == 422
+        assert any(expected in error["msg"] for error in response.json()["detail"])
+        handler.ingest_reference_data.assert_not_awaited()
+    finally:
+        if previous is None:
+            app.dependency_overrides.pop(get_reference_data_ingestion_command_handler, None)
+        else:
+            app.dependency_overrides[get_reference_data_ingestion_command_handler] = previous
 
 
 def _xlsx_upload_bytes(headers: list[str], rows: list[list[object]]) -> bytes:
