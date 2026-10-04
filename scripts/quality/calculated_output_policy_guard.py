@@ -30,6 +30,7 @@ OPTIONAL_POLICY_KEYS = {
     "lineage_boundary_callsites",
     "lineage_boundary_covered_callsites",
     "lineage_boundary_terminal_callsites",
+    "lineage_verification_boundaries",
 }
 LINEAGE_BINDINGS = {"required", "partial", "not-exposed"}
 EXECUTION_METHODS = {
@@ -42,6 +43,643 @@ EXECUTION_METHODS = {
 }
 CALCULATION_LINEAGE_MODULE = "portfolio_common.domain.calculation_lineage"
 CALCULATION_LINEAGE_BUILDER = "build_calculation_lineage"
+
+
+class _RetainedVerificationProof:
+    """Fail-closed proof for straight-line retained-receipt rejection boundaries.
+
+    Only import-resolved strict decoding, expected policy/algorithm checks and a
+    negative output-binding predicate that raises can authorize a normal return.
+    Other control-flow shapes are deliberately unsupported, not guessed safe.
+    """
+
+    def __init__(
+        self,
+        path: str,
+        constant: str,
+        declaration: PolicyDeclaration,
+        specification: dict[str, Any],
+        covered: set[str],
+    ) -> None:
+        self.path, self.constant, self.specification = path, constant, specification
+        self.policy = f"{_source_module(declaration.declaration_path)}.{constant}"
+        self.covered = covered
+        self.aliases: dict[str, str | None] = {}
+        self.facts: set[str] = set()
+        self.covered_parameters: dict[str, tuple[list[str], str]] = {}
+
+    def symbol(self, node: ast.expr) -> str | None:
+        if isinstance(node, ast.Name):
+            return self.aliases.get(node.id)
+        if isinstance(node, ast.Attribute):
+            root = self.symbol(node.value)
+            return f"{root}.{node.attr}" if root is not None else None
+        if not isinstance(node, ast.Call):
+            return None
+        function = self.symbol(node.func)
+        if (
+            function == f"{CALCULATION_LINEAGE_MODULE}.calculation_lineage_from_payload"
+            and len(node.args) == 1
+            and not node.keywords
+            and self.symbol(node.args[0]) == "@receipt_input"
+        ):
+            return "@decoded"
+        if (
+            function == self.specification["output_canonicalizer"]
+            and len(node.args) == 1
+            and not node.keywords
+            and self.symbol(node.args[0]) == "@output"
+        ):
+            return "@canonical_output"
+        if function == f"{self.policy}.lineage_identity" and not node.args and not node.keywords:
+            return "@expected_policy"
+        return None
+
+    def rejection_facts(self, node: ast.expr) -> set[str]:
+        if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.Or):
+            return set().union(*(self.rejection_facts(value) for value in node.values))
+        if isinstance(node, ast.Compare) and len(node.ops) == len(node.comparators) == 1:
+            left, right, operator = self.symbol(node.left), node.comparators[0], node.ops[0]
+            if (
+                left == "@decoded"
+                and isinstance(operator, ast.Is)
+                and isinstance(right, ast.Constant)
+                and right.value is None
+            ):
+                return {"present"}
+            if not isinstance(operator, ast.NotEq):
+                return set()
+            expected = {
+                "@decoded.algorithm_id": self.specification["algorithm_id"],
+                "@decoded.algorithm_version": self.specification["algorithm_version"],
+            }
+            if (
+                left in expected
+                and isinstance(right, ast.Constant)
+                and type(right.value) is type(expected[left])
+                and right.value == expected[left]
+            ):
+                return {cast(str, left)}
+            if (
+                left == "@decoded.intermediate_precision"
+                and self.symbol(right) == f"{self.policy}.working_precision"
+            ):
+                return {"precision"}
+            if (
+                left == "@decoded.numeric_output_policy"
+                and self.symbol(right) == "@expected_policy"
+            ):
+                return {"policy"}
+        if (
+            isinstance(node, ast.UnaryOp)
+            and isinstance(node.op, ast.Not)
+            and isinstance(node.operand, ast.Call)
+        ):
+            call = node.operand
+            if (
+                self.symbol(call.func)
+                == f"{CALCULATION_LINEAGE_MODULE}.calculation_lineage_binds_output"
+                and len(call.args) == 1
+                and self.symbol(call.args[0]) == "@decoded"
+                and len(call.keywords) == 1
+                and call.keywords[0].arg == "output_payload"
+                and self.symbol(call.keywords[0].value) == "@canonical_output"
+            ):
+                return {"bound_output"}
+        return set()
+
+    def complete(self) -> bool:
+        return self.facts == {
+            "present",
+            "@decoded.algorithm_id",
+            "@decoded.algorithm_version",
+            "precision",
+            "policy",
+            "bound_output",
+        }
+
+    def canonicalizer_projects_input(
+        self, function: ast.FunctionDef | ast.AsyncFunctionDef, parameter: str
+    ) -> bool:
+        """Recognize pure field projections, never merely an argument-taking helper.
+
+        Supported forms are a literal field map normalized from the identical input
+        keys, or a full items() copy that omits only None and applies the governed
+        Decimal normalization/quantization. Other shapes require separate proof.
+        """
+        saved_aliases = self.aliases.copy()
+        for argument in (
+            *function.args.posonlyargs,
+            *function.args.args,
+            *function.args.kwonlyargs,
+        ):
+            self.aliases[argument.arg] = None
+        self.aliases[parameter] = "@output"
+        body = [
+            statement
+            for statement in function.body
+            if not (
+                isinstance(statement, ast.Expr)
+                and isinstance(statement.value, ast.Constant)
+                and isinstance(statement.value.value, str)
+            )
+        ]
+        try:
+            if len(body) == 1 and isinstance(body[0], ast.Return):
+                projection = body[0].value
+                if not isinstance(projection, ast.Dict) or not projection.keys:
+                    return False
+                keys: set[str] = set()
+                for key, value in zip(projection.keys, projection.values):
+                    if (
+                        not isinstance(key, ast.Constant)
+                        or not isinstance(key.value, str)
+                        or not key.value
+                        or key.value in keys
+                        or not isinstance(value, ast.Call)
+                        or self.symbol(value.func) != f"{self.policy}.normalize"
+                        or len(value.args) != 1
+                        or len(value.keywords) != 1
+                        or value.keywords[0].arg != "field_name"
+                        or ast.dump(value.keywords[0].value) != ast.dump(key)
+                    ):
+                        return False
+                    source = value.args[0]
+                    if (
+                        not isinstance(source, ast.Subscript)
+                        or self.symbol(source.value) != "@output"
+                        or ast.dump(source.slice) != ast.dump(key)
+                    ):
+                        return False
+                    keys.add(key.value)
+                return True
+            return self.complete_mapping_projection(body, parameter)
+        finally:
+            self.aliases = saved_aliases
+
+    def complete_mapping_projection(self, body: list[ast.stmt], parameter: str) -> bool:
+        """Fail closed outside the immutable policy-scaled complete-mapping grammar."""
+        if len(body) != 5:
+            return False
+        policy_assignment, quantum_assignment, output_assignment, loop, result = body
+        if (
+            not isinstance(policy_assignment, ast.Assign)
+            or len(policy_assignment.targets) != 1
+            or not isinstance(policy_assignment.targets[0], ast.Name)
+            or self.symbol(policy_assignment.value) != self.policy
+            or not isinstance(quantum_assignment, ast.Assign)
+            or len(quantum_assignment.targets) != 1
+            or not isinstance(quantum_assignment.targets[0], ast.Name)
+            or not isinstance(loop, ast.For)
+            or not isinstance(loop.target, ast.Tuple)
+            or len(loop.target.elts) != 2
+            or not all(isinstance(item, ast.Name) for item in loop.target.elts)
+        ):
+            return False
+        if isinstance(output_assignment, ast.AnnAssign) and output_assignment.value is not None:
+            output_assignment = ast.Assign(
+                targets=[output_assignment.target], value=output_assignment.value
+            )
+        if (
+            not isinstance(output_assignment, ast.Assign)
+            or len(output_assignment.targets) != 1
+            or not isinstance(output_assignment.targets[0], ast.Name)
+        ):
+            return False
+        policy_name = policy_assignment.targets[0].id
+        quantum_name = quantum_assignment.targets[0].id
+        output_name = output_assignment.targets[0].id
+        key_name, value_name = [cast(ast.Name, item).id for item in loop.target.elts]
+        if len({parameter, policy_name, quantum_name, output_name, key_name, value_name}) != 6:
+            return False
+        decimal_types = [
+            node.args[1]
+            for node in ast.walk(loop)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "isinstance"
+            and len(node.args) == 2
+        ]
+        if (
+            "isinstance" in self.aliases
+            or len(decimal_types) != 1
+            or self.symbol(decimal_types[0]) != "decimal.Decimal"
+        ):
+            return False
+        local_names = {policy_name, quantum_name, output_name, key_name, value_name}
+        decimal_root = ast.unparse(decimal_types[0]).split(".")[0]
+        if local_names & {"isinstance", decimal_root}:
+            return False
+        # Alpha-renamed AST grammar: identifiers/import aliases are not a source hash.
+        decimal_type = ast.unparse(decimal_types[0])
+        policy_source = ast.unparse(policy_assignment.value)
+        expected = ast.parse(
+            f"{policy_name} = {policy_source}\n"
+            f"{quantum_name} = {decimal_type}(1).scaleb(-{policy_name}.scale)\n"
+            f"{output_name} = {{}}\n"
+            f"for {key_name}, {value_name} in {parameter}.items():\n"
+            f"    if {value_name} is None:\n        continue\n"
+            f"    if isinstance({value_name}, {decimal_type}):\n"
+            f"        with {policy_name}.arithmetic_context():\n"
+            f"            {value_name} = {policy_name}.normalize({value_name}, "
+            f"field_name={key_name}).quantize({quantum_name}, rounding={policy_name}.rounding)\n"
+            f"    {output_name}[{key_name}] = {value_name}\n"
+            f"return {output_name}\n"
+        ).body
+        actual = [policy_assignment, quantum_assignment, output_assignment, loop, result]
+        return ast.dump(ast.Module(body=actual, type_ignores=[])) == ast.dump(
+            ast.Module(body=expected, type_ignores=[])
+        )
+
+    def helper_returns_immutable_amount(self, function: ast.FunctionDef, parameter: str) -> bool:
+        """Prove read-only helpers return normalized Decimal/None, not hidden aliases."""
+        saved_aliases = self.aliases.copy()
+        scalar_names: set[str] = set()
+        for argument in (
+            *function.args.posonlyargs,
+            *function.args.args,
+            *function.args.kwonlyargs,
+        ):
+            self.aliases[argument.arg] = None
+        self.aliases[parameter] = "@output"
+
+        def normalized(node: ast.AST | None) -> bool:
+            return (
+                isinstance(node, ast.Call)
+                and self.symbol(node.func) == f"{self.policy}.normalize"
+                and len(node.args) == 1
+                and len(node.keywords) == 1
+                and node.keywords[0].arg == "field_name"
+            )
+
+        def readonly(node: ast.AST) -> bool:
+            for child in ast.walk(node):
+                if isinstance(
+                    child,
+                    (
+                        ast.NamedExpr,
+                        ast.Lambda,
+                        ast.Await,
+                        ast.Yield,
+                        ast.YieldFrom,
+                        ast.ListComp,
+                        ast.SetComp,
+                        ast.DictComp,
+                        ast.GeneratorExp,
+                    ),
+                ):
+                    return False
+                if isinstance(child, ast.Call) and not (
+                    normalized(child)
+                    or (
+                        self.symbol(child.func) == "@output.get"
+                        and len(child.args) in (1, 2)
+                        and not any(isinstance(value, ast.Starred) for value in child.args)
+                        and not child.keywords
+                    )
+                ):
+                    return False
+            return True
+
+        def immutable(node: ast.AST | None) -> bool:
+            return (
+                isinstance(node, ast.Constant)
+                and node.value is None
+                or isinstance(node, ast.Name)
+                and node.id in scalar_names
+                or normalized(node)
+                or isinstance(node, ast.IfExp)
+                and immutable(node.body)
+                and immutable(node.orelse)
+            )
+
+        try:
+            for index, statement in enumerate(function.body):
+                if not readonly(statement):
+                    return False
+                if (
+                    isinstance(statement, ast.Expr)
+                    and isinstance(statement.value, ast.Constant)
+                    and isinstance(statement.value.value, str)
+                ):
+                    continue
+                if (
+                    isinstance(statement, ast.Assign)
+                    and len(statement.targets) == 1
+                    and isinstance(statement.targets[0], ast.Name)
+                ):
+                    name = statement.targets[0].id
+                    if name in self.aliases:
+                        return False
+                    if self.symbol(statement.value) == self.policy:
+                        self.aliases[name] = self.policy
+                    elif normalized(statement.value):
+                        scalar_names.add(name)
+                        self.aliases[name] = None
+                    else:
+                        return False
+                elif (
+                    isinstance(statement, ast.If)
+                    and not statement.orelse
+                    and len(statement.body) == 1
+                    and isinstance(statement.body[0], ast.Return)
+                    and isinstance(statement.body[0].value, ast.Constant)
+                    and statement.body[0].value.value is None
+                ):
+                    continue
+                elif isinstance(statement, ast.Return):
+                    return index == len(function.body) - 1 and immutable(statement.value)
+                else:
+                    return False
+            return False
+        finally:
+            self.aliases = saved_aliases
+
+    def calls_use_bound_output(self, statement: ast.AST) -> bool:
+        for node in ast.walk(statement):
+            if isinstance(node, (ast.NamedExpr, ast.Await, ast.Yield, ast.YieldFrom)):
+                return False
+            if not isinstance(node, ast.Call):
+                continue
+            function = self.symbol(node.func)
+            protected_arguments = {
+                self.symbol(value)
+                for argument in [*node.args, *(item.value for item in node.keywords)]
+                for value in ast.walk(argument)
+                if isinstance(value, ast.expr)
+            } & {
+                "@output",
+                "@decoded",
+                "@receipt_input",
+                "@canonical_output",
+                "@expected_policy",
+                self.policy,
+            }
+            trusted = {
+                f"{CALCULATION_LINEAGE_MODULE}.calculation_lineage_from_payload",
+                f"{CALCULATION_LINEAGE_MODULE}.calculation_lineage_binds_output",
+                f"{self.policy}.lineage_identity",
+                *self.covered,
+            }
+            if protected_arguments and function not in trusted:
+                return False
+            if function in self.covered:
+                parameters, output_parameter = self.covered_parameters[function]
+                if len(node.args) > len(parameters) or any(
+                    isinstance(value, ast.Starred) for value in node.args
+                ):
+                    return False
+                arguments = dict(zip(parameters, node.args))
+                for item in node.keywords:
+                    if item.arg not in parameters or item.arg in arguments:
+                        return False
+                    arguments[item.arg] = item.value
+                if (
+                    output_parameter not in arguments
+                    or self.symbol(arguments[output_parameter]) != "@output"
+                ):
+                    return False
+                if function != self.specification["output_canonicalizer"] and not self.complete():
+                    return False
+            receiver = (
+                self.symbol(node.func.value) if isinstance(node.func, ast.Attribute) else None
+            )
+            if receiver and any(
+                receiver == root or receiver.startswith(root + ".")
+                for root in (
+                    "@output",
+                    "@decoded",
+                    "@canonical_output",
+                    "@expected_policy",
+                    self.policy,
+                )
+            ):
+                if (
+                    function == f"{self.policy}.lineage_identity"
+                    and not node.args
+                    and not node.keywords
+                ):
+                    continue
+                # Mutating/opaque receiver calls are not evidence-preserving operations.
+                return False
+        return True
+
+    def prove(self, module: ast.Module, function: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+        if function.decorator_list or isinstance(function, ast.AsyncFunctionDef):
+            return False
+        canonicalizer = None
+        amount_helpers: dict[str, ast.FunctionDef] = {}
+        for statement in module.body:
+            if isinstance(statement, ast.Import):
+                for alias in statement.names:
+                    self.aliases[alias.asname or alias.name.split(".")[0]] = (
+                        alias.name if alias.asname else alias.name.split(".")[0]
+                    )
+            elif isinstance(statement, ast.ImportFrom) and statement.level == 0:
+                for alias in statement.names:
+                    if alias.name == "*":
+                        return False
+                    self.aliases[alias.asname or alias.name] = f"{statement.module}.{alias.name}"
+            elif isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                self.aliases[statement.name] = f"{self.path}::{statement.name}"
+                callsite = f"{self.path}::{statement.name}"
+                if callsite in self.covered:
+                    parameters = [
+                        argument.arg
+                        for argument in (
+                            *statement.args.posonlyargs,
+                            *statement.args.args,
+                            *statement.args.kwonlyargs,
+                        )
+                    ]
+                    output_parameter = self.specification["output_parameter"]
+                    if output_parameter not in parameters and len(parameters) == 1:
+                        output_parameter = parameters[0]
+                    if (
+                        output_parameter not in parameters
+                        or statement.args.vararg
+                        or statement.args.kwarg
+                        or statement.decorator_list
+                        or isinstance(statement, ast.AsyncFunctionDef)
+                        or callsite in self.covered_parameters
+                    ):
+                        return False
+                    self.covered_parameters[callsite] = (parameters, output_parameter)
+                    if callsite == self.specification["output_canonicalizer"]:
+                        canonicalizer = statement
+                    else:
+                        amount_helpers[callsite] = statement
+            else:
+                # Later module assignments/classes/control flow may shadow imports.
+                for node in ast.walk(statement):
+                    if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                        self.aliases[node.id] = None
+                    elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                        for alias in node.names:
+                            self.aliases[alias.asname or alias.name.split(".")[0]] = None
+                if isinstance(statement, ast.ClassDef):
+                    self.aliases[statement.name] = None
+        if self.covered != set(self.covered_parameters):
+            return False
+        if canonicalizer is None or not self.canonicalizer_projects_input(
+            canonicalizer, self.covered_parameters[self.specification["output_canonicalizer"]][1]
+        ):
+            return False
+        if not all(
+            self.helper_returns_immutable_amount(helper, self.covered_parameters[callsite][1])
+            for callsite, helper in amount_helpers.items()
+        ):
+            return False
+        boundary_parameters = {
+            argument.arg
+            for argument in (
+                *function.args.posonlyargs,
+                *function.args.args,
+                *function.args.kwonlyargs,
+            )
+        }
+        boundary_parameters.update(
+            argument.arg for argument in (function.args.vararg, function.args.kwarg) if argument
+        )
+        if (
+            not {self.specification["receipt_parameter"], self.specification["output_parameter"]}
+            <= boundary_parameters
+        ):
+            return False
+        for name in boundary_parameters:
+            self.aliases[name] = None
+        self.aliases[self.specification["receipt_parameter"]] = "@receipt_input"
+        self.aliases[self.specification["output_parameter"]] = "@output"
+        for index, statement in enumerate(function.body):
+            if not self.calls_use_bound_output(statement):
+                return False
+            if (
+                isinstance(statement, ast.Expr)
+                and isinstance(statement.value, ast.Constant)
+                and isinstance(statement.value.value, str)
+            ):
+                continue
+            if (
+                isinstance(statement, ast.Assign)
+                and len(statement.targets) == 1
+                and isinstance(statement.targets[0], ast.Name)
+            ):
+                name = statement.targets[0].id
+                symbol = self.symbol(statement.value)
+                protected_roots = {
+                    "@output",
+                    "@decoded",
+                    "@receipt_input",
+                    "@canonical_output",
+                    "@expected_policy",
+                    self.policy,
+                }
+                contains_protected_alias = any(
+                    self.symbol(node) in protected_roots
+                    for node in ast.walk(statement.value)
+                    if isinstance(node, ast.expr)
+                )
+                if (
+                    contains_protected_alias
+                    and symbol is None
+                    and not (
+                        isinstance(statement.value, ast.Call)
+                        and self.symbol(statement.value.func) in self.covered
+                    )
+                ):
+                    # Containers/closures/computed wrappers can hide a mutable alias.
+                    return False
+                if self.aliases.get(name) in {
+                    "@decoded",
+                    "@output",
+                    "@receipt_input",
+                    "@canonical_output",
+                    "@expected_policy",
+                    self.policy,
+                } or (isinstance(statement.value, ast.Call) and symbol == "@decoded"):
+                    self.facts.clear()
+                self.aliases[name] = symbol
+            elif (
+                isinstance(statement, ast.If)
+                and not statement.orelse
+                and len(statement.body) == 1
+                and isinstance(statement.body[0], ast.Raise)
+            ):
+                self.facts.update(self.rejection_facts(statement.test))
+            elif isinstance(statement, ast.Return):
+                return index == len(function.body) - 1 and self.complete()
+            else:
+                return False
+        return False
+
+
+def _verified_retained_boundary(
+    repo_root: Path,
+    callsite: str,
+    constant: str,
+    declaration: PolicyDeclaration,
+    specification: dict[str, Any],
+    covered: set[str],
+) -> bool:
+    path, name = callsite.split("::", maxsplit=1)
+    module = ast.parse((repo_root / path).read_text(encoding="utf-8"))
+    functions = [
+        node
+        for node in module.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name
+    ]
+    return len(functions) == 1 and _RetainedVerificationProof(
+        path, constant, declaration, specification, covered
+    ).prove(module, functions[0])
+
+
+def _retained_boundaries(
+    repo_root: Path,
+    constant: str,
+    declaration: PolicyDeclaration,
+    policy: dict[str, Any],
+    call_graph: dict[str, set[str]],
+    computed_gaps: set[str],
+) -> tuple[set[str], list[str]]:
+    specifications = policy.get("lineage_verification_boundaries", {})
+    if not isinstance(specifications, dict) or list(specifications) != sorted(specifications):
+        return set(), [f"{constant}: invalid retained-verification boundary specifications"]
+    verified: set[str] = set()
+    findings: list[str] = []
+    required_keys = {
+        "receipt_parameter",
+        "output_parameter",
+        "output_canonicalizer",
+        "algorithm_id",
+        "algorithm_version",
+    }
+    for boundary, specification in specifications.items():
+        covered = set(policy.get("lineage_boundary_covered_callsites", {}).get(boundary, []))
+        valid = (
+            boundary in policy.get("lineage_boundary_callsites", [])
+            and boundary in call_graph
+            and isinstance(specification, dict)
+            and set(specification) == required_keys
+            and all(
+                isinstance(specification[name], str) and specification[name].isidentifier()
+                for name in ("receipt_parameter", "output_parameter")
+            )
+            and specification["receipt_parameter"] != specification["output_parameter"]
+            and isinstance(specification["algorithm_id"], str)
+            and bool(specification["algorithm_id"].strip())
+            and type(specification["algorithm_version"]) is int
+            and specification["algorithm_version"] > 0
+            and isinstance(specification["output_canonicalizer"], str)
+            and specification["output_canonicalizer"] in covered & computed_gaps
+            and boundary not in policy.get("lineage_boundary_terminal_callsites", {})
+        )
+        if valid and _verified_retained_boundary(
+            repo_root, boundary, constant, declaration, specification, covered
+        ):
+            verified.add(boundary)
+        else:
+            findings.append(f"{constant}: invalid retained-verification boundary at {boundary}")
+    return verified, findings
 
 
 @dataclass(frozen=True, slots=True)
@@ -1247,16 +1885,21 @@ def evaluate(repo_root: Path, contract_path: Path) -> tuple[str, ...]:
             )
             continue
         boundary_terminals = cast(dict[str, dict[str, str]], raw_boundary_terminals)
-        unverified_boundaries = set(boundary_callsites) - lineage_callsites
-        for callsite in sorted(unverified_boundaries):
-            findings.append(
-                f"{constant}: lineage boundary does not invoke the governed builder at {callsite}"
-            )
         computed_gaps = (
             (execution_callsites - lineage_callsites)
             | control_flow_gaps[constant]
             | terminal_control_flow_gaps[constant]
         )
+        retained_boundaries, retained_findings = _retained_boundaries(
+            repo_root, constant, declaration, policy, exact_call_graph, computed_gaps
+        )
+        findings.extend(retained_findings)
+        verified_boundaries = lineage_callsites | retained_boundaries
+        unverified_boundaries = set(boundary_callsites) - verified_boundaries
+        for callsite in sorted(unverified_boundaries):
+            findings.append(
+                f"{constant}: lineage boundary does not invoke the governed builder at {callsite}"
+            )
         for boundary, terminals in boundary_terminals.items():
             if boundary not in boundary_coverage:
                 findings.append(
@@ -1319,13 +1962,13 @@ def evaluate(repo_root: Path, contract_path: Path) -> tuple[str, ...]:
             findings.append(f"{constant}: stale lineage gap at {callsite}")
         if not execution_callsites:
             findings.append(f"{constant}: no execution consumer found")
-        if binding == "required" and (not lineage_callsites or effective_gaps):
+        if binding == "required" and (not verified_boundaries or effective_gaps):
             findings.append(f"{constant}: required lineage binding is incomplete")
-        if binding == "partial" and (not lineage_callsites or not effective_gaps):
+        if binding == "partial" and (not verified_boundaries or not effective_gaps):
             findings.append(
                 f"{constant}: partial lineage binding requires bound and unbound consumers"
             )
-        if binding == "not-exposed" and lineage_callsites:
+        if binding == "not-exposed" and verified_boundaries:
             findings.append(f"{constant}: not-exposed policy has a lineage binding")
     if len(declarations) != expected_inventory:
         findings.append(

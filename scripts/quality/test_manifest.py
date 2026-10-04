@@ -70,6 +70,8 @@ SUITES: dict[str, list[str]] = {
         "test_redemption_correction_clears_superseded_terms_and_interest_cash_link",
     ],
     "critical-db-coverage": [
+        "tests/integration/services/query_control_plane_service/"
+        "test_historical_fx_evidence_postgresql.py",
         "tests/integration/services/portfolio_transaction_processing_service/"
         "test_cost_basis_lot_disposal_admission_postgresql.py",
         "tests/integration/services/persistence_service/test_fx_source_admission_postgresql.py",
@@ -146,6 +148,8 @@ SUITES: dict[str, list[str]] = {
     "critical-lifecycle-db": ["tests/integration"],
     "query-authority-db-contract": [
         "tests/integration/services/query_control_plane_service/"
+        "test_historical_fx_evidence_postgresql.py",
+        "tests/integration/services/query_control_plane_service/"
         "test_client_restriction_profile_router_postgresql.py",
         "tests/integration/services/query_control_plane_service/"
         "test_analytics_business_calendar_postgresql.py",
@@ -164,6 +168,8 @@ SUITES: dict[str, list[str]] = {
     "integration-all": ["tests/integration"],
     "ops-contract": [
         "tests/integration/services/ingestion_service/test_ingestion_main_app_contract.py",
+        "tests/integration/services/query_control_plane_service/test_control_plane_app.py::"
+        "test_openapi_fully_documents_performance_component_economics_schema_family",
         "tests/integration/services/ingestion_service/test_ingestion_routers.py",
         "tests/integration/services/query_control_plane_service/"
         "test_operations_router_dependency.py",

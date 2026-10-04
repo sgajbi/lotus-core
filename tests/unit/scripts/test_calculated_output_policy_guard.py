@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import ast
 import json
+from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Callable
 
 import pytest
@@ -113,6 +116,566 @@ def test_repository_calculated_output_policy_inventory_is_complete() -> None:
         )
         == ()
     )
+
+
+def _retained_verification_fixture(root: Path) -> tuple[Path, Path]:
+    _write_policy(root)
+    source = root / "src" / "owner" / "retained.py"
+    source.write_text(
+        "from portfolio_common.domain.calculation_lineage import "
+        "calculation_lineage_from_payload as decode, calculation_lineage_binds_output as binds\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1 as policy\n"
+        "def canonical(output):\n"
+        "    return {'value': policy.normalize(output['value'], field_name='value')}\n"
+        "def amount(output):\n"
+        "    return policy.normalize(output['value'], field_name='value')\n"
+        "def verify(receipt_payload, ledger_output):\n"
+        "    receipt = decode(receipt_payload)\n"
+        "    if (receipt is None or receipt.algorithm_id != 'test-retained'\n"
+        "        or receipt.algorithm_version != 1\n"
+        "        or receipt.intermediate_precision != policy.working_precision\n"
+        "        or receipt.numeric_output_policy != policy.lineage_identity()\n"
+        "        or not binds(receipt, output_payload=canonical(ledger_output))):\n"
+        "        raise ValueError('unavailable')\n"
+        "    return amount(ledger_output)\n",
+        encoding="utf-8",
+    )
+    boundary = "src/owner/retained.py::verify"
+    contract = _contract(
+        root,
+        lineage_boundary_callsites=[boundary],
+        lineage_boundary_covered_callsites={
+            boundary: ["src/owner/retained.py::amount", "src/owner/retained.py::canonical"]
+        },
+        lineage_verification_boundaries={
+            boundary: {
+                "receipt_parameter": "receipt_payload",
+                "output_parameter": "ledger_output",
+                "output_canonicalizer": "src/owner/retained.py::canonical",
+                "algorithm_id": "test-retained",
+                "algorithm_version": 1,
+            }
+        },
+    )
+    return source, contract
+
+
+def test_retained_verification_accepts_strict_import_resolved_predicate(tmp_path: Path):
+    source, contract = _retained_verification_fixture(tmp_path)
+    assert source.exists()
+    assert evaluate(tmp_path, contract) == ()
+
+
+def test_retained_verification_accepts_qualified_shared_import(tmp_path):
+    source, contract = _retained_verification_fixture(tmp_path)
+    text = source.read_text(encoding="utf-8")
+    text = text.replace(
+        "from portfolio_common.domain.calculation_lineage import "
+        "calculation_lineage_from_payload as decode, calculation_lineage_binds_output as binds",
+        "import portfolio_common.domain.calculation_lineage as lineage",
+    ).replace(
+        "decode(receipt_payload)", "lineage.calculation_lineage_from_payload(receipt_payload)"
+    )
+    text = text.replace("binds(receipt,", "lineage.calculation_lineage_binds_output(receipt,")
+    source.write_text(text, encoding="utf-8")
+    assert evaluate(tmp_path, contract) == ()
+
+
+def test_retained_verification_rejects_exception_bypass(tmp_path):
+    source, contract = _retained_verification_fixture(tmp_path)
+    text = source.read_text(encoding="utf-8")
+    before, body = text.split("def verify(receipt_payload, ledger_output):\n")
+    source.write_text(
+        before
+        + "def verify(receipt_payload, ledger_output):\n    try:\n"
+        + "".join("    " + line + "\n" for line in body.splitlines())
+        + "    except ValueError:\n        return amount(ledger_output)\n",
+        encoding="utf-8",
+    )
+    assert any(
+        "invalid retained-verification boundary" in finding
+        for finding in evaluate(tmp_path, contract)
+    )
+
+
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        ("receipt = decode(receipt_payload)", "receipt = decode(unrelated_receipt)"),
+        ("receipt = decode(receipt_payload)", "receipt = receipt_payload"),
+        ("receipt is None", "receipt is not None"),
+        ("receipt.algorithm_id != 'test-retained'", "receipt.algorithm_id != 'wrong'"),
+        ("receipt.algorithm_version != 1", "receipt.algorithm_version != 2"),
+        ("receipt.intermediate_precision != policy.working_precision", "False"),
+        ("receipt.numeric_output_policy != policy.lineage_identity()", "False"),
+        (
+            "receipt.numeric_output_policy != policy.lineage_identity()",
+            "receipt.numeric_output_policy == policy.lineage_identity()",
+        ),
+        ("or not binds(receipt, output_payload=canonical(ledger_output))", "or False"),
+        ("not binds(receipt,", "binds(receipt,"),
+        ("binds(receipt,", "binds(unrelated_receipt,"),
+        ("canonical(ledger_output))", "canonical(unrelated_output))"),
+        ("raise ValueError('unavailable')", "return amount(ledger_output)"),
+        (
+            "return amount(ledger_output)",
+            "receipt = decode(unrelated_receipt)\n    return amount(ledger_output)",
+        ),
+        (
+            "return amount(ledger_output)",
+            "ledger_output = unrelated_output\n    return amount(ledger_output)",
+        ),
+        (
+            "receipt = decode(receipt_payload)",
+            "if bypass:\n        return amount(ledger_output)\n"
+            "    receipt = decode(receipt_payload)",
+        ),
+        (
+            "or not binds(receipt, output_payload=canonical(ledger_output))",
+            "or binds(receipt, output_payload=canonical(ledger_output)) is None",
+        ),
+        (
+            "receipt = decode(receipt_payload)",
+            "binds = untrusted\n    receipt = decode(receipt_payload)",
+        ),
+        (
+            "receipt = decode(receipt_payload)",
+            "policy = untrusted\n    receipt = decode(receipt_payload)",
+        ),
+        (
+            "return amount(ledger_output)",
+            "ledger_output['value'] = 99\n    return amount(ledger_output)",
+        ),
+        ("return amount(ledger_output)", "return amount(unrelated_output, ignored=ledger_output)"),
+        (
+            "return amount(ledger_output)",
+            "result = mutate([ledger_output])\n    return amount(ledger_output)",
+        ),
+        (
+            "return amount(ledger_output)",
+            "result = receipt.numeric_output_policy.mutate()\n    return amount(ledger_output)",
+        ),
+        (
+            "def verify(receipt_payload, ledger_output):",
+            "def verify(receipt_payload, ledger_output, decode=None):",
+        ),
+        (
+            "def verify(receipt_payload, ledger_output):",
+            "def verify(receipt_payload, ledger_output, *binds):",
+        ),
+        (
+            "def verify(receipt_payload, ledger_output):",
+            "def verify(receipt_payload, ledger_output, **policy):",
+        ),
+        (
+            "def verify(receipt_payload, ledger_output):",
+            "@untrusted\ndef verify(receipt_payload, ledger_output):",
+        ),
+        (
+            "return amount(ledger_output)",
+            "another = decode(receipt_payload)\n    return amount(ledger_output)",
+        ),
+        (
+            "or not binds(receipt, output_payload=canonical(ledger_output))",
+            "or (not binds(receipt, output_payload=canonical(ledger_output)) and bypass)",
+        ),
+        (
+            "or not binds(receipt, output_payload=canonical(ledger_output))",
+            "or False\n        or "
+            "(binds(receipt, output_payload=canonical(ledger_output)) and False)",
+        ),
+        (
+            "return amount(ledger_output)",
+            "ignored = (ledger_output := unrelated_output)\n    return amount(ledger_output)",
+        ),
+        ("return amount(ledger_output)", "return amount(unrelated_output)"),
+    ],
+)
+def test_retained_verification_rejects_unbound_or_bypassed_predicate(tmp_path, before, after):
+    source, contract = _retained_verification_fixture(tmp_path)
+    text = source.read_text(encoding="utf-8")
+    assert before in text
+    source.write_text(text.replace(before, after), encoding="utf-8")
+    findings = evaluate(tmp_path, contract)
+    assert any("invalid retained-verification boundary" in finding for finding in findings)
+    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in findings
+
+
+@pytest.mark.parametrize("name", ["decode", "binds", "policy"])
+def test_retained_verification_rejects_module_import_shadowing(tmp_path, name):
+    source, contract = _retained_verification_fixture(tmp_path)
+    source.write_text(
+        source.read_text(encoding="utf-8") + f"\n{name} = untrusted\n", encoding="utf-8"
+    )
+    assert any(
+        "invalid retained-verification boundary" in item for item in evaluate(tmp_path, contract)
+    )
+
+
+def test_retained_verification_rejects_discarded_binding_result(tmp_path):
+    source, contract = _retained_verification_fixture(tmp_path)
+    text = (
+        source.read_text(encoding="utf-8")
+        .replace("or not binds(receipt, output_payload=canonical(ledger_output))", "or False")
+        .replace(
+            "    return amount(ledger_output)",
+            "    discarded = binds(receipt, output_payload=canonical(ledger_output))\n"
+            "    return amount(ledger_output)",
+        )
+    )
+    source.write_text(text, encoding="utf-8")
+    findings = evaluate(tmp_path, contract)
+    assert any("invalid retained-verification boundary" in item for item in findings)
+    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in findings
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("receipt_parameter", "unrelated_receipt"),
+        ("output_parameter", "unrelated_output"),
+        ("output_canonicalizer", "src/owner/missing.py::canonical"),
+        ("algorithm_id", "wrong"),
+        ("algorithm_id", ""),
+        ("algorithm_version", 2),
+        ("algorithm_version", True),
+        ("algorithm_version", 0),
+        ("extra", "not-supported"),
+    ],
+)
+def test_retained_verification_rejects_stale_or_malformed_specification(tmp_path, field, value):
+    _, contract = _retained_verification_fixture(tmp_path)
+
+    def mutate(payload):
+        payload["policies"]["TEST_LEDGER_OUTPUT_V1"]["lineage_verification_boundaries"][
+            "src/owner/retained.py::verify"
+        ][field] = value
+
+    _rewrite_contract(contract, mutate)
+    assert any(
+        "invalid retained-verification boundary" in item for item in evaluate(tmp_path, contract)
+    )
+
+
+@pytest.mark.parametrize(
+    "shared_name", ["calculation_lineage_from_payload", "calculation_lineage_binds_output"]
+)
+def test_retained_verification_rejects_untrusted_import(tmp_path, shared_name):
+    source, contract = _retained_verification_fixture(tmp_path)
+    alias = "decode" if shared_name.endswith("from_payload") else "binds"
+    source.write_text(
+        source.read_text(encoding="utf-8") + f"\nfrom untrusted import {shared_name} as {alias}\n",
+        encoding="utf-8",
+    )
+    assert any(
+        "invalid retained-verification boundary" in item for item in evaluate(tmp_path, contract)
+    )
+
+
+def test_retained_verification_cannot_use_arbitrary_terminal(tmp_path):
+    _, contract = _retained_verification_fixture(tmp_path)
+    boundary = "src/owner/retained.py::verify"
+    _rewrite_contract(
+        contract,
+        lambda payload: payload["policies"]["TEST_LEDGER_OUTPUT_V1"].update(
+            lineage_boundary_terminal_callsites={
+                boundary: {boundary: "read-only-lineage-verification"}
+            }
+        ),
+    )
+    assert any(
+        "invalid retained-verification boundary" in item for item in evaluate(tmp_path, contract)
+    )
+
+
+def test_retained_verification_rejects_mutated_precomputed_canonical_output(tmp_path):
+    source, contract = _retained_verification_fixture(tmp_path)
+    text = (
+        source.read_text(encoding="utf-8")
+        .replace(
+            "    receipt = decode(receipt_payload)",
+            "    payload = canonical(ledger_output)\n"
+            "    changed = mutate(payload)\n    receipt = decode(receipt_payload)",
+        )
+        .replace("output_payload=canonical(ledger_output)", "output_payload=payload")
+    )
+    source.write_text(text, encoding="utf-8")
+    assert any(
+        "invalid retained-verification boundary" in item for item in evaluate(tmp_path, contract)
+    )
+
+
+def _execute_retained_fixture(source: str, *, bound: str, output: str):
+    """Execute only authored fixture functions to demonstrate a guard counterexample."""
+    policy = SimpleNamespace(
+        working_precision=64,
+        lineage_identity=lambda: "same-policy",
+        normalize=lambda value, **kwargs: Decimal(str(value)),
+    )
+    receipt = SimpleNamespace(
+        algorithm_id="test-retained",
+        algorithm_version=1,
+        intermediate_precision=64,
+        numeric_output_policy="same-policy",
+        value=Decimal(bound),
+    )
+
+    def mutate(alias):
+        retained = alias["retained"] if isinstance(alias, dict) else alias[0]
+        retained["value"] = Decimal("99")
+
+    namespace = {
+        "policy": policy,
+        "decode": lambda payload: payload,
+        "binds": lambda receipt, *, output_payload: receipt.value == output_payload["value"],
+        "mutate": mutate,
+    }
+    tree = ast.parse(source)
+    functions = ast.Module(
+        body=[node for node in tree.body if isinstance(node, ast.FunctionDef)], type_ignores=[]
+    )
+    exec(compile(functions, "<authored-retained-fixture>", "exec"), namespace)
+    return namespace["verify"](receipt, {"value": Decimal(output)})
+
+
+@pytest.mark.parametrize("container", ["{'retained': ledger_output}", "[ledger_output]"])
+def test_retained_verification_rejects_executed_container_alias_escape(tmp_path, container):
+    source, contract = _retained_verification_fixture(tmp_path)
+    original = source.read_text(encoding="utf-8")
+    assert _execute_retained_fixture(original, bound="1", output="1") == Decimal("1")
+    mutated = original.replace(
+        "    return amount(ledger_output)",
+        f"    shadow = {container}\n    changed = mutate(shadow)\n    return amount(ledger_output)",
+    )
+    assert _execute_retained_fixture(mutated, bound="1", output="1") == Decimal("99")
+    source.write_text(mutated, encoding="utf-8")
+    assert any(
+        "invalid retained-verification boundary" in item for item in evaluate(tmp_path, contract)
+    )
+
+
+def test_retained_verification_rejects_executed_constant_canonical_projection(tmp_path):
+    source, contract = _retained_verification_fixture(tmp_path)
+    original = source.read_text(encoding="utf-8")
+    assert _execute_retained_fixture(original, bound="1", output="1") == Decimal("1")
+    mutated = original.replace("policy.normalize(output['value'],", "policy.normalize('0',", 1)
+    assert _execute_retained_fixture(mutated, bound="0", output="99") == Decimal("99")
+    source.write_text(mutated, encoding="utf-8")
+    assert any(
+        "invalid retained-verification boundary" in item for item in evaluate(tmp_path, contract)
+    )
+
+
+@pytest.mark.parametrize(
+    "projection",
+    [
+        "{'value': policy.normalize('0', field_name='value')}",
+        "{'wrong': policy.normalize(output['value'], field_name='wrong')}",
+        "{'value': policy.normalize(output['other'], field_name='value')}",
+        "{'value': policy.normalize(output['value'] * 0, field_name='value')}",
+        "{'value': policy.normalize(output['value'], field_name='value'), "
+        "'extra': policy.normalize('0', field_name='extra')}",
+    ],
+)
+def test_retained_verification_rejects_fabricated_or_remapped_field_projection(
+    tmp_path, projection
+):
+    source, contract = _retained_verification_fixture(tmp_path)
+    text = source.read_text(encoding="utf-8").replace(
+        "{'value': policy.normalize(output['value'], field_name='value')}", projection
+    )
+    source.write_text(text, encoding="utf-8")
+    assert any(
+        "invalid retained-verification boundary" in item for item in evaluate(tmp_path, contract)
+    )
+
+
+@pytest.mark.parametrize(
+    "hidden_alias",
+    [
+        "(ledger_output,)",
+        "{'receipt': receipt}",
+        "{'output': canonical(ledger_output)}",
+        "lambda: ledger_output",
+        "ledger_output['value']",
+    ],
+)
+def test_retained_verification_rejects_unsupported_alias_bearing_assignment(tmp_path, hidden_alias):
+    source, contract = _retained_verification_fixture(tmp_path)
+    text = source.read_text(encoding="utf-8").replace(
+        "    return amount(ledger_output)",
+        f"    shadow = {hidden_alias}\n    return amount(ledger_output)",
+    )
+    source.write_text(text, encoding="utf-8")
+    assert any(
+        "invalid retained-verification boundary" in item for item in evaluate(tmp_path, contract)
+    )
+
+
+def _complete_projection_fixture(root: Path) -> tuple[Path, Path]:
+    source, contract = _retained_verification_fixture(root)
+    text = source.read_text(encoding="utf-8")
+    start, remainder = text.split("def canonical(output):\n")
+    _, tail = remainder.split("def amount(output):\n")
+    projection = (
+        "def canonical(output):\n"
+        "    owned_policy = source_policy\n"
+        "    quantum = D(1).scaleb(-owned_policy.scale)\n"
+        "    projected: dict[str, object] = {}\n"
+        "    for key, value in output.items():\n"
+        "        if value is None:\n            continue\n"
+        "        if isinstance(value, D):\n"
+        "            with owned_policy.arithmetic_context():\n"
+        "                value = owned_policy.normalize(value, field_name=key).quantize(\n"
+        "                    quantum, rounding=owned_policy.rounding)\n"
+        "        projected[key] = value\n"
+        "    return projected\n"
+    )
+    source.write_text(
+        start + "from decimal import Decimal as D\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1 as source_policy\n"
+        + projection
+        + "def amount(output):\n"
+        + tail,
+        encoding="utf-8",
+    )
+    return source, contract
+
+
+def test_retained_verification_accepts_alpha_renamed_complete_projection(tmp_path):
+    _, contract = _complete_projection_fixture(tmp_path)
+    assert evaluate(tmp_path, contract) == ()
+
+
+def test_retained_verification_rejects_alias_hidden_by_covered_helper(tmp_path):
+    source, contract = _retained_verification_fixture(tmp_path)
+    text = (
+        source.read_text(encoding="utf-8")
+        .replace(
+            "    return policy.normalize(output['value'], field_name='value')",
+            "    ignored = policy.normalize(output['value'], field_name='value')\n"
+            "    return output",
+        )
+        .replace(
+            "    return amount(ledger_output)",
+            "    shadow = amount(ledger_output)\n"
+            "    changed = shadow.update(value=99)\n    return amount(ledger_output)",
+        )
+    )
+    source.write_text(text, encoding="utf-8")
+    assert any(
+        "invalid retained-verification boundary" in item for item in evaluate(tmp_path, contract)
+    )
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "    return policy.normalize(output.pop('value'), field_name='value')\n",
+        "    scalar = policy.normalize(output['value'], field_name='value')\n"
+        "    return scalar if bypass else output\n",
+        "    if bypass:\n"
+        "        output = policy.normalize(output['value'], field_name='value')\n"
+        "    return output\n",
+        "    scalar = policy.normalize(output['value'], field_name='value')\n"
+        "    output.update(value=99)\n    return scalar\n",
+        "    scalar = policy.normalize(output['value'], field_name='value')\n"
+        "    return unrelated(scalar)\n",
+        "    scalar = policy.normalize(output['value'], field_name='value')\n"
+        "    return output.get('value')\n",
+        "    scalar = policy.normalize(output['value'], field_name='value')\n"
+        "    scalar = output\n    return scalar\n",
+    ],
+)
+def test_retained_verification_rejects_mutable_or_opaque_amount_helpers(tmp_path, body):
+    source, contract = _retained_verification_fixture(tmp_path)
+    text = source.read_text(encoding="utf-8")
+    prefix, remainder = text.split("def amount(output):\n")
+    _, verifier = remainder.split("def verify(receipt_payload, ledger_output):\n")
+    source.write_text(
+        prefix
+        + "def amount(output):\n"
+        + body
+        + "def verify(receipt_payload, ledger_output):\n"
+        + verifier,
+        encoding="utf-8",
+    )
+    findings = evaluate(tmp_path, contract)
+    assert any("invalid retained-verification boundary" in item for item in findings)
+    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in findings
+
+
+def test_retained_verification_accepts_readonly_conditional_scalar_helper(tmp_path):
+    source, contract = _retained_verification_fixture(tmp_path)
+    text = source.read_text(encoding="utf-8").replace(
+        "    return policy.normalize(output['value'], field_name='value')",
+        "    if output.get('value') is None:\n        return None\n"
+        "    numeric_policy = policy\n"
+        "    scalar = numeric_policy.normalize(output['value'], field_name='value')\n"
+        "    return scalar if scalar == output.get('value') else None",
+    )
+    source.write_text(text, encoding="utf-8")
+    assert evaluate(tmp_path, contract) == ()
+
+
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        (
+            "owned_policy.normalize(value, field_name=key)",
+            "owned_policy.normalize('0', field_name=key)",
+        ),
+        ("projected[key] = value", "projected['wrong'] = value"),
+        ("output.items()", "unrelated_output.items()"),
+        ("if value is None", "if value is not None"),
+        ("rounding=owned_policy.rounding", "rounding='ROUND_DOWN'"),
+        ("    return projected", "    return {'value': D(0)}"),
+        ("def canonical(output):", "def canonical(output, D=None):"),
+        ("quantum", "isinstance"),
+    ],
+)
+def test_retained_verification_rejects_drifting_complete_projection(tmp_path, before, after):
+    source, contract = _complete_projection_fixture(tmp_path)
+    text = source.read_text(encoding="utf-8")
+    assert before in text
+    source.write_text(text.replace(before, after), encoding="utf-8")
+    assert any(
+        "invalid retained-verification boundary" in item for item in evaluate(tmp_path, contract)
+    )
+
+
+@pytest.mark.parametrize("mutation", ["missing", "duplicate", "stale", "unbound_caller"])
+def test_retained_verification_registration_is_not_an_allowlist(tmp_path, mutation):
+    source, contract = _retained_verification_fixture(tmp_path)
+    boundary = "src/owner/retained.py::verify"
+    if mutation == "missing":
+        _rewrite_contract(
+            contract,
+            lambda payload: payload["policies"]["TEST_LEDGER_OUTPUT_V1"].pop(
+                "lineage_verification_boundaries"
+            ),
+        )
+    elif mutation == "duplicate":
+        _rewrite_contract(
+            contract,
+            lambda payload: payload["policies"]["TEST_LEDGER_OUTPUT_V1"][
+                "lineage_boundary_covered_callsites"
+            ][boundary].append("src/owner/retained.py::canonical"),
+        )
+    elif mutation == "stale":
+        _rewrite_contract(
+            contract,
+            lambda payload: payload["policies"]["TEST_LEDGER_OUTPUT_V1"][
+                "lineage_boundary_covered_callsites"
+            ][boundary].append("src/owner/missing.py::canonical"),
+        )
+    else:
+        (source.parent / "unbound.py").write_text(
+            "from owner.retained import canonical\n"
+            "def escape(output):\n    return canonical(output)\n",
+            encoding="utf-8",
+        )
+    assert evaluate(tmp_path, contract)
 
 
 @pytest.mark.parametrize(

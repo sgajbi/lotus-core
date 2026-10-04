@@ -24,10 +24,17 @@ source is `contracts/transaction-processing/transaction-capability-catalog.v1.js
 ## Executive Summary
 
 Fresh applicable FX `UPSTREAM_PROVIDED` admission requires local/base FX P&L, including supplied
-zero. Incomplete source admission is refused; historical readers/calculations and command-level
-correction remain unchanged. This bounded rule is not live-broker or deployment certification.
+zero. Incomplete source admission is refused; calculations and command-level correction remain
+unchanged. This bounded rule is not live-broker or deployment certification.
 See the [FX admission policy](https://github.com/sgajbi/lotus-core/blob/main/docs/rfc-transaction-specs/transactions/FX/FX-SLICE-6-PNL-SEMANTICS.md#fresh-source-admission)
 for exemptions, legacy fail-closed identity and exact-head database acceptance requirements.
+
+The separate QCP historical FX projection withholds unqualified FX and dependent totals as null.
+Qualified raw source plus existing complete receipt authority preserves explicit zero and signed
+amounts; incomplete mixed totals retain missing contributor counts and DEGRADED/PARTIAL posture.
+Read-side qualification does not backfill ledger, outbox or fences, and is not downstream analytics
+or deployment certification. See the
+[component economics methodology](https://github.com/sgajbi/lotus-core/blob/main/docs/methodologies/source-data-products/performance-component-economics.md).
 
 `lotus-core` is the Lotus system of record for foundational portfolio, booking, transaction,
 position, cashflow, valuation, source-data, support, lineage, and reconciliation evidence.

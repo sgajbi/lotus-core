@@ -7,6 +7,10 @@ from decimal import Decimal
 from typing import cast
 
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.transaction.fx_source_admission import (
+    FX_NON_REALIZING_SOURCE_COMPONENTS,
+    FX_SOURCE_ADMISSION_TYPES,
+)
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 
 from ...contracts.performance_component_economics import (
@@ -15,6 +19,7 @@ from ...contracts.performance_component_economics import (
 )
 from ...domain.transaction_economics import (
     BookedTransactionEconomics,
+    FxPnlEvidenceReason,
     TransactionCostComponentEvidence,
 )
 from .performance_policy import (
@@ -34,6 +39,7 @@ def _performance_component_economics_row(
     cashflow = transaction.cashflow
     trade_fee_components = _transaction_fee_components(transaction)
     trade_fee_currency = _transaction_fee_currency(trade_fee_components)
+    fx_local, fx_base, fx_reason = _fx_source_amounts(transaction)
     return PerformanceComponentEconomicsRow(
         transaction_id=str(transaction.transaction_id),
         portfolio_id=str(transaction.portfolio_id),
@@ -66,16 +72,42 @@ def _performance_component_economics_row(
         ),
         net_interest_amount=_decimal_or_zero(transaction.net_interest_amount),
         realized_capital_pnl_local=_decimal_or_zero(transaction.realized_capital_pnl_local),
-        realized_fx_pnl_local=_decimal_or_zero(transaction.realized_fx_pnl_local),
-        realized_total_pnl_local=_decimal_or_zero(transaction.realized_total_pnl_local),
+        realized_fx_pnl_local=fx_local,
+        realized_total_pnl_local=(
+            _decimal_or_zero(transaction.realized_total_pnl_local) if fx_local is not None else None
+        ),
         realized_pnl_local_currency=_transaction_trade_currency(transaction),
         realized_capital_pnl_base=_decimal_or_zero(transaction.realized_capital_pnl_base),
-        realized_fx_pnl_base=_decimal_or_zero(transaction.realized_fx_pnl_base),
-        realized_total_pnl_base=_decimal_or_zero(transaction.realized_total_pnl_base),
+        realized_fx_pnl_base=fx_base,
+        realized_total_pnl_base=(
+            _decimal_or_zero(transaction.realized_total_pnl_base) if fx_base is not None else None
+        ),
+        fx_pnl_evidence_reason=fx_reason,
         transaction_fx_rate=transaction.transaction_fx_rate,
         fx_contract_id=transaction.fx_contract_id,
         source_lineage=performance_component_economics_source_lineage(),
     )
+
+
+def _fx_source_amounts(
+    transaction: BookedTransactionEconomics,
+) -> tuple[Decimal | None, Decimal | None, FxPnlEvidenceReason]:
+    if str(transaction.transaction_type).strip().upper() not in FX_SOURCE_ADMISSION_TYPES:
+        return (
+            _decimal_or_zero(transaction.realized_fx_pnl_local),
+            _decimal_or_zero(transaction.realized_fx_pnl_base),
+            "FX_SOURCE_NOT_APPLICABLE",
+        )
+    if (
+        str(transaction.fx_realized_pnl_mode or "").strip().upper() == "NONE"
+        or str(transaction.component_type or "").strip().upper()
+        in FX_NON_REALIZING_SOURCE_COMPONENTS
+    ):
+        return Decimal("0"), Decimal("0"), "FX_SOURCE_NOT_APPLICABLE"
+    evidence = transaction.fx_pnl_source_evidence
+    if evidence is None:
+        return None, None, "FX_SOURCE_AUTHORITY_UNAVAILABLE"
+    return evidence.local, evidence.base, evidence.reason
 
 
 def _transaction_fee_components(

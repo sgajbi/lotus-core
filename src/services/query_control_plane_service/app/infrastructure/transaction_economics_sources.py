@@ -1,10 +1,18 @@
 """SQLAlchemy source adapter for transaction-economics evidence products."""
 
+from collections import defaultdict
 from datetime import UTC, date, datetime, time, timedelta
 from typing import cast
 
-from portfolio_common.database_models import Cashflow, Portfolio, Transaction, TransactionCost
+from portfolio_common.database_models import (
+    Cashflow,
+    OutboxEvent,
+    Portfolio,
+    Transaction,
+    TransactionCost,
+)
 from portfolio_common.domain.tenant import TenantId
+from portfolio_common.domain.transaction.fx_source_admission import FX_SOURCE_ADMISSION_TYPES
 from portfolio_common.identifiers import normalize_lookup_identifier
 from portfolio_common.infrastructure.transaction_cost_snapshot import (
     TransactionCostSnapshot,
@@ -15,11 +23,25 @@ from sqlalchemy import and_, exists, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, contains_eager
 
+from ..application.transaction_economics.evidence import qualify_fx_pnl_source_evidence
 from ..domain.transaction_economics import (
     BookedTransactionEconomics,
+    FxPnlSourceEvidence,
     TransactionCashflowEvidence,
     TransactionCostComponentEvidence,
 )
+
+_FX_RECEIPT_TECHNICAL_FIELDS = frozenset(
+    {"id", "updated_at", "payload_fingerprint", "calculation_lineage"}
+)
+
+
+def _fx_receipt_ledger_output(transaction: Transaction, tenant_id: TenantId) -> dict[str, object]:
+    return {
+        column.name: getattr(transaction, column.name)
+        for column in Transaction.__table__.columns
+        if column.name not in _FX_RECEIPT_TECHNICAL_FIELDS
+    } | {"tenant_id": tenant_id.value}
 
 
 def _start_of_day(value: date) -> datetime:
@@ -118,6 +140,7 @@ def _booked_transaction_economics(
     transaction: Transaction,
     *,
     costs: tuple[TransactionCostSnapshot, ...],
+    fx_pnl_source_evidence: FxPnlSourceEvidence | None = None,
 ) -> BookedTransactionEconomics:
     return BookedTransactionEconomics(
         transaction_id=transaction.transaction_id,
@@ -145,6 +168,9 @@ def _booked_transaction_economics(
         cashflow=_cashflow_evidence(transaction.cashflow),
         costs=tuple(_cost_component_evidence(cost) for cost in costs),
         updated_at=transaction.updated_at,
+        fx_realized_pnl_mode=transaction.fx_realized_pnl_mode,
+        component_type=transaction.component_type,
+        fx_pnl_source_evidence=fx_pnl_source_evidence,
     )
 
 
@@ -153,6 +179,54 @@ class SqlAlchemyTransactionEconomicsReader:
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def _fx_source_evidence(
+        self, transactions: list[Transaction], *, portfolio_id: str, tenant_id: TenantId
+    ) -> dict[str, FxPnlSourceEvidence]:
+        fx_transactions = [
+            row
+            for row in transactions
+            if row.transaction_type in FX_SOURCE_ADMISSION_TYPES
+            and row.fx_realized_pnl_mode == "UPSTREAM_PROVIDED"
+        ]
+        if not fx_transactions:
+            return {}
+        source_rows = await self._session.execute(
+            select(OutboxEvent.payload, Portfolio.tenant_id)
+            .join(Portfolio, Portfolio.portfolio_id == OutboxEvent.aggregate_id)
+            .where(
+                OutboxEvent.aggregate_type == "RawTransaction",
+                OutboxEvent.aggregate_id == portfolio_id,
+                OutboxEvent.event_type == "RawTransactionPersisted",
+                Portfolio.tenant_id == tenant_id.value,
+                OutboxEvent.payload["portfolio_id"].as_string() == Portfolio.portfolio_id,
+                OutboxEvent.payload["transaction_id"]
+                .as_string()
+                .in_([row.transaction_id for row in fx_transactions]),
+            )
+        )
+        sources: dict[str, list[tuple[object, str]]] = defaultdict(list)
+        for payload, source_tenant in source_rows.all():
+            sources[str(payload["transaction_id"])].append((payload, source_tenant))
+        return {
+            row.transaction_id: qualify_fx_pnl_source_evidence(
+                raw_source=(
+                    sources[row.transaction_id][0][0]
+                    if len(sources[row.transaction_id]) == 1
+                    else None
+                ),
+                ledger_output=_fx_receipt_ledger_output(row, tenant_id),
+                stored_fingerprint=row.payload_fingerprint,
+                receipt_payload=row.calculation_lineage,
+                tenant_id=tenant_id.value,
+                source_portfolio_tenant_id=(
+                    sources[row.transaction_id][0][1]
+                    if len(sources[row.transaction_id]) == 1
+                    else None
+                ),
+            )
+            for row in fx_transactions
+        }
 
     async def portfolio_exists(self, portfolio_id: str, *, tenant_id: TenantId) -> bool:
         stmt = (
@@ -476,9 +550,14 @@ class SqlAlchemyTransactionEconomicsReader:
         )
 
         results = await self._session.execute(stmt)
+        page_rows = results.all()
+        fx_evidence = await self._fx_source_evidence(
+            [row[0] for row in page_rows], portfolio_id=portfolio_id, tenant_id=tenant_id
+        )
         return [
             _booked_transaction_economics(
                 transaction,
+                fx_pnl_source_evidence=fx_evidence.get(transaction.transaction_id),
                 costs=transaction_cost_snapshots(
                     fee_types=fee_types,
                     amounts=amounts,
@@ -486,5 +565,5 @@ class SqlAlchemyTransactionEconomicsReader:
                     updated_ats=updated_ats,
                 ),
             )
-            for transaction, fee_types, amounts, currencies, updated_ats in results.all()
+            for transaction, fee_types, amounts, currencies, updated_ats in page_rows
         ]

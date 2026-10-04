@@ -72,8 +72,37 @@ strict-forward. Broker duplicates precede admission inside the existing UOW; fre
 leave no ledger/outbox/fence. Locked immutable v3 durable identity can qualify exact replay after
 fence expiry. Raw upstream v3 hashes all six original P&L fields; ambiguous P&L-excluding v1/v2
 identity cannot qualify upstream replay or promote stored zero. No historical row, calculation,
-reader, receipt or correction command changes. Native candidate-specific PG proof is routed through
+receipt or correction command changes in admission. Native candidate-specific PG proof is routed through
 `transaction-fx-contract` and `critical-db-coverage`; unit mocks are not durable evidence.
+
+The QCP `PerformanceComponentEconomics:v1` reader separately qualifies historical applicable FX
+using retained immutable raw outbox evidence, persisted portfolio tenant ownership, source identity,
+the strict shared lineage decoder and complete existing FX receipt output binding. Stored zero and
+normalized version-1 receipts alone never prove original presence. Missing FX bases and dependent
+totals remain nullable, missing contributors prevent complete grouped totals, and source-safe reasons
+qualify supportability as DEGRADED/PARTIAL. Qualified explicit zero is observed evidence; explicit
+NONE/non-realizing and non-FX semantics remain supported. Reads do not backfill ledger, outbox or
+fences. Owning reader proof runs in `query-authority-db-contract` and `critical-db-coverage`; actual
+downstream consumer and exact-main release qualification remain distinct acceptance boundaries.
+
+### Retained-verification delivery practice
+
+`make calculated-output-policy-guard` recognizes retained receipt verification separately from
+producer receipt creation. A registered straight-line boundary must import the shared strict
+decoder and output-binding predicate, reject missing/wrong algorithm, precision and complete
+numeric-policy identity, and reject a false binding against the same declared output before
+covered amount arithmetic. Covered helpers remain subject to exact caller reachability and
+escape checks. Unsupported branch/exception/decorator shapes, discarded or inverted predicates,
+input reassignment and opaque mutation fail closed; no arbitrary terminal or new lineage gap
+is permitted. Covered local helpers use the same named output parameter or a single output
+parameter. This is static source proof, not PostgreSQL, consumer or release certification.
+Canonical projection is a checked premise: only same-key input field normalization or an
+alpha-renamed complete mapping copy that omits only None and applies governed Decimal
+normalization/quantization is recognized. Constant/remapped/opaque projection shapes and
+alias-bearing containers, closures or computed assignments fail closed. Passing the input
+argument or reading it and then returning an unrelated value is not projection authority.
+Covered amount helpers must be read-only and return normalized immutable Decimal/None values;
+registration or annotations alone cannot prove that their result contains no mutable input alias.
 
 Core owns:
 
