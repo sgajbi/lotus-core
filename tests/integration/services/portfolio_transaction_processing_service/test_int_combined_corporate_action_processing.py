@@ -1,23 +1,34 @@
 from __future__ import annotations
 
+import asyncio
 from argparse import Namespace
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
 import pytest
+from portfolio_common import db as db_module
 from portfolio_common.database_models import (
     Cashflow,
+    CostBasisProcessingState,
     FinancialReconciliationFinding,
     FinancialReconciliationRun,
     LotDisposalAllocationRecord,
     LotDisposalReceiptRecord,
+    OutboxEvent,
     PositionHistory,
     PositionLotState,
+    PositionState,
+    ProcessedEvent,
 )
 from portfolio_common.database_models import Transaction as DBTransaction
-from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
+from portfolio_common.db import create_async_database_engine
+from sqlalchemy import event as sqlalchemy_event
+from sqlalchemy import select, text, update
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from scripts.operations import audit_lot_position_parity
 from scripts.operations.audit_lot_position_parity import (
     report_exit_code,
 )
@@ -50,6 +61,81 @@ pytestmark = [
     pytest.mark.db_direct,
     pytest.mark.regression,
 ]
+
+
+@contextmanager
+def _foreign_loop_cached_pool(database_url: str, monkeypatch: pytest.MonkeyPatch):
+    """Own a warmed real cached pool and clean it up on its original thread/loop."""
+
+    def create_foreign_pool():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            engine = create_async_database_engine(
+                runtime_identity="lotus-core-test", database_url=database_url
+            )
+            factory = async_sessionmaker(engine, expire_on_commit=False)
+        except BaseException:
+            loop.close()
+            raise
+
+        async def backend_id():
+            async with factory() as session:
+                return await session.scalar(text("SELECT pg_backend_pid()"))
+
+        try:
+            pid = loop.run_until_complete(backend_id())
+        except BaseException:
+            try:
+                loop.run_until_complete(engine.dispose())
+            finally:
+                loop.close()
+            raise
+        return loop, engine, factory, backend_id, pid
+
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="parity-foreign-pool") as owner:
+        loop, engine, factory, backend_id, pid = owner.submit(create_foreign_pool).result()
+        try:
+            with monkeypatch.context() as cache_patch:
+                cache_patch.setattr(db_module, "_async_engine", engine)
+                cache_patch.setattr(db_module, "_async_session_factory", factory)
+                yield
+                assert db_module._async_engine is engine
+                assert db_module._async_session_factory is factory
+                assert owner.submit(loop.run_until_complete, backend_id()).result() == pid
+        finally:
+            try:
+                owner.submit(loop.run_until_complete, engine.dispose()).result()
+            finally:
+                owner.submit(loop.close).result()
+
+
+async def _parity_audit_durable_snapshot(session_factory):
+    """Reload full authoritative rows, not counts or cached ORM projections."""
+
+    models = (
+        DBTransaction,
+        Cashflow,
+        PositionHistory,
+        PositionLotState,
+        PositionState,
+        CostBasisProcessingState,
+        LotDisposalReceiptRecord,
+        LotDisposalAllocationRecord,
+        ProcessedEvent,
+        OutboxEvent,
+    )
+    async with session_factory() as session:
+        return {
+            model.__tablename__: (
+                await session.execute(
+                    select(model.__table__).order_by(*model.__table__.primary_key.columns)
+                )
+            )
+            .mappings()
+            .all()
+            for model in models
+        }
 
 
 @pytest.mark.parametrize("cost_basis_method", ["FIFO", "AVCO"])
@@ -424,6 +510,7 @@ async def test_backdated_restatement_compares_position_at_event_before_later_sal
 async def test_same_time_restatements_share_cost_and_position_order(
     clean_db,
     async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     portfolio_id = "PORT-SAME-TIME-RESTATE"
     security_id = "EQ-SAME-TIME-RESTATE"
@@ -521,18 +608,64 @@ async def test_same_time_restatements_share_cost_and_position_order(
         after_security_id=None,
         output=None,
     )
-    current_report = await run_lot_position_parity_audit(audit_args)
-    assert report_exit_code(current_report) == 0
+    application_names = []
+    create_engine = audit_lot_position_parity.create_async_database_engine
 
-    async with context.session_factory() as drift_session:
-        async with drift_session.begin():
-            await drift_session.execute(
-                update(PositionHistory)
-                .where(PositionHistory.transaction_id == bonus.transaction_id)
-                .values(quantity=Decimal("249"))
-            )
-    drifted_report = await run_lot_position_parity_audit(audit_args)
-    assert report_exit_code(drifted_report) == 1
+    def create_attributed_audit_engine(**kwargs):
+        engine = create_engine(**kwargs)
+
+        @sqlalchemy_event.listens_for(engine.sync_engine, "connect")
+        def record_actual_identity(connection, _record):
+            cursor = connection.cursor()
+            try:
+                cursor.execute("SELECT current_setting('application_name')")
+                application_names.append(cursor.fetchone()[0])
+            finally:
+                cursor.close()
+
+        return engine
+
+    monkeypatch.setattr(
+        audit_lot_position_parity, "create_async_database_engine", create_attributed_audit_engine
+    )
+    assert async_db_session.bind is not None
+    database_url = async_db_session.bind.url.render_as_string(hide_password=False)
+    with _foreign_loop_cached_pool(database_url, monkeypatch):
+        before_current = await _parity_audit_durable_snapshot(context.session_factory)
+        current_report = await run_lot_position_parity_audit(audit_args)
+        assert current_report["summary"] == {
+            "candidate_count": 1,
+            "current_count": 1,
+            "drifted_count": 0,
+        }
+        assert current_report["assessments"][0]["status"] == LotPositionParityStatus.CURRENT
+        assert current_report["assessments"][0]["lot_quantity"] == "250.0000000000"
+        assert current_report["assessments"][0]["position_quantity"] == "250.0000000000"
+        assert report_exit_code(current_report) == 0
+        assert await _parity_audit_durable_snapshot(context.session_factory) == before_current
+
+        async with context.session_factory() as drift_session:
+            async with drift_session.begin():
+                await drift_session.execute(
+                    update(PositionHistory)
+                    .where(PositionHistory.transaction_id == bonus.transaction_id)
+                    .values(quantity=Decimal("249"))
+                )
+        before_drifted = await _parity_audit_durable_snapshot(context.session_factory)
+        drifted_report = await run_lot_position_parity_audit(audit_args)
+        assert drifted_report["summary"] == {
+            "candidate_count": 1,
+            "current_count": 0,
+            "drifted_count": 1,
+        }
+        assessment = drifted_report["assessments"][0]
+        assert assessment["status"] == LotPositionParityStatus.DRIFTED
+        assert assessment["lot_quantity"] == "250.0000000000"
+        assert assessment["position_quantity"] == "249.0000000000"
+        assert assessment["finding_type"] == LOT_QUANTITY_VS_POSITION_MISMATCH
+        assert report_exit_code(drifted_report) == 1
+        assert await _parity_audit_durable_snapshot(context.session_factory) == before_drifted
+    assert application_names == ["lot-position-parity-audit", "lot-position-parity-audit"]
 
 
 async def test_full_exchange_conserves_basis_and_balances_linked_mvt_flows(
