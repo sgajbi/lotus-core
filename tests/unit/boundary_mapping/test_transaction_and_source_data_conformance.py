@@ -31,6 +31,9 @@ from src.services.query_control_plane_service.app.application.dpm_source_readine
 from src.services.query_control_plane_service.app.application.transaction_economics.performance import (  # noqa: E501
     build_performance_component_economics_rows,
 )
+from src.services.query_control_plane_service.app.application.transaction_economics.performance_policy import (  # noqa: E501
+    SOURCE_LINEAGE,
+)
 from src.services.query_control_plane_service.app.contracts.portfolio_tax_lots import (
     PortfolioTaxLotWindowResponse,
     PortfolioTaxLotWindowSupportability,
@@ -371,8 +374,31 @@ def test_performance_economics_mapping_uses_typed_domain_evidence_for_optional_j
         ("EUR", Decimal("2.5000000000")),
         ("USD", Decimal("1.2500000000")),
     ]
+    # Product-policy authority includes tenant portfolios and retained FX outbox evidence,
+    # not only tables with matching optional joins for this non-FX row.
     assert rows[0].source_lineage == {
         "source_system": "transactions",
-        "source_table": "transactions,cashflows,transaction_costs",
+        "source_table": "transactions,cashflows,transaction_costs,portfolios,outbox_events",
         "contract_version": "performance_component_economics_v1",
     }
+
+
+@pytest.mark.parametrize("omitted_table", ["portfolios", "outbox_events"])
+def test_performance_economics_boundary_rejects_incomplete_policy_lineage(
+    monkeypatch: pytest.MonkeyPatch, omitted_table: str
+) -> None:
+    required_tables = (
+        "transactions",
+        "cashflows",
+        "transaction_costs",
+        "portfolios",
+        "outbox_events",
+    )
+    monkeypatch.setitem(
+        SOURCE_LINEAGE,
+        "source_table",
+        ",".join(table for table in required_tables if table != omitted_table),
+    )
+
+    with pytest.raises(AssertionError, match="source_table"):
+        test_performance_economics_mapping_uses_typed_domain_evidence_for_optional_joins()
