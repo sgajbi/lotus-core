@@ -17,8 +17,13 @@ from portfolio_common.domain.calculation_lineage import (
 )
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
 from portfolio_common.domain.cost_basis_receipt_integrity import (
+    LOT_DISPOSAL_LINEAGE_ALGORITHM_ID,
+    LOT_DISPOSAL_LINEAGE_ALGORITHM_VERSION,
     canonical_cost_basis_output_payload,
+    lot_disposal_lineage_input_payload,
+    lot_disposal_lineage_output_payload,
 )
+from portfolio_common.domain.transaction.numeric_policy import COST_BASIS_STATE_LEDGER_OUTPUT_V1
 from sqlalchemy.exc import IntegrityError
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
@@ -32,6 +37,102 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     lot_disposal_repository,
 )
+from src.services.query_service.app.repositories.lot_disposal_repository import (
+    CorruptLotDisposalReadModelError,
+    _verify_receipt_integrity,
+)
+
+
+def _with_disposal_lineage(
+    state: LotDisposalReceiptState, *, violation: str = "valid"
+) -> LotDisposalReceiptState:
+    """Build internally consistent lineage, including adversarial rehashed evidence."""
+    lineage = build_calculation_lineage(
+        algorithm_id=(
+            "foreign-disposal" if violation == "algorithm" else LOT_DISPOSAL_LINEAGE_ALGORITHM_ID
+        ),
+        algorithm_version=LOT_DISPOSAL_LINEAGE_ALGORITHM_VERSION,
+        intermediate_precision=COST_BASIS_STATE_LEDGER_OUTPUT_V1.working_precision,
+        input_payload=(
+            {"unrelated_source": "BUY-FOREIGN"}
+            if violation == "input"
+            else lot_disposal_lineage_input_payload(
+                [
+                    lot_disposal_repository.source_lot_disposal_allocation_payload(item)
+                    for item in state.allocations
+                ]
+            )
+        ),
+        output_payload=lot_disposal_lineage_output_payload(
+            consumed_cost_base=state.consumed_cost_base,
+            consumed_cost_local=state.consumed_cost_local,
+            consumed_quantity=(Decimal("2") if violation == "output" else state.consumed_quantity),
+        ),
+        numeric_output_policy=(
+            None if violation == "policy" else COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity()
+        ),
+    )
+    return replace(state, disposal_calculation_lineage=lineage)
+
+
+@pytest.mark.parametrize("violation", ["algorithm", "policy", "input", "output"])
+def test_writer_rejects_self_consistent_lineage_rejected_by_query(violation: str) -> None:
+    state = _with_disposal_lineage(_active_state(), violation=violation)
+    record, allocations = _persisted_version(state)
+    # Complete outer hashes are produced from the adversarial state, not stale hashes.
+    with pytest.raises(CorruptLotDisposalReadModelError, match="corrupt"):
+        _verify_receipt_integrity(record, list(allocations), predecessor_hash=None)
+    with pytest.raises(lot_disposal_repository.CorruptLotDisposalReceiptError, match="corrupt"):
+        lot_disposal_repository._verified_state(
+            record, allocations=allocations, previous_record=None
+        )
+
+
+def test_writer_and_query_accept_governed_disposal_lineage() -> None:
+    state = _with_disposal_lineage(_active_state())
+    record, allocations = _persisted_version(state)
+    _verify_receipt_integrity(record, list(allocations), predecessor_hash=None)
+    assert (
+        lot_disposal_repository._verified_state(
+            record, allocations=allocations, previous_record=None
+        )
+        == state
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("violation", ["algorithm", "policy", "input", "output"])
+@pytest.mark.parametrize("operation", ["retry", "correction"])
+@pytest.mark.parametrize("bad_version", [1, 2])
+async def test_unsupported_retained_lineage_refuses_retry_and_correction_before_writes(
+    violation: str, operation: str, bad_version: int
+) -> None:
+    valid = _active_state()
+    chain = []
+    allocations_by_version = {}
+    previous = None
+    for version in range(1, 4):
+        state = (
+            _with_disposal_lineage(valid, violation=violation) if version == bad_version else valid
+        )
+        record, allocations = _persisted_version(state, version=version, previous=previous)
+        chain.append(record)
+        allocations_by_version[(state.receipt_id, version)] = allocations
+        previous = record
+    session = AsyncMock()
+    repository = lot_disposal_repository.SqlAlchemyCostBasisLotDisposalRepository(session)
+    repository._load_receipt_chains = AsyncMock(  # type: ignore[method-assign]
+        return_value={valid.disposal_transaction_id: tuple(chain)}
+    )
+    repository._load_allocations = AsyncMock(  # type: ignore[method-assign]
+        return_value=allocations_by_version
+    )
+    candidate = valid if operation == "retry" else _active_state(cost_local="11")
+    with pytest.raises(lot_disposal_repository.CorruptLotDisposalReceiptError, match="corrupt"):
+        await repository.reconcile_disposal_receipts(receipt_states=(candidate,))
+    session.execute.assert_not_awaited()
+    session.flush.assert_not_awaited()
+    session.commit.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -87,33 +188,35 @@ def _lineage(algorithm_id: str) -> CalculationLineage:
 
 
 def _active_state(*, cost_local: str = "10") -> LotDisposalReceiptState:
-    return LotDisposalReceiptState(
-        disposal_transaction_id="SELL-REPOSITORY-01",
-        portfolio_id="PORT-REPOSITORY-01",
-        instrument_id="INSTRUMENT-REPOSITORY-01",
-        security_id="SECURITY-REPOSITORY-01",
-        disposal_timestamp=datetime(2026, 7, 1, tzinfo=timezone.utc),
-        transaction_type="SELL",
-        cost_basis_method=CostBasisMethod.FIFO,
-        calculation_policy_id="cost-basis-default",
-        calculation_policy_version="1",
-        transaction_calculation_lineage=_lineage("transaction-cost"),
-        status=LotDisposalReceiptStatus.ACTIVE,
-        consumed_quantity=Decimal("1"),
-        consumed_cost_local=Decimal(cost_local),
-        consumed_cost_base=Decimal("10"),
-        allocations=(
-            SourceLotDisposalAllocation(
-                source_lot_id="LOT-REPOSITORY-01",
-                source_transaction_id="BUY-REPOSITORY-01",
-                source_acquisition_date=date(2026, 1, 1),
-                allocation_ordinal=1,
-                consumed_quantity=Decimal("1"),
-                consumed_cost_local=Decimal(cost_local),
-                consumed_cost_base=Decimal("10"),
+    return _with_disposal_lineage(
+        LotDisposalReceiptState(
+            disposal_transaction_id="SELL-REPOSITORY-01",
+            portfolio_id="PORT-REPOSITORY-01",
+            instrument_id="INSTRUMENT-REPOSITORY-01",
+            security_id="SECURITY-REPOSITORY-01",
+            disposal_timestamp=datetime(2026, 7, 1, tzinfo=timezone.utc),
+            transaction_type="SELL",
+            cost_basis_method=CostBasisMethod.FIFO,
+            calculation_policy_id="cost-basis-default",
+            calculation_policy_version="1",
+            transaction_calculation_lineage=_lineage("transaction-cost"),
+            status=LotDisposalReceiptStatus.ACTIVE,
+            consumed_quantity=Decimal("1"),
+            consumed_cost_local=Decimal(cost_local),
+            consumed_cost_base=Decimal("10"),
+            allocations=(
+                SourceLotDisposalAllocation(
+                    source_lot_id="LOT-REPOSITORY-01",
+                    source_transaction_id="BUY-REPOSITORY-01",
+                    source_acquisition_date=date(2026, 1, 1),
+                    allocation_ordinal=1,
+                    consumed_quantity=Decimal("1"),
+                    consumed_cost_local=Decimal(cost_local),
+                    consumed_cost_base=Decimal("10"),
+                ),
             ),
-        ),
-        disposal_calculation_lineage=_lineage("lot-disposal"),
+            disposal_calculation_lineage=_lineage("lot-disposal"),
+        )
     )
 
 
@@ -182,11 +285,13 @@ def _active_state_with_amortized_cost() -> LotDisposalReceiptState:
         consumed_cost_base=Decimal("11"),
         amortized_cost_evidence=evidence,
     )
-    return replace(
-        state,
-        consumed_cost_local=Decimal("11"),
-        consumed_cost_base=Decimal("11"),
-        allocations=(allocation,),
+    return _with_disposal_lineage(
+        replace(
+            state,
+            consumed_cost_local=Decimal("11"),
+            consumed_cost_base=Decimal("11"),
+            allocations=(allocation,),
+        )
     )
 
 

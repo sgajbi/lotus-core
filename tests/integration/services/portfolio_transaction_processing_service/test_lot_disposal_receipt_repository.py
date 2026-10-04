@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import runpy
+from dataclasses import replace
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -11,9 +12,16 @@ import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from portfolio_common.database_models import (
+    Cashflow,
+    CostBasisProcessingState,
     LotDisposalAllocationRecord,
     LotDisposalReceiptRecord,
+    OutboxEvent,
+    PositionHistory,
     PositionLotState,
+    PositionState,
+    ProcessedEvent,
+    Transaction,
 )
 from portfolio_common.domain.calculation_lineage import (
     CalculationLineage,
@@ -26,10 +34,12 @@ from portfolio_common.domain.cost_basis_receipt_integrity import (
     lot_disposal_allocation_payload,
     lot_disposal_lineage_input_payload,
     lot_disposal_lineage_output_payload,
+    receipt_version_content_hash,
+    verify_cost_basis_receipt_version_chain,
 )
 from portfolio_common.domain.transaction.numeric_policy import COST_BASIS_STATE_LEDGER_OUTPUT_V1
 from sqlalchemy import event, func, inspect, select, text, update
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     LotDisposalReceiptState,
@@ -287,6 +297,217 @@ async def test_initial_void_state_remains_database_neutral(
         await async_db_session.scalar(select(func.count()).select_from(LotDisposalReceiptRecord))
         == 0
     )
+
+
+async def _disposal_durable_snapshot(session_factory) -> dict[str, tuple]:
+    """Observe complete financial, receipt, fence and outbox rows through a fresh session."""
+    snapshot = {}
+    async with session_factory() as session:
+        for model in (
+            Transaction,
+            Cashflow,
+            PositionHistory,
+            PositionLotState,
+            PositionState,
+            CostBasisProcessingState,
+            LotDisposalReceiptRecord,
+            LotDisposalAllocationRecord,
+            ProcessedEvent,
+            OutboxEvent,
+        ):
+            table = model.__table__
+            rows = await session.execute(select(table).order_by(*table.primary_key.columns))
+            snapshot[table.name] = tuple(tuple(row) for row in rows.all())
+    return snapshot
+
+
+def _numerical_disposal_state(
+    quantity: int, *, violation: str = "valid"
+) -> LotDisposalReceiptState:
+    """Independent 10-local/12-base unit basis, with conserved persisted allocations."""
+    template = _active_state(cost_local=str(quantity * 10))
+    allocation = replace(
+        template.allocations[0],
+        consumed_quantity=Decimal(quantity),
+        consumed_cost_base=Decimal(quantity * 12),
+    )
+    state = replace(
+        template,
+        consumed_quantity=Decimal(quantity),
+        consumed_cost_base=Decimal(quantity * 12),
+        allocations=(allocation,),
+    )
+    lineage = build_calculation_lineage(
+        algorithm_id=("foreign" if violation == "algorithm" else LOT_DISPOSAL_LINEAGE_ALGORITHM_ID),
+        algorithm_version=LOT_DISPOSAL_LINEAGE_ALGORITHM_VERSION,
+        intermediate_precision=COST_BASIS_STATE_LEDGER_OUTPUT_V1.working_precision,
+        input_payload=(
+            {"unrelated_source": "BUY-OTHER"}
+            if violation == "input"
+            else lot_disposal_lineage_input_payload([lot_disposal_allocation_payload(allocation)])
+        ),
+        output_payload=lot_disposal_lineage_output_payload(
+            consumed_cost_base=state.consumed_cost_base,
+            consumed_cost_local=state.consumed_cost_local,
+            consumed_quantity=Decimal(99) if violation == "output" else state.consumed_quantity,
+        ),
+        numeric_output_policy=(
+            None if violation == "policy" else COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity()
+        ),
+    )
+    return replace(state, disposal_calculation_lineage=lineage)
+
+
+def _assert_lineage_refusal(error: ValueError, violation: str) -> None:
+    reason = {
+        "algorithm": "algorithm identity is unsupported",
+        "policy": "numeric policy is unsupported",
+        "input": "lineage does not bind persisted inputs",
+        "output": "lineage does not bind persisted outputs",
+    }[violation]
+    cause: BaseException = error
+    while cause.__cause__ is not None:
+        cause = cause.__cause__
+    assert reason in str(cause)
+
+
+@pytest.mark.parametrize("violation", ["algorithm", "policy", "input", "output"])
+@pytest.mark.parametrize("bad_version", [1, 2])
+async def test_reloaded_rehashed_lineage_refuses_retry_correction_and_query_without_writes(
+    clean_db,
+    disposal_receipt_schema,
+    async_db_session: AsyncSession,
+    violation: str,
+    bad_version: int,
+) -> None:
+    await _seed_source_lot(async_db_session)
+    await _seed_unrelated_source_lot(async_db_session)
+    assert async_db_session.bind is not None
+    # The fixture owns its engine; each proof phase owns/closes only its session.
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    states = tuple(_numerical_disposal_state(quantity) for quantity in (1, 2, 3))
+    async with session_factory() as writer:
+        repository = SqlAlchemyCostBasisLotDisposalRepository(writer)
+        for state in states:
+            await repository.reconcile_disposal_receipts(receipt_states=(state,))
+        await writer.commit()
+
+    async with session_factory() as adversary:
+        records = list(
+            (
+                await adversary.scalars(
+                    select(LotDisposalReceiptRecord).order_by(
+                        LotDisposalReceiptRecord.receipt_version
+                    )
+                )
+            ).all()
+        )
+        bad = _numerical_disposal_state(bad_version, violation=violation)
+        assert bad.disposal_calculation_lineage is not None
+        records[
+            bad_version - 1
+        ].disposal_calculation_lineage = bad.disposal_calculation_lineage.lineage_payload()
+        records[bad_version - 1].semantic_content_hash = bad.semantic_content_hash
+        # Rehash every successor so neither stale outer hashes nor broken pointers
+        # can explain refusal. Only governed lineage admission remains violated.
+        previous_hash = None
+        for record in records:
+            record.previous_receipt_content_hash = previous_hash
+            record.receipt_content_hash = receipt_version_content_hash(
+                receipt_id=record.receipt_id,
+                semantic_content_hash=record.semantic_content_hash,
+                receipt_version=record.receipt_version,
+                previous_receipt_content_hash=previous_hash,
+            )
+            previous_hash = record.receipt_content_hash
+        verify_cost_basis_receipt_version_chain(records)
+        await adversary.commit()
+
+    before = await _disposal_durable_snapshot(session_factory)
+    statements = []
+
+    def observe(_connection, _cursor, statement, _parameters, _context, _executemany):
+        statements.append(statement.lstrip().split()[0].upper())
+
+    engine = async_db_session.bind.sync_engine
+    event.listen(engine, "before_cursor_execute", observe)
+    try:
+        for candidate in (states[-1], _numerical_disposal_state(4)):
+            async with session_factory() as restarted:
+                with pytest.raises(
+                    CorruptLotDisposalReceiptError, match="receipt is corrupt"
+                ) as rejected:
+                    await SqlAlchemyCostBasisLotDisposalRepository(
+                        restarted
+                    ).reconcile_disposal_receipts(receipt_states=(candidate,))
+                _assert_lineage_refusal(rejected.value, violation)
+                await restarted.commit()
+        async with session_factory() as reader:
+            with pytest.raises(
+                CorruptLotDisposalReadModelError, match="chain is corrupt"
+            ) as rejected_read:
+                await QueryLotDisposalRepository(reader).get_latest_receipt(
+                    portfolio_id=states[-1].portfolio_id,
+                    transaction_id=states[-1].disposal_transaction_id,
+                )
+            _assert_lineage_refusal(rejected_read.value, violation)
+    finally:
+        event.remove(engine, "before_cursor_execute", observe)
+    assert statements and set(statements) == {"SELECT"}
+    assert await _disposal_durable_snapshot(session_factory) == before
+
+
+async def test_governed_history_survives_session_restart_and_replays_without_writes(
+    clean_db,
+    disposal_receipt_schema,
+    async_db_session: AsyncSession,
+) -> None:
+    await _seed_source_lot(async_db_session)
+    await _seed_unrelated_source_lot(async_db_session)
+    assert async_db_session.bind is not None
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    original, corrected = _numerical_disposal_state(2), _numerical_disposal_state(3)
+    for state in (original, corrected, _void_state(), corrected):
+        async with session_factory() as writer:
+            await SqlAlchemyCostBasisLotDisposalRepository(writer).reconcile_disposal_receipts(
+                receipt_states=(state,)
+            )
+            await writer.commit()
+    before = await _disposal_durable_snapshot(session_factory)
+    async with session_factory() as restarted:
+        await SqlAlchemyCostBasisLotDisposalRepository(restarted).reconcile_disposal_receipts(
+            receipt_states=(corrected,)
+        )
+        await restarted.commit()
+    async with session_factory() as reader:
+        records = list(
+            (
+                await reader.scalars(
+                    select(LotDisposalReceiptRecord).order_by(
+                        LotDisposalReceiptRecord.receipt_version
+                    )
+                )
+            ).all()
+        )
+        assert [row.status for row in records] == ["ACTIVE", "ACTIVE", "VOIDED", "ACTIVE"]
+        assert [row.receipt_version for row in records] == [1, 2, 3, 4]
+        assert (
+            records[0].consumed_quantity,
+            records[0].consumed_cost_local,
+            records[0].consumed_cost_base,
+        ) == (Decimal(2), Decimal(20), Decimal(24))
+        receipt = await QueryLotDisposalRepository(reader).get_latest_receipt(
+            portfolio_id=corrected.portfolio_id,
+            transaction_id=corrected.disposal_transaction_id,
+        )
+        assert receipt is not None
+        assert receipt[0].receipt_version == 4
+        assert (
+            receipt[0].consumed_quantity,
+            receipt[0].consumed_cost_local,
+            receipt[0].consumed_cost_base,
+        ) == (Decimal(3), Decimal(30), Decimal(36))
+    assert await _disposal_durable_snapshot(session_factory) == before
 
 
 async def _seed_source_lot(session: AsyncSession) -> None:

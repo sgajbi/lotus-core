@@ -187,6 +187,16 @@ def test_integrity_accepts_complete_canonical_evidence() -> None:
     _verify_receipt_integrity(receipt, [allocation], predecessor_hash=None)
 
 
+def test_integrity_preserves_governed_historical_decimal_scale_without_rehashing() -> None:
+    receipt, allocation = _valid_evidence()
+    original_hashes = (receipt.semantic_content_hash, receipt.receipt_content_hash)
+    for evidence in (receipt, allocation):
+        for field in ("consumed_quantity", "consumed_cost_local", "consumed_cost_base"):
+            setattr(evidence, field, getattr(evidence, field).quantize(Decimal("0.0000000001")))
+    _verify_receipt_integrity(receipt, [allocation], predecessor_hash=None)
+    assert (receipt.semantic_content_hash, receipt.receipt_content_hash) == original_hashes
+
+
 def test_integrity_fails_closed_on_missing_allocation_rows() -> None:
     receipt, _ = _valid_evidence()
 

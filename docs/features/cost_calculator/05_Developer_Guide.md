@@ -335,6 +335,38 @@ receipt-version collision diagnostics. Unit proof alone does not establish Postg
 constraint behavior; neither this regression nor a repaired-worker ingress/replay campaign proves
 a same-database baseline-to-upgraded-worker failure checkpoint.
 
+### Persisted Disposal-Lineage Admission
+
+The persistence adapter and supportability query share the same pure ACTIVE disposal-lineage
+predicate. Before an existing receipt can support a write-neutral retry or a correction append,
+the adapter verifies every retained version, not only the latest one. The existing tenant/source
+scope, allocation, semantic-hash, and version-chain checks remain required.
+
+ACTIVE evidence must declare `cost-basis-lot-disposal-allocation` version `2` and the
+`cost-basis-state-ledger-output` numeric policy version `1.0.0`: precision `18`, scale `10`,
+working precision `64`, and `ROUND_HALF_EVEN`. Its input hash must bind the persisted ordered
+allocation payloads, including amortized-cost evidence when present; its output hash must bind
+the consumed quantity and local/base cost. Internally consistent lineage hashes alone do not
+admit a different algorithm, policy, allocation input, or financial output. Canonical decimal
+normalization preserves valid governed evidence after PostgreSQL reload at ledger scale; it does
+not create an exemption for unsupported historical lineage.
+
+VOIDED evidence retains its separate contract: zero consumed amounts, no allocations or disposal
+lineage, and a retained void reason. A valid correction does not bypass an invalid earlier ACTIVE
+version. Corrupt persisted evidence raises `CorruptLotDisposalReceiptError` before a retry or
+correction writes a receipt; the caller must roll back its local financial unit of work. Recovery
+requires an owning-issue disposition rather than deleting history or rehashing corrupt evidence
+to make it admissible. Financial state and its outbox remain in Core's local PostgreSQL ACID
+transaction; no downstream commit or distributed transaction is required.
+
+Owning unit controls cover independently invalid algorithm, policy, input, and output bindings.
+The authored commit/reload, full-chain refusal, write-neutral retry, and
+ACTIVE/corrected/VOIDED/reactivated PostgreSQL controls live in
+`tests/integration/services/portfolio_transaction_processing_service/test_lot_disposal_receipt_repository.py`.
+Collection is not PostgreSQL execution evidence: actual owning-suite execution is required before
+runtime qualification. This admission boundary does not close issue #481's broader source
+provenance work or qualify the separate AVCO analogue.
+
 ## 4. Testing
 
 ```bash

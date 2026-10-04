@@ -5,7 +5,12 @@ from datetime import date
 from decimal import Decimal
 from typing import Protocol, cast
 
-from .calculation_lineage import canonical_content_hash, require_sha256_digest
+from .calculation_lineage import (
+    CalculationLineage,
+    calculation_lineage_binds_output,
+    canonical_content_hash,
+    require_sha256_digest,
+)
 from .transaction.numeric_policy import COST_BASIS_STATE_LEDGER_OUTPUT_V1
 
 BASIS_TRANSFER_LINEAGE_ALGORITHM_ID = "cost-basis-lot-basis-transfer-allocation"
@@ -136,6 +141,47 @@ def lot_disposal_lineage_output_payload(
             "consumed_quantity": consumed_quantity,
         }
     )
+
+
+def verify_active_lot_disposal_lineage(
+    lineage: CalculationLineage | None,
+    *,
+    allocation_payloads: Sequence[Mapping[str, object]],
+    consumed_cost_base: Decimal,
+    consumed_cost_local: Decimal,
+    consumed_quantity: Decimal,
+) -> None:
+    """Verify governed ACTIVE lineage against persisted allocations and economics.
+
+    Callers retain ownership of receipt lifecycle, scope, outer hashes and version
+    chains. This pure predicate neither qualifies VOIDED receipts nor mutates facts.
+    """
+    if lineage is None:
+        raise ValueError("active receipt lacks disposal lineage")
+    if (
+        lineage.algorithm_id != LOT_DISPOSAL_LINEAGE_ALGORITHM_ID
+        or lineage.algorithm_version != LOT_DISPOSAL_LINEAGE_ALGORITHM_VERSION
+    ):
+        raise ValueError("disposal lineage algorithm identity is unsupported")
+    numeric_policy = COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity()
+    if (
+        lineage.intermediate_precision != numeric_policy.working_precision
+        or lineage.numeric_output_policy != numeric_policy
+    ):
+        raise ValueError("disposal lineage numeric policy is unsupported")
+    if lineage.input_content_hash != canonical_content_hash(
+        lot_disposal_lineage_input_payload(allocation_payloads)
+    ):
+        raise ValueError("disposal lineage does not bind persisted inputs")
+    if not calculation_lineage_binds_output(
+        lineage,
+        output_payload=lot_disposal_lineage_output_payload(
+            consumed_cost_base=consumed_cost_base,
+            consumed_cost_local=consumed_cost_local,
+            consumed_quantity=consumed_quantity,
+        ),
+    ):
+        raise ValueError("disposal lineage does not bind persisted outputs")
 
 
 def basis_transfer_lineage_input_payload(

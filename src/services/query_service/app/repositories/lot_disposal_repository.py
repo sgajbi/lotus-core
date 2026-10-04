@@ -16,18 +16,14 @@ from portfolio_common.domain.calculation_lineage import (
     require_sha256_digest,
 )
 from portfolio_common.domain.cost_basis_receipt_integrity import (
-    LOT_DISPOSAL_LINEAGE_ALGORITHM_ID,
-    LOT_DISPOSAL_LINEAGE_ALGORITHM_VERSION,
     cost_basis_allocation_content_hash,
     cost_basis_receipt_semantic_hash,
     lot_disposal_allocation_payload,
-    lot_disposal_lineage_input_payload,
-    lot_disposal_lineage_output_payload,
     receipt_version_content_hash,
+    verify_active_lot_disposal_lineage,
     verify_cost_basis_receipt_version_chain,
 )
 from portfolio_common.domain.tenant import TenantId
-from portfolio_common.domain.transaction.numeric_policy import COST_BASIS_STATE_LEDGER_OUTPUT_V1
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -340,35 +336,13 @@ def _verify_lifecycle(
     if receipt.status == "ACTIVE":
         if receipt.consumed_quantity <= 0 or not allocations:
             raise ValueError("active receipt lacks positive allocations")
-        lineage = calculation_lineage_from_payload(receipt.disposal_calculation_lineage)
-        if lineage is None:
-            raise ValueError("active receipt lacks disposal lineage")
-        if (
-            lineage.algorithm_id != LOT_DISPOSAL_LINEAGE_ALGORITHM_ID
-            or lineage.algorithm_version != LOT_DISPOSAL_LINEAGE_ALGORITHM_VERSION
-        ):
-            raise ValueError("disposal lineage algorithm identity is unsupported")
-        numeric_policy = COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity()
-        if (
-            lineage.intermediate_precision != numeric_policy.working_precision
-            or lineage.numeric_output_policy != numeric_policy
-        ):
-            raise ValueError("disposal lineage numeric policy is unsupported")
-        if lineage.input_content_hash != canonical_content_hash(
-            lot_disposal_lineage_input_payload(
-                [_allocation_payload(receipt, allocation) for allocation in allocations]
-            )
-        ):
-            raise ValueError("disposal lineage does not bind persisted inputs")
-        if not calculation_lineage_binds_output(
-            lineage,
-            output_payload=lot_disposal_lineage_output_payload(
-                consumed_cost_base=receipt.consumed_cost_base,
-                consumed_cost_local=receipt.consumed_cost_local,
-                consumed_quantity=receipt.consumed_quantity,
-            ),
-        ):
-            raise ValueError("disposal lineage does not bind persisted outputs")
+        verify_active_lot_disposal_lineage(
+            calculation_lineage_from_payload(receipt.disposal_calculation_lineage),
+            allocation_payloads=[_allocation_payload(receipt, item) for item in allocations],
+            consumed_cost_base=receipt.consumed_cost_base,
+            consumed_cost_local=receipt.consumed_cost_local,
+            consumed_quantity=receipt.consumed_quantity,
+        )
         if receipt.void_reason is not None:
             raise ValueError("active receipt has a void reason")
         return
