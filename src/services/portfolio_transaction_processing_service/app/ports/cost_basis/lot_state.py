@@ -28,6 +28,12 @@ class CostBasisLotStatePort(Protocol):
 
     async def upsert_buy_lot_state(self, transaction: CostBasisTransaction) -> None: ...
 
+    async def ensure_acquisition_lot_parent(
+        self, transaction: CostBasisTransaction, *, tenant_id: str
+    ) -> None:
+        """Admit an eligible missing parent without changing an existing source lot."""
+        ...
+
     async def update_open_lot_states(
         self,
         *,

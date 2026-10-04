@@ -4,7 +4,11 @@ from collections.abc import Sequence, Set
 from dataclasses import dataclass
 from enum import StrEnum
 
-from ...domain.cost_basis import CostBasisTransaction
+from ...domain.cost_basis import (
+    LOT_OPENING_BEHAVIORS,
+    CostBasisTransaction,
+    transaction_lot_behavior,
+)
 
 
 class CostBasisTransactionPersistenceScope(StrEnum):
@@ -20,6 +24,7 @@ class CostBasisPersistencePlan:
 
     economics_transactions: tuple[CostBasisTransaction, ...]
     child_state_transactions: tuple[CostBasisTransaction, ...]
+    acquisition_parent_transactions: tuple[CostBasisTransaction, ...]
 
 
 def affected_transaction_suffix(
@@ -78,4 +83,10 @@ def build_cost_basis_persistence_plan(
     return CostBasisPersistencePlan(
         economics_transactions=economics,
         child_state_transactions=affected,
+        acquisition_parent_transactions=tuple(
+            transaction
+            for transaction in economics
+            if transaction.transaction_id not in affected_ids
+            and transaction_lot_behavior(transaction.transaction_type) in LOT_OPENING_BEHAVIORS
+        ),
     )

@@ -62,6 +62,30 @@ def test_critical_db_coverage_includes_changed_outbox_delivery_hot_path() -> Non
     )
 
 
+SOURCE_LOT_ADMISSION_CRITICAL_PROOF_FILE = (
+    "tests/integration/services/portfolio_transaction_processing_service/"
+    "test_cost_basis_lot_disposal_admission_postgresql.py"
+)
+
+
+def test_critical_db_coverage_executes_source_lot_admission_postgresql() -> None:
+    assert SOURCE_LOT_ADMISSION_CRITICAL_PROOF_FILE in get_suite("critical-db-coverage")
+
+
+def test_source_lot_admission_manifest_guard_rejects_missing_proof(monkeypatch) -> None:
+    monkeypatch.setitem(
+        SUITES,
+        "critical-db-coverage",
+        [
+            path
+            for path in get_suite("critical-db-coverage")
+            if path != SOURCE_LOT_ADMISSION_CRITICAL_PROOF_FILE
+        ],
+    )
+    with pytest.raises(AssertionError):
+        test_critical_db_coverage_executes_source_lot_admission_postgresql()
+
+
 def test_critical_db_coverage_includes_financial_reconciliation_repository() -> None:
     assert (
         "tests/integration/services/financial_reconciliation_service/"

@@ -45,6 +45,10 @@ class ConflictingLotDisposalReceiptError(ValueError):
     """Raised when a concurrent or malformed version collides during append."""
 
 
+class MissingSourceLotDisposalDependencyError(ValueError):
+    """Raised when an allocation has no source lot in its required durable scope."""
+
+
 class SqlAlchemyCostBasisLotDisposalRepository:
     """Append correction versions and classify exact receipt replays as neutral."""
 
@@ -143,9 +147,20 @@ class SqlAlchemyCostBasisLotDisposalRepository:
                     pg_insert(LotDisposalAllocationRecord).values(allocation_values)
                 )
         except IntegrityError as exc:
-            raise ConflictingLotDisposalReceiptError(
-                "lot-disposal receipt version collided during append"
-            ) from exc
+            sqlstate, constraint = _integrity_error_identity(exc)
+            if sqlstate == "23503" and constraint == "fk_lot_disposal_allocation_lot_scope":
+                raise MissingSourceLotDisposalDependencyError(
+                    "lot-disposal allocation requires an admitted source-lot dependency"
+                ) from exc
+            if sqlstate == "23505" and constraint in {
+                "uq_lot_disposal_receipt_version",
+                "uq_lot_disposal_transaction_version",
+                "uq_lot_disposal_receipt_scope_version",
+            }:
+                raise ConflictingLotDisposalReceiptError(
+                    "lot-disposal receipt version collided during append"
+                ) from exc
+            raise
 
     async def _load_receipt_chains(
         self,
@@ -187,6 +202,22 @@ class SqlAlchemyCostBasisLotDisposalRepository:
         for row in rows:
             grouped[(str(row.receipt_id), int(row.receipt_version))].append(row)
         return {identity: tuple(items) for identity, items in grouped.items()}
+
+
+def _integrity_error_identity(error: IntegrityError) -> tuple[str | None, str | None]:
+    """Read structured driver diagnostics, including SQLAlchemy's asyncpg wrapper."""
+    sqlstate = None
+    constraint = None
+    current = error.orig
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        sqlstate = sqlstate or getattr(current, "sqlstate", None)
+        diagnostic = getattr(current, "diag", None)
+        constraint = constraint or getattr(current, "constraint_name", None)
+        constraint = constraint or getattr(diagnostic, "constraint_name", None)
+        current = current.__cause__
+    return sqlstate, constraint
 
 
 def _validate_candidate_batch(receipt_states: Sequence[LotDisposalReceiptState]) -> None:

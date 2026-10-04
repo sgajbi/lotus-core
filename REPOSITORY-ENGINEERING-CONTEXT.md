@@ -138,6 +138,13 @@ Every Core change must preserve the following:
 
 ## Architecture And Module Map
 
+Incremental cost persistence admits an absent acquisition-lot dependency from an eligible historical
+lot-opening prefix before writing disposal allocations, under the incoming stream's resolved tenant
+and locked durable source/portfolio authority. This absent-only boundary preserves an existing
+residual lot and does not replay the acquisition's child effects; later refusal rolls admission back
+in the same unit of work. See the [cost developer guide](docs/features/cost_calculator/05_Developer_Guide.md#3-acquisition-lot-dependency-admission)
+for source identity qualification and distinct FK/receipt-version collision classification.
+
 | Area | Ownership |
 | --- | --- |
 | `src/services/ingestion_service/` | Source-data and adapter write ingress; command-owned ingestion lifecycle. |
