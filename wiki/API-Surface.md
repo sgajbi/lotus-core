@@ -115,6 +115,13 @@ Current router groups inside `query_control_plane_service` are:
 - `advisory_simulation`
   canonical advisory simulation execution contract for source-owned proposal simulation effects
 
+The QCP `PerformanceComponentEconomics:v1` response separately qualifies historical applicable FX.
+Missing original raw/receipt authority leaves FX and dependent totals null; known/unknown mixed
+totals carry missing-evidence counts rather than fabricated zero. Qualified zero is valid evidence;
+incomplete rows yield DEGRADED/PARTIAL posture. This is read-only qualification, not correction or
+downstream performance calculation. See the
+[component economics methodology](https://github.com/sgajbi/lotus-core/blob/main/docs/methodologies/source-data-products/performance-component-economics.md).
+
 ### `ingestion_service`
 
 Write-ingress contracts for source-data and adapter upload flows.

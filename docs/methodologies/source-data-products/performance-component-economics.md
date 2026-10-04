@@ -63,7 +63,25 @@ The contract source-authors these component families when evidence exists:
 | `realized_total_pnl` | `transactions.realized_total_pnl_local/base` plus `realized_pnl_local_currency` |
 | `fx_context` | `transactions.transaction_fx_rate`, `fx_contract_id` |
 
-Zero or absent fields remain zero or null. The product does not fabricate missing economics.
+For applicable historical FX, stored zero is not independent original-source evidence. The product
+requires exactly one retained `RawTransactionPersisted` outbox payload for the selected transaction,
+owned by the admitted portfolio tenant, matching the ledger source identifiers, mode, component
+and stored economic fingerprint. The strict shared calculation-lineage decoder must accept the
+existing version-1 FX baseline receipt, governed numeric policy and complete persisted output
+binding. Raw v1 transport can omit tenant; the persisted joined portfolio supplies authority, not
+caller body metadata. An explicit conflicting raw tenant is refused.
+
+| Original authority | Row FX amounts | Row reason |
+| --- | --- | --- |
+| Qualified explicit zero, positive or negative amounts | Exact independently supplied amounts | `FX_SOURCE_QUALIFIED` |
+| Qualified source missing one or both bases | Missing basis remains null; known basis retained | `FX_SOURCE_INCOMPLETE` |
+| Missing, duplicate, foreign, mismatched raw evidence or absent/tampered receipt | Both null | `FX_SOURCE_AUTHORITY_UNAVAILABLE` |
+| Explicit `NONE` mode or non-realizing `FX_CONTRACT_OPEN` | Zero, without claiming upstream P&L presence | `FX_SOURCE_NOT_APPLICABLE` |
+
+Legacy pre-upstream fingerprints can identify retained immutable raw evidence but cannot recreate
+omitted P&L from a normalized receipt or stored zero. Missing authority is never backfilled during
+a read. Non-FX behavior is unchanged. Local/base total P&L is withheld independently when the
+corresponding applicable FX basis is unknown, even if a stored total exists.
 Rows also expose `allocated_cost_basis_local` and `allocated_cost_basis_base` as transaction-level
 audit evidence for non-security consideration. These fields explain realized P&L but are not
 reported as a separate additive component family, because allocated basis is an input to the P&L
@@ -90,6 +108,11 @@ Row-level realized `*_pnl_local` fields carry `realized_pnl_local_currency`, nor
 transaction trade currency, so consumers do not infer local P&L currency from book currency. Tax
 totals combine withholding tax and other interest deductions in the same currency while preserving
 row-level fields separately.
+
+Independently qualified FX zero also contributes evidence. Any included unknown base amount makes
+that component total null; `evidence_count` counts known contributors and `missing_evidence_count`
+counts unavailable contributors. A mixed known/unknown total must not expose the known subtotal as
+the complete amount. FX and total families can remain missing even when another row observes them.
 
 When positive transaction-cost rows on one transaction carry multiple currencies, row-level
 `trade_fee_currency` is `MIXED`, `trade_fee_amount` is zero, and `trade_fee_components` carries one
@@ -122,7 +145,7 @@ The QCP implementation keeps the source-data anti-corruption boundary in four st
 ## Supportability
 
 `READY` with reason `PERFORMANCE_COMPONENT_ECONOMICS_READY` means at least one source row was
-returned and no additional page is indicated. `READY` with reason
+returned, no additional page is indicated, and applicable FX evidence is qualified. `READY` with reason
 `PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY` means Core proved the portfolio and base-currency
 authority, successfully queried the initial page of the complete bounded request scope, and found no
 matching activity. That authoritative empty result has `source_row_count=0`, `rows=[]`, no observed
@@ -133,6 +156,8 @@ evidence that every component amount was zero.
 
 `DEGRADED` with reason `PERFORMANCE_COMPONENT_ECONOMICS_PAGE_PARTIAL` means the current response is
 a valid partial page and `page.next_page_token` must be followed to exhaust the requested window.
+Otherwise incomplete applicable FX yields `DEGRADED`, reason
+`PERFORMANCE_COMPONENT_ECONOMICS_FX_SOURCE_INCOMPLETE` and `data_quality_status=PARTIAL`.
 An unexpectedly empty continuation page is `UNAVAILABLE` with reason
 `PERFORMANCE_COMPONENT_ECONOMICS_PAGE_EVIDENCE_CHANGED`, `data_quality_status=UNKNOWN`, and all
 supported families missing. A continuation can prove only the suffix after its cursor, not that the
@@ -178,3 +203,20 @@ still required after deployment; documentation does not substitute for a live da
 This product is not contribution analytics, attribution analytics, a return calculator, tax advice,
 best-execution evidence, venue-routing evidence, OMS acknowledgement, or a performance-ready UI
 claim. Downstream `lotus-performance` consumption and proof remain tracked separately.
+
+The read-side qualifier has a rejection-only retained-verification boundary: a strict shared
+decoder, exact algorithm/version/working precision and complete numeric-policy identity must
+accept the persisted receipt, and its output-binding predicate must accept the same canonical
+ledger output before either original source amount is interpreted. The calculated-output policy
+guard verifies this predicate-dependent path and preserves helper caller-escape checks. It does
+not fabricate a producer receipt, infer original presence or certify database execution.
+The guard also qualifies the canonicalizer's input-derived projection shape; a helper that
+ignores or remaps its input cannot supply binding authority. Unsupported alias-bearing
+assignments are rejected so containers cannot conceal a mutable reference after verification.
+Covered amount helpers are also checked for read-only normalized Decimal/None returns, so a
+helper cannot conceal an output alias behind an arithmetic callsite registration.
+
+The owning historical FX PostgreSQL proof executes through `make test-query-authority-db-contract`
+and `critical-db-coverage` in protected CI. Unit execution and schema documentation do not prove
+durable reload, no-mutation, deployment or an actual downstream consumer. No processor, shared
+receipt producer, ledger schema, replay fence or correction command is changed by this reader policy.

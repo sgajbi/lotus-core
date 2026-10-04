@@ -3,6 +3,14 @@
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
+
+FxPnlEvidenceReason = Literal[
+    "FX_SOURCE_NOT_APPLICABLE",
+    "FX_SOURCE_QUALIFIED",
+    "FX_SOURCE_INCOMPLETE",
+    "FX_SOURCE_AUTHORITY_UNAVAILABLE",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +34,15 @@ class TransactionCostComponentEvidence:
     amount: Decimal
     currency: str | None
     updated_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class FxPnlSourceEvidence:
+    """Read-only qualification of original FX amounts, never a reconstructed source."""
+
+    local: Decimal | None
+    base: Decimal | None
+    reason: FxPnlEvidenceReason
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,3 +74,6 @@ class BookedTransactionEconomics:
     cashflow: TransactionCashflowEvidence | None
     costs: tuple[TransactionCostComponentEvidence, ...]
     updated_at: datetime | None
+    fx_realized_pnl_mode: str | None = None
+    component_type: str | None = None
+    fx_pnl_source_evidence: FxPnlSourceEvidence | None = None

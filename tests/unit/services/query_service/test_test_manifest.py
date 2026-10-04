@@ -74,6 +74,40 @@ def test_fresh_fx_source_admission_has_native_pg_and_changed_code_routes() -> No
     assert owning_file not in get_suite("unit-db")
 
 
+def test_historical_fx_evidence_executes_native_reader_and_coverage_proof() -> None:
+    owning_file = (
+        "tests/integration/services/query_control_plane_service/"
+        "test_historical_fx_evidence_postgresql.py"
+    )
+    for suite in ("query-authority-db-contract", "critical-db-coverage"):
+        assert get_suite(suite).count(owning_file) == 1
+        assert SUITE_RUNTIME_MODE[suite] == "db_direct"
+        assert SUITE_ENV_PROFILE[suite] == "integration"
+    assert owning_file not in get_suite("unit-db")
+    owning_openapi = (
+        "tests/integration/services/query_control_plane_service/test_control_plane_app.py::"
+        "test_openapi_fully_documents_performance_component_economics_schema_family"
+    )
+    assert get_suite("ops-contract").count(owning_openapi) == 1
+
+
+@pytest.mark.parametrize("suite", ["query-authority-db-contract", "critical-db-coverage"])
+@pytest.mark.parametrize("mutation", ["missing", "duplicate"])
+def test_historical_fx_manifest_guard_refuses_lost_or_duplicate_reader_proof(
+    monkeypatch, suite, mutation
+) -> None:
+    owning_file = (
+        "tests/integration/services/query_control_plane_service/"
+        "test_historical_fx_evidence_postgresql.py"
+    )
+    paths = [path for path in get_suite(suite) if path != owning_file]
+    if mutation == "duplicate":
+        paths.extend([owning_file, owning_file])
+    monkeypatch.setitem(SUITES, suite, paths)
+    with pytest.raises(AssertionError):
+        test_historical_fx_evidence_executes_native_reader_and_coverage_proof()
+
+
 def test_unit_db_suite_tracks_db_dependent_tests() -> None:
     unit_db_suite = get_suite("unit-db")
     assert "tests/unit/libs/portfolio-common/test_position_state_repository.py" in unit_db_suite
@@ -396,6 +430,8 @@ def test_critical_lifecycle_suite_has_repository_native_make_target() -> None:
 
 def test_query_authority_db_contract_executes_tenant_and_service_regressions() -> None:
     assert get_suite("query-authority-db-contract") == [
+        "tests/integration/services/query_control_plane_service/"
+        "test_historical_fx_evidence_postgresql.py",
         "tests/integration/services/query_control_plane_service/"
         "test_client_restriction_profile_router_postgresql.py",
         "tests/integration/services/query_control_plane_service/"

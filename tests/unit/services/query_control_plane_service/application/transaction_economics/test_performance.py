@@ -1,5 +1,6 @@
 """Application tests for QCP-owned performance-component economics."""
 
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
@@ -120,6 +121,29 @@ def _cost(
         amount=Decimal(amount),
         currency=currency,
         updated_at=updated_at,
+    )
+
+
+@pytest.mark.parametrize("stored", [None, Decimal("0"), Decimal("12"), Decimal("-12")])
+def test_historical_fx_without_source_qualification_is_unavailable(stored: Decimal | None) -> None:
+    transaction = replace(
+        _transaction(transaction_id="FX-HISTORY", transaction_type="FX_SPOT"),
+        realized_fx_pnl_local=stored,
+        realized_fx_pnl_base=stored,
+        realized_total_pnl_local=Decimal("100"),
+        realized_total_pnl_base=Decimal("100"),
+    )
+    row = build_performance_component_economics_rows([transaction])[0]
+    assert row.realized_fx_pnl_local is None
+    assert row.realized_fx_pnl_base is None
+    assert row.realized_total_pnl_local is None
+    assert row.realized_total_pnl_base is None
+    assert "realized_fx_pnl" not in observed_performance_component_families([row])
+    assert (
+        performance_component_economics_data_quality_status(
+            rows=[row], has_more=False, is_initial_page=True
+        )
+        == "PARTIAL"
     )
 
 
@@ -314,7 +338,9 @@ def test_performance_component_economics_response_reports_coverage_and_lineage()
     assert response.data_quality_status == "COMPLETE"
     assert response.tenant_id == "tenant-sg"
     assert response.latest_evidence_timestamp == datetime(2026, 5, 10, 17, tzinfo=UTC)
-    assert response.lineage["source_table"] == "transactions,cashflows,transaction_costs"
+    assert response.lineage["source_table"] == (
+        "transactions,cashflows,transaction_costs,portfolios,outbox_events"
+    )
     assert response.content_hash.startswith("sha256:")
     assert response.source_digest == response.content_hash
     assert response.source_batch_fingerprint is None
@@ -374,7 +400,7 @@ def test_performance_component_economics_policy_classifies_source_evidence() -> 
     )
     assert performance_component_economics_source_lineage() == {
         "source_system": "transactions",
-        "source_table": "transactions,cashflows,transaction_costs",
+        "source_table": "transactions,cashflows,transaction_costs,portfolios,outbox_events",
         "contract_version": "performance_component_economics_v1",
     }
 

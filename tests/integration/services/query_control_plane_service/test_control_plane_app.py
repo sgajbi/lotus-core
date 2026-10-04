@@ -2527,6 +2527,26 @@ async def test_openapi_fully_documents_performance_component_economics_schema_fa
     assert response.status_code == 200
     schema = response.json()
 
+    schemas = schema["components"]["schemas"]
+    row_properties = schemas["PerformanceComponentEconomicsRow"]["properties"]
+    for field in (
+        "realized_fx_pnl_local",
+        "realized_fx_pnl_base",
+        "realized_total_pnl_local",
+        "realized_total_pnl_base",
+    ):
+        assert {"type": "null"} in row_properties[field]["anyOf"]
+        assert "null when" in row_properties[field]["description"]
+    assert row_properties["fx_pnl_evidence_reason"]["enum"] == [
+        "FX_SOURCE_NOT_APPLICABLE",
+        "FX_SOURCE_QUALIFIED",
+        "FX_SOURCE_INCOMPLETE",
+        "FX_SOURCE_AUTHORITY_UNAVAILABLE",
+    ]
+    total_properties = schemas["PerformanceComponentEconomicsTotal"]["properties"]
+    assert {"type": "null"} in total_properties["amount"]["anyOf"]
+    assert total_properties["missing_evidence_count"]["minimum"] == 0
+
     assert_schema_properties_are_documented_and_exampled(
         schema,
         PERFORMANCE_COMPONENT_ECONOMICS_SCHEMA_ROOTS,
@@ -2548,6 +2568,7 @@ async def test_openapi_fully_documents_performance_component_economics_schema_fa
     )
     assert "persistence failures remain fail-closed transport errors" in route_description
     assert "empty continuation page is UNAVAILABLE" in route_description
+    assert "Missing or unqualified FX remains null" in route_description
     request_schema = schema["components"]["schemas"]["PerformanceComponentEconomicsRequest"]
     assert (
         "must match admitted tenant authority"

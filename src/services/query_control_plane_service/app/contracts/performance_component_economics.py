@@ -14,6 +14,7 @@ from portfolio_common.source_data_product_metadata import (
 )
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from ..domain.transaction_economics import FxPnlEvidenceReason
 from .common import IntegrationWindow
 
 SUPPORTED_PERFORMANCE_ECONOMICS_COMPONENT_FAMILIES = (
@@ -41,6 +42,9 @@ PERFORMANCE_COMPONENT_ECONOMICS_ROUTE_DESCRIPTION = (
     "READY evidence. An empty continuation page is UNAVAILABLE because it cannot prove that the "
     "complete window had no activity. Reads are scoped to the admitted tenant; a foreign "
     "portfolio is indistinguishable from absence.\n"
+    "Applicable historical FX requires retained raw source and output-bound calculation authority. "
+    "Missing or unqualified FX remains null, with incomplete component totals and DEGRADED/PARTIAL "
+    "posture; independently qualified explicit zero remains evidence.\n"
     "When: Used by lotus-performance to replace local or inferred component economics in stateful "
     "contribution analytics. This route does not calculate contribution, attribution, performance "
     "returns, tax advice, execution quality, best execution, or OMS acknowledgement; "
@@ -225,14 +229,19 @@ class PerformanceComponentEconomicsRow(BaseModel):
         description="Realized capital P&L in local currency when recorded.",
         examples=["10.0000000000"],
     )
-    realized_fx_pnl_local: Decimal = Field(
+    realized_fx_pnl_local: Decimal | None = Field(
         ...,
-        description="Realized FX P&L in local currency when recorded.",
+        description=(
+            "Qualified realized FX P&L in local currency; null when original source authority "
+            "is unavailable."
+        ),
         examples=["3.0000000000"],
     )
-    realized_total_pnl_local: Decimal = Field(
+    realized_total_pnl_local: Decimal | None = Field(
         ...,
-        description="Realized total P&L in local currency when recorded.",
+        description=(
+            "Realized total P&L in local currency; null when its FX component is unqualified."
+        ),
         examples=["13.0000000000"],
     )
     realized_pnl_local_currency: str = Field(
@@ -245,14 +254,20 @@ class PerformanceComponentEconomicsRow(BaseModel):
         description="Realized capital P&L in portfolio/base currency when recorded.",
         examples=["10.0000000000"],
     )
-    realized_fx_pnl_base: Decimal = Field(
+    realized_fx_pnl_base: Decimal | None = Field(
         ...,
-        description="Realized FX P&L in portfolio/base currency when recorded.",
+        description=(
+            "Qualified realized FX P&L in portfolio/base currency; null when original source "
+            "authority is unavailable."
+        ),
         examples=["3.0000000000"],
     )
-    realized_total_pnl_base: Decimal = Field(
+    realized_total_pnl_base: Decimal | None = Field(
         ...,
-        description="Realized total P&L in portfolio/base currency when recorded.",
+        description=(
+            "Realized total P&L in portfolio/base currency; null when its FX component "
+            "is unqualified."
+        ),
         examples=["13.0000000000"],
     )
     transaction_fx_rate: Decimal | None = Field(
@@ -262,6 +277,14 @@ class PerformanceComponentEconomicsRow(BaseModel):
     )
     fx_contract_id: str | None = Field(
         None, description="Linked FX contract identifier when available.", examples=["FXC-001"]
+    )
+    fx_pnl_evidence_reason: FxPnlEvidenceReason = Field(
+        "FX_SOURCE_NOT_APPLICABLE",
+        description=(
+            "Source-safe qualification reason for historical FX P&L; stored zero alone "
+            "is not authority."
+        ),
+        examples=["FX_SOURCE_INCOMPLETE"],
     )
     source_lineage: dict[str, str] = Field(
         default_factory=dict,
@@ -299,13 +322,26 @@ class PerformanceComponentEconomicsTotal(BaseModel):
         examples=["income"],
     )
     currency: str = Field(..., description="Currency for this total.", examples=["USD"])
-    amount: Decimal = Field(
-        ..., description="Source-authored component amount.", examples=["80.0000000000"]
+    amount: Decimal | None = Field(
+        ...,
+        description=(
+            "Complete source-authored component amount; null if any included evidence "
+            "is unavailable."
+        ),
+        examples=["80.0000000000"],
     )
     evidence_count: int = Field(
         ...,
         ge=0,
         description="Number of rows contributing to this component total.",
+        examples=[1],
+    )
+    missing_evidence_count: int = Field(
+        0,
+        ge=0,
+        description=(
+            "Included rows whose component amount is unavailable; these are never summed as zero."
+        ),
         examples=[1],
     )
 
@@ -328,6 +364,7 @@ class PerformanceComponentEconomicsSupportability(BaseModel):
             "PERFORMANCE_COMPONENT_ECONOMICS_READY",
             "PERFORMANCE_COMPONENT_ECONOMICS_NO_ACTIVITY",
             "PERFORMANCE_COMPONENT_ECONOMICS_PAGE_EVIDENCE_CHANGED",
+            "PERFORMANCE_COMPONENT_ECONOMICS_FX_SOURCE_INCOMPLETE",
         ],
     )
     source_owner: Literal["lotus-core"] = Field(
@@ -411,7 +448,7 @@ class PerformanceComponentEconomicsResponse(SourceDataProductRuntimeMetadata):
         examples=[
             {
                 "source_system": "transactions",
-                "source_table": "transactions,cashflows,transaction_costs",
+                "source_table": "transactions,cashflows,transaction_costs,portfolios,outbox_events",
                 "contract_version": "performance_component_economics_v1",
             }
         ],

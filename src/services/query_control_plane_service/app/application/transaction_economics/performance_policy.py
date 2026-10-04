@@ -17,7 +17,7 @@ from .evidence import latest_evidence_timestamp
 SOURCE_CONTRACT_VERSION = "performance_component_economics_v1"
 SOURCE_LINEAGE = {
     "source_system": "transactions",
-    "source_table": "transactions,cashflows,transaction_costs",
+    "source_table": "transactions,cashflows,transaction_costs,portfolios,outbox_events",
     "contract_version": SOURCE_CONTRACT_VERSION,
 }
 
@@ -38,6 +38,8 @@ def performance_component_economics_supportability_state(
         return "READY" if is_initial_page else "UNAVAILABLE"
     if has_more:
         return "DEGRADED"
+    if _has_incomplete_fx_evidence(rows):
+        return "DEGRADED"
     return "READY"
 
 
@@ -53,6 +55,8 @@ def performance_component_economics_supportability_reason(
         return "PERFORMANCE_COMPONENT_ECONOMICS_PAGE_EVIDENCE_CHANGED"
     if has_more:
         return "PERFORMANCE_COMPONENT_ECONOMICS_PAGE_PARTIAL"
+    if _has_incomplete_fx_evidence(rows):
+        return "PERFORMANCE_COMPONENT_ECONOMICS_FX_SOURCE_INCOMPLETE"
     return "PERFORMANCE_COMPONENT_ECONOMICS_READY"
 
 
@@ -64,7 +68,7 @@ def performance_component_economics_data_quality_status(
 ) -> str:
     if not rows and not is_initial_page:
         return "UNKNOWN"
-    if has_more:
+    if has_more or _has_incomplete_fx_evidence(rows):
         return "PARTIAL"
     return "COMPLETE"
 
@@ -94,6 +98,10 @@ def missing_performance_component_families(
         family
         for family in SUPPORTED_PERFORMANCE_ECONOMICS_COMPONENT_FAMILIES
         if family not in observed_component_families
+        or (
+            family in {"realized_fx_pnl", "realized_total_pnl"}
+            and _has_incomplete_fx_evidence(rows)
+        )
     ]
 
 
@@ -102,7 +110,7 @@ def build_performance_component_economics_totals(
     *,
     portfolio_base_currency: str,
 ) -> list[PerformanceComponentEconomicsTotal]:
-    grouped: dict[tuple[str, str], list[Decimal]] = defaultdict(list)
+    grouped: dict[tuple[str, str], list[Decimal | None]] = defaultdict(list)
     for row in rows:
         for fee_component in row.trade_fee_components:
             _append_total(grouped, "fee", fee_component.currency, fee_component.amount)
@@ -115,7 +123,16 @@ def build_performance_component_economics_totals(
             portfolio_base_currency,
             row.realized_capital_pnl_base,
         )
-        _append_total(grouped, "realized_fx_pnl", portfolio_base_currency, row.realized_fx_pnl_base)
+        _append_total(
+            grouped,
+            "realized_fx_pnl",
+            portfolio_base_currency,
+            row.realized_fx_pnl_base,
+            retain_zero=(
+                row.fx_pnl_evidence_reason in {"FX_SOURCE_QUALIFIED", "FX_SOURCE_INCOMPLETE"}
+                and row.realized_fx_pnl_base is not None
+            ),
+        )
         _append_total(
             grouped,
             "realized_total_pnl",
@@ -129,8 +146,13 @@ def build_performance_component_economics_totals(
         PerformanceComponentEconomicsTotal(
             component_family=component_family,
             currency=currency,
-            amount=sum(amounts, Decimal("0")),
-            evidence_count=len(amounts),
+            amount=(
+                None
+                if None in amounts
+                else sum((amount for amount in amounts if amount is not None), Decimal("0"))
+            ),
+            evidence_count=sum(amount is not None for amount in amounts),
+            missing_evidence_count=sum(amount is None for amount in amounts),
         )
         for (component_family, currency), amounts in sorted(grouped.items())
     ]
@@ -143,13 +165,22 @@ def latest_performance_evidence_timestamp(
 
 
 def _append_total(
-    grouped: dict[tuple[str, str], list[Decimal]],
+    grouped: dict[tuple[str, str], list[Decimal | None]],
     component_family: str,
     currency: str,
-    amount: Decimal,
+    amount: Decimal | None,
+    *,
+    retain_zero: bool = False,
 ) -> None:
-    if amount != 0:
+    if amount != 0 or retain_zero:
         grouped[(component_family, currency)].append(amount)
+
+
+def _has_incomplete_fx_evidence(rows: list[PerformanceComponentEconomicsRow]) -> bool:
+    return any(
+        row.fx_pnl_evidence_reason in {"FX_SOURCE_INCOMPLETE", "FX_SOURCE_AUTHORITY_UNAVAILABLE"}
+        for row in rows
+    )
 
 
 def _observed_row_component_families(row: PerformanceComponentEconomicsRow) -> set[str]:
@@ -177,11 +208,16 @@ def _has_realized_capital_pnl_component(row: PerformanceComponentEconomicsRow) -
 
 
 def _has_realized_fx_pnl_component(row: PerformanceComponentEconomicsRow) -> bool:
+    if row.fx_pnl_evidence_reason != "FX_SOURCE_NOT_APPLICABLE":
+        return row.realized_fx_pnl_local is not None and row.realized_fx_pnl_base is not None
     return cast(bool, row.realized_fx_pnl_local != 0 or row.realized_fx_pnl_base != 0)
 
 
 def _has_realized_total_pnl_component(row: PerformanceComponentEconomicsRow) -> bool:
-    return cast(bool, row.realized_total_pnl_local != 0 or row.realized_total_pnl_base != 0)
+    return row.realized_total_pnl_local not in (
+        None,
+        Decimal("0"),
+    ) or row.realized_total_pnl_base not in (None, Decimal("0"))
 
 
 def _has_fx_context_component(row: PerformanceComponentEconomicsRow) -> bool:
