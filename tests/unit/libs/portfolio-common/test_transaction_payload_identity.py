@@ -8,6 +8,10 @@ from portfolio_common.domain.transaction import (
     build_transaction_payload_identity,
     transaction_payload_fingerprint,
 )
+from portfolio_common.domain.transaction.payload_identity import (
+    FX_UPSTREAM_PNL_FIELDS,
+    transaction_payload_pre_upstream_fingerprint,
+)
 from portfolio_common.events import TransactionEvent
 
 
@@ -157,3 +161,76 @@ def test_transaction_payload_identity_rejects_unclassified_fields() -> None:
 
     with pytest.raises(ValueError, match="future_unclassified_field"):
         transaction_payload_fingerprint(payload)
+
+
+@pytest.mark.parametrize("field", FX_UPSTREAM_PNL_FIELDS)
+@pytest.mark.parametrize("amount", [Decimal(0), Decimal("12"), Decimal("-12")])
+def test_upstream_raw_identity_distinguishes_missing_zero_and_signed_source(field, amount) -> None:
+    original = _event(transaction_type="FX_FORWARD", fx_realized_pnl_mode="UPSTREAM_PROVIDED")
+    changed = original.model_copy(update={field: amount})
+    before = original.model_dump(mode="python")
+    after = changed.model_dump(mode="python")
+    identity = build_transaction_payload_identity(before, tenant_id="tenant-a")
+    assert identity.semantic_key.startswith("transaction-persistence:v3:")
+    assert identity.payload_fingerprint != transaction_payload_fingerprint(after)
+    assert transaction_payload_pre_upstream_fingerprint(before) == (
+        transaction_payload_pre_upstream_fingerprint(after)
+    )
+    assert (
+        identity.legacy_payload_fingerprint
+        == build_transaction_payload_identity(
+            after, tenant_id="tenant-a"
+        ).legacy_payload_fingerprint
+    )
+
+
+@pytest.mark.parametrize("mode", [None, "NONE"])
+def test_non_upstream_raw_identity_preserves_processor_output_exclusion(mode) -> None:
+    original = _event(transaction_type="FX_FORWARD", fx_realized_pnl_mode=mode)
+    changed = original.model_copy(update={name: Decimal(12) for name in FX_UPSTREAM_PNL_FIELDS})
+    assert transaction_payload_fingerprint(original.model_dump(mode="python")) == (
+        transaction_payload_fingerprint(changed.model_dump(mode="python"))
+    )
+
+
+def test_upstream_raw_identity_preserves_numeric_and_metadata_replay() -> None:
+    original = _event(
+        transaction_type="FX_FORWARD",
+        fx_realized_pnl_mode="UPSTREAM_PROVIDED",
+        realized_fx_pnl_local=Decimal("0"),
+        realized_fx_pnl_base=Decimal("12"),
+    )
+    replay = original.model_copy(
+        update={
+            "realized_fx_pnl_local": Decimal("0.00"),
+            "realized_fx_pnl_base": Decimal("12.000"),
+            "correlation_id": "another-attempt",
+        }
+    )
+    assert transaction_payload_fingerprint(original.model_dump(mode="python")) == (
+        transaction_payload_fingerprint(replay.model_dump(mode="python"))
+    )
+
+
+@pytest.mark.parametrize("origin", [None, "SOURCE_BOOKED"])
+def test_pre_upstream_hash_preserves_exact_existing_version_policy(origin) -> None:
+    event = _event(transaction_fx_rate=Decimal("1.1"), transaction_fx_rate_origin=origin)
+    payload = event.model_dump(mode="python")
+    assert transaction_payload_pre_upstream_fingerprint(payload) == (
+        transaction_payload_fingerprint(payload)
+    )
+    upstream = {
+        **payload,
+        "transaction_type": "FX_FORWARD",
+        "fx_realized_pnl_mode": "UPSTREAM_PROVIDED",
+    }
+    changed = {**upstream, **{name: Decimal(12) for name in FX_UPSTREAM_PNL_FIELDS}}
+    assert transaction_payload_pre_upstream_fingerprint(upstream) == (
+        transaction_payload_pre_upstream_fingerprint(changed)
+    )
+    if origin == "SOURCE_BOOKED":
+        assert transaction_payload_pre_upstream_fingerprint(upstream) != (
+            transaction_payload_pre_upstream_fingerprint(
+                {**upstream, "transaction_fx_rate": Decimal("1.2")}
+            )
+        )

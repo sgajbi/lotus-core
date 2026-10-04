@@ -72,6 +72,7 @@ SUITES: dict[str, list[str]] = {
     "critical-db-coverage": [
         "tests/integration/services/portfolio_transaction_processing_service/"
         "test_cost_basis_lot_disposal_admission_postgresql.py",
+        "tests/integration/services/persistence_service/test_fx_source_admission_postgresql.py",
         "tests/integration/services/query_service/"
         "test_holdings_reconciliation_completion_postgresql.py",
         "tests/integration/services/ingestion_service/"
@@ -252,6 +253,7 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/services/portfolio_transaction_processing_service/test_int_interest_negative_pre_fee_net.py",
     ],
     "transaction-fx-contract": [
+        "tests/integration/services/persistence_service/test_fx_source_admission_postgresql.py",
         "tests/unit/transaction_specs/test_fx_slice0_characterization.py",
         "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/fx/test_validation.py",
         "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/fx/test_linkage.py",

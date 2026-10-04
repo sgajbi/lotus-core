@@ -1,11 +1,149 @@
 import re
 from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
+from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 from pydantic import ValidationError
 
+from src.services.ingestion_service.app import main as ingestion_main
+from src.services.ingestion_service.app.dependencies import (
+    get_ingestion_publish_command_handler,
+    get_transaction_portfolio_ownership_validator,
+)
 from src.services.ingestion_service.app.DTOs.transaction_dto import Transaction
+from tests.test_support.tenant import TEST_TENANT_HEADERS
+
+
+def _fx_source_payload(**changes: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "transaction_id": "FX-SOURCE-ADMISSION-001",
+        "portfolio_id": "PORT-001",
+        "instrument_id": "FX-001",
+        "security_id": "FX-001",
+        "transaction_date": "2026-09-01T10:00:00Z",
+        "transaction_type": "FX_FORWARD",
+        "component_type": "FX_CONTRACT_CLOSE",
+        "fx_realized_pnl_mode": "UPSTREAM_PROVIDED",
+        "quantity": "1",
+        "price": "1",
+        "gross_transaction_amount": "1",
+        "trade_currency": "USD",
+        "currency": "USD",
+    }
+    payload.update(changes)
+    return payload
+
+
+@pytest.mark.parametrize(
+    ("local", "base", "missing"),
+    [
+        (None, None, "realized_fx_pnl_local,realized_fx_pnl_base"),
+        ("0", None, "realized_fx_pnl_base"),
+        (None, "0", "realized_fx_pnl_local"),
+    ],
+)
+def test_fx_upstream_source_rejects_missing_applicable_amounts(
+    local: str | None, base: str | None, missing: str
+) -> None:
+    with pytest.raises(ValidationError) as raised:
+        Transaction.model_validate(
+            _fx_source_payload(
+                realized_fx_pnl_local=local,
+                realized_fx_pnl_base=base,
+                realized_total_pnl_local="0",
+                realized_total_pnl_base="0",
+            )
+        )
+    error = raised.value.errors()[0]
+    assert error["type"] == "FX_UPSTREAM_SOURCE_INCOMPLETE"
+    assert error["ctx"]["field_path"] == missing
+
+
+@pytest.mark.parametrize("amount", ["0", "12.5", "-12.5"])
+@pytest.mark.parametrize("totals_supplied", [False, True])
+def test_fx_upstream_source_accepts_explicit_signed_amounts(
+    amount: str, totals_supplied: bool
+) -> None:
+    payload = _fx_source_payload(realized_fx_pnl_local=amount, realized_fx_pnl_base=amount)
+    if totals_supplied:
+        payload.update(realized_total_pnl_local=amount, realized_total_pnl_base=amount)
+    admitted = Transaction.model_validate(payload)
+    assert admitted.realized_fx_pnl_local == admitted.realized_fx_pnl_base == Decimal(amount)
+    assert admitted.fx_realized_pnl_mode == "UPSTREAM_PROVIDED"
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"fx_realized_pnl_mode": "NONE"},
+        {"fx_realized_pnl_mode": None},
+        {"component_type": " fx_contract_open "},
+        {"transaction_type": "BUY"},
+    ],
+)
+def test_fx_upstream_source_exempts_non_realizing_or_non_fx(changes: dict[str, object]) -> None:
+    admitted = Transaction.model_validate(_fx_source_payload(**changes))
+    assert admitted.realized_fx_pnl_local is None
+    assert admitted.realized_fx_pnl_base is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("endpoint", ["/ingest/transaction", "/ingest/transactions"])
+async def test_registered_route_refuses_incomplete_fx_before_publish_or_job(
+    monkeypatch: pytest.MonkeyPatch, endpoint: str
+) -> None:
+    handler = AsyncMock()
+    ownership = AsyncMock()
+    producer = MagicMock()
+    producer.flush.return_value = 0
+    monkeypatch.setattr(ingestion_main, "get_kafka_producer", lambda: producer)
+    monkeypatch.setitem(ingestion_main.app_state, "kafka_producer", producer)
+    monkeypatch.setitem(
+        ingestion_main.app.dependency_overrides,
+        get_ingestion_publish_command_handler,
+        lambda: handler,
+    )
+    monkeypatch.setitem(
+        ingestion_main.app.dependency_overrides,
+        get_transaction_portfolio_ownership_validator,
+        lambda: ownership,
+    )
+    incomplete = _fx_source_payload(realized_total_pnl_local="0", realized_total_pnl_base="0")
+    valid = _fx_source_payload(realized_fx_pnl_local="0", realized_fx_pnl_base="0")
+    payload = (
+        incomplete if endpoint.endswith("/transaction") else {"transactions": [valid, incomplete]}
+    )
+    transport = httpx.ASGITransport(app=ingestion_main.app)
+    async with ingestion_main.app.router.lifespan_context(ingestion_main.app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(endpoint, headers=TEST_TENANT_HEADERS, json=payload)
+    assert response.status_code == 422, response.text
+    assert "FX_UPSTREAM_SOURCE_INCOMPLETE" in response.text
+    handler.ingest_transaction.assert_not_awaited()
+    handler.ingest_transactions.assert_not_awaited()
+    producer.publish_message.assert_not_called()
+
+
+def test_registered_openapi_binds_fx_source_admission_condition() -> None:
+    schema = ingestion_main.app.openapi()["components"]["schemas"]["Transaction"]
+    rule = next(
+        rule for rule in schema["allOf"] if "fx_realized_pnl_mode" in rule["if"].get("required", [])
+    )
+    assert rule["then"] == {
+        "required": ["realized_fx_pnl_local", "realized_fx_pnl_base"],
+        "properties": {
+            "realized_fx_pnl_local": {"not": {"type": "null"}},
+            "realized_fx_pnl_base": {"not": {"type": "null"}},
+        },
+    }
+    assert re.fullmatch(
+        rule["if"]["properties"]["fx_realized_pnl_mode"]["pattern"], " upstream_provided "
+    )
+    assert re.fullmatch(
+        rule["if"]["not"]["properties"]["component_type"]["pattern"], " fx_contract_open "
+    )
 
 
 def _interest_payload(**changes: object) -> dict[str, object]:

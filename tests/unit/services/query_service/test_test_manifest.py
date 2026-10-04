@@ -36,6 +36,17 @@ def test_unit_suite_excludes_integration_db_marker() -> None:
     ]
 
 
+def test_fresh_fx_source_admission_has_native_pg_and_changed_code_routes() -> None:
+    owning_file = (
+        "tests/integration/services/persistence_service/test_fx_source_admission_postgresql.py"
+    )
+    for suite in ("transaction-fx-contract", "critical-db-coverage"):
+        assert get_suite(suite).count(owning_file) == 1
+        assert SUITE_ENV_PROFILE[suite] == "integration"
+        assert SUITE_RUNTIME_MODE[suite] == "db_direct"
+    assert owning_file not in get_suite("unit-db")
+
+
 def test_unit_db_suite_tracks_db_dependent_tests() -> None:
     unit_db_suite = get_suite("unit-db")
     assert "tests/unit/libs/portfolio-common/test_position_state_repository.py" in unit_db_suite
