@@ -67,7 +67,7 @@
     {
       "path": "src/services/query_service/app/services/reporting_service.py",
       "rank": "C",
-      "mi": 6.432122664854502,
+      "mi": 6.513248933977338,
       "owner": "lotus-core maintainers",
       "rationale": "Existing reporting hotspot; follow-up layering work is tracked separately.",
       "issue": "#1064"

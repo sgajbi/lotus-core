@@ -133,12 +133,12 @@ async def _seed_allocation_snapshots(session: AsyncSession) -> None:
     await session.commit()
 
 
-async def _request(client: httpx.AsyncClient) -> httpx.Response:
+async def _request(client: httpx.AsyncClient, *, as_of_date: date = AS_OF_DATE) -> httpx.Response:
     return await client.post(
         "/reporting/asset-allocation/query",
         json={
             "scope": {"portfolio_id": PORTFOLIO_ID},
-            "as_of_date": AS_OF_DATE.isoformat(),
+            "as_of_date": as_of_date.isoformat(),
             "dimensions": ["asset_class"],
             "look_through_mode": "direct_only",
             "contributor_limit_per_bucket": 20,
@@ -149,6 +149,16 @@ async def _request(client: httpx.AsyncClient) -> httpx.Response:
 
 def _buckets(payload: dict) -> dict[str, dict]:
     return {bucket["dimension_value"]: bucket for bucket in payload["views"][0]["buckets"]}
+
+
+async def _request_aum(client: httpx.AsyncClient, *, as_of_date: date = AS_OF_DATE) -> dict:
+    response = await client.post(
+        "/reporting/assets-under-management/query",
+        json={"scope": {"portfolio_id": PORTFOLIO_ID}, "as_of_date": as_of_date.isoformat()},
+        headers=TEST_TENANT_HEADERS,
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["portfolios"][0]
 
 
 async def test_registered_allocation_distinguishes_unknown_zero_signed_and_failed_postgresql(
@@ -168,6 +178,7 @@ async def test_registered_allocation_distinguishes_unknown_zero_signed_and_faile
             base_url="http://test",
         ) as client:
             unknown = await _request(client)
+            unvalued_aum = await _request_aum(client)
             await async_db_session.rollback()
 
             await async_db_session.execute(
@@ -188,6 +199,8 @@ async def test_registered_allocation_distinguishes_unknown_zero_signed_and_faile
             await async_db_session.commit()
             async_db_session.expire_all()
             signed = await _request(client)
+            carry_forward_aum = await _request_aum(client, as_of_date=date(2026, 4, 10))
+            carry_forward_allocation = await _request(client, as_of_date=date(2026, 4, 10))
             await async_db_session.rollback()
 
             await async_db_session.execute(
@@ -198,6 +211,17 @@ async def test_registered_allocation_distinguishes_unknown_zero_signed_and_faile
             await async_db_session.commit()
             async_db_session.expire_all()
             failed = await _request(client)
+            await async_db_session.rollback()
+
+            await async_db_session.execute(
+                update(DailyPositionSnapshot)
+                .where(DailyPositionSnapshot.security_id.in_([EQUITY_ID, BOND_ID]))
+                .values(market_value=Decimal("0"), valuation_status="VALUED_CURRENT")
+            )
+            await async_db_session.commit()
+            async_db_session.expire_all()
+            measured_zero_aum = await _request_aum(client)
+            measured_zero_allocation = await _request(client)
             await async_db_session.rollback()
 
             await async_db_session.execute(
@@ -216,6 +240,54 @@ async def test_registered_allocation_distinguishes_unknown_zero_signed_and_faile
             await async_db_session.commit()
             async_db_session.expire_all()
             missing_snapshot = await _request(client)
+            await async_db_session.rollback()
+
+            # Direct fixtures qualify the reader; they are not supported writer evidence.
+            await async_db_session.execute(
+                delete(DailyPositionSnapshot).where(
+                    DailyPositionSnapshot.portfolio_id == PORTFOLIO_ID
+                )
+            )
+            await async_db_session.commit()
+            async_db_session.expire_all()
+            history_only_aum = await _request_aum(client)
+            history_only_allocation = await _request(client)
+            await async_db_session.rollback()
+
+            await async_db_session.execute(
+                update(PositionHistory)
+                .where(PositionHistory.portfolio_id == PORTFOLIO_ID)
+                .values(quantity=Decimal("0"), cost_basis=Decimal("0"))
+            )
+            async_db_session.add_all(
+                [
+                    DailyPositionSnapshot(
+                        portfolio_id=PORTFOLIO_ID,
+                        security_id=security_id,
+                        date=AS_OF_DATE,
+                        quantity=Decimal("0"),
+                        cost_basis=Decimal("0"),
+                        market_value=Decimal("0"),
+                        valuation_status="VALUED_CURRENT",
+                        epoch=0,
+                    )
+                    for security_id in (EQUITY_ID, BOND_ID)
+                ]
+            )
+            await async_db_session.commit()
+            async_db_session.expire_all()
+            flat_aum = await _request_aum(client)
+            await async_db_session.rollback()
+
+            await async_db_session.execute(
+                delete(DailyPositionSnapshot).where(
+                    DailyPositionSnapshot.portfolio_id == PORTFOLIO_ID
+                )
+            )
+            await async_db_session.commit()
+            async_db_session.expire_all()
+            no_source_aum = await _request_aum(client)
+            await async_db_session.rollback()
     finally:
         app.dependency_overrides.pop(get_async_db_session)
 
@@ -285,3 +357,46 @@ async def test_registered_allocation_distinguishes_unknown_zero_signed_and_faile
         "unvalued_position_count": 1,
     }
     assert missing_snapshot_payload["total_market_value_reporting_currency"] is None
+
+    for payload, found, source_date, coverage, value, count in [
+        (history_only_aum, False, None, "UNAVAILABLE", "0", 0),
+        (no_source_aum, False, None, "NO_SNAPSHOT", "0", 0),
+        (flat_aum, True, AS_OF_DATE.isoformat(), "LOADED_EMPTY", "0", 0),
+        (unvalued_aum, True, AS_OF_DATE.isoformat(), "UNAVAILABLE", "100", 2),
+        (measured_zero_aum, True, AS_OF_DATE.isoformat(), "MEASURED_ZERO", "0", 2),
+        (carry_forward_aum, True, AS_OF_DATE.isoformat(), "CARRY_FORWARD", "80", 2),
+    ]:
+        assert payload["snapshot_found"] is found
+        assert payload["snapshot_date"] == source_date
+        assert payload["coverage_state"] == coverage
+        assert Decimal(payload["aum_portfolio_currency"]) == Decimal(value)
+        assert Decimal(payload["aum_reporting_currency"]) == Decimal(value)
+        assert payload["position_count"] == count
+
+    assert history_only_allocation.status_code == 200, history_only_allocation.text
+    history_payload = history_only_allocation.json()
+    assert history_payload["valuation_coverage"] == {
+        "coverage_state": "UNAVAILABLE",
+        "coverage_reason": "open_position_coverage_gap",
+        "snapshot_row_count": 0,
+        "expected_open_position_count": 2,
+        "valued_position_count": 0,
+        "unvalued_position_count": 0,
+    }
+    assert history_payload["total_market_value_reporting_currency"] is None
+
+    assert measured_zero_allocation.status_code == 200, measured_zero_allocation.text
+    assert (
+        measured_zero_allocation.json()["valuation_coverage"]["coverage_state"] == "MEASURED_ZERO"
+    )
+    assert Decimal(measured_zero_allocation.json()["total_market_value_reporting_currency"]) == 0
+    assert all(
+        Decimal(bucket["weight"]) == 0
+        for bucket in _buckets(measured_zero_allocation.json()).values()
+    )
+    assert carry_forward_allocation.status_code == 200, carry_forward_allocation.text
+    carry_payload = carry_forward_allocation.json()
+    assert carry_payload["valuation_coverage"]["coverage_state"] == "CARRY_FORWARD"
+    assert Decimal(carry_payload["total_market_value_reporting_currency"]) == 80
+    assert Decimal(_buckets(carry_payload)["EQUITY"]["weight"]) == Decimal("1.25")
+    assert Decimal(_buckets(carry_payload)["BOND"]["weight"]) == Decimal("-0.25")

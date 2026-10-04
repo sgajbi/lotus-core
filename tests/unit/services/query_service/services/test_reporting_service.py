@@ -149,6 +149,115 @@ async def test_get_assets_under_management_defaults_to_portfolio_currency_for_si
 
 
 @pytest.mark.parametrize(
+    ("snapshot_date", "market_value", "presence", "expected_date", "expected_coverage"),
+    [
+        pytest.param(
+            None, None, SnapshotPresence(None, 0, 2), None, "UNAVAILABLE", id="history-only"
+        ),
+        pytest.param(None, None, None, None, "NO_SNAPSHOT", id="no-source"),
+        pytest.param(
+            None,
+            None,
+            SnapshotPresence(date(2026, 3, 26), 1),
+            date(2026, 3, 26),
+            "LOADED_EMPTY",
+            id="flat-snapshot",
+        ),
+        pytest.param(
+            date(2026, 3, 27),
+            None,
+            SnapshotPresence(date(2026, 3, 27), 1, 1),
+            date(2026, 3, 27),
+            "UNAVAILABLE",
+            id="unvalued-snapshot",
+        ),
+        pytest.param(
+            date(2026, 3, 27),
+            "0",
+            SnapshotPresence(date(2026, 3, 27), 1, 1),
+            date(2026, 3, 27),
+            "MEASURED_ZERO",
+            id="measured-zero",
+        ),
+        pytest.param(
+            date(2026, 3, 26),
+            "-20",
+            SnapshotPresence(date(2026, 3, 26), 1, 1),
+            date(2026, 3, 26),
+            "CARRY_FORWARD",
+            id="signed-carry-forward",
+        ),
+        pytest.param(
+            date(2026, 3, 27),
+            "25",
+            SnapshotPresence(None, 0, 1),
+            date(2026, 3, 27),
+            "MEASURED",
+            id="actual-row-date-fallback",
+        ),
+    ],
+)
+async def test_aum_snapshot_existence_requires_observed_date(
+    snapshot_date,
+    market_value,
+    presence,
+    expected_date,
+    expected_coverage,
+) -> None:
+    portfolio = _portfolio("P1")
+    rows = (
+        [
+            ReportingSnapshotRow(
+                portfolio,
+                _snapshot("SEC1", market_value=market_value, snapshot_date=snapshot_date),
+                _instrument("SEC1"),
+            )
+        ]
+        if snapshot_date is not None
+        else []
+    )
+    repo = AsyncMock()
+    repo.get_latest_business_date.return_value = date(2026, 3, 27)
+    repo.list_portfolios.return_value = [portfolio]
+    repo.list_latest_snapshot_rows.return_value = rows
+    repo.list_snapshot_presence.return_value = {"P1": presence} if presence is not None else {}
+    with patch(
+        "src.services.query_service.app.services.reporting_service.ReportingRepository",
+        return_value=repo,
+    ):
+        service = ReportingService(AsyncMock(spec=AsyncSession))
+        response = await service.get_assets_under_management(
+            AssetsUnderManagementQueryRequest(
+                scope=ReportingScope(portfolio_id="P1"),
+                as_of_date=date(2026, 3, 27),
+            ),
+            tenant_context=TEST_TENANT_CONTEXT,
+        )
+        if presence is not None and presence.expected_open_count == 2:
+            allocation = await service.get_asset_allocation(
+                AssetAllocationQueryRequest(
+                    scope=ReportingScope(portfolio_id="P1"),
+                    as_of_date=date(2026, 3, 27),
+                    dimensions=["asset_class"],
+                    look_through_mode="direct_only",
+                ),
+                tenant_context=TEST_TENANT_CONTEXT,
+            )
+            assert allocation.valuation_coverage.expected_open_position_count == 2
+            assert allocation.valuation_coverage.snapshot_row_count == 0
+            assert allocation.valuation_coverage.coverage_state == "UNAVAILABLE"
+            assert allocation.total_market_value_reporting_currency is None
+    summary = response.portfolios[0]
+    assert summary.snapshot_found is (expected_date is not None)
+    assert summary.snapshot_date == expected_date
+    assert summary.coverage_state == expected_coverage
+    expected_value = Decimal(market_value) if market_value is not None else Decimal("0")
+    assert summary.aum_portfolio_currency == summary.aum_reporting_currency == expected_value
+    assert response.totals.aum_reporting_currency == expected_value
+    assert summary.position_count == len(rows)
+
+
+@pytest.mark.parametrize(
     ("rows", "presence", "expected"),
     [
         ([], None, "NO_SNAPSHOT"),

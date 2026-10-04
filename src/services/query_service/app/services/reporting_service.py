@@ -435,6 +435,11 @@ class ReportingService:
             portfolio_id = portfolio.portfolio_id
             presence = snapshot_presence.get(portfolio_id)
             portfolio_rows = rows_by_portfolio[portfolio_id]
+            observed_snapshot_date = (
+                presence.snapshot_date
+                if presence is not None and presence.snapshot_date is not None
+                else max((row.snapshot.date for row in portfolio_rows), default=None)
+            )
             total_positions += per_portfolio_positions[portfolio_id]
             total_aum_reporting += per_portfolio_reporting[portfolio_id]
             portfolio_summaries.append(
@@ -450,16 +455,8 @@ class ReportingService:
                     ),
                     aum_reporting_currency=per_portfolio_reporting[portfolio_id],
                     position_count=per_portfolio_positions[portfolio_id],
-                    snapshot_found=presence is not None or bool(portfolio_rows),
-                    snapshot_date=(
-                        presence.snapshot_date
-                        if presence is not None
-                        else (
-                            max(row.snapshot.date for row in portfolio_rows)
-                            if portfolio_rows
-                            else None
-                        )
-                    ),
+                    snapshot_found=observed_snapshot_date is not None,
+                    snapshot_date=observed_snapshot_date,
                     coverage_state=_aum_coverage_state(
                         rows=portfolio_rows,
                         presence=presence,
