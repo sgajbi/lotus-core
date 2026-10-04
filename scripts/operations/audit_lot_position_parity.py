@@ -19,7 +19,8 @@ for source_root in (REPO_ROOT, REPO_ROOT / "src" / "libs" / "portfolio-common"):
 from portfolio_common.database_runtime_identity import (  # noqa: E402
     database_runtime_identity_scope,
 )
-from portfolio_common.db import get_async_engine  # noqa: E402
+from portfolio_common.db import create_async_database_engine  # noqa: E402
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker  # noqa: E402
 
 from src.services.portfolio_transaction_processing_service.app.application import (  # noqa: E402
     AuditLotPositionParityCommand,
@@ -82,13 +83,23 @@ def parse_args() -> argparse.Namespace:
 
 async def run(args: argparse.Namespace) -> dict[str, Any]:
     with database_runtime_identity_scope("lot-position-parity-audit"):
+        engine = create_async_database_engine(runtime_identity="lot-position-parity-audit")
         try:
+            session_factory = async_sessionmaker(
+                bind=engine,
+                class_=AsyncSession,
+                autocommit=False,
+                autoflush=False,
+                expire_on_commit=False,
+            )
             after = (
                 LotPositionParityKey(args.after_portfolio_id, args.after_security_id)
                 if args.after_portfolio_id
                 else None
             )
-            result = await build_audit_lot_position_parity_use_case().execute(
+            result = await build_audit_lot_position_parity_use_case(
+                session_factory=session_factory
+            ).execute(
                 AuditLotPositionParityCommand(
                     portfolio_id=args.portfolio_id,
                     limit=args.limit,
@@ -97,7 +108,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
             )
             return build_report(result)
         finally:
-            await get_async_engine().dispose()
+            await engine.dispose()
 
 
 def main() -> int:
