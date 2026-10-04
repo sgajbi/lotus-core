@@ -36,6 +36,33 @@ def test_unit_suite_excludes_integration_db_marker() -> None:
     ]
 
 
+INGESTION_OPENAPI_CONTRACT_FILE = (
+    "tests/integration/services/ingestion_service/test_ingestion_main_app_contract.py"
+)
+
+
+def test_ops_contract_executes_complete_ingestion_openapi_contract() -> None:
+    assert get_suite("ops-contract").count(INGESTION_OPENAPI_CONTRACT_FILE) == 1
+
+
+def test_ops_ingestion_openapi_manifest_guard_rejects_missing_proof(monkeypatch) -> None:
+    monkeypatch.setitem(
+        SUITES,
+        "ops-contract",
+        [path for path in get_suite("ops-contract") if path != INGESTION_OPENAPI_CONTRACT_FILE],
+    )
+    with pytest.raises(AssertionError):
+        test_ops_contract_executes_complete_ingestion_openapi_contract()
+
+
+def test_ops_ingestion_openapi_manifest_guard_rejects_duplicate_proof(monkeypatch) -> None:
+    monkeypatch.setitem(
+        SUITES, "ops-contract", [*get_suite("ops-contract"), INGESTION_OPENAPI_CONTRACT_FILE]
+    )
+    with pytest.raises(AssertionError):
+        test_ops_contract_executes_complete_ingestion_openapi_contract()
+
+
 def test_fresh_fx_source_admission_has_native_pg_and_changed_code_routes() -> None:
     owning_file = (
         "tests/integration/services/persistence_service/test_fx_source_admission_postgresql.py"

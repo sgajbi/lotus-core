@@ -1031,7 +1031,10 @@ async def test_openapi_describes_transaction_fx_fields(async_test_client):
         "settlement components of the same FX swap."
     )
     assert properties["fx_realized_pnl_mode"]["description"] == (
-        "Policy-driven mode for realized FX P&L population, for example NONE or UPSTREAM_PROVIDED."
+        "Policy-driven mode for realized FX P&L population, for example NONE or UPSTREAM_PROVIDED. "
+        "Fresh applicable UPSTREAM_PROVIDED FX sources require both realized_fx_pnl_local "
+        "and realized_fx_pnl_base; explicit zero is valid. FX_CONTRACT_OPEN is non-realizing. "
+        "Totals cannot replace missing FX evidence."
     )
     assert properties["realized_total_pnl_base"]["description"] == (
         exact_numeric_openapi_description(
