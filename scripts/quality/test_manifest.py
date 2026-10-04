@@ -163,6 +163,7 @@ SUITES: dict[str, list[str]] = {
     "integration-lite": _discover_integration_lite(),
     "integration-all": ["tests/integration"],
     "ops-contract": [
+        "tests/integration/services/ingestion_service/test_ingestion_main_app_contract.py",
         "tests/integration/services/ingestion_service/test_ingestion_routers.py",
         "tests/integration/services/query_control_plane_service/"
         "test_operations_router_dependency.py",
