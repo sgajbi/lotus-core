@@ -10,7 +10,11 @@ from portfolio_common.event_mapping import (
     decode_kafka_event_payload,
     validate_kafka_event_payload,
 )
-from portfolio_common.events import MarketPricePersistedEvent, event_business_payload
+from portfolio_common.events import (
+    AuthoritativeMarketPriceAuthorityChangedEvent,
+    MarketPricePersistedEvent,
+    event_business_payload,
+)
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.retry_policy import CONSUMER_DB_SHORT_RETRY, tenacity_retry_kwargs
@@ -34,6 +38,7 @@ from ..repositories.valuation_repository import ValuationRepository
 logger = logging.getLogger(__name__)
 
 SERVICE_NAME = "price-event-reprocessing-trigger"
+AUTHORITATIVE_PRICE_IMPACT_PAGE_SIZE = 100
 
 
 def _price_event_correlation_id(event_data: dict) -> str:
@@ -74,6 +79,17 @@ class PriceEventConsumer(BaseConsumer):
             with self._message_correlation_context(
                 msg, fallback_correlation_id=price_event_correlation_id
             ) as correlation_id:
+                if (
+                    decoded_payload.data.get("event_type")
+                    == "AuthoritativeMarketPriceAuthorityChanged"
+                ):
+                    authority_event = validate_kafka_event_payload(
+                        decoded_payload,
+                        AuthoritativeMarketPriceAuthorityChangedEvent,
+                        expected_event_type="AuthoritativeMarketPriceAuthorityChanged",
+                    )
+                    await self._process_authority_change(authority_event, correlation_id)
+                    return
                 event = validate_kafka_event_payload(
                     decoded_payload,
                     MarketPricePersistedEvent,
@@ -167,6 +183,56 @@ class PriceEventConsumer(BaseConsumer):
                 exc_info=True,
             )
             raise
+
+    async def _process_authority_change(
+        self,
+        event: AuthoritativeMarketPriceAuthorityChangedEvent,
+        correlation_id: str,
+    ) -> None:
+        """Atomically consume all scoped pages; no partial fanout idempotency commit."""
+        async for db in get_async_db_session():
+            async with db.begin():
+                if not await IdempotencyRepository(db).claim_event_processing(
+                    event.correction_id,
+                    "N/A",
+                    f"{SERVICE_NAME}-authority",
+                    correlation_id,
+                ):
+                    return
+                repo = ValuationRepository(db)
+                calendar = await repo.classify_valuation_business_date(event.price_date)
+                if not calendar.is_business_date:
+                    # Exact-date facts are retained; later governed position readiness
+                    # resolves them. Never issue a security-global watermark reset.
+                    return
+                after = None
+                while True:
+                    keys = await repo.find_authoritative_price_impact_page(
+                        tenant_id=event.tenant_id,
+                        legal_book_id=event.legal_book_id,
+                        security_id=event.security_id,
+                        valuation_date=event.price_date,
+                        after=after,
+                        page_size=AUTHORITATIVE_PRICE_IMPACT_PAGE_SIZE,
+                    )
+                    if not keys:
+                        break
+                    await ValuationJobRepository(db).upsert_jobs(
+                        [
+                            ValuationJobUpsert(
+                                portfolio_id=portfolio_id,
+                                security_id=security_id,
+                                valuation_date=event.price_date,
+                                epoch=epoch,
+                                correlation_id=correlation_id,
+                                source_correction_id=event.correction_id,
+                            )
+                            for portfolio_id, security_id, epoch in keys
+                        ],
+                        rearm_completed=True,
+                        requeue_if_processing=True,
+                    )
+                    after = keys[-1][0], keys[-1][2]
 
     async def _queue_immediate_valuation_jobs(
         self,

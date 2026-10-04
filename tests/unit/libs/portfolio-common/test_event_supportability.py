@@ -155,6 +155,35 @@ def test_cataloged_event_models_accept_governed_outbox_envelope_metadata() -> No
         },
     }
 
+    revision = {
+        "tenant_id": "tenant",
+        "legal_book_id": "book",
+        "security_id": "S1",
+        "price_date": "2026-07-22",
+        "source_system": "prices",
+        "source_record_id": "p1",
+        "fact_version": 1,
+        "source_revision": "rev-1",
+        "source_content_hash": "a" * 64,
+        "fact_status": "ACTIVE",
+        "quote_basis": "UNIT_PRICE",
+        "currency": "USD",
+        "observed_at": "2026-07-22T00:00:00Z",
+    }
+    authority_payload = {
+        "tenant_id": "tenant",
+        "legal_book_id": "book",
+        "security_id": "S1",
+        "price_date": "2026-07-22",
+        "previous": None,
+        "accepted": revision,
+    }
+    sample_payloads_by_schema_model["AuthoritativeMarketPriceAuthorityChangedEvent"] = {
+        **authority_payload,
+        "correction_id": events.AuthoritativeMarketPriceAuthorityChangedEvent.identity_for(
+            authority_payload,
+        ),
+    }
     for definition in EVENT_FAMILY_DEFINITIONS:
         model_cls = getattr(events, definition.schema_model)
         payload = {

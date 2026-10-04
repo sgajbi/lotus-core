@@ -157,14 +157,14 @@
     {
       "topic": "market_prices.persisted",
       "partitions": 12,
-      "producer_services": ["persistence_service"],
+      "producer_services": ["persistence_service", "ingestion_service"],
       "current_key": "security_id",
       "ordering_scope": "security",
       "consumer_groups": ["valuation_orchestrator_group_price_events"],
       "consumer_max_in_flight": 12,
       "state_owner": "valuation_orchestrator_service.price_reprocessing_queue",
       "duplicate_policy": "source_observation_identity_and_bounded_reprocessing_upsert",
-      "replay_contract": "replay_preserves_security_key"
+      "replay_contract": "replay_preserves_security_key; authoritative impacts retain tenant/book/date and correction identity; scoped delivery pages all visible current-epoch positions atomically"
     },
     {
       "topic": "fx_rates.persisted",

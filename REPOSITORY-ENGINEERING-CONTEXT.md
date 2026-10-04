@@ -12,6 +12,17 @@ and the task routes below to load only relevant specialist context.
 
 ## Repository Role
 
+### Scoped price correction practice
+
+Authoritative source ingress stages typed `AuthoritativeMarketPriceAuthorityChanged` intents
+in the existing price outbox within the source-write transaction. Previous/accepted revision
+evidence and each affected tenant/book/security/date bind a transport-neutral correction ID;
+the payload supplies no calculation price. The price consumer strictly dispatches this family
+and atomically pages all visible held current-epoch positions, job upserts and idempotency.
+Workers resolve persisted authority. Never substitute legacy security-global replay or an
+unscoped quote projection for this path. Scoped recovery does not qualify future/calendar,
+derived propagation or latest-revision publication, and does not change QCP date coherence.
+
 `ClientRestrictionProfile:v1` ranks effective authoritative revisions before the active-only
 filter. Preserve inactive/suspended version and lineage in the inclusive view, and keep empty
 current evidence INCOMPLETE. Restriction admission trims selectors and rejects any blank element;

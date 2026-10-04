@@ -4,10 +4,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from portfolio_common.event_mapping import EventContractValidationError
-from portfolio_common.events import GOVERNED_EVENT_SCHEMA_VERSION, MarketPricePersistedEvent
+from portfolio_common.events import (
+    GOVERNED_EVENT_SCHEMA_VERSION,
+    AuthoritativeMarketPriceAuthorityChangedEvent,
+    MarketPricePersistedEvent,
+)
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.valuation_job_contracts import ValuationJobUpsert
 from portfolio_common.valuation_job_repository import ValuationJobRepository
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.valuation_orchestrator_service.app.consumers.price_event_consumer import (
@@ -25,6 +30,38 @@ from src.services.valuation_orchestrator_service.app.repositories.valuation_repo
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+def _scoped_event():
+    summary = {
+        "tenant_id": "tenant",
+        "legal_book_id": "book",
+        "security_id": "S1",
+        "price_date": "2025-08-05",
+        "source_system": "prices",
+        "source_record_id": "p1",
+        "fact_version": 2,
+        "source_revision": "rev-2",
+        "source_content_hash": "a" * 64,
+        "fact_status": "ACTIVE",
+        "quote_basis": "UNIT_PRICE",
+        "currency": "USD",
+        "observed_at": "2025-08-05T00:00:00Z",
+    }
+    payload = {
+        "tenant_id": "tenant",
+        "legal_book_id": "book",
+        "security_id": "S1",
+        "price_date": "2025-08-05",
+        "previous": None,
+        "accepted": summary,
+    }
+    return AuthoritativeMarketPriceAuthorityChangedEvent.model_validate(
+        {
+            **payload,
+            "correction_id": AuthoritativeMarketPriceAuthorityChangedEvent.identity_for(payload),
+        }
+    )
 
 
 @pytest.fixture
@@ -123,6 +160,75 @@ async def test_invalid_price_event_is_raised_to_shared_recovery_boundary(
         await consumer.process_message(mock_kafka_message)
 
     consumer._send_to_dlq_async.assert_not_awaited()
+
+
+async def test_scoped_price_fanout_consumes_every_page_in_one_unit_of_work(
+    consumer,
+    mock_kafka_message,
+    mock_dependencies,
+):
+    event = _scoped_event()
+    mock_kafka_message.value.return_value = event.model_dump_json().encode()
+    repo = mock_dependencies["valuation_repo"]
+    repo.find_authoritative_price_impact_page.side_effect = [
+        [("P1", "S1", 0), ("P2", "S1", 1)],
+        [("P3", "S1", 0)],
+        [],
+    ]
+    await consumer.process_message(mock_kafka_message)
+    calls = mock_dependencies["job_repo"].upsert_jobs.await_args_list
+    assert [[job.portfolio_id for job in call.args[0]] for call in calls] == [["P1", "P2"], ["P3"]]
+    assert all(
+        call.kwargs == {"rearm_completed": True, "requeue_if_processing": True} for call in calls
+    )
+    assert repo.find_authoritative_price_impact_page.await_count == 3
+    assert repo.find_authoritative_price_impact_page.await_args_list[1].kwargs["after"] == ("P2", 1)
+    assert all(
+        call.kwargs["tenant_id"] == "tenant" and call.kwargs["legal_book_id"] == "book"
+        for call in repo.find_authoritative_price_impact_page.await_args_list
+    )
+    repo.find_position_keys_requiring_price_revaluation.assert_not_awaited()
+    mock_dependencies["reprocessing_repo"].upsert_state.assert_not_awaited()
+
+
+async def test_scoped_price_duplicate_delivery_does_not_repeat_fanout(
+    consumer,
+    mock_kafka_message,
+    mock_dependencies,
+):
+    mock_kafka_message.value.return_value = _scoped_event().model_dump_json().encode()
+    mock_dependencies["idempotency_repo"].claim_event_processing.return_value = False
+    await consumer.process_message(mock_kafka_message)
+    mock_dependencies["valuation_repo"].find_authoritative_price_impact_page.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "mutation", ["missing_scope", "wrong_identity", "unknown_type", "legacy_amount"]
+)
+async def test_scoped_discriminator_never_falls_back_to_legacy(
+    consumer,
+    mock_kafka_message,
+    mock_dependencies,
+    mutation,
+):
+    import json
+
+    payload = _scoped_event().model_dump(mode="json")
+    if mutation == "missing_scope":
+        payload.pop("tenant_id")
+    elif mutation == "wrong_identity":
+        payload["correction_id"] = "sha256:" + "0" * 64
+    elif mutation == "unknown_type":
+        payload["event_type"] = "UnknownScopedPrice"
+    else:
+        payload["price"] = "120"
+    mock_kafka_message.value.return_value = json.dumps(payload).encode()
+    with pytest.raises((ValidationError, EventContractValidationError)):
+        await consumer.process_message(mock_kafka_message)
+    mock_dependencies[
+        "valuation_repo"
+    ].find_position_keys_requiring_price_revaluation.assert_not_awaited()
+    mock_dependencies["idempotency_repo"].claim_event_processing.assert_not_awaited()
 
 
 async def test_backdated_price_flags_instrument_for_reprocessing(

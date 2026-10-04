@@ -2,7 +2,13 @@ from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
-from portfolio_common.events import BusinessDateEvent, CoreEventModel, TransactionEvent
+from portfolio_common.events import (
+    AuthoritativeMarketPriceAuthorityChangedEvent,
+    BusinessDateEvent,
+    CoreEventModel,
+    MarketPriceAuthorityRevision,
+    TransactionEvent,
+)
 from pydantic import ValidationError
 
 
@@ -21,6 +27,76 @@ def test_business_date_event_rejects_blank_calendar_identity() -> None:
             business_date=date(2026, 4, 10),
             calendar_code=" ",
         )
+
+
+def _authority_revision(version=1, **overrides):
+    return MarketPriceAuthorityRevision(
+        tenant_id="tenant",
+        legal_book_id="book",
+        security_id="S1",
+        price_date=date(2026, 7, 22),
+        source_system="prices",
+        source_record_id="p1",
+        fact_version=version,
+        source_revision=f"rev-{version}",
+        source_content_hash=f"{version:064x}",
+        fact_status="ACTIVE",
+        quote_basis="UNIT_PRICE",
+        currency="USD",
+        observed_at=datetime(2026, 7, 22, tzinfo=UTC),
+        **overrides,
+    )
+
+
+def _authority_event_payload():
+    payload = {
+        "tenant_id": "tenant",
+        "legal_book_id": "book",
+        "security_id": "S1",
+        "price_date": "2026-07-22",
+        "previous": _authority_revision().model_dump(mode="json"),
+        "accepted": _authority_revision(2).model_dump(mode="json"),
+    }
+    return {
+        **payload,
+        "correction_id": AuthoritativeMarketPriceAuthorityChangedEvent.identity_for(payload),
+    }
+
+
+def test_authority_change_binds_scoped_revision_and_transport_neutral_identity():
+    payload = _authority_event_payload()
+    event = AuthoritativeMarketPriceAuthorityChangedEvent.model_validate(payload)
+    assert event.authority_key == ("tenant", "book", "S1", date(2026, 7, 22))
+    replay = AuthoritativeMarketPriceAuthorityChangedEvent.model_validate(
+        {
+            **payload,
+            "correlation_id": "different-transport",
+        }
+    )
+    assert replay.correction_id == event.correction_id
+
+
+@pytest.mark.parametrize(
+    "mutation", ["blank", "scope", "hash", "version", "source", "quote", "amount"]
+)
+def test_authority_change_rejects_bad_or_legacy_payload(mutation):
+    payload = _authority_event_payload()
+    if mutation == "blank":
+        payload["tenant_id"] = " "
+    elif mutation == "scope":
+        payload["legal_book_id"] = "unrelated"
+    elif mutation == "hash":
+        payload["correction_id"] = "sha256:" + "0" * 64
+    elif mutation == "version":
+        payload["accepted"]["fact_version"] = 1
+    elif mutation == "source":
+        payload["accepted"]["source_record_id"] = "different"
+    elif mutation == "quote":
+        payload["accepted"]["quote_basis"] = "INFER_FROM_PRICE"
+    else:
+        payload["price"] = "120"
+    with pytest.raises(ValidationError):
+        AuthoritativeMarketPriceAuthorityChangedEvent.model_validate(payload)
 
 
 def _txn(

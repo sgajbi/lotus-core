@@ -216,6 +216,59 @@ class ValuationRepositoryBase:
         result = await self.db.execute(stmt)
         return [(row.portfolio_id, row.security_id, row.epoch) for row in result.all()]
 
+    async def find_authoritative_price_impact_page(
+        self,
+        *,
+        tenant_id: str,
+        legal_book_id: str,
+        security_id: str,
+        valuation_date: date,
+        after: tuple[str, int] | None = None,
+        page_size: int = 100,
+    ) -> List[Tuple[str, str, int]]:
+        """Page current-epoch held positions under one exact source authority.
+
+        No legacy MarketPrice join or quote comparison is valid for this authority.
+        Later position mutations retain their existing position-owned readiness path.
+        """
+        if not 1 <= page_size <= 500:
+            raise ValueError("authority impact page size must be between 1 and 500")
+        for identity in (tenant_id, legal_book_id, security_id):
+            if not isinstance(identity, str) or not identity.strip():
+                raise ValueError("authority impact identity must be nonblank text")
+        latest_quantity = (
+            select(PositionHistory.quantity)
+            .where(
+                PositionHistory.portfolio_id == PositionState.portfolio_id,
+                PositionHistory.security_id == PositionState.security_id,
+                PositionHistory.epoch == PositionState.epoch,
+                PositionHistory.position_date <= valuation_date,
+            )
+            .order_by(PositionHistory.position_date.desc(), PositionHistory.id.desc())
+            .limit(1)
+            .correlate(PositionState)
+            .scalar_subquery()
+        )
+        statement = (
+            select(PositionState.portfolio_id, PositionState.security_id, PositionState.epoch)
+            .join(Portfolio, Portfolio.portfolio_id == PositionState.portfolio_id)
+            .where(
+                Portfolio.tenant_id == tenant_id,
+                Portfolio.legal_book_id == legal_book_id,
+                PositionState.security_id == security_id,
+                PositionState.status.in_(SCHEDULABLE_POSITION_STATE_STATUSES),
+                latest_quantity != 0,
+            )
+            .order_by(PositionState.portfolio_id, PositionState.epoch)
+            .limit(page_size)
+        )
+        if after is not None:
+            statement = statement.where(
+                tuple_(PositionState.portfolio_id, PositionState.epoch) > after,
+            )
+        rows = (await self.db.execute(statement)).all()
+        return [(row.portfolio_id, row.security_id, row.epoch) for row in rows]
+
     @async_timed(
         repository="ValuationRepository", method="find_portfolios_holding_security_on_date"
     )

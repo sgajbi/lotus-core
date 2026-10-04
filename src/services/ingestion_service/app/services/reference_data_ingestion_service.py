@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
+from portfolio_common.config import KAFKA_MARKET_PRICES_PERSISTED_TOPIC
 from portfolio_common.database_models import (
     BenchmarkCompositionSeries,
     BenchmarkDefinition,
@@ -32,6 +33,9 @@ from portfolio_common.database_models import (
     SustainabilityPreferenceProfile,
 )
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.event_mapping import outbox_event_payload
+from portfolio_common.events import AuthoritativeMarketPriceAuthorityChangedEvent
+from portfolio_common.outbox_repository import OutboxRepository
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -279,7 +283,23 @@ class ReferenceDataIngestionService:
                 AuthoritativeMarketPriceSourceFact.model_validate(persistence_record).to_domain()
             )
         try:
-            await MarketPriceSourceFactWriter(self._db).append_many(facts)
+            changes = await MarketPriceSourceFactWriter(self._db).append_many(facts)
+            outbox = OutboxRepository(self._db)
+            for change in changes:
+                for authority in sorted(change.affected_authorities):
+                    event = AuthoritativeMarketPriceAuthorityChangedEvent.from_facts(
+                        authority=authority,
+                        previous=change.previous,
+                        accepted=change.accepted,
+                    )
+                    await outbox.create_outbox_event(
+                        aggregate_type="MarketPriceAuthority",
+                        aggregate_id=event.correction_id,
+                        partition_key=event.security_id,
+                        event_type=event.event_type,
+                        topic=KAFKA_MARKET_PRICES_PERSISTED_TOPIC,
+                        payload=outbox_event_payload(event),
+                    )
             await self._db.commit()
         except Exception:
             await self._db.rollback()
