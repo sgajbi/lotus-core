@@ -12,6 +12,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 for source_root in (REPO_ROOT, REPO_ROOT / "src" / "libs" / "portfolio-common"):
     sys.path.insert(0, str(source_root))
@@ -19,7 +21,7 @@ for source_root in (REPO_ROOT, REPO_ROOT / "src" / "libs" / "portfolio-common"):
 from portfolio_common.database_runtime_identity import (  # noqa: E402
     database_runtime_identity_scope,
 )
-from portfolio_common.db import get_async_engine  # noqa: E402
+from portfolio_common.db import create_async_database_engine  # noqa: E402
 
 from src.services.portfolio_transaction_processing_service.app.application import (  # noqa: E402
     ReconcileAverageCostPoolsCommand,
@@ -93,13 +95,23 @@ def parse_args() -> argparse.Namespace:
 
 async def run(args: argparse.Namespace) -> dict[str, Any]:
     with database_runtime_identity_scope("average-cost-reconciliation"):
+        engine = create_async_database_engine(runtime_identity="average-cost-reconciliation")
         try:
+            session_factory = async_sessionmaker(
+                bind=engine,
+                class_=AsyncSession,
+                autocommit=False,
+                autoflush=False,
+                expire_on_commit=False,
+            )
             after = (
                 AverageCostPoolKey(args.after_portfolio_id, args.after_security_id)
                 if args.after_portfolio_id
                 else None
             )
-            result = await build_reconcile_average_cost_pools_use_case().execute(
+            result = await build_reconcile_average_cost_pools_use_case(
+                session_factory=session_factory
+            ).execute(
                 ReconcileAverageCostPoolsCommand(
                     apply=args.apply,
                     limit=args.limit,
@@ -109,7 +121,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
             )
             return build_report(result)
         finally:
-            await get_async_engine().dispose()
+            await engine.dispose()
 
 
 def main() -> int:

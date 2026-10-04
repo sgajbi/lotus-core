@@ -215,8 +215,10 @@ hidden remainder. Cost and position results must agree before the transaction ca
 
 Audit historical AVCO state before cutover with `make audit-average-cost-pools`. The command is
 read-only by default, processes a bounded deterministic page, compares both persisted
-representations with canonical replay truth, and returns a machine-readable resume cursor. After
-review, use `make reconcile-average-cost-pools` with a portfolio scope and bounded limit. Each key
+representations with canonical replay truth, and returns a machine-readable resume cursor. Each
+invocation owns a governed `average-cost-reconciliation` database engine and session factory,
+closing only that engine on success or failure without borrowing or disposing shared providers.
+After review, use `make reconcile-average-cost-pools` with a portfolio scope and bounded limit. Each key
 commits independently only after exact source-count, quantity, local-basis, and base-basis
 certification. Retain output reports as release evidence; tool availability does not prove that a
 historical estate has already been reconciled.
