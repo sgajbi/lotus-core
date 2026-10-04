@@ -35,6 +35,15 @@ Operational read contracts for:
 - lookups
 - reporting-oriented source-data reads
 
+The investigative BUY lot route
+`GET /portfolios/{portfolio_id}/positions/{security_id}/lots` returns `original_quantity`
+and `open_quantity` as exact decimal strings, matching its cost fields. Consumers must parse
+strings directly as decimals; the former JSON number representation could lose supported
+`NUMERIC(18,10)` precision. Gateway already uses this Decimal/string contract. Zero/closed lots,
+cost and lineage remain available; foreign portfolio ownership and empty state retain 404.
+See the [BUY query contract](https://github.com/sgajbi/lotus-core/blob/main/docs/rfc-transaction-specs/transactions/BUY/BUY-SLICE-5-QUERY-OBSERVABILITY.md)
+for migration guidance and exact examples.
+
 `GET /reporting-currencies/support` is the source-owned, portfolio/as-of preflight for performance
 restatement. It returns explicit `SUPPORTED`, `UNSUPPORTED`, or `UNAVAILABLE` status based on
 source currencies and the same two-leg as-of FX path used by performance: position currency to

@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-10-03T08:06:15.117446+00:00",
+  "generatedAt": "2026-10-04T01:26:45.600060+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -4878,8 +4878,8 @@
           "instrument_id": "AAPL",
           "security_id": "US0378331005",
           "acquisition_date": "2026-02-28",
-          "original_quantity": 100.0,
-          "open_quantity": 100.0,
+          "original_quantity": "99999999.9999999999",
+          "open_quantity": "99999999.9999999998",
           "lot_cost_local": 15005.5,
           "lot_cost_base": 15005.5,
           "accrued_interest_paid_local": 1250.0,
@@ -5893,14 +5893,14 @@
       "semanticId": "lotus.open_quantity",
       "canonicalTerm": "open_quantity",
       "preferredName": "open_quantity",
-      "description": "Current open quantity.",
-      "example": 100.0,
-      "type": "number",
+      "description": "Current open quantity, serialized as an exact decimal string.",
+      "example": "99999999.9999999998",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "number"
+        "string"
       ]
     },
     {
@@ -5949,14 +5949,14 @@
       "semanticId": "lotus.original_quantity",
       "canonicalTerm": "original_quantity",
       "preferredName": "original_quantity",
-      "description": "Original acquired quantity.",
-      "example": 100.0,
-      "type": "number",
+      "description": "Original acquired quantity, serialized as an exact decimal string.",
+      "example": "99999999.9999999999",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "number"
+        "string"
       ]
     },
     {
@@ -19175,7 +19175,7 @@
             "name": "lots[].original_quantity",
             "location": "body",
             "required": true,
-            "type": "number",
+            "type": "string",
             "semanticId": "lotus.original_quantity",
             "attributeRef": "lotus.original_quantity"
           },
@@ -19183,7 +19183,7 @@
             "name": "lots[].open_quantity",
             "location": "body",
             "required": true,
-            "type": "number",
+            "type": "string",
             "semanticId": "lotus.open_quantity",
             "attributeRef": "lotus.open_quantity"
           },

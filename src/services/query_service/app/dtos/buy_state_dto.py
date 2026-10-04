@@ -16,10 +16,16 @@ class PositionLotRecord(BaseModel):
     acquisition_date: date = Field(
         ..., description="Lot acquisition date.", examples=["2026-02-28"]
     )
-    original_quantity: float = Field(
-        ..., description="Original acquired quantity.", examples=[100.0]
+    original_quantity: Decimal = Field(
+        ...,
+        description="Original acquired quantity, serialized as an exact decimal string.",
+        examples=["99999999.9999999999"],
     )
-    open_quantity: float = Field(..., description="Current open quantity.", examples=[100.0])
+    open_quantity: Decimal = Field(
+        ...,
+        description="Current open quantity, serialized as an exact decimal string.",
+        examples=["99999999.9999999998"],
+    )
     lot_cost_local: Decimal = Field(
         ..., description="Lot cost in trade/local currency.", examples=[15005.5]
     )

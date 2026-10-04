@@ -110,6 +110,11 @@ Every Core change must preserve the following:
 
 1. **Exact economics.** Money, quantity, rates, fees, taxes, FX, and cost use governed exact
    numeric semantics and explicit rounding policy.
+   The operational BUY lots route preserves `PositionLotState` quantity Decimals through
+   `PositionLotRecord` and emits `original_quantity`/`open_quantity` as exact JSON decimal strings,
+   as it already does for costs. Consumers parse the strings directly without binary-float
+   conversion; Gateway's immediate lot consumer uses Decimal. This wire correction leaves the
+   separate dated `PortfolioTaxLotWindow` contract unchanged.
 2. **Temporal truth.** Trade, settlement, booking, effective, observation, valuation, correction,
    and ingestion time are distinct. As-of queries cannot silently switch semantics.
    `PositionTimeseriesInput` aligns internal investment position flows to the linked transaction's
