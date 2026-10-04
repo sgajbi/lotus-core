@@ -13,7 +13,7 @@ from portfolio_common.database_runtime_profile import (
     DATABASE_RUNTIME_COHORT_BY_IDENTITY,
     DatabaseRuntimeCohort,
 )
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from scripts.operations import audit_lot_position_parity
 from scripts.operations.audit_lot_position_parity import build_report
@@ -64,6 +64,7 @@ async def test_run_owns_fresh_registered_engine_and_disposes_on_every_outcome(
     engines = []
     disposals = []
     real_dispose = AsyncEngine.dispose
+    governed_create_engine = db_module.create_async_database_engine
 
     async def dispose_owned_engine(engine):
         disposals.append(engine)
@@ -75,7 +76,10 @@ async def test_run_owns_fresh_registered_engine_and_disposes_on_every_outcome(
         assert runtime_identity == "lot-position-parity-audit"
         assert database_runtime_identity() == runtime_identity
         # Real engine/factory binding, without allocating a database connection.
-        engine = create_async_engine("postgresql+asyncpg://unused:unused@localhost/unused")
+        engine = governed_create_engine(
+            runtime_identity=runtime_identity,
+            database_url="postgresql+asyncpg://unused:unused@localhost/unused",
+        )
         engines.append(engine)
         return engine
 
