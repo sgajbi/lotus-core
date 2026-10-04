@@ -33,7 +33,11 @@ class ClientRestrictionProfileRequest(BaseModel):
     )
     include_inactive_restrictions: bool = Field(
         False,
-        description="When false, excludes inactive or expired restriction records.",
+        description=(
+            "Select the authoritative effective revision per scope and code first; when false, "
+            "return only selected active revisions. When true, also return selected inactive "
+            "and suspended revisions, without returning superseded history or future records."
+        ),
     )
 
     model_config = ConfigDict()

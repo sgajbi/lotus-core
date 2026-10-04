@@ -941,6 +941,34 @@ def test_client_restriction_profile_requires_scope_values_for_scoped_restriction
         )
 
 
+@pytest.mark.parametrize(
+    "field", ["instrument_ids", "issuer_ids", "country_codes", "asset_classes"]
+)
+@pytest.mark.parametrize("values", [[""], [" \t "], ["VALID", " "]])
+def test_client_restriction_profile_rejects_blank_selector_elements(field, values) -> None:
+    with pytest.raises(ValidationError, match="must not contain blank identifiers"):
+        ClientRestrictionProfileRecord.model_validate(
+            _restriction_profile(asset_classes=[], **{field: values})
+            if field != "asset_classes"
+            else _restriction_profile(asset_classes=values)
+        )
+
+
+@pytest.mark.parametrize("scope", ["client", "mandate"])
+def test_client_restriction_profile_accepts_intentional_global_controls(scope) -> None:
+    record = ClientRestrictionProfileRecord.model_validate(
+        _restriction_profile(restriction_scope=scope, asset_classes=[])
+    )
+    assert record.asset_classes == []
+
+
+def test_client_restriction_profile_trims_valid_selectors_and_preserves_or_family_policy() -> None:
+    record = ClientRestrictionProfileRecord.model_validate(
+        _restriction_profile(restriction_scope="issuer", asset_classes=[" private_credit "])
+    )
+    assert record.asset_classes == ["private_credit"]
+
+
 def test_client_restriction_profile_ingestion_rejects_duplicate_effective_profiles() -> None:
     duplicate = _restriction_profile()
 

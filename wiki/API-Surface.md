@@ -1,5 +1,17 @@
 # API Surface
 
+## Client restriction authority
+
+`ClientRestrictionProfile:v1` selects the authoritative effective revision before applying the
+active-only view. Inactive/suspended corrections cannot resurrect superseded active records;
+the inclusive view retains the selected version and source-record lineage. Empty current evidence
+remains INCOMPLETE. Ingestion rejects every blank selector element, including mixed lists, before
+dispatch. Retained malformed scoped rows make the profile UNAVAILABLE with INVALID quality;
+consumers must refuse it before matching. Intentional selector-free client/mandate global rules
+and the existing OR across populated selector families remain supported. See
+[the producer contract](https://github.com/sgajbi/lotus-core/blob/main/docs/integration/client-restriction-profile.md)
+for date windows, selector policy and the bounded validation/tenant posture.
+
 ## Current Scope
 
 This page is the navigation view for API families and common route examples. The generated

@@ -47,13 +47,6 @@ class SqlAlchemyClientRestrictionProfileSourceReader:
                     ClientRestrictionProfile.mandate_id == mandate_id,
                 )
             )
-        if not include_inactive_restrictions:
-            predicates.append(
-                CLIENT_RESTRICTION_ACTIVE.sqlalchemy_filter(
-                    ClientRestrictionProfile.restriction_status
-                )
-            )
-
         ranked = ranked_latest_ids(
             ClientRestrictionProfile,
             ClientRestrictionProfile.restriction_scope,
@@ -77,6 +70,12 @@ class SqlAlchemyClientRestrictionProfileSourceReader:
                 ClientRestrictionProfile.restriction_code.asc(),
             )
         )
+        if not include_inactive_restrictions:
+            statement = statement.where(
+                CLIENT_RESTRICTION_ACTIVE.sqlalchemy_filter(
+                    ClientRestrictionProfile.restriction_status
+                )
+            )
         result = await self._session.execute(statement)
         return [_restriction_record(row) for row in result.scalars().all()]
 
@@ -108,4 +107,5 @@ def _restriction_record(row: Any) -> ClientRestrictionSourceRecord:
 def _string_tuple(value: object) -> tuple[str, ...]:
     if not isinstance(value, list):
         return ()
-    return tuple(str(item) for item in value if str(item).strip())
+    # Retain unusable elements so source qualification cannot broaden a scoped rule.
+    return tuple(str(item).strip() for item in value)

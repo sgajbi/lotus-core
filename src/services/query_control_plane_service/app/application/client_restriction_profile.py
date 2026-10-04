@@ -75,10 +75,17 @@ class ClientRestrictionProfileService:
         supportability_state: Literal["READY", "INCOMPLETE", "UNAVAILABLE"] = "READY"
         supportability_reason = "CLIENT_RESTRICTION_PROFILE_READY"
         missing_data_families: list[str] = []
+        data_quality_status = "ACCEPTED"
         if not restrictions:
             supportability_state = "INCOMPLETE"
             supportability_reason = "CLIENT_RESTRICTION_PROFILE_EMPTY"
             missing_data_families.append("client_restrictions")
+            data_quality_status = "MISSING"
+        elif any(not record.has_usable_selectors() for record in restrictions):
+            supportability_state = "UNAVAILABLE"
+            supportability_reason = "CLIENT_RESTRICTION_PROFILE_INVALID_SELECTORS"
+            missing_data_families.append("client_restrictions")
+            data_quality_status = "INVALID"
 
         return ClientRestrictionProfileResponse(
             portfolio_id=portfolio_id,
@@ -100,7 +107,7 @@ class ClientRestrictionProfileService:
                 as_of_date=request.as_of_date,
                 generated_at=self._clock.utc_now(),
                 tenant_id=request.tenant_id,
-                data_quality_status=("ACCEPTED" if restrictions else "MISSING"),
+                data_quality_status=data_quality_status,
                 latest_evidence_timestamp=latest_evidence_timestamp([binding], restrictions),
                 source_batch_fingerprint=None,
                 snapshot_id=(
