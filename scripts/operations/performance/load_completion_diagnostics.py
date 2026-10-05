@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import json
 import multiprocessing
+import os
 import time
 from datetime import UTC, datetime
 from typing import Any
 
 import requests  # type: ignore[import-untyped]
+from portfolio_common.connection_security import build_kafka_connection_config
+from portfolio_common.database_runtime_profile import DatabasePoolMode
+from portfolio_common.db import create_sync_database_engine
 from prometheus_client.parser import text_string_to_metric_families
 
 from scripts.operations.transaction_processing_load_support import LOAD_TENANT_ID
@@ -137,27 +141,51 @@ def _diagnostic_worker(
 
 
 def _load_database_diagnostics(database_url: str, scope: dict[str, Any]) -> dict[str, Any]:
-    import psycopg2
     from psycopg2.extras import RealDictCursor
 
-    # A fresh diagnostic connection avoids the governed application's pool wait. Driver-native
-    # limits and the enclosing process deadline apply even if connection/cancellation stalls.
-    with psycopg2.connect(
-        database_url,
-        connect_timeout=1,
-        options=(
-            "-c default_transaction_read_only=on -c statement_timeout=500 -c lock_timeout=100 "
-            "-c application_name=performance-load-diagnostics"
-        ),
-    ) as connection:
-        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
-            cursor.execute(
-                "SELECT tenant_id FROM portfolios WHERE portfolio_id=%s", (scope["portfolio_id"],)
-            )
-            owner = cursor.fetchone()
-            if owner is None or owner["tenant_id"] != LOAD_TENANT_ID:
-                return {"status": "unavailable", "reason": "governed_portfolio_owner_mismatch"}
-        return _load_database_probes(connection, scope, RealDictCursor)
+    engine = _diagnostic_database_engine(database_url)
+    try:
+        connection = engine.raw_connection()
+        try:
+            connection.set_session(readonly=True, autocommit=True)
+            with connection.cursor() as cursor:
+                cursor.execute("SET lock_timeout = '100ms'")
+            with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute(
+                    "SELECT tenant_id FROM portfolios WHERE portfolio_id=%s",
+                    (scope["portfolio_id"],),
+                )
+                owner = cursor.fetchone()
+                if owner is None or owner["tenant_id"] != LOAD_TENANT_ID:
+                    return {"status": "unavailable", "reason": "governed_portfolio_owner_mismatch"}
+            return _load_database_probes(connection, scope, RealDictCursor)
+        finally:
+            connection.close()
+    finally:
+        engine.dispose()
+
+
+def _diagnostic_database_engine(database_url: str) -> Any:
+    # Called only in the private diagnostic child. Restore even for factory/security refusal,
+    # so direct unit calls cannot leak diagnostic limits into their parent test environment.
+    limits = {
+        "LOTUS_CORE_DB_CONNECT_TIMEOUT_SECONDS": "2",
+        "LOTUS_CORE_DB_STATEMENT_TIMEOUT_MS": "500",
+    }
+    previous = {key: os.environ.get(key) for key in limits}
+    try:
+        os.environ.update(limits)
+        return create_sync_database_engine(
+            runtime_identity="performance-load-gate",
+            database_url=database_url,
+            pool_mode=DatabasePoolMode.NULL,
+        )
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 def _load_database_probes(
@@ -293,6 +321,9 @@ def _load_consumer_offsets(bootstrap_servers: str, deadline: float) -> dict[str,
 
     if not bootstrap_servers:
         return {"status": "unavailable", "reason": "isolated_broker_endpoint_missing"}
+    connection_config = build_kafka_connection_config(
+        bootstrap_servers, service_name="performance-load-gate"
+    )
     result: list[dict[str, Any]] = []
     for topic, group in (
         ("transactions.raw.received", "persistence_group_transactions"),
@@ -300,7 +331,7 @@ def _load_consumer_offsets(bootstrap_servers: str, deadline: float) -> dict[str,
     ):
         consumer = Consumer(
             {
-                "bootstrap.servers": bootstrap_servers,
+                **connection_config,
                 "group.id": group,
                 "enable.auto.commit": False,
                 "enable.auto.offset.store": False,

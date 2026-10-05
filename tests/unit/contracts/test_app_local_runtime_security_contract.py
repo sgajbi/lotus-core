@@ -114,6 +114,7 @@ def test_direct_kafka_clients_cannot_bypass_shared_transport_security() -> None:
                 )
 
     assert {path.relative_to(REPO_ROOT).as_posix() for path in client_construction_paths} == {
+        "scripts/operations/performance/load_completion_diagnostics.py",
         "scripts/operations/transaction_processing_cutover_offsets.py",
         "src/libs/portfolio-common/portfolio_common/health.py",
         "src/libs/portfolio-common/portfolio_common/kafka_admin.py",

@@ -681,6 +681,22 @@ proof; its mocks do not certify PostgreSQL/Kafka semantics, actual metric exposi
 pipeline cause or main readiness. See `docs/operations/bank-day-load-scenario.md` for operator
 budgets and supportability limits.
 
+Diagnostic clients must use `portfolio_common.db.create_sync_database_engine` and
+`portfolio_common.connection_security.build_kafka_connection_config`. Retain inherited validated
+security/trust, governed operator identity and `NullPool`; diagnostic profile limits belong only
+to the private child. The supported connection-timeout minimum is two seconds. Do not substitute
+raw DBAPI connections, plaintext defaults or constructor aliases to evade source-wide guards.
+For script/client slices, run these existing checks from the Core root before publication in
+addition to focused tests and checks on every changed file; default `src` checks omit scripts:
+
+```powershell
+python scripts/development/repository_python.py -m pytest tests/unit/contracts/test_app_local_runtime_security_contract.py::test_direct_kafka_clients_cannot_bypass_shared_transport_security tests/unit/libs/portfolio-common/test_db.py::test_database_engines_use_governed_factory -q
+```
+
+```bash
+python scripts/development/repository_python.py -m pytest tests/unit/contracts/test_app_local_runtime_security_contract.py::test_direct_kafka_clients_cannot_bypass_shared_transport_security tests/unit/libs/portfolio-common/test_db.py::test_database_engines_use_governed_factory -q
+```
+
 ## Context Maintenance Rule
 
 Update this file only when current Core ownership, architecture, financial invariants, task routes,

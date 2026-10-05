@@ -811,7 +811,11 @@ preserve the original enforcing exception/nonzero exit; unavailable is never zer
 Only a matching managed isolated runtime admits bounded read-only timeout probes for database
 lifecycle/outbox/DLQ/waits, existing PTP metrics and sampled raw/persisted Kafka committed/end
 offsets. Collection/byte/record limits and explicit cleanup status apply; no subscription, commit,
-replay, application mutation or financial/ordering relaxation occurs. Actual metric availability
+replay, application mutation or financial/ordering relaxation occurs. Probes use shared Kafka
+transport policy and the governed database factory (`performance-load-gate`,
+`NullPool`, two-second connection timeout). Read-only sessions retain 500ms statement and 100ms
+lock limits, owned connection/engine cleanup and the six-second child response budget. Invalid
+security is unavailable evidence, never a plaintext fallback. Actual metric availability
 and genuine SQL/Kafka semantics require the existing runtime lane. This evidence does not make a
 failed gate releasable or establish its root cause.
 

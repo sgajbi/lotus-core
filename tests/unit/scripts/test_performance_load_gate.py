@@ -1181,21 +1181,101 @@ def test_cleanup_guard_reports_unconfirmed_stop_honestly():
 
 
 def test_database_connection_has_native_read_only_short_limits_and_owner_guard(monkeypatch):
-    import psycopg2
+    from portfolio_common import db
+    from sqlalchemy.pool import NullPool
 
-    connect = MagicMock()
-    cursor = connect.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value
+    engine = MagicMock()
+    connection = engine.raw_connection.return_value
+    cursor = connection.cursor.return_value.__enter__.return_value
     cursor.fetchone.return_value = {"tenant_id": "foreign"}
-    monkeypatch.setattr(psycopg2, "connect", connect)
+    create = MagicMock(return_value=engine)
+    monkeypatch.setattr(db, "create_engine", create)
+    monkeypatch.setenv("LOTUS_CORE_DB_CONNECT_TIMEOUT_SECONDS", "60")
+    monkeypatch.setenv("LOTUS_CORE_DB_STATEMENT_TIMEOUT_MS", "3000")
     result = load_completion_diagnostics._load_database_diagnostics(
-        "private-url", {"portfolio_id": GOVERNED_LOAD_PORTFOLIO_ID}
+        "postgresql://operator:nondefault-secret@isolated/db?sslmode=require",
+        {"portfolio_id": GOVERNED_LOAD_PORTFOLIO_ID},
     )
     assert result["status"] == "unavailable"
-    assert connect.call_args.kwargs["connect_timeout"] == 1
-    options = connect.call_args.kwargs["options"]
-    assert "default_transaction_read_only=on" in options
-    assert "statement_timeout=500" in options and "lock_timeout=100" in options
-    assert cursor.execute.call_count == 1
+    settings = create.call_args.kwargs
+    assert settings["poolclass"] is NullPool
+    assert settings["connect_args"]["connect_timeout"] == 2
+    assert settings["connect_args"]["application_name"] == "performance-load-gate"
+    assert "statement_timeout=500" in settings["connect_args"]["options"]
+    assert "sslmode=require" in create.call_args.args[0]
+    connection.set_session.assert_called_once_with(readonly=True, autocommit=True)
+    assert cursor.execute.call_args_list[0].args == ("SET lock_timeout = '100ms'",)
+    assert cursor.execute.call_count == 2
+    connection.close.assert_called_once()
+    engine.dispose.assert_called_once()
+    assert os.environ["LOTUS_CORE_DB_CONNECT_TIMEOUT_SECONDS"] == "60"
+    assert os.environ["LOTUS_CORE_DB_STATEMENT_TIMEOUT_MS"] == "3000"
+
+
+@pytest.mark.parametrize("stage", ["connection", "read_only", "owner", "probe", "close"])
+def test_diagnostic_database_failure_disposes_engine_and_closes_connection(monkeypatch, stage):
+    engine = MagicMock()
+    connection = engine.raw_connection.return_value
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchone.return_value = {"tenant_id": load_completion_diagnostics.LOAD_TENANT_ID}
+    monkeypatch.setattr(
+        load_completion_diagnostics, "_diagnostic_database_engine", lambda url: engine
+    )
+    if stage == "connection":
+        engine.raw_connection.side_effect = PermissionError("refused")
+    elif stage == "read_only":
+        connection.set_session.side_effect = PermissionError("refused")
+    elif stage == "owner":
+        cursor.execute.side_effect = PermissionError("refused")
+    elif stage == "probe":
+        monkeypatch.setattr(
+            load_completion_diagnostics,
+            "_load_database_probes",
+            MagicMock(side_effect=PermissionError),
+        )
+    else:
+        connection.close.side_effect = PermissionError("refused")
+    with pytest.raises(PermissionError):
+        load_completion_diagnostics._load_database_diagnostics(
+            "unused",
+            {
+                "portfolio_id": GOVERNED_LOAD_PORTFOLIO_ID,
+                "submitted_ids": [],
+                "ingestion_job_ids": [],
+            },
+        )
+    engine.dispose.assert_called_once()
+    if stage != "connection":
+        connection.close.assert_called_once()
+
+
+def test_diagnostic_database_security_refusal_preserves_parent_profile(monkeypatch):
+    from portfolio_common import db
+    from portfolio_common.runtime_settings import RuntimeConfigurationError
+
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("LOTUS_CORE_DB_CONNECT_TIMEOUT_SECONDS", "60")
+    create = MagicMock()
+    monkeypatch.setattr(db, "create_engine", create)
+    with pytest.raises(RuntimeConfigurationError):
+        load_completion_diagnostics._diagnostic_database_engine("postgresql://user@isolated/db")
+    create.assert_not_called()
+    assert os.environ["LOTUS_CORE_DB_CONNECT_TIMEOUT_SECONDS"] == "60"
+
+
+def test_diagnostic_database_inherited_invalid_profile_is_not_weakened(monkeypatch):
+    from portfolio_common import db
+    from portfolio_common.database_runtime_profile import DatabaseRuntimeProfileError
+
+    monkeypatch.setenv("LOTUS_CORE_DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS", "1")
+    create = MagicMock()
+    monkeypatch.setattr(db, "create_engine", create)
+    with pytest.raises(DatabaseRuntimeProfileError):
+        load_completion_diagnostics._diagnostic_database_engine(
+            "postgresql://operator:nondefault-secret@isolated/db"
+        )
+    create.assert_not_called()
+    assert os.environ["LOTUS_CORE_DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS"] == "1"
 
 
 @pytest.mark.parametrize("missing,oversized", [(False, False), (True, False), (False, True)])
@@ -1226,7 +1306,8 @@ def test_consumer_metrics_missing_and_byte_limits_never_become_zero(
     assert get.call_args.kwargs["timeout"] == 0.5
 
 
-def test_native_kafka_offset_reads_do_not_join_store_or_commit(monkeypatch):
+@pytest.mark.parametrize("protocol", ["SSL", "SASL_SSL"])
+def test_native_kafka_offset_reads_do_not_join_store_or_commit(monkeypatch, protocol):
     import confluent_kafka
 
     consumer = MagicMock()
@@ -1238,6 +1319,11 @@ def test_native_kafka_offset_reads_do_not_join_store_or_commit(monkeypatch):
     consumer.get_watermark_offsets.return_value = (0, 12)
     factory = MagicMock(return_value=consumer)
     monkeypatch.setattr(confluent_kafka, "Consumer", factory)
+    monkeypatch.setenv("KAFKA_SECURITY_PROTOCOL", protocol)
+    monkeypatch.setenv("KAFKA_SSL_CA_LOCATION", "/deployment/trust.pem")
+    monkeypatch.setenv("KAFKA_SASL_MECHANISM", "SCRAM-SHA-512")
+    monkeypatch.setenv("KAFKA_SASL_USERNAME", "diagnostic-operator")
+    monkeypatch.setenv("KAFKA_SASL_PASSWORD", "inherited-secret")
     result = load_completion_diagnostics._load_consumer_offsets("isolated", time.monotonic() + 10)
     assert [row["committed"] for row in result["partitions"]] == [5, 5]
     assert [row["end"] for row in result["partitions"]] == [12, 12]
@@ -1245,5 +1331,32 @@ def test_native_kafka_offset_reads_do_not_join_store_or_commit(monkeypatch):
         assert call.args[0]["enable.auto.commit"] is False
         assert call.args[0]["enable.auto.offset.store"] is False
         assert call.args[0]["allow.auto.create.topics"] is False
+        assert call.args[0]["security.protocol"] == protocol
+        assert call.args[0]["ssl.ca.location"] == "/deployment/trust.pem"
+        if protocol == "SASL_SSL":
+            assert call.args[0]["sasl.mechanism"] == "SCRAM-SHA-512"
+            assert call.args[0]["sasl.username"] == "diagnostic-operator"
+            assert call.args[0]["sasl.password"] == "inherited-secret"
     for method in (consumer.subscribe, consumer.assign, consumer.commit, consumer.store_offsets):
         method.assert_not_called()
+
+
+@pytest.mark.parametrize("protocol", ["SSL", "PLAINTEXT", "INVALID"])
+def test_kafka_security_refusal_is_unavailable_without_client_construction(monkeypatch, protocol):
+    import confluent_kafka
+
+    factory = MagicMock()
+    monkeypatch.setattr(confluent_kafka, "Consumer", factory)
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("KAFKA_SECURITY_PROTOCOL", protocol)
+    monkeypatch.delenv("KAFKA_SSL_CA_LOCATION", raising=False)
+    monkeypatch.setattr(load_completion_diagnostics, "_load_database_diagnostics", lambda *args: {})
+    monkeypatch.setattr(load_completion_diagnostics, "_load_consumer_metrics", lambda *args: {})
+    sender = MagicMock()
+    load_completion_diagnostics._diagnostic_worker(sender, "unused", "unused", "isolated", {})
+    result = json.loads(sender.send_bytes.call_args.args[0])
+    assert result["probes"]["consumer_offsets"] == {
+        "status": "unavailable",
+        "reason": "RuntimeConfigurationError",
+    }
+    factory.assert_not_called()
