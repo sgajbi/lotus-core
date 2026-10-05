@@ -664,6 +664,23 @@ schema, machine-readable contracts, or executable evidence.
   absent; cumulative duration and mean are attribution evidence, not percentile or saturation
   proof.
 
+## Performance-load diagnostic practice
+
+`scripts/operations/performance_load_gate.py` owns partial-report publication at its original
+exception boundary. `transaction_processing_load_support.py` owns supported acknowledgement
+lineage and the shared completion/fixture probes. The existing performance package owns
+`scripts/operations/performance/load_completion_diagnostics.py` for isolated bounded process,
+database, metric and Kafka diagnostics. Main imports it directly; shared support has no reverse
+import or compatibility alias. Keep
+portfolio aggregate claims separate from prefix domain counts; replay not-run, missing evidence,
+budget exhaustion and unconfirmed child cleanup cannot become successful or zero observations.
+Never relax economics, input cardinality, financial admission, ordering or drain SLOs to collect
+diagnostics. Preserve the original nonzero exception even if collection/publication fails.
+Use `tests/unit/scripts/test_performance_load_gate.py` for focused native script/report/process
+proof; its mocks do not certify PostgreSQL/Kafka semantics, actual metric exposition availability,
+pipeline cause or main readiness. See `docs/operations/bank-day-load-scenario.md` for operator
+budgets and supportability limits.
+
 ## Context Maintenance Rule
 
 Update this file only when current Core ownership, architecture, financial invariants, task routes,

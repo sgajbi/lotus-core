@@ -16,10 +16,10 @@ import os
 import sys
 import time
 import zlib
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
 import requests  # type: ignore[import-untyped]
 from portfolio_common.db import create_sync_database_engine
@@ -32,8 +32,12 @@ if str(REPO_ROOT) not in sys.path:
 
 from portfolio_common.config import KAFKA_TOPIC_PARTITION_COUNTS  # noqa: E402
 
+from scripts.operations.performance.load_completion_diagnostics import (  # noqa: E402
+    collect_load_completion_diagnostics,
+)
 from scripts.operations.transaction_processing_load_support import (  # noqa: E402
     LOAD_TENANT_ID,
+    accepted_batch_evidence,
 )
 from scripts.operations.transaction_processing_load_support import (  # noqa: E402
     build_transaction_batch as _build_transaction_batch,
@@ -395,9 +399,12 @@ def _write_report(
     profile_tier: str,
     results: list[ProfileResult],
     enforce: bool,
+    evidence: dict[str, Any] | None = None,
 ) -> tuple[Path, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
-    overall_passed = all(item.checks_passed for item in results)
+    overall_passed = bool(results) and all(item.checks_passed for item in results)
+    if evidence is not None:
+        overall_passed = overall_passed and evidence["status"] == "completed"
     payload = {
         "run_id": run_id,
         "generated_at": datetime.now(UTC).isoformat(),
@@ -405,10 +412,14 @@ def _write_report(
         "enforce": enforce,
         "overall_passed": overall_passed,
         "profiles": [asdict(item) for item in results],
+        "completion_evidence": evidence,
     }
     json_path = output_dir / f"{run_id}-performance-load-gate.json"
     md_path = output_dir / f"{run_id}-performance-load-gate.md"
-    json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    encoded = json.dumps(payload, indent=2)
+    if len(encoded.encode("utf-8")) > 262144:
+        raise ValueError("Load report byte budget exceeded")
+    json_path.write_text(encoded, encoding="utf-8")
 
     lines = [
         f"# Performance Load Gate {run_id}",
@@ -427,6 +438,16 @@ def _write_report(
         ),
         "|---|---|---:|---:|---:|---:|---:|",
     ]
+    if evidence is not None:
+        lines.extend(
+            [
+                f"- Execution status: {evidence['status']}",
+                f"- Active stage: {evidence['stage']}",
+                "- Portfolio aggregate claims are not exact-prefix completion proof.",
+                "- Unavailable/not-run evidence is not zero or passing.",
+                "",
+            ]
+        )
     for item in results:
         lines.append(
             (
@@ -454,6 +475,104 @@ def _write_report(
             lines.append("")
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return json_path, md_path
+
+
+@dataclass
+class _LoadEvidenceReport:
+    """Retain the actual partial run at the enforcing exception/report boundary."""
+
+    args: argparse.Namespace
+    run_id: str
+    engine: Engine
+    runtime: ManagedComposeRun | None
+    results: list[ProfileResult] = field(default_factory=list)
+    stage: str = "profiles"
+    batches: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    timeouts: list[dict[str, Any]] = field(default_factory=list)
+    deadline_counts: dict[str, Any] = field(default_factory=dict)
+    replay_storm_status: str = "not_run"
+
+    def __enter__(self) -> "_LoadEvidenceReport":
+        return self
+
+    def accepted(self, ids: list[str], response: requests.Response) -> None:
+        self.batches.setdefault(self.stage, []).append(accepted_batch_evidence(ids, response))
+
+    def timed_out(self, counts: Any) -> None:
+        self.deadline_counts = asdict(counts)
+
+    def source_timeout(self, prefix: str, claim_minimum: int) -> None:
+        batches = self.batches.get(self.stage, [])
+        ids = [item for batch in batches for item in batch["submitted_ids"]]
+        scope = {
+            "run_id": self.run_id,
+            "tenant_id": LOAD_TENANT_ID,
+            "portfolio_id": GOVERNED_LOAD_PORTFOLIO_ID,
+            "prefix": prefix,
+            "stage": self.stage,
+            "submitted_count": len(ids),
+            "submitted_ids": ids,
+            "portfolio_claim_minimum": claim_minimum,
+            "ingestion_job_ids": [
+                batch["acknowledgement"]["job_id"]
+                for batch in batches
+                if batch["acknowledgement"].get("job_id")
+            ],
+            "runtime": self.runtime.runtime.endpoints.compose_project_name
+            if self.runtime
+            else None,
+        }
+        try:
+            result = collect_load_completion_diagnostics(
+                database_url=self.engine.url.render_as_string(hide_password=False),
+                metrics_url=f"{self.args.transaction_processing_base_url}/metrics",
+                kafka_bootstrap_servers=self.runtime.runtime.endpoints.kafka_bootstrap_servers
+                if self.runtime
+                else "",
+                scope=scope,
+                isolated_runtime=(
+                    self.runtime is not None
+                    and self.args.host_database_url
+                    == self.runtime.runtime.endpoints.host_database_url
+                    and self.args.transaction_processing_base_url
+                    == self.runtime.runtime.endpoints.e2e_transaction_processing_url
+                ),
+            )
+        except Exception as exc:
+            result = {"status": "unavailable", "reason": type(exc).__name__, "scope": scope}
+        result["drain_deadline_counts"] = self.deadline_counts
+        result["claims_scope"] = "portfolio_aggregate_not_exact_prefix"
+        self.timeouts.append(result)
+        self.deadline_counts = {}
+
+    def __exit__(self, exc_type: Any, exc: BaseException | None, traceback: Any) -> Literal[False]:
+        evidence = {
+            "status": "failed" if exc else "completed",
+            "stage": self.stage,
+            "failure_type": type(exc).__name__ if exc else None,
+            "submitted_batches": self.batches,
+            "source_timeouts": self.timeouts,
+            "replay_storm_status": self.replay_storm_status,
+            "profiles_not_run": [
+                name
+                for name in ("steady_state", "burst", "replay_storm")
+                if name not in {item.profile_name for item in self.results}
+            ],
+        }
+        try:
+            _write_report(
+                output_dir=Path(self.args.repo_root) / self.args.output_dir,
+                run_id=self.run_id,
+                profile_tier=self.args.profile_tier,
+                results=self.results,
+                enforce=self.args.enforce,
+                evidence=evidence,
+            )
+        except Exception as report_error:
+            print(f"Load report unavailable: {type(report_error).__name__}", file=sys.stderr)
+            if exc is None:
+                raise
+        return False
 
 
 def _requested_endpoint(cli_value: str | None, environment_key: str) -> str | None:
@@ -599,218 +718,232 @@ def main(
         business_date=business_date,
         timeout_seconds=args.ready_timeout_seconds,
     )
-    all_results: list[ProfileResult] = []
-    if args.profile_tier == "fast":
-        profiles: list[LoadProfile] = [
-            {
-                "name": "steady_state",
-                "batches": 2,
-                "batch_size": 20,
-                "sleep_seconds": 0.2,
-                "thresholds": {
-                    "min_throughput_rps": None,
-                    "max_backlog_age_increase_seconds": 1800.0,
-                    "max_dlq_pressure_ratio_added": 5.0,
-                    "max_replay_pressure_ratio_increase": 5.0,
-                    "max_drain_seconds": GOVERNED_MAX_DRAIN_SECONDS["fast"]["steady_state"],
-                    "require_drain": True,
+    with _LoadEvidenceReport(args, run_id, engine, _managed_run) as report:
+        all_results = report.results
+        if args.profile_tier == "fast":
+            profiles: list[LoadProfile] = [
+                {
+                    "name": "steady_state",
+                    "batches": 2,
+                    "batch_size": 20,
+                    "sleep_seconds": 0.2,
+                    "thresholds": {
+                        "min_throughput_rps": None,
+                        "max_backlog_age_increase_seconds": 1800.0,
+                        "max_dlq_pressure_ratio_added": 5.0,
+                        "max_replay_pressure_ratio_increase": 5.0,
+                        "max_drain_seconds": GOVERNED_MAX_DRAIN_SECONDS["fast"]["steady_state"],
+                        "require_drain": True,
+                    },
                 },
-            },
-            {
-                "name": "burst",
-                "batches": 3,
-                "batch_size": 40,
-                "sleep_seconds": 0.0,
-                "thresholds": {
-                    "min_throughput_rps": None,
-                    "max_backlog_age_increase_seconds": 2400.0,
-                    "max_dlq_pressure_ratio_added": 5.0,
-                    "max_replay_pressure_ratio_increase": 5.0,
-                    "max_drain_seconds": GOVERNED_MAX_DRAIN_SECONDS["fast"]["burst"],
-                    "require_drain": True,
+                {
+                    "name": "burst",
+                    "batches": 3,
+                    "batch_size": 40,
+                    "sleep_seconds": 0.0,
+                    "thresholds": {
+                        "min_throughput_rps": None,
+                        "max_backlog_age_increase_seconds": 2400.0,
+                        "max_dlq_pressure_ratio_added": 5.0,
+                        "max_replay_pressure_ratio_increase": 5.0,
+                        "max_drain_seconds": GOVERNED_MAX_DRAIN_SECONDS["fast"]["burst"],
+                        "require_drain": True,
+                    },
                 },
-            },
-        ]
-    else:
-        profiles = [
-            {
-                "name": "steady_state",
-                "batches": 5,
-                "batch_size": 40,
-                "sleep_seconds": 0.5,
-                "thresholds": {
-                    "min_throughput_rps": None,
-                    "max_backlog_age_increase_seconds": 1200.0,
-                    "max_dlq_pressure_ratio_added": 5.0,
-                    "max_replay_pressure_ratio_increase": 5.0,
-                    "max_drain_seconds": GOVERNED_MAX_DRAIN_SECONDS["full"]["steady_state"],
-                    "require_drain": True,
+            ]
+        else:
+            profiles = [
+                {
+                    "name": "steady_state",
+                    "batches": 5,
+                    "batch_size": 40,
+                    "sleep_seconds": 0.5,
+                    "thresholds": {
+                        "min_throughput_rps": None,
+                        "max_backlog_age_increase_seconds": 1200.0,
+                        "max_dlq_pressure_ratio_added": 5.0,
+                        "max_replay_pressure_ratio_increase": 5.0,
+                        "max_drain_seconds": GOVERNED_MAX_DRAIN_SECONDS["full"]["steady_state"],
+                        "require_drain": True,
+                    },
                 },
-            },
-            {
-                "name": "burst",
-                "batches": 8,
-                "batch_size": 80,
-                "sleep_seconds": 0.0,
-                "thresholds": {
-                    "min_throughput_rps": None,
-                    "max_backlog_age_increase_seconds": 1800.0,
-                    "max_dlq_pressure_ratio_added": 10.0,
-                    "max_replay_pressure_ratio_increase": 5.0,
-                    "max_drain_seconds": GOVERNED_MAX_DRAIN_SECONDS["full"]["burst"],
-                    "require_drain": True,
+                {
+                    "name": "burst",
+                    "batches": 8,
+                    "batch_size": 80,
+                    "sleep_seconds": 0.0,
+                    "thresholds": {
+                        "min_throughput_rps": None,
+                        "max_backlog_age_increase_seconds": 1800.0,
+                        "max_dlq_pressure_ratio_added": 10.0,
+                        "max_replay_pressure_ratio_increase": 5.0,
+                        "max_drain_seconds": GOVERNED_MAX_DRAIN_SECONDS["full"]["burst"],
+                        "require_drain": True,
+                    },
                 },
-            },
-        ]
+            ]
 
-    transaction_sequence_offset = 0
-    for profile in profiles:
-        baseline_health = _get_health_snapshot(
+        transaction_sequence_offset = 0
+        for profile in profiles:
+            report.stage = profile["name"]
+            baseline_health = _get_health_snapshot(
+                event_replay_base_url=args.event_replay_base_url,
+                ops_token=args.ops_token,
+            )
+            processing_claim_baseline = _processed_event_count(
+                engine=engine,
+                portfolio_id=portfolio_id,
+            )
+            transaction_seed = f"PERF-{run_id}-{profile['name']}"
+            started = time.time()
+            transaction_ids, batches_submitted = _ingest_transactions(
+                ingestion_base_url=args.ingestion_base_url,
+                portfolio_id=portfolio_id,
+                batches=profile["batches"],
+                batch_size=profile["batch_size"],
+                sleep_seconds_between_batches=profile["sleep_seconds"],
+                seed_prefix=transaction_seed,
+                security_prefix=security_prefix,
+                transaction_date=transaction_timestamp,
+                sequence_offset=transaction_sequence_offset,
+                on_accepted=report.accepted,
+            )
+            transaction_sequence_offset += len(transaction_ids)
+            drain_seconds = _wait_for_transaction_processing(
+                engine=engine,
+                portfolio_id=portfolio_id,
+                transaction_id_prefix=f"TX_{transaction_seed}",
+                expected=len(transaction_ids),
+                expected_processing_claim_minimum=(
+                    processing_claim_baseline + len(transaction_ids)
+                ),
+                timeout_seconds=args.drain_timeout_seconds,
+                on_timeout=report.timed_out,
+            )
+            ended = time.time()
+            if drain_seconds is None:
+                report.source_timeout(
+                    f"TX_{transaction_seed}", processing_claim_baseline + len(transaction_ids)
+                )
+            health = _get_health_snapshot(
+                event_replay_base_url=args.event_replay_base_url,
+                ops_token=args.ops_token,
+            )
+            all_results.append(
+                _evaluate_profile(
+                    profile_name=profile["name"],
+                    records_submitted=len(transaction_ids),
+                    batches_submitted=batches_submitted,
+                    started_at=started,
+                    ended_at=ended,
+                    baseline_health=baseline_health,
+                    health=health,
+                    drain_seconds=drain_seconds,
+                    thresholds=profile["thresholds"],
+                )
+            )
+
+        replay_baseline_health = _get_health_snapshot(
             event_replay_base_url=args.event_replay_base_url,
             ops_token=args.ops_token,
         )
-        processing_claim_baseline = _processed_event_count(
+        report.stage = "replay_source"
+        replay_started = time.time()
+        replay_source_seed = f"PERF-{run_id}-replay-source"
+        replay_source_claim_baseline = _processed_event_count(
             engine=engine,
             portfolio_id=portfolio_id,
         )
-        transaction_seed = f"PERF-{run_id}-{profile['name']}"
-        started = time.time()
-        transaction_ids, batches_submitted = _ingest_transactions(
-            ingestion_base_url=args.ingestion_base_url,
+        replay_source_transactions = _build_transaction_batch(
             portfolio_id=portfolio_id,
-            batches=profile["batches"],
-            batch_size=profile["batch_size"],
-            sleep_seconds_between_batches=profile["sleep_seconds"],
-            seed_prefix=transaction_seed,
-            security_prefix=security_prefix,
+            batch_size=120,
+            seed=replay_source_seed,
             transaction_date=transaction_timestamp,
+            security_prefix=security_prefix,
             sequence_offset=transaction_sequence_offset,
         )
-        transaction_sequence_offset += len(transaction_ids)
-        drain_seconds = _wait_for_transaction_processing(
+        replay_ids = [row["transaction_id"] for row in replay_source_transactions]
+        response = requests.post(
+            f"{args.ingestion_base_url}/ingest/transactions",
+            json={"transactions": replay_source_transactions},
+            headers=LOAD_TENANT_HEADERS,
+            timeout=30,
+        )
+        if response.status_code != 202:
+            raise RuntimeError(
+                f"Replay source ingestion failed status={response.status_code}: "
+                f"{response.text[:300]}"
+            )
+        report.accepted(replay_ids, response)
+        replay_source_drain = _wait_for_transaction_processing(
             engine=engine,
             portfolio_id=portfolio_id,
-            transaction_id_prefix=f"TX_{transaction_seed}",
-            expected=len(transaction_ids),
-            expected_processing_claim_minimum=(processing_claim_baseline + len(transaction_ids)),
+            transaction_id_prefix=f"TX_{replay_source_seed}",
+            expected=len(replay_ids),
+            expected_processing_claim_minimum=(replay_source_claim_baseline + len(replay_ids)),
+            timeout_seconds=args.drain_timeout_seconds,
+            on_timeout=report.timed_out,
+        )
+        if replay_source_drain is None:
+            report.source_timeout(
+                f"TX_{replay_source_seed}", replay_source_claim_baseline + len(replay_ids)
+            )
+            raise TimeoutError("Replay source transactions did not complete before replay")
+        report.stage = "replay_storm"
+        replay_bursts = 4 if args.profile_tier == "fast" else 12
+        replay_burst_size = 15 if args.profile_tier == "fast" else 30
+        replay_completion_baseline = _repair_replay_completion_count(
+            transaction_processing_base_url=args.transaction_processing_base_url,
+        )
+        report.replay_storm_status = "started"
+        replay_request_count = _trigger_replay_storm(
+            ingestion_base_url=args.ingestion_base_url,
+            transaction_ids=replay_ids,
+            bursts=replay_bursts,
+            burst_size=replay_burst_size,
+        )
+        replay_drain_seconds = _wait_for_repair_replay_completion(
+            transaction_processing_base_url=args.transaction_processing_base_url,
+            expected_minimum=replay_completion_baseline + replay_request_count,
             timeout_seconds=args.drain_timeout_seconds,
         )
-        ended = time.time()
-        health = _get_health_snapshot(
+        replay_ended = time.time()
+        replay_health = _get_health_snapshot(
             event_replay_base_url=args.event_replay_base_url,
             ops_token=args.ops_token,
         )
         all_results.append(
             _evaluate_profile(
-                profile_name=profile["name"],
-                records_submitted=len(transaction_ids),
-                batches_submitted=batches_submitted,
-                started_at=started,
-                ended_at=ended,
-                baseline_health=baseline_health,
-                health=health,
-                drain_seconds=drain_seconds,
-                thresholds=profile["thresholds"],
+                profile_name="replay_storm",
+                records_submitted=len(replay_ids) + replay_request_count,
+                batches_submitted=1 + replay_bursts,
+                started_at=replay_started,
+                ended_at=replay_ended,
+                baseline_health=replay_baseline_health,
+                health=replay_health,
+                drain_seconds=replay_drain_seconds,
+                thresholds={
+                    "min_throughput_rps": None,
+                    "max_backlog_age_increase_seconds": (
+                        2400.0 if args.profile_tier == "full" else 3600.0
+                    ),
+                    "max_dlq_pressure_ratio_added": 25.0 if args.profile_tier == "full" else 5.0,
+                    "max_replay_pressure_ratio_increase": 5.0,
+                    "max_drain_seconds": GOVERNED_MAX_DRAIN_SECONDS[args.profile_tier][
+                        "replay_storm"
+                    ],
+                    "require_drain": True,
+                },
             )
         )
 
-    replay_baseline_health = _get_health_snapshot(
-        event_replay_base_url=args.event_replay_base_url,
-        ops_token=args.ops_token,
-    )
-    replay_started = time.time()
-    replay_source_seed = f"PERF-{run_id}-replay-source"
-    replay_source_claim_baseline = _processed_event_count(
-        engine=engine,
-        portfolio_id=portfolio_id,
-    )
-    replay_source_transactions = _build_transaction_batch(
-        portfolio_id=portfolio_id,
-        batch_size=120,
-        seed=replay_source_seed,
-        transaction_date=transaction_timestamp,
-        security_prefix=security_prefix,
-        sequence_offset=transaction_sequence_offset,
-    )
-    replay_ids = [row["transaction_id"] for row in replay_source_transactions]
-    response = requests.post(
-        f"{args.ingestion_base_url}/ingest/transactions",
-        json={"transactions": replay_source_transactions},
-        headers=LOAD_TENANT_HEADERS,
-        timeout=30,
-    )
-    if response.status_code != 202:
-        raise RuntimeError(
-            f"Replay source ingestion failed status={response.status_code}: {response.text[:300]}"
-        )
-    replay_source_drain = _wait_for_transaction_processing(
-        engine=engine,
-        portfolio_id=portfolio_id,
-        transaction_id_prefix=f"TX_{replay_source_seed}",
-        expected=len(replay_ids),
-        expected_processing_claim_minimum=(replay_source_claim_baseline + len(replay_ids)),
-        timeout_seconds=args.drain_timeout_seconds,
-    )
-    if replay_source_drain is None:
-        raise TimeoutError("Replay source transactions did not complete before replay")
-    replay_bursts = 4 if args.profile_tier == "fast" else 12
-    replay_burst_size = 15 if args.profile_tier == "fast" else 30
-    replay_completion_baseline = _repair_replay_completion_count(
-        transaction_processing_base_url=args.transaction_processing_base_url,
-    )
-    replay_request_count = _trigger_replay_storm(
-        ingestion_base_url=args.ingestion_base_url,
-        transaction_ids=replay_ids,
-        bursts=replay_bursts,
-        burst_size=replay_burst_size,
-    )
-    replay_drain_seconds = _wait_for_repair_replay_completion(
-        transaction_processing_base_url=args.transaction_processing_base_url,
-        expected_minimum=replay_completion_baseline + replay_request_count,
-        timeout_seconds=args.drain_timeout_seconds,
-    )
-    replay_ended = time.time()
-    replay_health = _get_health_snapshot(
-        event_replay_base_url=args.event_replay_base_url,
-        ops_token=args.ops_token,
-    )
-    all_results.append(
-        _evaluate_profile(
-            profile_name="replay_storm",
-            records_submitted=len(replay_ids) + replay_request_count,
-            batches_submitted=1 + replay_bursts,
-            started_at=replay_started,
-            ended_at=replay_ended,
-            baseline_health=replay_baseline_health,
-            health=replay_health,
-            drain_seconds=replay_drain_seconds,
-            thresholds={
-                "min_throughput_rps": None,
-                "max_backlog_age_increase_seconds": (
-                    2400.0 if args.profile_tier == "full" else 3600.0
-                ),
-                "max_dlq_pressure_ratio_added": 25.0 if args.profile_tier == "full" else 5.0,
-                "max_replay_pressure_ratio_increase": 5.0,
-                "max_drain_seconds": GOVERNED_MAX_DRAIN_SECONDS[args.profile_tier]["replay_storm"],
-                "require_drain": True,
-            },
-        )
-    )
+        report.replay_storm_status = "completed"
+        report.stage = "completed"
 
-    json_path, md_path = _write_report(
-        output_dir=(repo_root / args.output_dir),
-        run_id=run_id,
-        profile_tier=args.profile_tier,
-        results=all_results,
-        enforce=args.enforce,
-    )
-    print(f"Wrote load gate JSON report: {json_path}")
-    print(f"Wrote load gate Markdown report: {md_path}")
-
-    overall_passed = all(item.checks_passed for item in all_results)
-    if args.enforce and not overall_passed:
-        return 1
-    return 0
+        overall_passed = all(item.checks_passed for item in all_results)
+        if args.enforce and not overall_passed:
+            return 1
+        return 0
 
 
 if __name__ == "__main__":
