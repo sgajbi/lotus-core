@@ -68,6 +68,14 @@ qualified source authority, and the exact coalesced financial lookup refuses it.
 replay query retains its prior anchor, date limit and deterministic order rather than loading
 whole history and filtering it in memory.
 
+The bounded fee loader reuses exact semantic scopes and correction hypotheses only within one row's batch
+invocation. Defensive canonical and positive-fee snapshots invalidate preparation when inputs
+change across awaits. Query-positive preparation does not replace canonical fee validation or
+raw/retained receipt authority; ordinary semantic and correction identities remain distinct.
+Prepared projections are immutable and returned fee dictionaries remain independent. Standalone
+qualification keeps the same validation and refusal contract without a persistent or cross-row
+cache. This reduces repeated client preparation without certifying database lock or load latency.
+
 An admitted correction or repair carries one immutable root identity and complete cost-result
 member group within the same unit of work. Position replay requires the active member's exact
 persisted row, locked replay epoch, scope, material and financial/lineage equality before deleting

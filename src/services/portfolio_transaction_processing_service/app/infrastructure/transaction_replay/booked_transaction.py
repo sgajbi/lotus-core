@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from itertools import product
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 from typing import Any, Protocol
 
 from portfolio_common.database_models import ProcessedEvent
@@ -101,6 +102,26 @@ def qualify_transaction_fee_source(
     derived_financial: bool = False,
 ) -> dict[str, Decimal | None]:
     """Recover exact fee presence only from original-fingerprint-qualified source facts."""
+    return _qualify_transaction_fee_source(
+        canonical,
+        costs,
+        raw_sources,
+        receipts,
+        allow_retained_receipt=allow_retained_receipt,
+        derived_financial=derived_financial,
+    )
+
+
+def _qualify_transaction_fee_source(
+    canonical: Mapping[str, Any],
+    costs: Sequence[Mapping[str, Any]],
+    raw_sources: Sequence[Mapping[str, Any]],
+    receipts: Sequence[Mapping[str, Any]],
+    *,
+    allow_retained_receipt: bool,
+    derived_financial: bool,
+    preparation: _FeeAuthorityPreparation | None = None,
+) -> dict[str, Decimal | None]:
     transaction_id = str(canonical["transaction_id"])
     tenant_id = str(canonical.get("tenant_id") or "")
     fingerprint: str | None = canonical.get("payload_fingerprint")
@@ -157,7 +178,11 @@ def qualify_transaction_fee_source(
         qualified.append(original)
     if not qualified and allow_retained_receipt:
         return _qualify_retained_fee_presence(
-            canonical, positive, receipts, derived_financial=derived_financial
+            canonical,
+            positive,
+            receipts,
+            derived_financial=derived_financial,
+            preparation=preparation,
         )
     if not qualified:
         raise ValueError("Original named fee presence cannot be recovered")
@@ -197,13 +222,66 @@ def _receipt_scope_keys(canonical: Mapping[str, Any]) -> tuple[str, str]:
     return identity.legacy_semantic_key, identity.semantic_key
 
 
+class _FeeAuthorityPreparation:
+    """Reuse one row's exact hypotheses within a batch, never its financial authority."""
+
+    def __init__(self) -> None:
+        self._canonical: dict[str, Any] | None = None
+        self._positive: dict[str, Decimal] | None = None
+        self._scopes: tuple[str, str] | None = None
+        self._corrections: tuple[tuple[str, str, Mapping[str, Decimal | None]], ...] | None = None
+
+    def _sync(self, canonical: Mapping[str, Any]) -> None:
+        if self._canonical != canonical:
+            self._canonical = deepcopy(dict(canonical))
+            self._positive = None
+            self._scopes = None
+            self._corrections = None
+
+    def scope_keys(self, canonical: Mapping[str, Any]) -> tuple[str, str]:
+        self._sync(canonical)
+        if self._scopes is None:
+            self._scopes = _receipt_scope_keys(canonical)
+        return self._scopes
+
+    def correction_hypotheses(
+        self, canonical: Mapping[str, Any], positive: Mapping[str, Decimal]
+    ) -> tuple[tuple[str, str, Mapping[str, Decimal | None]], ...]:
+        self._sync(canonical)
+        if self._positive != positive or self._corrections is None:
+            self._positive = dict(positive)
+            self._corrections = tuple(
+                (key, fingerprint, MappingProxyType(dict(projection)))
+                for key, fingerprint, projection in _correction_fee_hypotheses(canonical, positive)
+            )
+        return self._corrections
+
+
+def _fee_receipt_scope_keys(
+    canonical: Mapping[str, Any], preparation: _FeeAuthorityPreparation | None
+) -> tuple[str, str]:
+    return preparation.scope_keys(canonical) if preparation else _receipt_scope_keys(canonical)
+
+
+def _fee_correction_hypotheses(
+    canonical: Mapping[str, Any],
+    positive: Mapping[str, Decimal],
+    preparation: _FeeAuthorityPreparation | None,
+) -> Sequence[tuple[str, str, Mapping[str, Decimal | None]]]:
+    return (
+        preparation.correction_hypotheses(canonical, positive)
+        if preparation
+        else _correction_fee_hypotheses(canonical, positive)
+    )
+
+
 def _fee_presence_hypotheses(
     positive: Mapping[str, Decimal], aggregate: Decimal | None
 ) -> list[dict[str, Decimal | None]]:
     """Bound presence candidates; none supplies authority before exact evidence matches."""
     missing = [name for name in TRANSACTION_FEE_COMPONENT_FIELDS if name not in positive]
     candidates = [
-        dict(positive) | dict(zip(missing, values, strict=True))
+        dict[str, Decimal | None](positive) | dict(zip(missing, values, strict=True))
         for values in product((None, Decimal(0)), repeat=len(missing))
     ]
     if positive == {"brokerage": aggregate} and aggregate is not None and aggregate > 0:
@@ -217,11 +295,12 @@ def _qualify_retained_fee_presence(
     receipts: Sequence[Mapping[str, Any]],
     *,
     derived_financial: bool = False,
+    preparation: _FeeAuthorityPreparation | None = None,
 ) -> dict[str, Decimal | None]:
     """Verify bounded hypotheses against independent committed processing evidence."""
     tenant = canonical.get("tenant_id")
     portfolio = canonical["portfolio_id"]
-    v1_key, v2_key = _receipt_scope_keys(canonical)
+    v1_key, v2_key = _fee_receipt_scope_keys(canonical, preparation)
     admissible = [
         receipt
         for receipt in receipts
@@ -239,7 +318,9 @@ def _qualify_retained_fee_presence(
     if has_v2 != source_booked:
         raise ValueError("Retained source FX version cannot be downgraded or inferred")
     if derived_financial:
-        corrected = _qualified_correction_fee_presence(canonical, positive, receipts)
+        corrected = _qualified_correction_fee_presence(
+            canonical, positive, receipts, preparation=preparation
+        )
         if corrected is not None:
             return corrected
     aggregate = canonical.get("trade_fee")
@@ -308,10 +389,14 @@ def _qualified_correction_fee_presence(
     canonical: Mapping[str, Any],
     positive: Mapping[str, Decimal],
     receipts: Sequence[Mapping[str, Any]],
+    *,
+    preparation: _FeeAuthorityPreparation | None = None,
 ) -> dict[str, Decimal | None] | None:
     """A unique exact committed correction binds this historical derived material cut."""
     qualified = []
-    for key, fingerprint, projection in _correction_fee_hypotheses(canonical, positive):
+    for key, fingerprint, projection in _fee_correction_hypotheses(
+        canonical, positive, preparation
+    ):
         matches = [
             receipt
             for receipt in receipts
@@ -324,7 +409,7 @@ def _qualified_correction_fee_presence(
             if len(matches) != 1 or matches[0]["payload_fingerprint"] != fingerprint:
                 raise ValueError("Conflicting committed correction authority")
             if projection not in qualified:
-                qualified.append(projection)
+                qualified.append(dict(projection))
     if len(qualified) > 1:
         raise ValueError("Ambiguous committed correction fee presence")
     return qualified[0] if qualified else None
@@ -336,6 +421,7 @@ async def _load_correction_fee_receipts(
     costs_by_id: Mapping[str, Sequence[Mapping[str, Any]]],
     *,
     lock_sources: bool,
+    preparations: Sequence[_FeeAuthorityPreparation],
 ) -> list[Mapping[str, Any]]:
     """One additional bounded batch after fee rows make exact correction keys computable."""
     scopes = [
@@ -345,13 +431,14 @@ async def _load_correction_fee_receipts(
             ProcessedEvent.portfolio_id == row["portfolio_id"],
             ProcessedEvent.semantic_key == key,
         )
-        for row in canonical_rows
-        for key, _, _ in _correction_fee_hypotheses(
+        for row, preparation in zip(canonical_rows, preparations, strict=True)
+        for key, _, _ in _fee_correction_hypotheses(
             row,
             {
                 str(cost["fee_type"]).strip().lower(): Decimal(cost["amount"])
                 for cost in costs_by_id.get(str(row["transaction_id"]), [])
             },
+            preparation,
         )
     ]
     if not scopes:
@@ -369,7 +456,7 @@ async def _load_correction_fee_receipts(
     )
     if lock_sources:
         statement = statement.with_for_update(read=True, of=ProcessedEvent)
-    return list((await session.execute(statement)).mappings().all())
+    return [dict(receipt) for receipt in (await session.execute(statement)).mappings().all()]
 
 
 async def load_qualified_transaction_fee_sources(
@@ -381,6 +468,7 @@ async def load_qualified_transaction_fee_sources(
     derived_financial: bool = False,
 ) -> dict[str, dict[str, Decimal | None]]:
     """Qualify the complete bounded batch before its first publication."""
+    preparations = [_FeeAuthorityPreparation() for _ in canonical_rows]
     scopes = (
         [
             (
@@ -389,8 +477,8 @@ async def load_qualified_transaction_fee_sources(
                 str(row["portfolio_id"]),
                 key,
             )
-            for row in canonical_rows
-            for key in _receipt_scope_keys(row)
+            for row, preparation in zip(canonical_rows, preparations, strict=True)
+            for key in preparation.scope_keys(row)
         ]
         if allow_retained_receipt
         else []
@@ -406,7 +494,11 @@ async def load_qualified_transaction_fee_sources(
     if allow_retained_receipt and derived_financial:
         receipts.extend(
             await _load_correction_fee_receipts(
-                session, canonical_rows, costs_by_id, lock_sources=lock_sources
+                session,
+                canonical_rows,
+                costs_by_id,
+                lock_sources=lock_sources,
+                preparations=preparations,
             )
         )
     for source in raw:
@@ -420,29 +512,30 @@ async def load_qualified_transaction_fee_sources(
         )
         receipts_by_scope.setdefault(scope, []).append(receipt)
     projections = {}
-    for canonical in canonical_rows:
+    for canonical, preparation in zip(canonical_rows, preparations, strict=True):
         key = str(canonical["transaction_id"])
         try:
-            projections[key] = qualify_transaction_fee_source(
+            projections[key] = _qualify_transaction_fee_source(
                 canonical,
                 costs_by_id.get(key, []),
                 raw_by_id.get(key, []),
                 [
                     receipt
                     for semantic_key in (
-                        _receipt_scope_keys(canonical)
+                        preparation.scope_keys(canonical)
                         + tuple(
                             correction_key
-                            for correction_key, _, _ in _correction_fee_hypotheses(
+                            for correction_key, _, _ in _fee_correction_hypotheses(
                                 canonical,
                                 {
                                     str(cost["fee_type"]).strip().lower(): Decimal(cost["amount"])
                                     for cost in costs_by_id.get(key, [])
                                 },
+                                preparation,
                             )
                         )
                         if derived_financial
-                        else _receipt_scope_keys(canonical)
+                        else preparation.scope_keys(canonical)
                     )
                     for receipt in receipts_by_scope.get(
                         (
@@ -458,6 +551,7 @@ async def load_qualified_transaction_fee_sources(
                 else [],
                 allow_retained_receipt=allow_retained_receipt,
                 derived_financial=derived_financial,
+                preparation=preparation,
             )
         except (ValueError, TypeError, KeyError) as exc:
             raise ReprocessingReplayError(
