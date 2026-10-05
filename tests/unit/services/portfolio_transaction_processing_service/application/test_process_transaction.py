@@ -29,6 +29,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.cashflow i
 )
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     build_generated_settlement_cash_leg,
+    build_transaction_semantic_identity,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     CashflowProcessingResult,
@@ -40,6 +41,9 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
 )
 from src.services.portfolio_transaction_processing_service.app.ports.position_history import (
     MaterializedPositionReceipt,
+)
+from src.services.portfolio_transaction_processing_service.app.ports.transaction_processing import (
+    FirstPublicationSourceAuthority,
 )
 
 
@@ -146,6 +150,9 @@ class _Cost:
 
     async def validate_unversioned_repair_source(self, transaction: BookedTransaction) -> None:
         self.validated_transaction = transaction
+
+    async def load_first_publication_source(self, transaction):
+        return None
 
     async def process(self, transaction: BookedTransaction, **_kwargs) -> CostProcessingResult:
         self.calls.append(f"cost:{transaction.transaction_id}")
@@ -768,6 +775,186 @@ async def test_coalesced_authority_requires_both_exact_receipts_and_rolls_back(d
         assert unit_of_work.rolled_back and not unit_of_work.committed
         assert not unit_of_work.cashflow.transactions
         assert not unit_of_work.readiness.transactions
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quantity", [Decimal("1500"), Decimal("0")])
+async def test_first_publication_uses_locked_source_and_current_cost_before_cash(quantity):
+    booked = replace(_transaction(), transaction_type="DEPOSIT", quantity=Decimal("500"))
+    calls = []
+    unit_of_work = _UnitOfWork(calls=calls, cost_result=CostProcessingResult((booked,)))
+    proof = FirstPublicationSourceAuthority(
+        tenant_id=booked.tenant_id,
+        portfolio_id=booked.portfolio_id,
+        security_id=booked.security_id,
+        transaction_id=booked.transaction_id,
+        payload_fingerprint=build_transaction_semantic_identity(booked).payload_fingerprint,
+    )
+
+    async def source(transaction):
+        assert transaction == booked
+        assert not any(call.startswith("cost:") for call in calls)
+        calls.append("locked-source")
+        return proof
+
+    unit_of_work.cost.load_first_publication_source = AsyncMock(side_effect=source)
+    unit_of_work.cost.load_derived_financial_transaction = AsyncMock(return_value=booked)
+    unit_of_work.cashflow.has_materialized_effect = AsyncMock(return_value=False)
+    unit_of_work.position.results_by_id[booked.transaction_id] = PositionProcessingResult(
+        locked_state_epoch=0,
+        processed_transaction_quantity=quantity,
+        materialized_receipt=MaterializedPositionReceipt(
+            booked.tenant_id,
+            booked.portfolio_id,
+            booked.security_id,
+            booked.transaction_id,
+            0,
+            quantity,
+        ),
+    )
+    result = await ProcessTransactionUseCase(lambda: unit_of_work, _RecordingObserver()).execute(
+        replace(_command(), transaction=booked)
+    )
+    assert result.status is TransactionProcessingStatus.PROCESSED
+    assert calls.index("locked-source") < calls.index("cost:TX-001")
+    assert unit_of_work.cashflow.transactions == [replace(booked, epoch=0)]
+    assert unit_of_work.cashflow.calculation_contexts == [
+        CashflowCalculationContext.CURRENT_BOOKING
+    ]
+    assert unit_of_work.cashflow.locked_position_epochs == [0]
+    assert unit_of_work.readiness.transactions == (replace(booked, epoch=0),)
+    assert unit_of_work.committed and not unit_of_work.rolled_back
+    unit_of_work.cost.load_derived_financial_transaction.assert_not_awaited()
+    unit_of_work.cashflow.has_materialized_effect.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "tenant_id",
+        "portfolio_id",
+        "security_id",
+        "transaction_id",
+        "payload_fingerprint",
+        "missing_source",
+        "missing_receipt",
+        "unknown_epoch",
+        "absent_quantity",
+        "wrong_quantity",
+        "foreign_current_output",
+        "generated_member",
+        "nonfinite_quantity",
+        "receipt_tenant_id",
+        "receipt_portfolio_id",
+        "receipt_security_id",
+        "receipt_transaction_id",
+        "receipt_epoch",
+    ],
+)
+async def test_first_publication_bad_authority_retains_refusal_and_rollback(damage):
+    booked = _transaction()
+    proof = FirstPublicationSourceAuthority(
+        booked.tenant_id,
+        booked.portfolio_id,
+        booked.security_id,
+        booked.transaction_id,
+        build_transaction_semantic_identity(booked).payload_fingerprint,
+    )
+    if damage in {
+        "tenant_id",
+        "portfolio_id",
+        "security_id",
+        "transaction_id",
+        "payload_fingerprint",
+    }:
+        proof = replace(proof, **{damage: "foreign"})
+    if damage == "missing_source":
+        proof = None
+    current = replace(booked, price=Decimal("99")) if damage == "foreign_current_output" else booked
+    if damage == "generated_member":
+        current = replace(booked, transaction_id="TX-GENERATED")
+    uow = _UnitOfWork(calls=[], cost_result=CostProcessingResult((current,)))
+    uow.cost.load_first_publication_source = AsyncMock(return_value=proof)
+    uow.cost.load_derived_financial_transaction = AsyncMock(return_value=None)
+    quantity = Decimal("NaN") if damage == "nonfinite_quantity" else Decimal("0")
+    receipt = MaterializedPositionReceipt(
+        current.tenant_id,
+        current.portfolio_id,
+        current.security_id,
+        current.transaction_id,
+        0,
+        quantity,
+    )
+    if damage.startswith("receipt_"):
+        field = damage.removeprefix("receipt_")
+        receipt = replace(receipt, **{field: 1 if field == "epoch" else "foreign"})
+    uow.position.results_by_id[current.transaction_id] = PositionProcessingResult(
+        locked_state_epoch=None if damage == "unknown_epoch" else 0,
+        processed_transaction_quantity=None
+        if damage == "absent_quantity"
+        else Decimal("1")
+        if damage == "wrong_quantity"
+        else quantity,
+        materialized_receipt=None if damage == "missing_receipt" else receipt,
+    )
+    with pytest.raises(TransactionProcessingRejected) as failure:
+        await ProcessTransactionUseCase(lambda: uow, _RecordingObserver()).execute(_command())
+    assert failure.value.reason_code == "position_materialization_unavailable"
+    assert uow.rolled_back and not uow.committed
+    assert not uow.cashflow.transactions and not uow.readiness.transactions
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        TransactionIdempotencyOutcome.PHYSICAL_DUPLICATE,
+        TransactionIdempotencyOutcome.SEMANTIC_DUPLICATE,
+    ],
+)
+async def test_first_publication_duplicate_does_not_load_source_or_stage_effects(outcome):
+    uow = _UnitOfWork(calls=[], idempotency_outcome=outcome)
+    uow.cost.load_first_publication_source = AsyncMock()
+    result = await ProcessTransactionUseCase(lambda: uow, _RecordingObserver()).execute(_command())
+    assert result.status is TransactionProcessingStatus.DUPLICATE
+    uow.cost.load_first_publication_source.assert_not_awaited()
+    assert not uow.cashflow.transactions and not uow.readiness.transactions
+
+
+@pytest.mark.asyncio
+async def test_first_publication_cashflow_failure_cannot_commit_or_mark_ready():
+    booked = _transaction()
+    uow = _UnitOfWork(
+        calls=[],
+        cost_result=CostProcessingResult((booked,)),
+        cashflow_error=RuntimeError("cashflow staging failed"),
+    )
+    uow.cost.load_first_publication_source = AsyncMock(
+        return_value=FirstPublicationSourceAuthority(
+            booked.tenant_id,
+            booked.portfolio_id,
+            booked.security_id,
+            booked.transaction_id,
+            build_transaction_semantic_identity(booked).payload_fingerprint,
+        )
+    )
+    uow.position.results_by_id[booked.transaction_id] = PositionProcessingResult(
+        locked_state_epoch=0,
+        processed_transaction_quantity=Decimal("0"),
+        materialized_receipt=MaterializedPositionReceipt(
+            booked.tenant_id,
+            booked.portfolio_id,
+            booked.security_id,
+            booked.transaction_id,
+            0,
+            Decimal("0"),
+        ),
+    )
+    with pytest.raises(RuntimeError, match="cashflow staging failed"):
+        await ProcessTransactionUseCase(lambda: uow, _RecordingObserver()).execute(_command())
+    assert uow.rolled_back and not uow.committed
+    assert not uow.readiness.transactions
 
 
 @pytest.mark.asyncio

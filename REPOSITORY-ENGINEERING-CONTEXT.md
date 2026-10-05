@@ -31,7 +31,24 @@ Ordinary coalesced work retains a typed tenant/portfolio/security/transaction/ep
 receipt under portfolio and state write locks, the existing replay lock, and a history read lock.
 Before continuing, it also qualifies the exact pre-existing cashflow semantic receipt and the
 complete governed historical cashflow output, including lineage and economic/group identities.
-History alone cannot admit a pending cash transaction. Declared FX contract open/close no-cash
+History alone cannot admit a pending cash transaction. A distinct first-publication route is
+limited to fresh ordinary CLAIMED, unversioned input: before costs, the current UOW retains
+canonical tenant/key/full original fingerprint authority under the existing source and cost
+locks. The current successful cost member must match that proof and the exact typed locked
+position epoch/quantity receipt before native CURRENT_BOOKING cashflow processing. Zero quantity
+is valid; unknown epoch or absent quantity is not. Generated members cannot inherit the root's
+proof. Missing optional proof preserves the old persisted-effect guard and unrelated noncoalesced
+behavior. Repair, correction, duplicates and stale epochs retain their existing fences. All source,
+financial, readiness and outbox effects commit or roll back in the same UOW.
+
+For example, an earliest DEPOSIT1000 can materialize a same-day pending DEPOSIT500 position1500
+or SELL100 position900 before that pending transaction's first financial delivery. Qualified
+first publication creates native +500 external deposit cashflow or +100 internal sale proceeds
+exactly once at the locked epoch. SELL reduces position quantity by100, but its cash-ledger
+proceeds are positive; cost reduction and analytics investment measures have distinct signs.
+Existing positions are not rebuilt; duplicate delivery stages no further effects.
+This admission does not certify HTTP/Kafka/live joined processing or broader concurrency.
+Declared FX contract open/close no-cash
 routes require a distinct pre-existing scoped stage receipt and absence of a transaction/epoch
 ledger; absence alone never authorizes them, and no zero-valued cashflow is fabricated.
 

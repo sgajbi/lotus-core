@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from dataclasses import asdict
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -8,8 +10,10 @@ import pytest
 from portfolio_common.database_models import (
     Cashflow,
     OutboxEvent,
+    PipelineStageState,
     PositionHistory,
     PositionState,
+    ProcessedEvent,
     TransactionCost,
 )
 from portfolio_common.database_models import Transaction as DBTransaction
@@ -20,6 +24,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.persistence_service.app.repositories.transaction_db_repo import (
     TransactionDBRepository,
 )
+from src.services.portfolio_transaction_processing_service.app.application import (
+    TransactionProcessingRejected,
+    TransactionProcessingStatus,
+)
+from src.services.portfolio_transaction_processing_service.app.application.cashflow_processing.use_case import (  # noqa: E501
+    ProcessTransactionCashflowUseCase,
+)
+from src.services.portfolio_transaction_processing_service.app.application.position_history import (
+    PositionHistoryProcessor,
+)
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     build_cost_basis_engine_input,
     has_governed_transaction_cost_authority,
@@ -28,12 +42,16 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
     SqlAlchemyCostBasisProcessingStateRepository,
     SqlAlchemyCostBasisTransactionRepository,
 )
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis.processing_adapter import (  # noqa: E501
+    CostBasisProcessingAdapter,
+)
 from tests.test_support.async_task_coordination import (
     cancel_pending_tasks,
     wait_for_postgres_advisory_lock_wait,
     wait_for_task_signal,
 )
 from tests.test_support.transaction_processing import (
+    TransactionProcessingTestContext,
     booked_transaction_event,
     instrument_record,
     persist_and_process_booked_transaction,
@@ -393,3 +411,276 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
     assert all(position.calculation_lineage is not None for position in current_positions)
     assert processed_event_count == 3
     assert replay_event_count == 0
+
+
+async def _first_delivery_financial_evidence(
+    context: TransactionProcessingTestContext, portfolio_id: str
+) -> dict[str, object]:
+    """Read independent committed facts after the producing UOW has left its locks."""
+    selections = {
+        "sources": select(
+            DBTransaction.transaction_id,
+            DBTransaction.payload_fingerprint,
+            DBTransaction.net_cost,
+            DBTransaction.net_cost_local,
+            DBTransaction.calculation_lineage,
+        )
+        .where(DBTransaction.portfolio_id == portfolio_id)
+        .order_by(DBTransaction.transaction_id),
+        "positions": select(
+            PositionHistory.transaction_id,
+            PositionHistory.position_date,
+            PositionHistory.epoch,
+            PositionHistory.quantity,
+        )
+        .where(PositionHistory.portfolio_id == portfolio_id)
+        .order_by(
+            PositionHistory.position_date, PositionHistory.transaction_id, PositionHistory.epoch
+        ),
+        "cashflows": select(
+            Cashflow.transaction_id,
+            Cashflow.epoch,
+            Cashflow.amount,
+            Cashflow.classification,
+            Cashflow.timing,
+            Cashflow.is_position_flow,
+            Cashflow.is_portfolio_flow,
+            Cashflow.calculation_lineage,
+        )
+        .where(Cashflow.portfolio_id == portfolio_id)
+        .order_by(Cashflow.transaction_id, Cashflow.epoch),
+        "semantic_receipts": select(
+            ProcessedEvent.tenant_id,
+            ProcessedEvent.service_name,
+            ProcessedEvent.event_id,
+            ProcessedEvent.semantic_key,
+            ProcessedEvent.payload_fingerprint,
+        )
+        .where(ProcessedEvent.portfolio_id == portfolio_id)
+        .order_by(ProcessedEvent.tenant_id, ProcessedEvent.service_name, ProcessedEvent.event_id),
+        "readiness": select(
+            PipelineStageState.transaction_id,
+            PipelineStageState.epoch,
+            PipelineStageState.status,
+            PipelineStageState.cost_event_seen,
+            PipelineStageState.cashflow_event_seen,
+        )
+        .where(PipelineStageState.portfolio_id == portfolio_id)
+        .order_by(PipelineStageState.transaction_id, PipelineStageState.epoch),
+        "outbox": select(OutboxEvent.event_type, OutboxEvent.aggregate_id, OutboxEvent.payload)
+        .where(OutboxEvent.aggregate_id.like(f"{portfolio_id}%"))
+        .order_by(OutboxEvent.id),
+    }
+    async with context.session_factory() as session:
+        evidence = {
+            name: [dict(row) for row in (await session.execute(statement)).mappings()]
+            for name, statement in selections.items()
+        }
+        evidence["epoch"] = await session.scalar(
+            select(PositionState.epoch).where(PositionState.portfolio_id == portfolio_id)
+        )
+    return evidence
+
+
+@pytest.mark.lifecycle
+@pytest.mark.parametrize(
+    (
+        "pending_type",
+        "pending_amount",
+        "expected_quantity",
+        "expected_flow",
+        "expected_classification",
+        "expected_timing",
+        "expected_portfolio_flow",
+    ),
+    [
+        ("DEPOSIT", "500", Decimal("1500"), Decimal("500"), "CASHFLOW_IN", "BOD", True),
+        ("SELL", "100", Decimal("900"), Decimal("100"), "INVESTMENT_INFLOW", "EOD", False),
+    ],
+)
+async def test_first_financial_delivery_completes_position_materialized_by_same_day_suffix(
+    clean_db,
+    async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    pending_type: str,
+    pending_amount: str,
+    expected_quantity: Decimal,
+    expected_flow: Decimal,
+    expected_classification: str,
+    expected_timing: str,
+    expected_portfolio_flow: bool,
+) -> None:
+    """Hold later delivery by order, without inventing financial or valuation readiness."""
+    portfolio_id = f"PORT-FIRST-FINANCIAL-{pending_type}"
+    security_id = f"CASH-FIRST-FINANCIAL-{pending_type}"
+    async_db_session.add_all(
+        [
+            portfolio_record(portfolio_id),
+            instrument_record(
+                security_id,
+                name="First financial delivery cash",
+                isin=f"USD-FIRST-{pending_type}",
+                currency="USD",
+                product_type="Cash",
+                asset_class="Cash",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+    events = tuple(
+        booked_transaction_event(
+            transaction_id=f"{portfolio_id}-{index}",
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            transaction_date=when,
+            transaction_type=kind,
+            quantity=amount,
+            price="1",
+            gross_amount=amount,
+        )
+        for index, (when, kind, amount) in enumerate(
+            [
+                (datetime(2026, 7, 1, 9, tzinfo=timezone.utc), "DEPOSIT", "1000"),
+                (datetime(2026, 7, 1, 10, tzinfo=timezone.utc), pending_type, pending_amount),
+                (datetime(2026, 7, 2, 9, tzinfo=timezone.utc), "WITHDRAWAL", "100"),
+            ]
+        )
+    )
+    repository = TransactionDBRepository(async_db_session)
+    for event in events:
+        await repository.create_or_update_transaction(event)
+    await async_db_session.commit()
+    context = transaction_processing_test_context(async_db_session)
+    observed_cost: list[dict[str, object]] = []
+    observed_position: list[dict[str, object]] = []
+    observed_cashflow: list[dict[str, object]] = []
+    cost_process = CostBasisProcessingAdapter.process
+    position_process = PositionHistoryProcessor.process
+    cashflow_process = ProcessTransactionCashflowUseCase.process
+
+    async def observe_cost(adapter, transaction, **kwargs):
+        result = await cost_process(adapter, transaction, **kwargs)
+        observed_cost.append({"input_id": transaction.transaction_id, "result": asdict(result)})
+        return result
+
+    async def observe_position(processor, transaction, **kwargs):
+        result = await position_process(processor, transaction, **kwargs)
+        observed_position.append({"input_id": transaction.transaction_id, "result": asdict(result)})
+        return result
+
+    async def observe_cashflow(processor, transaction, **kwargs):
+        result = await cashflow_process(processor, transaction, **kwargs)
+        observed_cashflow.append(
+            {
+                "input_id": transaction.transaction_id,
+                "epoch": transaction.epoch,
+                "calculation_context": kwargs.get("calculation_context"),
+                "result": asdict(result),
+            }
+        )
+        return result
+
+    monkeypatch.setattr(CostBasisProcessingAdapter, "process", observe_cost)
+    monkeypatch.setattr(PositionHistoryProcessor, "process", observe_position)
+    monkeypatch.setattr(ProcessTransactionCashflowUseCase, "process", observe_cashflow)
+    first = await process_booked_transaction(
+        context=context, event=events[0], event_id="first-delivery-0", correlation_id=portfolio_id
+    )
+    before = await _first_delivery_financial_evidence(context, portfolio_id)
+    assert first.position_record_count == 3, before
+    pending_position = next(
+        row for row in before["positions"] if row["transaction_id"] == events[1].transaction_id
+    )
+    assert pending_position["quantity"] == expected_quantity, before
+    assert pending_position["epoch"] == before["epoch"] == 0, before
+    assert all(row["payload_fingerprint"] for row in before["sources"]), before
+    assert [row["transaction_id"] for row in before["cashflows"]] == [events[0].transaction_id], (
+        before
+    )
+    assert [row["transaction_id"] for row in before["readiness"]] == [events[0].transaction_id], (
+        before
+    )
+
+    rejection = None
+    try:
+        await process_booked_transaction(
+            context=context,
+            event=events[1],
+            event_id="first-delivery-1",
+            correlation_id=portfolio_id,
+        )
+    except TransactionProcessingRejected as exc:
+        rejection = {
+            "reason_code": exc.reason_code,
+            "retryable": exc.retryable,
+            "detail": exc.detail,
+        }
+    after = await _first_delivery_financial_evidence(context, portfolio_id)
+    diagnostic = {
+        "before": before,
+        "after": after,
+        "cost_results": observed_cost,
+        "position_results": observed_position,
+        "cashflow_results": observed_cashflow,
+        "rejection": rejection,
+        "current_booking_expected_flow": expected_flow,
+    }
+    print(json.dumps(diagnostic, default=str, sort_keys=True))
+    assert rejection is None, diagnostic
+    pending_flow = next(
+        row for row in after["cashflows"] if row["transaction_id"] == events[1].transaction_id
+    )
+    assert pending_flow["amount"] == expected_flow, diagnostic
+    assert pending_flow["classification"] == expected_classification, diagnostic
+    assert pending_flow["timing"] == expected_timing, diagnostic
+    assert pending_flow["is_position_flow"] is True, diagnostic
+    assert pending_flow["is_portfolio_flow"] is expected_portfolio_flow, diagnostic
+    assert pending_flow["epoch"] == pending_position["epoch"], diagnostic
+    assert pending_flow["calculation_lineage"], diagnostic
+    assert pending_flow["calculation_lineage"]["algorithm_id"] == "transaction-cashflow", diagnostic
+    assert after["positions"] == before["positions"], diagnostic
+    pending_calls = [
+        row for row in observed_cashflow if row["input_id"] == events[1].transaction_id
+    ]
+    assert len(pending_calls) == 1, diagnostic
+    assert pending_calls[0]["calculation_context"] == "CURRENT_BOOKING", diagnostic
+    assert pending_calls[0]["epoch"] == pending_position["epoch"], diagnostic
+    assert (
+        sum(row["transaction_id"] == events[1].transaction_id for row in after["cashflows"]) == 1
+    ), diagnostic
+    assert any(
+        row["event_id"] == f"cashflow:{portfolio_id}:{events[1].transaction_id}:0"
+        for row in after["semantic_receipts"]
+    ), diagnostic
+    for event_type in (
+        "ProcessedTransactionPersisted",
+        "CashflowCalculated",
+        "TransactionProcessingCompleted",
+    ):
+        assert (
+            sum(
+                row["event_type"] == event_type
+                and row["payload"].get("transaction_id") == events[1].transaction_id
+                for row in after["outbox"]
+            )
+            == 1
+        ), diagnostic
+    pending_ready = next(
+        row for row in after["readiness"] if row["transaction_id"] == events[1].transaction_id
+    )
+    assert pending_ready["status"] == "COMPLETED", diagnostic
+    assert pending_ready["cost_event_seen"] and pending_ready["cashflow_event_seen"], diagnostic
+    assert any(
+        row["event_type"] == "TransactionProcessingCompleted"
+        and row["payload"]["transaction_id"] == events[1].transaction_id
+        for row in after["outbox"]
+    ), diagnostic
+    duplicate = await process_booked_transaction(
+        context=context,
+        event=events[1],
+        event_id="first-delivery-1-duplicate",
+        correlation_id=portfolio_id,
+    )
+    assert duplicate.status is TransactionProcessingStatus.DUPLICATE
+    repeated = await _first_delivery_financial_evidence(context, portfolio_id)
+    assert repeated == after, repeated

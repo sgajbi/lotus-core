@@ -105,7 +105,25 @@ Concurrent ordinary backdated work can reuse a completed current-epoch materiali
 when the same unit of work retains an exact tenant/key/epoch/quantity position receipt and
 qualifies the pre-existing cashflow semantic receipt plus complete historical output and lineage.
 Portfolio, state, replay and history locks protect that position receipt until commit or rollback.
-History without the required financial receipt still refuses. Declared FX contract open/close
+History without the required financial receipt still refuses completion/replay. A separately
+qualified first publication is limited to ordinary fresh CLAIMED, unversioned input. Its current
+unit of work qualifies the exact canonical tenant/key/full original fingerprint under source and
+cost locks before cost writes. Only the matching successful current cost member and typed locked
+position epoch/quantity receipt admit native CURRENT_BOOKING cashflow, readiness and outbox
+staging in that same atomic unit of work. Unknown epoch, absent quantity, foreign source and
+generated-member inheritance refuse; actual zero quantity remains distinct from missing evidence.
+Optional proof absence never relaxes the completion guard. Repair, correction, duplicate and stale
+epoch routes retain their own authority, including existing scoped no-cash receipts.
+
+For example, processing DEPOSIT1000 can materialize a pending same-day DEPOSIT500 position1500
+or SELL100 position900. The pending first financial delivery uses its own qualified source and
+locked position receipt to create +500 external deposit cash or +100 internal sale proceeds at
+the current booking context exactly once. SELL reduces position quantity by100 while cash-ledger
+sale proceeds are positive; cost reduction and analytics investment measures have distinct signs.
+Positions are not restated and duplicate delivery adds no cashflow/readiness/outbox effects.
+This bounded admission is not certification of broader HTTP/Kafka/live or concurrent processing.
+
+Declared FX contract open/close
 routes use a distinct completed no-cash stage receipt and require no transaction/epoch cashflow
 row; missing evidence is not success and a zero cashflow is not manufactured.
 

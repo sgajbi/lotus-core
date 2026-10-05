@@ -40,6 +40,7 @@ from ...ports import (
     InitialOpeningCostStatePort,
     LotAmortizedCostProfilePort,
 )
+from ...ports.transaction_processing import FirstPublicationSourceAuthority
 
 
 class PortfolioNotFoundError(Exception):
@@ -84,24 +85,8 @@ class CostBasisProcessingAdapter:
 
     async def validate_unversioned_repair_source(self, transaction: BookedTransaction) -> None:
         """Match canonical material authority while retaining the owning write locks."""
-        await self._processing_state.acquire_cost_basis_processing_lock(
-            transaction.portfolio_id, transaction.security_id
-        )
-        if requires_linked_redemption_interest_history(transaction):
-            await self._processing_state.acquire_linked_redemption_group_lock(
-                transaction.portfolio_id, transaction.linked_transaction_group_id or ""
-            )
-
-        source = await self._repository.get_booked_transaction(
-            transaction.transaction_id,
-            portfolio_id=transaction.portfolio_id,
-            repair_tenant_id=transaction.tenant_id or "",
-            repair_security_id=transaction.security_id,
-        )
-        if source is None or (
-            build_transaction_semantic_identity(source).payload_fingerprint
-            != build_transaction_semantic_identity(transaction).payload_fingerprint
-        ):
+        source = await self._load_locked_canonical_source(transaction)
+        if not self._matches_canonical_source(source, transaction):
             raise TransactionProcessingRejected(
                 reason_code="repair_source_authority_mismatch",
                 detail={
@@ -110,6 +95,74 @@ class CostBasisProcessingAdapter:
                 },
                 retryable=False,
             )
+
+    async def load_first_publication_source(
+        self, transaction: BookedTransaction
+    ) -> FirstPublicationSourceAuthority | None:
+        """Retain optional exact source proof without admitting a repair route."""
+        if transaction.epoch is not None or not transaction.tenant_id:
+            return None
+        try:
+            source = await self._load_locked_canonical_source(transaction)
+        except TransactionProcessingRejected as exc:
+            if exc.reason_code not in {
+                "repair_source_owner_mismatch",
+                "repair_source_authority_mismatch",
+                "repair_original_source_unavailable",
+            }:
+                raise
+            return None
+        if (
+            source is None
+            or source.epoch is not None
+            or not self._matches_canonical_source(source, transaction)
+        ):
+            return None
+        return FirstPublicationSourceAuthority(
+            tenant_id=transaction.tenant_id,
+            portfolio_id=transaction.portfolio_id,
+            security_id=transaction.security_id,
+            transaction_id=transaction.transaction_id,
+            payload_fingerprint=build_transaction_semantic_identity(
+                transaction
+            ).payload_fingerprint,
+        )
+
+    @staticmethod
+    def _matches_canonical_source(
+        source: BookedTransaction | None, transaction: BookedTransaction
+    ) -> bool:
+        return source is not None and (
+            source.tenant_id,
+            source.portfolio_id,
+            source.security_id,
+            source.transaction_id,
+            build_transaction_semantic_identity(source).payload_fingerprint,
+        ) == (
+            transaction.tenant_id,
+            transaction.portfolio_id,
+            transaction.security_id,
+            transaction.transaction_id,
+            build_transaction_semantic_identity(transaction).payload_fingerprint,
+        )
+
+    async def _load_locked_canonical_source(
+        self, transaction: BookedTransaction
+    ) -> BookedTransaction | None:
+        await self._processing_state.acquire_cost_basis_processing_lock(
+            transaction.portfolio_id, transaction.security_id
+        )
+        if requires_linked_redemption_interest_history(transaction):
+            await self._processing_state.acquire_linked_redemption_group_lock(
+                transaction.portfolio_id, transaction.linked_transaction_group_id or ""
+            )
+
+        return await self._repository.get_booked_transaction(
+            transaction.transaction_id,
+            portfolio_id=transaction.portfolio_id,
+            repair_tenant_id=transaction.tenant_id or "",
+            repair_security_id=transaction.security_id,
+        )
 
     async def load_derived_financial_transaction(
         self, transaction: BookedTransaction

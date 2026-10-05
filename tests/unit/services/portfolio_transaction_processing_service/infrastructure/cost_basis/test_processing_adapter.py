@@ -497,3 +497,54 @@ async def test_repair_source_validation_locks_before_loading_and_never_costs(sou
         assert rejected.value.reason_code == "repair_source_authority_mismatch"
     assert order == ["cost-lock", "canonical-source"]
     processor.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "damage",
+    [
+        None,
+        "tenant_id",
+        "portfolio_id",
+        "security_id",
+        "transaction_id",
+        "quantity",
+        "missing",
+        "unqualified",
+        "epoch",
+    ],
+)
+async def test_first_publication_source_requires_locked_exact_original_input(damage):
+    transaction = replace(_cash_account_booking("BUY"), tenant_id=TEST_TENANT_ID)
+    processor = AsyncMock(spec=PreparedCostProcessingUseCase)
+    adapter = _cash_account_adapter(processor=processor, instrument=None)
+    order = []
+
+    async def lock(*args):
+        order.append("cost-lock")
+
+    async def load(*args, **kwargs):
+        assert order == ["cost-lock"]
+        order.append("canonical-source")
+        assert kwargs["repair_tenant_id"] == transaction.tenant_id
+        assert kwargs["repair_security_id"] == transaction.security_id
+        if damage == "unqualified":
+            raise TransactionProcessingRejected(
+                reason_code="repair_original_source_unavailable", detail={}, retryable=False
+            )
+        if damage == "missing":
+            return None
+        if damage:
+            value = Decimal("26") if damage == "quantity" else 0 if damage == "epoch" else "foreign"
+            return replace(transaction, **{damage: value})
+        return transaction
+
+    adapter._processing_state.acquire_cost_basis_processing_lock.side_effect = lock
+    adapter._repository.get_booked_transaction.side_effect = load
+    proof = await adapter.load_first_publication_source(transaction)
+    assert order == ["cost-lock", "canonical-source"]
+    assert (proof is not None) is (damage is None)
+    if proof:
+        assert proof.matches(transaction)
+        assert not proof.matches(replace(transaction, quantity=Decimal("26")))
+    processor.execute.assert_not_awaited()

@@ -32,6 +32,7 @@ from ..ports import (
     TransactionProcessingUnitOfWorkFactory,
 )
 from ..ports.position_history import AdmittedPositionCorrectionGroup
+from ..ports.transaction_processing import FirstPublicationSourceAuthority
 from .commands import ProcessTransactionCommand, TransactionProcessingIntent
 from .errors import TransactionProcessingRejected
 from .results import ProcessTransactionResult, TransactionProcessingStatus
@@ -60,12 +61,36 @@ def _admitted_position_group(
     )
 
 
+async def _qualify_first_publication_source(
+    command: ProcessTransactionCommand,
+    unit_of_work: TransactionProcessingUnitOfWork,
+    *,
+    idempotency_outcome: TransactionIdempotencyOutcome,
+    correction_claimed: bool,
+    repair_delivery_claimed: bool,
+) -> FirstPublicationSourceAuthority | None:
+    """Retain optional canonical authority only for ordinary first publication."""
+    transaction = command.transaction
+    if (
+        idempotency_outcome is TransactionIdempotencyOutcome.CLAIMED
+        and command.metadata.processing_intent is TransactionProcessingIntent.STANDARD
+        and transaction.epoch is None
+        and not correction_claimed
+        and not repair_delivery_claimed
+    ):
+        source = await unit_of_work.cost.load_first_publication_source(transaction)
+        if isinstance(source, FirstPublicationSourceAuthority) and source.matches(transaction):
+            return source
+    return None
+
+
 async def _require_coalesced_financial_authority(
     transaction: BookedTransaction,
     result: PositionProcessingResult,
     unit_of_work: TransactionProcessingUnitOfWork,
+    first_publication_source: FirstPublicationSourceAuthority | None = None,
 ) -> None:
-    """Admit existing materialization only with independently persisted financial effects."""
+    """Require persisted effects or exact first-publication authority in this UOW."""
     receipt = result.materialized_receipt
     if (
         receipt is not None
@@ -76,6 +101,14 @@ async def _require_coalesced_financial_authority(
         and receipt.epoch == result.locked_state_epoch
         and receipt.quantity == result.processed_transaction_quantity
     ):
+        if (
+            isinstance(first_publication_source, FirstPublicationSourceAuthority)
+            and receipt.quantity is not None
+            and receipt.quantity.is_finite()
+            and receipt.epoch is not None
+            and first_publication_source.matches(transaction)
+        ):
+            return
         financial = await unit_of_work.cost.load_derived_financial_transaction(transaction)
         if (
             financial is not None
@@ -371,6 +404,13 @@ class ProcessTransactionUseCase:
             )
             if canonical_unversioned_repair:
                 await unit_of_work.cost.validate_unversioned_repair_source(transaction)
+            first_publication_source = await _qualify_first_publication_source(
+                command,
+                unit_of_work,
+                idempotency_outcome=idempotency_outcome,
+                correction_claimed=correction_claimed,
+                repair_delivery_claimed=repair_delivery_claimed,
+            )
             with self._observer.observe(TransactionProcessingOperation.COST):
                 cost_result = await unit_of_work.cost.process(
                     transaction,
@@ -403,7 +443,10 @@ class ProcessTransactionUseCase:
                         and not position_result.cashflow_rebuild_transactions
                     ):
                         await _require_coalesced_financial_authority(
-                            processed_transaction, position_result, unit_of_work
+                            processed_transaction,
+                            position_result,
+                            unit_of_work,
+                            first_publication_source,
                         )
                     _validate_lot_position_quantity_parity(
                         processed_transaction,

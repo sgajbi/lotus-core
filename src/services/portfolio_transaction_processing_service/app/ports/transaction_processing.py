@@ -7,9 +7,36 @@ from enum import StrEnum
 from types import TracebackType
 from typing import Protocol, Self
 
-from ..domain import BookedTransaction
+from ..domain import BookedTransaction, build_transaction_semantic_identity
 from ..domain.cashflow import CashflowCalculationContext
 from .position_history import AdmittedPositionCorrectionGroup, MaterializedPositionReceipt
+
+
+@dataclass(frozen=True, slots=True)
+class FirstPublicationSourceAuthority:
+    """Exact original input qualified under source locks in the current UOW."""
+
+    tenant_id: str
+    portfolio_id: str
+    security_id: str
+    transaction_id: str
+    payload_fingerprint: str
+
+    def matches(self, transaction: BookedTransaction) -> bool:
+        """Bind tenant separately from the full original material fingerprint."""
+        return transaction.epoch is None and (
+            self.tenant_id,
+            self.portfolio_id,
+            self.security_id,
+            self.transaction_id,
+            self.payload_fingerprint,
+        ) == (
+            transaction.tenant_id,
+            transaction.portfolio_id,
+            transaction.security_id,
+            transaction.transaction_id,
+            build_transaction_semantic_identity(transaction).payload_fingerprint,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +100,12 @@ class TransactionIdempotencyPort(Protocol):
 
 
 class CostProcessingPort(Protocol):
+    async def load_first_publication_source(
+        self, transaction: BookedTransaction
+    ) -> FirstPublicationSourceAuthority | None:
+        """Qualify optional ordinary source authority before any cost writes."""
+        ...
+
     async def load_derived_financial_transaction(
         self, transaction: BookedTransaction
     ) -> BookedTransaction | None: ...
