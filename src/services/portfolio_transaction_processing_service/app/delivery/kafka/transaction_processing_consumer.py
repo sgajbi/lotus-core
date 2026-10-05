@@ -126,6 +126,8 @@ class TransactionProcessingConsumer(BaseConsumer):
                 if exc.reason_code in _ACKNOWLEDGED_REJECTION_REASONS:
                     _log_acknowledged_rejection(event, event_id, exc)
                     return
+                if exc.retryable:
+                    raise RetryableConsumerError(_retryable_dependency_reason(exc)) from exc
                 raise
             except TransactionProcessingError as exc:
                 if exc.retryable:

@@ -291,9 +291,12 @@ async def test_consumer_converts_retryable_application_error() -> None:
         await _consumer(use_case).process_message(_message())
 
 
-async def test_consumer_exhausts_owned_dependency_budget_without_runtime_restart() -> None:
+@pytest.mark.parametrize("error_type", [TransactionProcessingError, TransactionProcessingRejected])
+async def test_consumer_exhausts_owned_dependency_budget_without_runtime_restart(
+    error_type: type[TransactionProcessingError],
+) -> None:
     use_case = AsyncMock()
-    use_case.execute.side_effect = TransactionProcessingError(
+    use_case.execute.side_effect = error_type(
         reason_code="cost_dependency_unavailable",
         detail={"dependency_error": "InstrumentReferenceUnavailableError"},
         retryable=True,
@@ -319,6 +322,54 @@ async def test_consumer_exhausts_owned_dependency_budget_without_runtime_restart
 
     assert use_case.execute.await_count == 2
     consumer._send_to_dlq_async.assert_awaited_once()
+    consumer._consumer.commit.assert_called_once_with(message=message, asynchronous=False)
+    assert consumer._running is True
+
+
+@pytest.mark.parametrize(
+    "reason_code",
+    ["position_materialization_unavailable", "financial_effect_epoch_unavailable"],
+)
+async def test_consumer_retries_financial_rejection_then_commits_success_without_dlq(
+    reason_code: str,
+) -> None:
+    use_case = AsyncMock()
+    rejection = TransactionProcessingRejected(
+        reason_code=reason_code,
+        detail={"portfolio_id": "PB-001", "transaction_id": "TX-001"},
+        retryable=True,
+    )
+    use_case.execute.side_effect = [
+        rejection,
+        ProcessTransactionResult(
+            status=TransactionProcessingStatus.PROCESSED,
+            input_transaction_id="TX-001",
+            cashflow_record_count=1,
+            position_record_count=1,
+        ),
+    ]
+    authority = AsyncMock()
+    authority.resolve.return_value = "tenant-test"
+    consumer = TransactionProcessingConsumer(
+        bootstrap_servers="mock_server",
+        topic="transactions.persisted",
+        group_id="portfolio_transaction_processing_group",
+        dlq_topic="dlq.persistence_service",
+        use_case=use_case,
+        route_corporate_action_child=_ordinary_arrival(),
+        tenant_authority=authority,
+        execution_profile=KafkaConsumerExecutionProfile(retryable_failure_backoff_seconds=0.001),
+        retryable_failure_max_attempts=2,
+    )
+    consumer._consumer = MagicMock()
+    consumer._send_to_dlq_async = AsyncMock(return_value=True)
+    message = _message()
+
+    await consumer._process_polled_message(message, asyncio.get_running_loop())
+
+    assert use_case.execute.await_count == 2
+    assert use_case.execute.await_args_list[0] == use_case.execute.await_args_list[1]
+    consumer._send_to_dlq_async.assert_not_awaited()
     consumer._consumer.commit.assert_called_once_with(message=message, asynchronous=False)
     assert consumer._running is True
 
