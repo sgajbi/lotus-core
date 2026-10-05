@@ -109,8 +109,11 @@ History without the required financial receipt still refuses completion/replay. 
 qualified first publication is limited to ordinary fresh CLAIMED, unversioned input. Its current
 unit of work qualifies the exact canonical tenant/key/full original fingerprint under source and
 cost locks before cost writes. Only the matching successful current cost member and typed locked
-position epoch/quantity receipt admit native CURRENT_BOOKING cashflow, readiness and outbox
-staging in that same atomic unit of work. Unknown epoch, absent quantity, foreign source and
+position epoch/quantity receipt at the initial locked epoch zero admit native CURRENT_BOOKING
+cashflow, readiness and outbox staging in that same atomic unit of work. Nonzero history established
+by repair or replay cannot grant this first-publication shortcut; existing persisted financial-effect
+fallback and authorized repair retain their authoritative epochs. Unknown epoch, absent quantity,
+foreign source and
 generated-member inheritance refuse; actual zero quantity remains distinct from missing evidence.
 Optional proof absence never relaxes the completion guard. Repair, correction, duplicate and stale
 epoch routes retain their own authority, including existing scoped no-cash receipts.

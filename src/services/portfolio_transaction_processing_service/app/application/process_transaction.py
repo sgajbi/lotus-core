@@ -105,7 +105,7 @@ async def _require_coalesced_financial_authority(
             isinstance(first_publication_source, FirstPublicationSourceAuthority)
             and receipt.quantity is not None
             and receipt.quantity.is_finite()
-            and receipt.epoch is not None
+            and receipt.epoch == 0
             and first_publication_source.matches(transaction)
         ):
             return
