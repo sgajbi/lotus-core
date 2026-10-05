@@ -234,6 +234,13 @@ respective Lotus services.
 
 ## Consumer Native-Operation Practice
 
+Shared Kafka consumer contract changes must inspect every concrete caller fixture and execute
+the full affected caller test set alongside the common consumer/native/supervisor controls.
+Positive synchronous-commit fixtures must return real acknowledgement-shaped values for the
+message's topic, partition and next offset, with no partition error; a commit-call assertion alone
+does not establish successful acknowledgement. Preserve negative acknowledgement and drain/order
+assertions when updating fixtures.
+
 `BaseConsumer` uses one owned FIFO worker for native construction/subscription, poll, pause/resume,
 synchronous offset acknowledgement, cached watermark reads, DLQ confirmation and close. Keep
 async financial UOWs and metrics on the event loop. Await exact topic/partition/next-offset success
