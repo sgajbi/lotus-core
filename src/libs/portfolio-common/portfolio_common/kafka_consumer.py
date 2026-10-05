@@ -43,6 +43,11 @@ from .kafka_consumer_execution import (
     KafkaConsumerExecutionProfile,
     load_kafka_consumer_execution_profile,
 )
+from .kafka_consumer_native import (
+    ConsumerNativeOperations,
+    PartitionOwnershipLost,
+)
+from .kafka_consumer_shutdown import ConsumerShutdownMixin
 from .kafka_utils import get_kafka_producer
 from .logging_utils import (
     REDACTED_VALUE,
@@ -211,7 +216,7 @@ class DlqPublicationBudgetExhausted(RuntimeError):
     """Raised when a terminal message repeatedly cannot be published to DLQ."""
 
 
-class BaseConsumer(ABC):
+class BaseConsumer(ConsumerShutdownMixin, ABC):
     """
     An abstract base class for creating robust, retrying Kafka consumers
     with Dead-Letter Queue (DLQ) support and Prometheus metrics.
@@ -235,6 +240,10 @@ class BaseConsumer(ABC):
         self.service_prefix = service_prefix
         self._metrics = metrics
         self._consumer = None
+        self._native_operations = ConsumerNativeOperations()
+        self._message_assignment_generations: dict[int, int] = {}
+        self._shutdown_task: asyncio.Task[None] | None = None
+        self._run_finished = asyncio.Event()
         self._producer = None
         self._consumer_config = build_kafka_connection_config(
             bootstrap_servers,
@@ -316,7 +325,7 @@ class BaseConsumer(ABC):
     def group_id(self) -> str:
         return self._group_id
 
-    def _initialize_consumer(self):
+    async def _initialize_consumer(self) -> None:
         """Initializes and subscribes the Kafka consumer."""
         self._log_consumer_event(
             logging.INFO,
@@ -325,8 +334,20 @@ class BaseConsumer(ABC):
             status="started",
             reason_code="consumer_initializing",
         )
-        self._consumer = Consumer(self._consumer_config)
-        self._consumer.subscribe([self.topic])
+
+        def create_subscribed_consumer() -> None:
+            consumer = Consumer(self._consumer_config)
+            # Retain ownership before a cancellable await can discard the factory
+            # result. The lane drains before run.finally accesses this handle.
+            self._consumer = consumer
+            consumer.subscribe(
+                [self.topic],
+                on_assign=self._native_operations.on_assignment,
+                on_revoke=self._native_operations.on_revocation,
+                on_lost=self._native_operations.on_revocation,
+            )
+
+        await self._native_operations.call(create_subscribed_consumer)
         self._log_consumer_event(
             logging.INFO,
             "Kafka consumer subscribed.",
@@ -492,8 +513,12 @@ class BaseConsumer(ABC):
                 ingestion_job_id=ingestion_job_id,
                 traceparent=traceparent,
             )
-            self._publish_dlq_message(msg, payload=dlq_payload, headers=dlq_headers)
-            self._confirm_dlq_delivery()
+
+            def publish_and_confirm() -> None:
+                self._publish_dlq_message(msg, payload=dlq_payload, headers=dlq_headers)
+                self._confirm_dlq_delivery()
+
+            await self._native_operations.call(publish_and_confirm)
         except Exception as e:
             self._record_consumer_event("dlq_failed", "dlq_publish_error")
             self._log_consumer_event(
@@ -695,7 +720,7 @@ class BaseConsumer(ABC):
         """
         self._run_active = True
         try:
-            self._initialize_consumer()
+            await self._initialize_consumer()
             loop = asyncio.get_running_loop()
             self._log_consumer_event(
                 logging.INFO,
@@ -712,8 +737,15 @@ class BaseConsumer(ABC):
             self._record_consumer_event("critical_loop_exit", "unhandled_exception")
             raise
         finally:
-            self._run_active = False
-            self.shutdown()
+            self._start_shutdown()
+            try:
+                await self._drain_in_flight_on_shutdown(asyncio.get_running_loop())
+            finally:
+                self._run_active = False
+                try:
+                    await self.wait_closed()
+                finally:
+                    self._run_finished.set()
 
     async def _run_serial_consumer_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         while self._running:
@@ -731,7 +763,7 @@ class BaseConsumer(ABC):
         self._set_in_flight_metric()
         while self._running:
             await self._drain_completed_processing_tasks(loop)
-            self._schedule_pending_messages(loop)
+            await self._schedule_pending_messages(loop)
             if self._at_in_flight_capacity():
                 self._record_backlog_pressure("max_in_flight_reached")
                 await self._wait_for_next_processing_task(loop)
@@ -751,7 +783,7 @@ class BaseConsumer(ABC):
                 if not self._running:
                     break
                 continue
-            self._dispatch_or_queue_message(msg, loop)
+            await self._dispatch_or_queue_message(msg, loop)
 
         await self._drain_in_flight_on_shutdown(loop)
 
@@ -778,16 +810,22 @@ class BaseConsumer(ABC):
             if timeout_seconds is None
             else timeout_seconds
         )
+
+        def poll_with_assignment() -> tuple[Message | None, int | None]:
+            message = consumer.poll(resolved_timeout_seconds)
+            generation = None if message is None else self._native_operations.generation(message)
+            return message, generation
+
         try:
-            msg = await loop.run_in_executor(
-                None,
-                consumer.poll,
-                resolved_timeout_seconds,
-            )
+            msg, generation = await self._native_operations.call(poll_with_assignment)
         except Exception:
             if not self._running:
                 return None
             raise
+        if not self._running:
+            # A poll already submitted at shutdown may still return a message.
+            # Leave it unadmitted and unacknowledged for Kafka redelivery.
+            return None
         if msg is None:
             observe_kafka_consumer_poll_idle_duration(
                 service=self._metric_service_label(),
@@ -795,9 +833,13 @@ class BaseConsumer(ABC):
                 group_id=self._consumer_config["group.id"],
                 duration_seconds=time.monotonic() - started_at,
             )
+        if msg is not None:
+            if generation is None:
+                raise RuntimeError("Polled message has no assignment generation")
+            self._message_assignment_generations[id(msg)] = generation
         return msg
 
-    def _dispatch_or_queue_message(
+    async def _dispatch_or_queue_message(
         self,
         msg: Message,
         loop: asyncio.AbstractEventLoop,
@@ -807,14 +849,14 @@ class BaseConsumer(ABC):
             self._schedule_processing_task(msg, loop, ordering_key)
             return
         if ordering_key in self._active_ordering_keys:
-            self._pause_ordering_partition(msg, ordering_key)
+            await self._pause_ordering_partition(msg, ordering_key)
         self._pending_messages_by_key[ordering_key].append(msg)
         self._pending_message_count += 1
         self._record_backlog_pressure(
             "ordering_key_busy" if ordering_key in self._active_ordering_keys else "capacity_full"
         )
 
-    def _schedule_pending_messages(self, loop: asyncio.AbstractEventLoop) -> None:
+    async def _schedule_pending_messages(self, loop: asyncio.AbstractEventLoop) -> None:
         for ordering_key in list(self._pending_messages_by_key):
             if self._at_in_flight_capacity():
                 return
@@ -835,6 +877,9 @@ class BaseConsumer(ABC):
         loop: asyncio.AbstractEventLoop,
         ordering_key: str,
     ) -> None:
+        if not self._running:
+            self._message_assignment_generations.pop(id(msg), None)
+            return
         self._active_ordering_keys.add(ordering_key)
         task = asyncio.create_task(self._process_polled_message(msg, loop))
         self._in_flight_tasks.add(task)
@@ -847,7 +892,7 @@ class BaseConsumer(ABC):
     ) -> None:
         completed = [task for task in self._in_flight_tasks if task.done()]
         for task in completed:
-            self._finalize_processing_task(task, loop)
+            await self._finalize_processing_task(task, loop)
 
     async def _wait_for_next_processing_task(
         self,
@@ -865,23 +910,11 @@ class BaseConsumer(ABC):
         if not done:
             return False
         for task in done:
-            self._finalize_processing_task(task, loop)
-        self._schedule_pending_messages(loop)
+            await self._finalize_processing_task(task, loop)
+        await self._schedule_pending_messages(loop)
         return True
 
-    async def _drain_in_flight_on_shutdown(self, loop: asyncio.AbstractEventLoop) -> None:
-        deadline = time.monotonic() + self.execution_profile.shutdown_drain_timeout_seconds
-        while self._in_flight_tasks:
-            remaining = max(0.0, deadline - time.monotonic())
-            if remaining <= 0:
-                self._record_consumer_event("shutdown_failed", "in_flight_drain_timeout")
-                for task in self._in_flight_tasks:
-                    task.cancel()
-                self._set_in_flight_metric()
-                return
-            await self._wait_for_next_processing_task(loop, timeout_seconds=remaining)
-
-    def _finalize_processing_task(
+    async def _finalize_processing_task(
         self,
         task: asyncio.Task[None],
         loop: asyncio.AbstractEventLoop,
@@ -895,17 +928,17 @@ class BaseConsumer(ABC):
         if ordering_key is None:
             return
         if self._running:
-            self._schedule_next_ordered_message_or_resume(ordering_key, loop)
+            await self._schedule_next_ordered_message_or_resume(ordering_key, loop)
             return
-        self._discard_pending_ordering_key(ordering_key)
+        await self._discard_pending_ordering_key(ordering_key)
 
-    def _discard_pending_ordering_key(self, ordering_key: str) -> None:
+    async def _discard_pending_ordering_key(self, ordering_key: str) -> None:
         pending = self._pending_messages_by_key.pop(ordering_key, None)
         if pending:
             self._pending_message_count -= len(pending)
-        self._resume_ordering_partition(ordering_key)
+        await self._resume_ordering_partition(ordering_key)
 
-    def _schedule_next_ordered_message_or_resume(
+    async def _schedule_next_ordered_message_or_resume(
         self,
         ordering_key: str,
         loop: asyncio.AbstractEventLoop,
@@ -918,7 +951,7 @@ class BaseConsumer(ABC):
                 self._pending_messages_by_key.pop(ordering_key, None)
             return
         self._pending_messages_by_key.pop(ordering_key, None)
-        self._resume_ordering_partition(ordering_key)
+        await self._resume_ordering_partition(ordering_key)
 
     def _message_ordering_key(self, msg: Message) -> str:
         return f"partition:{msg.topic()}:{_message_attr_or_unknown(msg, 'partition')}"
@@ -932,24 +965,24 @@ class BaseConsumer(ABC):
     def _at_pending_buffer_capacity(self) -> bool:
         return self._pending_message_count >= self.execution_profile.max_in_flight_messages
 
-    def _pause_ordering_partition(self, msg: Message, ordering_key: str) -> None:
+    async def _pause_ordering_partition(self, msg: Message, ordering_key: str) -> None:
         if ordering_key in self._paused_partitions_by_key:
             return
         consumer = self._consumer
         if consumer is None:
             raise RuntimeError("Kafka consumer must be initialized before pausing a partition.")
         topic_partition = TopicPartition(msg.topic(), msg.partition())
-        consumer.pause([topic_partition])
+        await self._native_operations.call(functools.partial(consumer.pause, [topic_partition]))
         self._paused_partitions_by_key[ordering_key] = topic_partition
 
-    def _resume_ordering_partition(self, ordering_key: str) -> None:
+    async def _resume_ordering_partition(self, ordering_key: str) -> None:
         topic_partition = self._paused_partitions_by_key.pop(ordering_key, None)
         if topic_partition is None:
             return
         consumer = self._consumer
         if consumer is None:
             raise RuntimeError("Kafka consumer must be initialized before resuming a partition.")
-        consumer.resume([topic_partition])
+        await self._native_operations.call(functools.partial(consumer.resume, [topic_partition]))
 
     def _set_in_flight_metric(self) -> None:
         set_kafka_consumer_in_flight(
@@ -980,6 +1013,9 @@ class BaseConsumer(ABC):
         processed_successfully = False
         processing_outcome = "success"
         processing_reason = "processed"
+        generation = self._message_assignment_generations.setdefault(
+            id(msg), self._native_operations.generation(msg)
+        )
         try:
             corr_id = self._resolve_message_correlation_id(msg)
             token = correlation_id_var.set(corr_id)
@@ -995,9 +1031,17 @@ class BaseConsumer(ABC):
                 try:
                     await self._dispatch_message_for_processing(msg, loop)
                     self._clear_retryable_failure_attempts(msg)
-                    processed_successfully = self._commit_after_successful_processing(msg)
-                    processing_outcome = "success"
-                    processing_reason = "processed"
+                    processed_successfully = await self._commit_after_successful_processing(
+                        msg, generation
+                    )
+                    if not processed_successfully:
+                        # Do not acknowledge a later offset past this durable but
+                        # unacknowledged message. Restart/redelivery owns recovery.
+                        self._running = False
+                    processing_outcome = "success" if processed_successfully else "commit_failed"
+                    processing_reason = (
+                        "processed" if processed_successfully else "redelivery_required"
+                    )
                     break
                 except RetryableConsumerError as error:
                     retry_exhausted = await self._handle_retryable_processing_error(msg, error)
@@ -1014,10 +1058,11 @@ class BaseConsumer(ABC):
                     # For terminal errors (poison pills), send to DLQ and then commit.
                     processing_outcome = "terminal_failure"
                     processing_reason = classify_dlq_reason_code(error)
-                    await self._handle_terminal_processing_error(msg, error)
+                    await self._handle_terminal_processing_error(msg, error, generation)
                     break
 
         finally:
+            self._message_assignment_generations.pop(id(msg), None)
             self._record_processing_metrics(
                 start_time,
                 processed_successfully,
@@ -1035,6 +1080,7 @@ class BaseConsumer(ABC):
         error = msg.error()
         if not error:
             return False
+        self._message_assignment_generations.pop(id(msg), None)
         if error.fatal():
             self._handle_fatal_consumer_error(error)
         else:
@@ -1211,17 +1257,21 @@ class BaseConsumer(ABC):
             error_type=type(error).__name__,
         )
 
-    async def _handle_terminal_processing_error(self, msg: Message, error: Exception) -> None:
+    async def _handle_terminal_processing_error(
+        self, msg: Message, error: Exception, generation: int | None = None
+    ) -> None:
         log_terminal_processing_error(
             self._log_consumer_event,
             error,
             reason_code=classify_dlq_reason_code(error),
         )
-        recovered = await self._recover_message_via_dlq(msg, error)
+        recovered = await self._recover_message_via_dlq(msg, error, generation)
         if recovered:
             self._clear_retryable_failure_attempts(msg)
 
-    async def _recover_message_via_dlq(self, msg: Message, error: Exception) -> bool:
+    async def _recover_message_via_dlq(
+        self, msg: Message, error: Exception, generation: int | None = None
+    ) -> bool:
         while True:
             dlq_succeeded = await self._send_to_dlq_async(msg, error)
             if dlq_succeeded:
@@ -1232,7 +1282,7 @@ class BaseConsumer(ABC):
             await asyncio.sleep(self.execution_profile.retryable_failure_backoff_seconds)
 
         while True:
-            if self._commit_after_dlq_publication(msg):
+            if await self._commit_after_dlq_publication(msg, generation):
                 self._clear_dlq_failure_attempts(msg)
                 return True
             self._handle_dlq_offset_commit_failed(msg, error)
@@ -1287,12 +1337,24 @@ class BaseConsumer(ABC):
             reason=reason,
         )
 
-    def _commit_after_dlq_publication(self, msg: Message) -> bool:
+    async def _commit_after_dlq_publication(
+        self, msg: Message, generation: int | None = None
+    ) -> bool:
         try:
-            self._consumer.commit(message=msg, asynchronous=False)
-            self._observe_committed_message_lag(msg)
+            await self._native_operations.commit(
+                self._consumer,
+                msg,
+                self._message_assignment_generations.get(
+                    id(msg), self._native_operations.generation(msg)
+                )
+                if generation is None
+                else generation,
+            )
+            await self._observe_committed_message_lag(msg)
             return True
         except Exception as commit_error:
+            if isinstance(commit_error, PartitionOwnershipLost):
+                self._running = False
             self._record_consumer_event("commit_failed", "dlq_publication")
             self._log_consumer_event(
                 logging.WARNING,
@@ -1305,10 +1367,10 @@ class BaseConsumer(ABC):
             )
             return False
 
-    def _commit_after_successful_processing(self, msg: Message) -> bool:
+    async def _commit_after_successful_processing(self, msg: Message, generation: int) -> bool:
         try:
-            self._consumer.commit(message=msg, asynchronous=False)
-            self._observe_committed_message_lag(msg)
+            await self._native_operations.commit(self._consumer, msg, generation)
+            await self._observe_committed_message_lag(msg)
             return True
         except Exception as commit_error:
             self._record_consumer_event("commit_failed", "successful_processing")
@@ -1323,7 +1385,7 @@ class BaseConsumer(ABC):
             )
             return False
 
-    def _observe_committed_message_lag(self, msg: Message) -> None:
+    async def _observe_committed_message_lag(self, msg: Message) -> None:
         consumer = self._consumer
         if consumer is None:
             return
@@ -1339,9 +1401,10 @@ class BaseConsumer(ABC):
                 or not isinstance(offset, int)
             ):
                 return
-            _, high_watermark = consumer.get_watermark_offsets(
-                TopicPartition(topic, partition),
-                cached=True,
+            _, high_watermark = await self._native_operations.call(
+                functools.partial(
+                    consumer.get_watermark_offsets, TopicPartition(topic, partition), cached=True
+                )
             )
             if isinstance(high_watermark, bool) or not isinstance(high_watermark, int):
                 return
@@ -1502,65 +1565,6 @@ class BaseConsumer(ABC):
             "committing the terminal message offset."
         )
 
-    def shutdown(self) -> None:
-        """Stop polling, drain active work, and then release Kafka resources."""
-        if self._shutdown_finalized:
-            return
-        self._start_shutdown()
-        if self._run_active:
-            return
-        self._finalize_shutdown()
-
-    def _start_shutdown(self) -> None:
-        if self._shutdown_started:
-            return
-        self._shutdown_started = True
-        self._log_consumer_event(
-            logging.INFO,
-            "Kafka consumer shutdown started.",
-            event_name="kafka.consumer.shutdown_started",
-            status="started",
-            reason_code="consumer_shutdown_started",
-        )
-        self._running = False
-        if self._consumer:
-            self._wakeup_consumer_for_shutdown()
-
-    def _finalize_shutdown(self) -> None:
-        if self._shutdown_finalized:
-            return
-        self._shutdown_finalized = True
-        if self._consumer:
-            self._close_consumer_for_shutdown()
-        if self._producer:
-            self._flush_dlq_producer_for_shutdown()
-        self._log_consumer_event(
-            logging.INFO,
-            "Kafka consumer shutdown completed.",
-            event_name="kafka.consumer.shutdown_completed",
-            status="succeeded",
-            reason_code="consumer_shutdown_completed",
-        )
-
-    def _wakeup_consumer_for_shutdown(self) -> None:
-        if self._consumer is None:
-            return
-        wakeup = getattr(self._consumer, "wakeup", None)
-        if not callable(wakeup):
-            return
-        try:
-            wakeup()
-        except Exception:
-            self._record_consumer_event("shutdown_failed", "consumer_wakeup")
-            self._log_consumer_event(
-                logging.WARNING,
-                "Consumer wakeup failed during shutdown.",
-                event_name="kafka.consumer.shutdown_failed",
-                status="failed",
-                reason_code="consumer_wakeup",
-                exc_info=True,
-            )
-
     def _log_consumer_event(
         self,
         level: int,
@@ -1585,45 +1589,3 @@ class BaseConsumer(ABC):
             **fields,
             exc_info=exc_info,
         )
-
-    def _close_consumer_for_shutdown(self) -> None:
-        if self._consumer is None:
-            return
-        try:
-            self._consumer.close()
-        except Exception:
-            self._record_consumer_event("shutdown_failed", "consumer_close")
-            self._log_consumer_event(
-                logging.ERROR,
-                "Consumer close failed during shutdown.",
-                event_name="kafka.consumer.shutdown_failed",
-                status="failed",
-                reason_code="consumer_close",
-                exc_info=True,
-            )
-
-    def _flush_dlq_producer_for_shutdown(self) -> None:
-        if self._producer is None:
-            return
-        try:
-            undelivered_count = self._producer.flush(timeout=5)
-            if undelivered_count:
-                self._record_consumer_event("shutdown_failed", "dlq_flush_undelivered")
-                self._log_consumer_event(
-                    logging.ERROR,
-                    "DLQ producer flush left undelivered messages during shutdown.",
-                    event_name="kafka.consumer.shutdown_failed",
-                    status="failed",
-                    reason_code="dlq_flush_undelivered",
-                    undelivered_count=undelivered_count,
-                )
-        except Exception:
-            self._record_consumer_event("shutdown_failed", "dlq_flush")
-            self._log_consumer_event(
-                logging.ERROR,
-                "DLQ producer flush failed during shutdown.",
-                event_name="kafka.consumer.shutdown_failed",
-                status="failed",
-                reason_code="dlq_flush",
-                exc_info=True,
-            )

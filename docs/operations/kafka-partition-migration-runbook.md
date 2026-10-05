@@ -133,6 +133,40 @@ rollback point that can:
 Never reset offsets without preserving the transaction semantic fences, valuation epochs, outbox
 identity, and replay audit evidence that make redelivery safe.
 
+## Native Consumer Operations And Shutdown
+
+`BaseConsumer` owns one serialized native-operation worker per consumer handle. Construction,
+subscription, polling, pause/resume, synchronous offset acknowledgement, cached watermark reads,
+DLQ delivery confirmation and close use that worker. Async financial processing remains on the
+event loop: a slow broker acknowledgement must not prevent another task from finishing its SQL
+unit of work. Do not replace this boundary with independent thread submissions against one handle.
+
+Financial durability precedes the success offset acknowledgement; confirmed DLQ publication
+precedes a poison-message acknowledgement. Completion requires exactly one returned partition
+with the expected topic, partition and next offset and no partition error. Missing or failed
+acknowledgement stops advancement past the message. Rebalance callbacks invalidate assignment
+generations without waiting on the event loop; work from an earlier assignment cannot commit.
+
+Shutdown signals admission to stop, drains application work, joins native operations, then closes
+the handle and flushes DLQ delivery. Runtime supervision awaits `wait_closed()` as well as worker
+tasks. Repeated waiter cancellation cannot make an outstanding native operation count as released.
+Native calls cannot be preempted by asyncio cancellation, so joining may exceed the configured
+supervision grace period. No hard native-call or deployment teardown bound is certified here;
+retain orchestrator termination and redelivery evidence before promotion.
+
+Recording tests reproduce the old event-loop stall and check candidate responsiveness before a
+latched acknowledgement is released, including actual supervisor cancellation and drain. They do
+not execute Kafka or PostgreSQL and do not establish the cause of the failed full-load profile.
+
+| Issue | Current evidence boundary | Remaining qualification |
+| --- | --- | --- |
+| #795 | Ordered native-operation lifecycle and recording regression | Exact-source broker, financial PG, rebalance and deployment shutdown proof |
+| #730 | Retained full-load failure and diagnostic observations | Exact-source workload completion and unchanged latency gates |
+| #483 | Rebuild-frequency alternative | Separate evidence and disposition if the consumer correction does not resolve the workload |
+
+Broad joined, live and scale acceptance remains open. No partition count, financial lock, epoch,
+SQL atomicity, pool size, workload or SLO changes accompany this correction.
+
 ## Completion Evidence
 
 - topic metadata matches the source contract,

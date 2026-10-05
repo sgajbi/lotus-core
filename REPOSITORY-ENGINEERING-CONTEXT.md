@@ -232,6 +232,23 @@ Core does not own performance or risk conclusions, advisory recommendations, man
 client report composition, or the unified front-office experience. Those remain with their
 respective Lotus services.
 
+## Consumer Native-Operation Practice
+
+`BaseConsumer` uses one owned FIFO worker for native construction/subscription, poll, pause/resume,
+synchronous offset acknowledgement, cached watermark reads, DLQ confirmation and close. Keep
+async financial UOWs and metrics on the event loop. Await exact topic/partition/next-offset success
+before releasing partition order; a successful native call alone is not partition acknowledgement.
+Rebalance callbacks only invalidate generation state and must not wait reentrantly on the worker.
+Cancellation joins the submitted operation before resource close; runtime supervision also awaits
+`wait_closed()`. Native work may exceed supervision grace because asyncio cannot preempt it.
+
+The recording regression reproduces the prior loop stall and tests responsive unrelated UOW work,
+ordering, ownership, acknowledgement errors and actual supervisor drain. It does not certify
+broker/PG semantics, deployment teardown bounds, full-load causation or accepted main. #795,
+#730 and the #483 rebuild alternative remain bounded as described in the
+[partition runbook](docs/operations/kafka-partition-migration-runbook.md#native-consumer-operations-and-shutdown).
+Financial locks, epochs, SQL atomicity, topology, pool sizes and SLOs retain their existing policy.
+
 ## Current-State Summary
 
 - `query_service` is the operational read plane.

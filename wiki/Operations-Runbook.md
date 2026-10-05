@@ -654,6 +654,16 @@ is failed, use that component identity in supervision logs to distinguish a live
 replay-consumer, dispatcher, or health-server exit; readiness payloads intentionally remain bounded
 and do not expose raw exceptions.
 
+`BaseConsumer` serializes native client operations on an owned worker while async financial work
+continues on the event loop. Durable processing and exact synchronous partition acknowledgement
+precede partition release. Missing, failed or stale-assignment acknowledgements retain redelivery
+posture. Runtime supervision joins native work before close, including cancelled waiters; the
+configured grace period cannot preempt a native call and is not a proven hard teardown bound.
+See the [native consumer lifecycle and issue matrix](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/kafka-partition-migration-runbook.md#native-consumer-operations-and-shutdown).
+Recording responsiveness and drain tests support #795 source review; actual broker/financial PG,
+deployment shutdown and #730 full-load qualification remain open. These tests do not establish
+full-load causation or joined/live/scale readiness.
+
 Metric vocabulary is guarded by `make metric-vocabulary-guard`. HTTP request metrics use
 `endpoint_template` for route templates; raw `path`, portfolio/account/client/security IDs,
 request/correlation/trace IDs, payload fields, stack traces, and raw exception text are forbidden
