@@ -695,6 +695,60 @@ async def test_unversioned_coalesced_position_never_fabricates_financial_effect(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("epoch", [1, 3])
+@pytest.mark.parametrize("quantity", [Decimal("1500"), Decimal("0")])
+@pytest.mark.parametrize("existing_effect", [False, True])
+async def test_nonzero_first_publication_requires_persisted_financial_effect(
+    epoch, quantity, existing_effect
+):
+    booked = replace(_transaction(), transaction_type="DEPOSIT", quantity=Decimal("500"))
+    uow = _UnitOfWork(calls=[], cost_result=CostProcessingResult((booked,)))
+    uow.cost.load_first_publication_source = AsyncMock(
+        return_value=FirstPublicationSourceAuthority(
+            booked.tenant_id,
+            booked.portfolio_id,
+            booked.security_id,
+            booked.transaction_id,
+            build_transaction_semantic_identity(booked).payload_fingerprint,
+        )
+    )
+    uow.cost.load_derived_financial_transaction = AsyncMock(return_value=booked)
+    uow.cashflow.has_materialized_effect = AsyncMock(return_value=existing_effect)
+    uow.position.results_by_id[booked.transaction_id] = PositionProcessingResult(
+        locked_state_epoch=epoch,
+        processed_transaction_quantity=quantity,
+        materialized_receipt=MaterializedPositionReceipt(
+            booked.tenant_id,
+            booked.portfolio_id,
+            booked.security_id,
+            booked.transaction_id,
+            epoch,
+            quantity,
+        ),
+    )
+    command = replace(_command(), transaction=booked)
+    use_case = ProcessTransactionUseCase(lambda: uow, _RecordingObserver())
+    if existing_effect:
+        result = await use_case.execute(command)
+        assert result.status is TransactionProcessingStatus.PROCESSED
+        assert uow.committed and not uow.rolled_back
+        assert uow.cashflow.transactions == [replace(booked, epoch=epoch)]
+        assert uow.cashflow.locked_position_epochs == [epoch]
+        assert uow.readiness.transactions == (replace(booked, epoch=epoch),)
+    else:
+        with pytest.raises(TransactionProcessingRejected) as failure:
+            await use_case.execute(command)
+        assert failure.value.reason_code == "position_materialization_unavailable"
+        assert failure.value.retryable
+        assert uow.rolled_back and not uow.committed
+        assert not uow.cashflow.transactions and not uow.readiness.transactions
+    uow.cost.load_derived_financial_transaction.assert_awaited_once_with(booked)
+    uow.cashflow.has_materialized_effect.assert_awaited_once_with(
+        replace(booked, epoch=epoch), locked_position_epoch=epoch
+    )
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "damage",
     [

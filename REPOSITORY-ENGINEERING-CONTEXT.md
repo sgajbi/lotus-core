@@ -35,8 +35,11 @@ History alone cannot admit a pending cash transaction. A distinct first-publicat
 limited to fresh ordinary CLAIMED, unversioned input: before costs, the current UOW retains
 canonical tenant/key/full original fingerprint authority under the existing source and cost
 locks. The current successful cost member must match that proof and the exact typed locked
-position epoch/quantity receipt before native CURRENT_BOOKING cashflow processing. Zero quantity
-is valid; unknown epoch or absent quantity is not. Generated members cannot inherit the root's
+position epoch/quantity receipt at the initial locked epoch zero before native CURRENT_BOOKING
+cashflow processing. This shortcut cannot grant first financial publication from nonzero history
+established by repair or replay; the existing persisted financial-effect fallback and authorized
+repair remain available at their authoritative epochs. Zero quantity is valid; unknown epoch or
+absent quantity is not. Generated members cannot inherit the root's
 proof. Missing optional proof preserves the old persisted-effect guard and unrelated noncoalesced
 behavior. Repair, correction, duplicates and stale epochs retain their existing fences. All source,
 financial, readiness and outbox effects commit or roll back in the same UOW.
