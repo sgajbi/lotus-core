@@ -723,9 +723,20 @@ def _literal(call: ast.Call, keyword: str, default: object = None) -> object:
     return default
 
 
+def _authored_source_paths(repo_root: Path) -> tuple[Path, ...]:
+    """Include new authored files but exclude packaging directories declared in .gitignore."""
+
+    source_root = repo_root / "src"
+    return tuple(
+        path
+        for path in sorted(source_root.rglob("*.py"))
+        if "build" not in path.relative_to(source_root).parent.parts
+    )
+
+
 def _declarations(repo_root: Path) -> dict[str, PolicyDeclaration]:
     declarations: dict[str, PolicyDeclaration] = {}
-    for path in sorted((repo_root / "src").rglob("*.py")):
+    for path in _authored_source_paths(repo_root):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         constructor_aliases = {"CalculatedDecimalPolicy"}
         for statement in tree.body:
@@ -823,7 +834,7 @@ def _usage(
     lineage = {constant: set() for constant in constants}
     control_flow_gaps = {constant: set() for constant in constants}
     terminal_control_flow_gaps = {constant: set() for constant in constants}
-    for path in sorted((repo_root / "src").rglob("*.py")):
+    for path in _authored_source_paths(repo_root):
         relative_path = path.relative_to(repo_root).as_posix()
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         _UsageVisitor(
@@ -852,7 +863,7 @@ def _call_graph(
     properties_by_dotted_name: dict[str, set[str]] = {}
     local_callables: dict[tuple[str, str], set[str]] = {}
     local_properties: dict[tuple[str, str], set[str]] = {}
-    for path in sorted((repo_root / "src").rglob("*.py")):
+    for path in _authored_source_paths(repo_root):
         relative_path = path.relative_to(repo_root).as_posix()
         module_name = _source_module(relative_path)
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -1739,6 +1750,8 @@ class _UsageVisitor(ast.NodeVisitor):
 def evaluate(repo_root: Path, contract_path: Path) -> tuple[str, ...]:
     payload = _load_contract(contract_path)
     findings: list[str] = []
+    if not _authored_source_paths(repo_root):
+        findings.append("no authored Python sources found below src/")
     if set(payload) != {"schema_version", "expected_inventory", "policies"}:
         findings.append("contract root must contain schema_version, expected_inventory, policies")
         return tuple(findings)

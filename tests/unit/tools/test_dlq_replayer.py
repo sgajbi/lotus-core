@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import threading
 from collections import deque
 from types import SimpleNamespace
@@ -203,7 +204,10 @@ async def test_explicit_malformed_discard_then_valid_replay_remains_ordered(payl
     consumer, native, producer, calls = compose(
         [ReplayMessage(payload), ReplayMessage(offset=8)], 2
     )
-    with patch("portfolio_common.kafka_consumer.Consumer", return_value=native):
+    with (
+        caplog.at_level(logging.WARNING, logger=dlq_replayer.logger.name),
+        patch("portfolio_common.kafka_consumer.Consumer", return_value=native),
+    ):
         await consumer.run()
     assert "Discarding malformed DLQ record" in caplog.text
     assert [value for name, value, _ in calls if name == "commit"] == [7, 8]
@@ -241,6 +245,7 @@ async def test_finite_operator_deadline_stops_idle_polling_and_closes_once(caplo
         return schedule(delay, callback, *args, **kwargs)
 
     with (
+        caplog.at_level(logging.WARNING, logger=dlq_replayer.logger.name),
         patch("portfolio_common.kafka_consumer.Consumer", return_value=native),
         patch.object(loop, "call_later", side_effect=short_deadline),
     ):

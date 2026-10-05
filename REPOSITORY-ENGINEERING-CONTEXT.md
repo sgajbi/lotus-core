@@ -209,6 +209,13 @@ downstream consumer and exact-main release qualification remain distinct accepta
 
 ### Retained-verification delivery practice
 
+Calculated-output declaration, usage and caller-graph scans share the same authored-source
+selection below `src/`. Directory components named `build` are generated packaging inputs,
+as declared by `.gitignore`, and are excluded without deleting their files. Newly authored
+untracked Python files remain visible; files named `build.py` and directories such as `buildings`
+are ordinary source. An empty authored-source inventory fails closed. This selection does not
+change financial lineage boundaries, terminal classifications or required binding.
+
 `make calculated-output-policy-guard` recognizes retained receipt verification separately from
 producer receipt creation. A registered straight-line boundary must import the shared strict
 decoder and output-binding predicate, reject missing/wrong algorithm, precision and complete
