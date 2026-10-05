@@ -118,8 +118,13 @@ def test_replay_use_case_builder_composes_canonical_repository_dependencies() ->
     session = MagicMock(spec=AsyncSession)
     replayer = replay_adapter.replayer_factory(session)
     assert isinstance(replayer, ReprocessingRepository)
-    assert replayer.db is session
-    assert replayer.kafka_producer is kafka_producer
+    from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay.booked_transaction import (  # noqa: E501
+        SqlAlchemyQualifiedTransactionReplayReader,
+    )
+
+    assert isinstance(replayer._reader, SqlAlchemyQualifiedTransactionReplayReader)
+    assert replayer._reader.session is session
+    assert replayer._publisher._kafka_producer is kafka_producer
 
 
 def test_average_cost_reconciliation_builder_uses_target_application_boundary() -> None:

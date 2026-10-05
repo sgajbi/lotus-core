@@ -6,7 +6,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock
 
 import pytest
-from portfolio_common.database_models import CostBasisProcessingState, PositionLotState
+from portfolio_common.database_models import CostBasisProcessingState, OutboxEvent, PositionLotState
 from portfolio_common.database_models import Transaction as DBTransaction
 from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy import select, text
@@ -236,6 +236,14 @@ async def test_same_key_buy_sell_and_replay_serialize_to_deterministic_fifo_lot_
                 currency="USD",
             ),
             canonical_transaction_record(buy),
+            OutboxEvent(
+                aggregate_type="RawTransaction",
+                aggregate_id=portfolio_id,
+                event_type="RawTransactionPersisted",
+                topic="raw_transactions",
+                payload=buy.model_dump(mode="json"),
+                status="PROCESSED",
+            ),
         ]
     )
     await async_db_session.commit()
@@ -266,6 +274,16 @@ async def test_same_key_buy_sell_and_replay_serialize_to_deterministic_fifo_lot_
 
         async with session_factory() as insert_session, insert_session.begin():
             insert_session.add(canonical_transaction_record(sell))
+            insert_session.add(
+                OutboxEvent(
+                    aggregate_type="RawTransaction",
+                    aggregate_id=portfolio_id,
+                    event_type="RawTransactionPersisted",
+                    topic="raw_transactions",
+                    payload=sell.model_dump(mode="json"),
+                    status="PROCESSED",
+                )
+            )
 
         sell_task = asyncio.create_task(
             _stage_cost_calculation(

@@ -32,6 +32,10 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     PositionReplayMode,
     PositionReplayWindow,
 )
+from src.services.portfolio_transaction_processing_service.app.ports.position_history import (
+    AdmittedPositionCorrectionGroup,
+    MaterializedPositionReceipt,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[5]
 SERVICE_TEST_ROOT = REPO_ROOT / "tests/unit/services/portfolio_transaction_processing_service"
@@ -56,6 +60,7 @@ def _transaction(
     return BookedTransaction(
         transaction_id=transaction_id,
         portfolio_id="PB-001",
+        tenant_id="tenant-test",
         instrument_id="SEC-001",
         security_id="SEC-001",
         transaction_date=datetime.combine(
@@ -100,7 +105,7 @@ def _ports() -> tuple[
         latest_history_date=None,
         latest_completed_snapshot_date=None,
     )
-    repository.contains_transaction.return_value = False
+    repository.load_materialized_receipt.return_value = None
     repository.load_replay_window.return_value = PositionReplayWindow(
         anchor=None,
         transactions=(),
@@ -244,7 +249,7 @@ async def test_processor_acquires_key_lock_before_deleting_current_history() -> 
 
     await processor.process(transaction)
 
-    assert call_order[:3] == ["lock", "delete", "load-window"]
+    assert call_order[:3] == ["lock", "load-window", "delete"]
 
 
 @pytest.mark.asyncio
@@ -289,7 +294,14 @@ async def test_processor_coalesces_materialized_backdated_transaction() -> None:
         latest_history_date=date(2026, 4, 19),
         latest_completed_snapshot_date=None,
     )
-    repository.contains_transaction.return_value = True
+    repository.load_materialized_receipt.return_value = MaterializedPositionReceipt(
+        tenant_id="tenant-test",
+        portfolio_id=transaction.portfolio_id,
+        security_id=transaction.security_id,
+        transaction_id=transaction.transaction_id,
+        epoch=3,
+        quantity=Decimal("10"),
+    )
 
     result = await processor.process(transaction)
 
@@ -395,7 +407,14 @@ async def test_processor_correction_rebuild_bypasses_materialized_coalescing() -
         latest_history_date=date(2026, 4, 19),
         latest_completed_snapshot_date=None,
     )
-    repository.contains_transaction.return_value = True
+    repository.load_materialized_receipt.return_value = MaterializedPositionReceipt(
+        tenant_id="tenant-test",
+        portfolio_id=incoming.portfolio_id,
+        security_id=incoming.security_id,
+        transaction_id=incoming.transaction_id,
+        epoch=3,
+        quantity=Decimal("10"),
+    )
     repository.list_all_transactions.return_value = (incoming,)
     state_store.advance_epoch.return_value = _state(
         epoch=4,
@@ -408,3 +427,90 @@ async def test_processor_correction_rebuild_bypasses_materialized_coalescing() -
     assert result.position_record_count == 1
     state_store.advance_epoch.assert_awaited_once()
     repository.acquire_replay_lock.assert_awaited_once()
+    assert repository.list_all_transactions.await_args.kwargs["admitted_correction"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("accepted_correction", [False, True])
+async def test_current_replay_admission_requires_accepted_correction(accepted_correction) -> None:
+    repository, _, _, processor = _ports()
+    current = _transaction(epoch=3)
+    await processor.process(current, rebuild_existing=accepted_correction)
+    admission = repository.load_replay_window.await_args.kwargs["admitted_correction"]
+    assert admission is None
+
+
+def test_admitted_correction_requires_explicit_tenant_authority() -> None:
+    from src.services.portfolio_transaction_processing_service.app.domain import (
+        build_transaction_correction_identity,
+    )
+
+    transaction = replace(_transaction(), tenant_id=None)
+    with pytest.raises(ValueError, match="tenant and event authority"):
+        AdmittedPositionCorrectionGroup(
+            transaction,
+            build_transaction_correction_identity(transaction),
+            "event",
+            None,
+            True,
+            False,
+            (transaction,),
+        )
+
+
+@pytest.mark.asyncio
+async def test_admitted_missing_active_row_refuses_before_position_deletion() -> None:
+    from src.services.portfolio_transaction_processing_service.app.domain import (
+        build_transaction_correction_identity,
+    )
+
+    repository, _, _, processor = _ports()
+    transaction = _transaction(epoch=3)
+    group = AdmittedPositionCorrectionGroup(
+        transaction,
+        build_transaction_correction_identity(transaction),
+        "event",
+        None,
+        True,
+        False,
+        (transaction,),
+    )
+    repository.load_replay_window.side_effect = ValueError("missing persisted active row")
+    with pytest.raises(ValueError, match="missing persisted"):
+        await processor.process(transaction, rebuild_existing=True, admitted_correction=group)
+    repository.delete_records_from.assert_not_awaited()
+    repository.save_records.assert_not_awaited()
+    bound = repository.load_replay_window.await_args.kwargs["admitted_correction"]
+    assert bound.active_transaction_id == transaction.transaction_id
+    assert bound.replay_epoch == 3
+    assert bound.members == group.members
+    assert group.replay_epoch is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("damage", ["member", "epoch", "ordinary"])
+async def test_position_group_refuses_invalid_invocation_before_state_lock(damage) -> None:
+    from src.services.portfolio_transaction_processing_service.app.domain import (
+        build_transaction_correction_identity,
+    )
+
+    _, state, _, processor = _ports()
+    transaction = _transaction(epoch=3)
+    group = AdmittedPositionCorrectionGroup(
+        transaction,
+        build_transaction_correction_identity(transaction),
+        "event",
+        None,
+        True,
+        False,
+        (transaction,),
+    )
+    if damage == "member":
+        transaction = replace(transaction, epoch=4)
+    if damage == "epoch":
+        group = replace(group, replay_epoch=4)
+    with pytest.raises(ValueError):
+        await processor.process(
+            transaction, rebuild_existing=damage != "ordinary", admitted_correction=group
+        )
+    state.get_or_create.assert_not_awaited()

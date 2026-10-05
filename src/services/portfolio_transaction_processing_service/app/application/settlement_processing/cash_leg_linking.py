@@ -13,6 +13,7 @@ from portfolio_common.domain.transaction_control_codes import normalize_transact
 from ...domain.transaction import (
     BookedTransaction,
     build_generated_settlement_cash_leg,
+    build_transaction_semantic_identity,
     resolve_cash_entry_mode,
     should_generate_settlement_cash_leg,
 )
@@ -174,7 +175,11 @@ async def link_settlement_cash_leg(
             ),
         )
     )
-    await transaction_persistence.upsert_generated_booked_transaction(generated_cash_leg)
+    generated_cash_leg = await _persist_generated_cash_leg(
+        proposed=generated_cash_leg,
+        product_leg=product_leg,
+        transaction_persistence=transaction_persistence,
+    )
     linked_product_leg = replace(
         product_leg,
         external_cash_transaction_id=generated_cash_leg.transaction_id,
@@ -302,8 +307,63 @@ async def _neutralize_obsolete_generated_cash_leg(
         realized_gain_loss_local=zero,
         calculation_lineage=lineage,
     )
-    await transaction_persistence.upsert_generated_booked_transaction(neutralized)
-    return neutralized
+    return await _persist_generated_cash_leg(
+        proposed=neutralized,
+        product_leg=product_leg,
+        transaction_persistence=transaction_persistence,
+    )
+
+
+async def _persist_generated_cash_leg(
+    *,
+    proposed: BookedTransaction,
+    product_leg: BookedTransaction,
+    transaction_persistence: SettlementTransactionPersistencePort,
+) -> BookedTransaction:
+    """Carry the exact canonical upsert result without inventing financial defaults."""
+    persisted = await transaction_persistence.upsert_generated_booked_transaction(proposed)
+    if not isinstance(persisted, BookedTransaction):
+        raise ValueError("Generated cash persistence returned no canonical authority")
+    if (
+        persisted.transaction_id != proposed.transaction_id
+        or persisted.portfolio_id != product_leg.portfolio_id
+        or persisted.security_id != proposed.security_id
+        or persisted.tenant_id != proposed.tenant_id
+    ):
+        raise ValueError("Generated cash persistence returned conflicting source scope")
+    # Epoch is admitted command context, not an ORM column or latest-row inference.
+    persisted = replace(persisted, epoch=product_leg.epoch)
+    expected = replace(proposed, epoch=product_leg.epoch)
+    if build_transaction_semantic_identity(persisted) != (
+        build_transaction_semantic_identity(expected)
+    ):
+        raise ValueError("Generated cash persistence returned conflicting material identity")
+    comparable = replace(
+        persisted,
+        created_at=expected.created_at,
+        calculation_policy_id=expected.calculation_policy_id,
+        calculation_policy_version=expected.calculation_policy_version,
+        cash_entry_mode=expected.cash_entry_mode,
+        external_cash_transaction_id=expected.external_cash_transaction_id,
+        economic_event_id=expected.economic_event_id,
+        linked_transaction_group_id=expected.linked_transaction_group_id,
+    )
+    # A generated cash constructor does not calculate these P&L columns. Retain
+    # their actual stored facts; an explicit neutralization value must still match.
+    comparable = replace(
+        comparable,
+        realized_gain_loss=(
+            None if expected.realized_gain_loss is None else comparable.realized_gain_loss
+        ),
+        realized_gain_loss_local=(
+            None
+            if expected.realized_gain_loss_local is None
+            else comparable.realized_gain_loss_local
+        ),
+    )
+    if comparable != expected:
+        raise ValueError("Generated cash persistence returned conflicting effects or lineage")
+    return persisted
 
 
 def _neutralization_transaction_snapshot(transaction: BookedTransaction) -> dict[str, object]:

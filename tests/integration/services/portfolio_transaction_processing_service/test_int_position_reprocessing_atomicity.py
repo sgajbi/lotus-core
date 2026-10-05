@@ -9,7 +9,6 @@ from unittest.mock import Mock
 import pytest
 import pytest_asyncio
 from portfolio_common.database_models import OutboxEvent, Portfolio, PositionHistory, PositionState
-from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.position_state_repository import PositionStateRepository
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -33,6 +32,10 @@ from src.services.portfolio_transaction_processing_service.app.ports.position_hi
     PositionHistoryObserver,
 )
 from tests.test_support.tenant import TEST_TENANT_ID
+from tests.test_support.transaction_processing import (
+    booked_transaction_event,
+    canonical_transaction_record,
+)
 
 pytestmark = [
     pytest.mark.asyncio,
@@ -56,6 +59,18 @@ class _FailingPositionHistoryRepository(SqlAlchemyPositionHistoryRepository):
 @pytest_asyncio.fixture(scope="function")
 async def setup_repro_atomicity_data(clean_db, async_db_session: AsyncSession) -> None:
     """Seed one current position stream with a later transaction."""
+    source = booked_transaction_event(
+        transaction_id="TXN_ATOM_CURRENT",
+        portfolio_id=PORTFOLIO_ID,
+        security_id=SECURITY_ID,
+        transaction_date=datetime(2025, 9, 10, 10, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        quantity="100",
+        price="10",
+        gross_amount="1000",
+        net_cost=Decimal("1000"),
+        net_cost_local=Decimal("1000"),
+    ).model_copy(update={"instrument_id": "ATS"})
     async_db_session.add_all(
         [
             Portfolio(
@@ -77,20 +92,14 @@ async def setup_repro_atomicity_data(clean_db, async_db_session: AsyncSession) -
                 epoch=0,
                 status="CURRENT",
             ),
-            DBTransaction(
-                transaction_id="TXN_ATOM_CURRENT",
-                portfolio_id=PORTFOLIO_ID,
-                instrument_id="ATS",
-                security_id=SECURITY_ID,
-                transaction_date=datetime(2025, 9, 10, 10, tzinfo=timezone.utc),
-                transaction_type="BUY",
-                quantity=100,
-                price=10,
-                gross_transaction_amount=1000,
-                net_cost=1000,
-                net_cost_local=1000,
-                trade_currency="USD",
-                currency="USD",
+            canonical_transaction_record(source),
+            OutboxEvent(
+                aggregate_type="RawTransaction",
+                aggregate_id=PORTFOLIO_ID,
+                event_type="RawTransactionPersisted",
+                topic="raw_transactions",
+                payload=source.model_dump(mode="json"),
+                status="PROCESSED",
             ),
         ]
     )
@@ -167,21 +176,27 @@ async def test_inline_reprocessing_deduplicates_trigger_and_emits_no_replay_even
 ) -> None:
     del setup_repro_atomicity_data
     transaction = _backdated_transaction()
+    source = booked_transaction_event(
+        transaction_id=transaction.transaction_id,
+        portfolio_id=PORTFOLIO_ID,
+        security_id=SECURITY_ID,
+        transaction_date=transaction.transaction_date,
+        transaction_type="BUY",
+        quantity="10",
+        price="9",
+        gross_amount="90",
+        net_cost=Decimal("90"),
+        net_cost_local=Decimal("90"),
+    ).model_copy(update={"instrument_id": "ATS"})
+    async_db_session.add(canonical_transaction_record(source))
     async_db_session.add(
-        DBTransaction(
-            transaction_id=transaction.transaction_id,
-            portfolio_id=transaction.portfolio_id,
-            instrument_id=transaction.instrument_id,
-            security_id=transaction.security_id,
-            transaction_date=transaction.transaction_date,
-            transaction_type=transaction.transaction_type,
-            quantity=transaction.quantity,
-            price=transaction.price,
-            gross_transaction_amount=transaction.gross_transaction_amount,
-            net_cost=transaction.net_cost,
-            net_cost_local=transaction.net_cost_local,
-            trade_currency=transaction.trade_currency,
-            currency=transaction.currency,
+        OutboxEvent(
+            aggregate_type="RawTransaction",
+            aggregate_id=PORTFOLIO_ID,
+            event_type="RawTransactionPersisted",
+            topic="raw_transactions",
+            payload=source.model_dump(mode="json"),
+            status="PROCESSED",
         )
     )
     await async_db_session.commit()

@@ -28,12 +28,84 @@ from ..ports import (
     TransactionProcessingObserver,
     TransactionProcessingOperation,
     TransactionProcessingOutcome,
+    TransactionProcessingUnitOfWork,
     TransactionProcessingUnitOfWorkFactory,
 )
+from ..ports.position_history import AdmittedPositionCorrectionGroup
 from .commands import ProcessTransactionCommand, TransactionProcessingIntent
 from .errors import TransactionProcessingRejected
 from .results import ProcessTransactionResult, TransactionProcessingStatus
 from .settlement_cash_rejection import build_settlement_cash_rejection
+
+
+def _admitted_position_group(
+    command: ProcessTransactionCommand,
+    identity: TransactionSemanticIdentity,
+    members: tuple[BookedTransaction, ...],
+    *,
+    correction_claimed: bool,
+    repair_claimed: bool,
+) -> AdmittedPositionCorrectionGroup | None:
+    """Carry successful cost outputs only for the admitted correction or repair route."""
+    if not (correction_claimed or repair_claimed):
+        return None
+    return AdmittedPositionCorrectionGroup(
+        root_transaction=command.transaction,
+        admission_identity=identity,
+        event_id=command.metadata.event_id,
+        repair_delivery_id=command.metadata.repair_delivery_id,
+        correction_claimed=correction_claimed,
+        repair_claimed=repair_claimed,
+        members=members,
+    )
+
+
+async def _require_coalesced_financial_authority(
+    transaction: BookedTransaction,
+    result: PositionProcessingResult,
+    unit_of_work: TransactionProcessingUnitOfWork,
+) -> None:
+    """Admit existing materialization only with independently persisted financial effects."""
+    receipt = result.materialized_receipt
+    if (
+        receipt is not None
+        and receipt.tenant_id == transaction.tenant_id
+        and receipt.portfolio_id == transaction.portfolio_id
+        and receipt.security_id == transaction.security_id
+        and receipt.transaction_id == transaction.transaction_id
+        and receipt.epoch == result.locked_state_epoch
+        and receipt.quantity == result.processed_transaction_quantity
+    ):
+        financial = await unit_of_work.cost.load_derived_financial_transaction(transaction)
+        if (
+            financial is not None
+            and (
+                financial.tenant_id,
+                financial.portfolio_id,
+                financial.security_id,
+                financial.transaction_id,
+            )
+            == (
+                transaction.tenant_id,
+                transaction.portfolio_id,
+                transaction.security_id,
+                transaction.transaction_id,
+            )
+            and await unit_of_work.cashflow.has_materialized_effect(
+                replace(financial, epoch=receipt.epoch), locked_position_epoch=receipt.epoch
+            )
+        ):
+            return
+    raise TransactionProcessingRejected(
+        reason_code="position_materialization_unavailable",
+        detail={
+            "portfolio_id": transaction.portfolio_id,
+            "security_id": transaction.security_id,
+            "transaction_id": transaction.transaction_id,
+            "epoch": transaction.epoch,
+        },
+        retryable=True,
+    )
 
 
 async def _claim_with_legacy_compatibility(
@@ -108,6 +180,26 @@ def _rebuilt_position_transactions(
     )
 
 
+def _bind_materialized_financial_epoch(
+    transaction: BookedTransaction,
+    locked_position_epochs: dict[tuple[str, str], int],
+) -> BookedTransaction:
+    if transaction.epoch is not None:
+        return transaction
+    epoch = locked_position_epochs.get((transaction.portfolio_id, transaction.security_id))
+    if epoch is None:
+        raise TransactionProcessingRejected(
+            reason_code="financial_effect_epoch_unavailable",
+            detail={
+                "portfolio_id": transaction.portfolio_id,
+                "security_id": transaction.security_id,
+                "transaction_id": transaction.transaction_id,
+            },
+            retryable=True,
+        )
+    return replace(transaction, epoch=epoch)
+
+
 def _validate_ordinary_settlement_cash(transaction: BookedTransaction) -> None:
     transaction_type = normalize_transaction_control_code(transaction.transaction_type)
     if transaction_type not in ORDINARY_SETTLEMENT_TRANSACTION_TYPES:
@@ -143,6 +235,23 @@ def _validate_lot_position_quantity_parity(
             ),
         },
         retryable=False,
+    )
+
+
+def _requires_canonical_unversioned_repair_source(
+    command: ProcessTransactionCommand,
+    *,
+    idempotency_outcome: TransactionIdempotencyOutcome,
+    correction_claimed: bool,
+    repair_delivery_claimed: bool,
+) -> bool:
+    """Distinguish first canonical repair admission from already-owned replay routes."""
+    return (
+        command.metadata.processing_intent is TransactionProcessingIntent.REPAIR
+        and command.transaction.epoch is None
+        and idempotency_outcome is TransactionIdempotencyOutcome.CLAIMED
+        and not correction_claimed
+        and not repair_delivery_claimed
     )
 
 
@@ -254,6 +363,14 @@ class ProcessTransactionUseCase:
                 )
 
             _validate_ordinary_settlement_cash(transaction)
+            canonical_unversioned_repair = _requires_canonical_unversioned_repair_source(
+                command,
+                idempotency_outcome=idempotency_outcome,
+                correction_claimed=correction_claimed,
+                repair_delivery_claimed=repair_delivery_claimed,
+            )
+            if canonical_unversioned_repair:
+                await unit_of_work.cost.validate_unversioned_repair_source(transaction)
             with self._observer.observe(TransactionProcessingOperation.COST):
                 cost_result = await unit_of_work.cost.process(
                     transaction,
@@ -261,6 +378,13 @@ class ProcessTransactionUseCase:
                     traceparent=metadata.traceparent,
                     reconcile_superseded_derived=correction_claimed,
                 )
+            admitted_correction = _admitted_position_group(
+                command,
+                identity,
+                cost_result.processed_transactions,
+                correction_claimed=correction_claimed,
+                repair_claimed=repair_delivery_claimed or canonical_unversioned_repair,
+            )
             position_results = []
             locked_position_epochs: dict[tuple[str, str], int] = {}
             for processed_transaction in cost_result.processed_transactions:
@@ -269,9 +393,18 @@ class ProcessTransactionUseCase:
                         processed_transaction,
                         correlation_id=metadata.correlation_id,
                         traceparent=metadata.traceparent,
-                        rebuild_existing=correction_claimed or repair_delivery_claimed,
+                        rebuild_existing=admitted_correction is not None,
+                        admitted_correction=admitted_correction,
                     )
                     position_results.append(position_result)
+                    if (
+                        processed_transaction.epoch is None
+                        and position_result.position_record_count == 0
+                        and not position_result.cashflow_rebuild_transactions
+                    ):
+                        await _require_coalesced_financial_authority(
+                            processed_transaction, position_result, unit_of_work
+                        )
                     _validate_lot_position_quantity_parity(
                         processed_transaction,
                         position_result,
@@ -289,7 +422,10 @@ class ProcessTransactionUseCase:
                 position_results,
             )
             financial_effect_transactions = tuple(
-                replace(rebuilt, tenant_id=transaction.tenant_id)
+                replace(
+                    _bind_materialized_financial_epoch(rebuilt, locked_position_epochs),
+                    tenant_id=transaction.tenant_id,
+                )
                 for rebuilt in financial_effect_transactions
             )
             cashflow_results = []

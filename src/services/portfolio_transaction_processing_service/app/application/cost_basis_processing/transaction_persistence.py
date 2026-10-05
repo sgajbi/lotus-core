@@ -9,9 +9,11 @@ from ...domain.cost_basis import (
     LOT_OPENING_BEHAVIORS,
     CostBasisProcessingCheckpoint,
     CostBasisTransaction,
+    Fees,
+    build_cost_basis_engine_input,
     transaction_lot_behavior,
 )
-from ...domain.transaction import BookedTransaction
+from ...domain.transaction import BookedTransaction, build_transaction_semantic_identity
 from ...ports import (
     AccruedIncomeOffsetStatePort,
     CostBasisLotStatePort,
@@ -32,6 +34,7 @@ async def persist_cost_basis_transactions(
     *,
     processed: list[CostBasisTransaction],
     incoming_transaction_ids: set[str],
+    incoming_source: BookedTransaction | None = None,
     transactions: CostBasisTransactionStatePort,
     lot_states: CostBasisLotStatePort,
     income_offsets: AccruedIncomeOffsetStatePort,
@@ -46,6 +49,8 @@ async def persist_cost_basis_transactions(
     """Persist governed timeline economics and return newly processed transactions."""
 
     persistence_observer = observer or _NullCostBasisPersistenceObserver()
+    if incoming_source is not None:
+        _validate_incoming_fee_source(incoming_source, processed, incoming_transaction_ids)
     newly_persisted: list[BookedTransaction] = []
     persistence_plan = build_cost_basis_persistence_plan(
         processed=processed,
@@ -87,8 +92,82 @@ async def persist_cost_basis_transactions(
             observer=persistence_observer,
         )
         if transaction.transaction_id in incoming_transaction_ids:
+            if incoming_source is not None:
+                persisted = _restore_incoming_fee_presence(persisted, incoming_source)
             newly_persisted.append(persisted)
     return tuple(newly_persisted)
+
+
+_NAMED_FEE_FIELDS = ("brokerage", "stamp_duty", "exchange_fee", "gst", "other_fees")
+_CALCULATED_SOURCE_FIELDS = (
+    "tenant_id",
+    "portfolio_id",
+    "security_id",
+    "transaction_id",
+    "instrument_id",
+    "transaction_date",
+    "settlement_date",
+    "quantity",
+    "gross_transaction_amount",
+    "trade_currency",
+    "epoch",
+)
+
+
+def _validate_incoming_fee_source(
+    source: BookedTransaction,
+    processed: list[CostBasisTransaction],
+    incoming_ids: set[str],
+) -> None:
+    roots = [row for row in processed if row.transaction_id == source.transaction_id]
+    if incoming_ids != {source.transaction_id} or len(roots) != 1:
+        raise ValueError("Incoming fee source requires exactly one calculated root")
+    calculated = roots[0]
+    if not source.tenant_id or any(
+        getattr(calculated, name, None) != getattr(source, name)
+        for name in _CALCULATED_SOURCE_FIELDS
+    ):
+        raise ValueError("Incoming fee source conflicts with calculated root scope or material")
+    if normalize_transaction_control_code(calculated.transaction_type) != (
+        normalize_transaction_control_code(source.transaction_type)
+    ):
+        raise ValueError("Incoming fee source conflicts with calculated transaction type")
+    expected_input = build_cost_basis_engine_input(source)
+    expected_fees = Fees(**expected_input.get("fees", {}))
+    calculated_fees = calculated.fees or Fees()
+    if any(
+        getattr(calculated_fees, name) != getattr(expected_fees, name) for name in _NAMED_FEE_FIELDS
+    ) or calculated_fees.total_fees != Decimal(expected_input["trade_fee"]):
+        raise ValueError("Incoming fee source conflicts with calculated fees")
+
+
+def _restore_incoming_fee_presence(
+    persisted: BookedTransaction, source: BookedTransaction
+) -> BookedTransaction:
+    if persisted.tenant_id != source.tenant_id or (
+        persisted.epoch is not None and persisted.epoch != source.epoch
+    ):
+        raise ValueError("Incoming fee source conflicts with returned root scope or epoch")
+    if any(
+        getattr(persisted, name) is not None and getattr(persisted, name) != getattr(source, name)
+        for name in _NAMED_FEE_FIELDS
+    ):
+        raise ValueError("Incoming fee source conflicts with returned named fees")
+    restored = replace(
+        persisted,
+        brokerage=source.brokerage,
+        stamp_duty=source.stamp_duty,
+        exchange_fee=source.exchange_fee,
+        gst=source.gst,
+        other_fees=source.other_fees,
+    )
+    # The canonical table has no source epoch. Its caller already retains that
+    # authority for effect coordination; this comparison does not rewrite it.
+    if build_transaction_semantic_identity(replace(restored, epoch=source.epoch)) != (
+        build_transaction_semantic_identity(source)
+    ):
+        raise ValueError("Incoming fee source conflicts with returned root material")
+    return restored
 
 
 def _acquisition_parent_tenant(

@@ -21,7 +21,9 @@ from ...domain.transaction import (
     CashAccountRequiredValidationError,
     CashAccountRequiredValidationReasonCode,
     SettlementCashValidationError,
+    build_transaction_semantic_identity,
 )
+from ...domain.transaction.redemption import requires_linked_redemption_interest_history
 from ...ports import (
     AccruedIncomeOffsetStatePort,
     CorporateActionReconciliationRepository,
@@ -79,6 +81,41 @@ class CostBasisProcessingAdapter:
         self._processing_state = processing_state
         self._reconciliation_repository = reconciliation_repository
         self._effect_stager = effect_stager
+
+    async def validate_unversioned_repair_source(self, transaction: BookedTransaction) -> None:
+        """Match canonical material authority while retaining the owning write locks."""
+        await self._processing_state.acquire_cost_basis_processing_lock(
+            transaction.portfolio_id, transaction.security_id
+        )
+        if requires_linked_redemption_interest_history(transaction):
+            await self._processing_state.acquire_linked_redemption_group_lock(
+                transaction.portfolio_id, transaction.linked_transaction_group_id or ""
+            )
+
+        source = await self._repository.get_booked_transaction(
+            transaction.transaction_id,
+            portfolio_id=transaction.portfolio_id,
+            repair_tenant_id=transaction.tenant_id or "",
+            repair_security_id=transaction.security_id,
+        )
+        if source is None or (
+            build_transaction_semantic_identity(source).payload_fingerprint
+            != build_transaction_semantic_identity(transaction).payload_fingerprint
+        ):
+            raise TransactionProcessingRejected(
+                reason_code="repair_source_authority_mismatch",
+                detail={
+                    "portfolio_id": transaction.portfolio_id,
+                    "transaction_id": transaction.transaction_id,
+                },
+                retryable=False,
+            )
+
+    async def load_derived_financial_transaction(
+        self, transaction: BookedTransaction
+    ) -> BookedTransaction | None:
+        """Read exact canonical financial facts while this UOW retains cost serialization."""
+        return await self._repository.get_derived_financial_transaction(transaction)
 
     async def _process(
         self,

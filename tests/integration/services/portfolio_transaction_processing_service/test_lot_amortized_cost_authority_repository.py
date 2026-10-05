@@ -20,6 +20,7 @@ from portfolio_common.database_models import (
     PositionLotState,
     Transaction,
 )
+from portfolio_common.domain.transaction import transaction_payload_fingerprint
 from portfolio_common.event_contracts import FixedIncomeBookCostAuthorityEvent
 from portfolio_common.events import TransactionEvent
 from sqlalchemy import func, inspect, select, text, update
@@ -718,6 +719,20 @@ async def _seed_source_lot(
     *,
     lot_id: str = "AMORT_LOT_001",
 ) -> None:
+    original = TransactionEvent(
+        transaction_id="AMORT_BUY_001",
+        tenant_id="TENANT_SG",
+        portfolio_id="AMORT_PORTFOLIO",
+        instrument_id="AMORT_BOND_001",
+        security_id="AMORT_BOND_001",
+        transaction_type="BUY",
+        quantity=Decimal("100"),
+        price=Decimal("97"),
+        gross_transaction_amount=Decimal("9700"),
+        trade_currency="SGD",
+        currency="SGD",
+        transaction_date=datetime(2026, 1, 1, 8, tzinfo=timezone.utc),
+    )
     await session.execute(
         text(
             """
@@ -755,9 +770,24 @@ async def _seed_source_lot(
                 'AMORT_BUY_001', 'AMORT_PORTFOLIO', 'AMORT_BOND_001',
                 'AMORT_BOND_001', 'BUY', 100, 97, 9700, 'SGD', 'SGD',
                 TIMESTAMPTZ '2026-01-01 08:00:00+00',
-                'sha256:' || repeat('2', 64)
+                :original_fingerprint
             )
             """
+        ),
+        {
+            "original_fingerprint": transaction_payload_fingerprint(
+                original.model_dump(mode="python")
+            )
+        },
+    )
+    session.add(
+        OutboxEvent(
+            aggregate_type="RawTransaction",
+            aggregate_id=original.portfolio_id,
+            event_type="RawTransactionPersisted",
+            topic="raw_transactions",
+            payload=original.model_dump(mode="json"),
+            status="PROCESSED",
         )
     )
     await session.execute(

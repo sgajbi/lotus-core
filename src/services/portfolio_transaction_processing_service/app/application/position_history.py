@@ -14,6 +14,8 @@ from ..domain.position.history import (
 from ..domain.position.reducer import PositionHandlerMissingError, plan_backdated_recalculation
 from ..domain.transaction.booked import BookedTransaction
 from ..ports.position_history import (
+    AdmittedPositionCorrectionGroup,
+    MaterializedPositionReceipt,
     PositionHistoryObserver,
     PositionHistoryRepository,
     PositionRecalculationReason,
@@ -31,6 +33,7 @@ class PositionHistoryProcessingResult:
     rebuilt_transactions: tuple[BookedTransaction, ...] = ()
     locked_state_epoch: int | None = None
     processed_transaction_quantity: Decimal | None = None
+    materialized_receipt: MaterializedPositionReceipt | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,8 +63,18 @@ class PositionHistoryProcessor:
         transaction: BookedTransaction,
         *,
         rebuild_existing: bool = False,
+        admitted_correction: AdmittedPositionCorrectionGroup | None = None,
     ) -> PositionHistoryProcessingResult:
         """Apply current history or atomically rebuild a backdated position stream."""
+        if admitted_correction is not None:
+            if not rebuild_existing:
+                raise ValueError("Position admission requires correction or repair rebuilding")
+            if (
+                admitted_correction.replay_epoch is not None
+                or admitted_correction.active_transaction_id is not None
+            ):
+                raise ValueError("Position replay epoch must come from the locked state")
+            admitted_correction.require_member(transaction)
         current_state = await self._state_store.get_or_create(
             portfolio_id=transaction.portfolio_id,
             security_id=transaction.security_id,
@@ -93,30 +106,38 @@ class PositionHistoryProcessor:
                 raise RuntimeError(
                     "Backdated recalculation decision did not include a rebuild watermark"
                 )
-            if not rebuild_existing and await self._repository.contains_transaction(
-                portfolio_id=transaction.portfolio_id,
-                security_id=transaction.security_id,
-                transaction_id=transaction.transaction_id,
-                epoch=current_state.epoch,
-            ):
+            receipt = (
+                await self._repository.load_materialized_receipt(
+                    transaction, expected_epoch=current_state.epoch
+                )
+                if not rebuild_existing
+                else None
+            )
+            if receipt is not None:
                 self._observer.recalculation_coalesced(
                     transaction=transaction,
                     epoch=current_state.epoch,
                     reason=PositionRecalculationReason.ALREADY_MATERIALIZED,
                 )
                 self._observer.replay_work_items(mode=PositionReplayMode.COALESCED, count=0)
-                return PositionHistoryProcessingResult()
+                return PositionHistoryProcessingResult(
+                    locked_state_epoch=receipt.epoch,
+                    processed_transaction_quantity=receipt.quantity,
+                    materialized_receipt=receipt,
+                )
             return await self._rebuild_backdated_history(
                 transaction=transaction,
                 current_state=current_state,
                 effective_completed_date=decision.effective_completed_date,
                 replay_watermark_date=decision.recalculation_watermark_date,
                 latest_history_date=latest_history_date,
+                admitted_correction=admitted_correction,
             )
 
         staged = await self._recalculate_current_history(
             transaction=transaction,
             current_state=current_state,
+            admitted_correction=admitted_correction,
         )
         return PositionHistoryProcessingResult(
             position_record_count=len(staged.records),
@@ -135,6 +156,7 @@ class PositionHistoryProcessor:
         effective_completed_date: date,
         replay_watermark_date: date,
         latest_history_date: date | None,
+        admitted_correction: AdmittedPositionCorrectionGroup | None,
     ) -> PositionHistoryProcessingResult:
         self._observer.backdated_recalculation_detected(
             transaction=transaction,
@@ -166,6 +188,15 @@ class PositionHistoryProcessor:
             await self._repository.list_all_transactions(
                 portfolio_id=transaction.portfolio_id,
                 security_id=transaction.security_id,
+                admitted_correction=(
+                    replace(
+                        admitted_correction,
+                        replay_epoch=new_state.epoch,
+                        active_transaction_id=transaction.transaction_id,
+                    )
+                    if admitted_correction is not None
+                    else None
+                ),
             )
         )
         if not any(
@@ -217,6 +248,7 @@ class PositionHistoryProcessor:
         *,
         transaction: BookedTransaction,
         current_state: PositionRecalculationState,
+        admitted_correction: AdmittedPositionCorrectionGroup | None,
     ) -> _StagedPositionHistory:
         transaction_date = transaction.transaction_date.date()
         message_epoch = transaction.epoch if transaction.epoch is not None else current_state.epoch
@@ -225,13 +257,22 @@ class PositionHistoryProcessor:
             security_id=transaction.security_id,
             epoch=message_epoch,
         )
-        await self._repository.delete_records_from(
+        replay_window = await self._repository.load_replay_window(
             portfolio_id=transaction.portfolio_id,
             security_id=transaction.security_id,
             position_date=transaction_date,
             epoch=message_epoch,
+            admitted_correction=(
+                replace(
+                    admitted_correction,
+                    replay_epoch=message_epoch,
+                    active_transaction_id=transaction.transaction_id,
+                )
+                if admitted_correction is not None
+                else None
+            ),
         )
-        replay_window = await self._repository.load_replay_window(
+        await self._repository.delete_records_from(
             portfolio_id=transaction.portfolio_id,
             security_id=transaction.security_id,
             position_date=transaction_date,

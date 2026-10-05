@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import fields
 
 from ...domain import BookedTransaction
-from ...domain.cashflow import CashflowCalculationContext, calculate_transaction_cashflow
+from ...domain.cashflow import (
+    CalculatedCashflow,
+    CashflowCalculationContext,
+    calculate_transaction_cashflow,
+)
 from ...domain.transaction import (
     SettlementCashValidationError,
     allows_omitted_upstream_cash_leg,
@@ -51,6 +56,45 @@ class ProcessTransactionCashflowUseCase:
         self._persistence = persistence
         self._events = events
         self._observer = observer
+
+    async def has_materialized_effect(
+        self, transaction: BookedTransaction, *, locked_position_epoch: int
+    ) -> bool:
+        """Check governed historical output against pre-existing committed evidence."""
+        if transaction.epoch != locked_position_epoch or not transaction.tenant_id:
+            return False
+        transaction_type = _validated_cashflow_transaction_type(transaction)
+        if not requires_cashflow_processing(transaction):
+            receipt = await self._persistence.load_materialized_no_effect(
+                transaction, semantic_event_id=_semantic_cashflow_event_id(transaction)
+            )
+            return (
+                receipt is not None
+                and receipt.tenant_id == transaction.tenant_id
+                and receipt.portfolio_id == transaction.portfolio_id
+                and receipt.transaction_id == transaction.transaction_id
+                and receipt.epoch == locked_position_epoch
+            )
+        rule = await self._rules.resolve(transaction_type)
+        if rule is None:
+            return False
+        calculated = calculate_transaction_cashflow(
+            transaction,
+            rule,
+            epoch=transaction.epoch,
+            calculation_context=CashflowCalculationContext.HISTORICAL_REBUILD,
+        )
+        stored = await self._persistence.load_materialized(
+            calculated,
+            tenant_id=transaction.tenant_id,
+            semantic_event_id=_semantic_cashflow_event_id(transaction),
+        )
+        if stored is None or calculated.calculation_lineage is None:
+            return False
+        return all(
+            getattr(stored, field.name) == getattr(calculated, field.name)
+            for field in fields(CalculatedCashflow)
+        )
 
     async def process(
         self,
