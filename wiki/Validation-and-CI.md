@@ -21,6 +21,13 @@ smallest evidence command for a change, then cite generated artifacts from the r
 
 ## Full integration diagnostics
 
+`make calculated-output-policy-guard` scans authored Python source below `src/` consistently
+for policy declarations, policy usage and caller graphs. Generated packaging directories named
+`build`, declared in `.gitignore`, are excluded from these scans; their files are retained.
+New untracked authored files, `build.py` modules and `buildings` directories remain in scope.
+An empty authored inventory fails closed. Financial lineage boundaries and required binding
+remain unchanged; a packaging copy cannot introduce a second authored caller namespace.
+
 Main Releasability admits Integration Full alongside its test/coverage matrix after
 lint/typecheck/contracts/security, with the existing Windows lock and exact-SHA admission chain.
 It uses its own hosted runner and consumes no coverage artifact. The complete suite, runtime

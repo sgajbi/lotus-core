@@ -118,6 +118,97 @@ def test_repository_calculated_output_policy_inventory_is_complete() -> None:
     )
 
 
+def _authored_boundary_fixture(root: Path) -> Path:
+    _write_policy(root, used=False)
+    (root / "src/owner/shared.py").write_text(
+        "from decimal import Decimal\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "from portfolio_common.domain.calculation_lineage import build_calculation_lineage\n"
+        "def calculate_upstream():\n"
+        "    return TEST_LEDGER_OUTPUT_V1.normalize(Decimal('2'), field_name='value')\n"
+        "def calculate_bound():\n"
+        "    value = calculate_upstream()\n"
+        "    return build_calculation_lineage(algorithm_id='test', algorithm_version=1, "
+        "intermediate_precision=64, input_payload={}, output_payload={'value': value}, "
+        "numeric_output_policy=TEST_LEDGER_OUTPUT_V1.lineage_identity())\n",
+        encoding="utf-8",
+    )
+    boundary = "src/owner/shared.py::calculate_bound"
+    return _contract(
+        root,
+        lineage_boundary_callsites=[boundary],
+        lineage_boundary_covered_callsites={boundary: ["src/owner/shared.py::calculate_upstream"]},
+    )
+
+
+@pytest.mark.parametrize("scan_pass", ["declaration", "usage", "caller-graph"])
+def test_guard_excludes_generated_packaging_inputs_from_every_pass(
+    tmp_path: Path, scan_pass: str
+) -> None:
+    contract = _authored_boundary_fixture(tmp_path)
+    assert evaluate(tmp_path, contract) == ()
+    generated = tmp_path / "src/owner/build/lib/owner/generated.py"
+    generated.parent.mkdir(parents=True)
+    content = {
+        "declaration": "from portfolio_common.domain.financial.calculation_precision "
+        "import CalculatedDecimalPolicy\n"
+        "GENERATED_OUTPUT_V1 = CalculatedDecimalPolicy(name='generated', "
+        "version='1.0.0', precision=18, scale=10)\n",
+        "usage": "from decimal import Decimal\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "value = TEST_LEDGER_OUTPUT_V1.normalize(Decimal('3'), field_name='value')\n",
+        "caller-graph": "from owner.shared import calculate_upstream\n"
+        "def copied_unbound_caller():\n"
+        "    return calculate_upstream()\n",
+    }[scan_pass]
+    generated.write_text(content, encoding="utf-8")
+
+    assert evaluate(tmp_path, contract) == ()
+    assert generated.read_text(encoding="utf-8") == content
+
+
+@pytest.mark.parametrize("path", ["fresh.py", "build.py", "buildings/fresh.py"])
+def test_guard_keeps_untracked_authored_callers_visible(tmp_path: Path, path: str) -> None:
+    contract = _authored_boundary_fixture(tmp_path)
+    source = tmp_path / "src/owner" / path
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text(
+        "from owner.shared import calculate_upstream\n"
+        "def new_unbound_caller():\n"
+        "    return calculate_upstream()\n",
+        encoding="utf-8",
+    )
+
+    assert any("caller path outside" in finding for finding in evaluate(tmp_path, contract))
+
+
+def test_guard_keeps_untracked_authored_cross_module_cycles_visible(tmp_path: Path) -> None:
+    contract = _authored_boundary_fixture(tmp_path)
+    (tmp_path / "src/owner/fresh.py").write_text(
+        "from owner.shared import calculate_upstream\n"
+        "def recursive_unbound_caller():\n"
+        "    return recursive_unbound_caller() + calculate_upstream()\n",
+        encoding="utf-8",
+    )
+
+    assert any("caller path outside" in finding for finding in evaluate(tmp_path, contract))
+
+
+def test_guard_rejects_empty_authored_inventory_with_only_generated_inputs(
+    tmp_path: Path,
+) -> None:
+    generated = tmp_path / "src/owner/build/lib/empty.py"
+    generated.parent.mkdir(parents=True)
+    generated.write_text("", encoding="utf-8")
+    contract = tmp_path / "contract.json"
+    contract.write_text(
+        json.dumps({"schema_version": "1.0.0", "expected_inventory": 0, "policies": {}}),
+        encoding="utf-8",
+    )
+
+    assert "no authored Python sources found below src/" in evaluate(tmp_path, contract)
+
+
 def _retained_verification_fixture(root: Path) -> tuple[Path, Path]:
     _write_policy(root)
     source = root / "src" / "owner" / "retained.py"
