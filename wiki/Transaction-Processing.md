@@ -79,6 +79,130 @@ and outcome labels, and failure behavior remain operational contracts.
 
 ## Ordinary Transaction Domain
 
+### Cashflow and history epoch coherence
+
+Before cashflow idempotency and readiness, the combined application binds every unversioned
+financial-effect transaction to the authoritative locked epoch of its materialized portfolio and
+security. Explicit epoch zero, current/future epochs and rebuilt transaction epochs are preserved
+for their existing fences. Missing lock evidence (`financial_effect_epoch_unavailable`) or
+unversioned ignored/coalesced position work without materialization
+(`position_materialization_unavailable`) refuses the financial effects and rolls back the unit of
+work. Explicit stale input retains its existing nonretryable cashflow epoch rejection. Raw semantic
+duplicates are suppressed before position processing. For ordinary first-CLAIMED unversioned
+REPAIR, existing cost/security and applicable group locks precede Portfolio and Transaction locks.
+The canonical source must match DB ownership and the complete original source fingerprint before
+costs; that admission permits native position rebuilding without guessing an epoch. Existing
+correction and repair-delivery paths retain their own authority. The registered
+`/reprocess/transactions` route replays canonical DB transaction
+fields through `transactions.reprocessing.requested`; verify those source fields and the actual
+selected cut before promising recovery. Do not add a repair header or rewrite a source epoch.
+Repeated delivery cannot
+supply missing materialization authority. There is no epoch-zero or latest-row
+fallback. Cashflow ledger dates, original trade timestamps, signed economics and source identity
+are unchanged.
+
+Concurrent ordinary backdated work can reuse a completed current-epoch materialization only
+when the same unit of work retains an exact tenant/key/epoch/quantity position receipt and
+qualifies the pre-existing cashflow semantic receipt plus complete historical output and lineage.
+Portfolio, state, replay and history locks protect that position receipt until commit or rollback.
+History without the required financial receipt still refuses. Declared FX contract open/close
+routes use a distinct completed no-cash stage receipt and require no transaction/epoch cashflow
+row; missing evidence is not success and a zero cashflow is not manufactured.
+
+Derived financial reconstruction reuses the existing fee qualifier, booking metadata policy and
+actual portfolio cost method for full and bounded replay. Positive, explicit-zero and absent
+named fees retain distinct qualified source presence. Bounded hypotheses require an exact
+original hash or independently committed scoped material receipt; a stale aggregate, absent
+cost rows or calculated net cost supplies no authority. This derived context does not relax
+default original-source validation or rewrite its immutable hash. Tenant ownership is checked
+through scoped admission and SQL joins, because the financial fingerprint does not bind tenant.
+Legacy history without an original hash remains readable as historical representation, but the
+exact coalesced financial lookup refuses it as unqualified source authority.
+
+For a gross booking amount of 50, qualified source fee presence produces these cash outflows:
+
+| Qualified original booking inputs | Persisted derived aggregate | Cash outflow |
+| --- | --- | --- |
+| Named fees 1.25 + 0.75 | Stale 99 | 52 |
+| Explicit-zero named fees | Stale 99 | 50 |
+| Absent named fees; original aggregate 99 | 99 | 149 |
+
+The original aggregate in the last row is a booking input. The stale derived aggregate in the
+first two rows cannot override qualified named presence. Source qualification and tenant admission
+remain separate checks.
+
+The date-bounded reader preserves its prior anchor and ordered window. These source and native
+database controls do not certify the registered recovery endpoint, live joined safety or closure.
+
+The service-owned replay reader qualifies named fees before the shared planner publishes the
+batch. Existing cost/raw rows provide fixed amounts; original raw payloads must match the stored
+full source hash. A prior-claimed transaction without retained raw evidence may recover fee
+presence from an independently committed, exact tenant/service/portfolio/ordinary semantic-key
+processing receipt using the unchanged service material identity. Each of the five named fields
+retains None or explicit zero; positive amounts cannot be invented. The existing aggregate-only
+brokerage ledger allocation remains an allocation, not an original named brokerage fee. At most32
+component hypotheses, or64 with a uniquely receipt-qualified aggregate None/zero hypothesis and
+no contradictory positive amount, may produce one projection. No match or conflicting evidence
+requires disposition. No new store, retention guarantee, latest receipt or source-hash policy
+exists. First-CLAIMED validation never uses this fallback or its newly inserted invocation claim.
+
+Receipt proof is the existing material-processing contract, not full original ingestion
+representation. Generated booking defaults retain their domain normalization; changed economics
+and custom metadata remain material. Exact None-input epoch/version is mandatory: explicit0 or
+another epoch cannot certify it. Source-booked v2 FX must match; disagreement cannot downgrade
+to v1, and a v1-only receipt cannot prove historical source FX value or presence. Physical-only,
+correction, unrelated tenant/service/portfolio and absent receipts do not qualify this ordinary
+fallback.
+If a supported historical case lacks sufficient facts, preserve it and return the authority gap;
+do not relabel a compatibility regression as an acceptable refusal.
+
+Historical derived financial projection has a separate correction rule, enabled only together
+with retained-receipt qualification. A committed exact correction key and fingerprint must bind
+the current tenant, service, portfolio, transaction, source epoch, version and complete material
+cut. The pre-existing ordinary epoch/version fence must remain present and consistent. One
+additional locked batch computes exact correction keys after fee rows are loaded; its query count
+does not grow with the number of transactions. Only a unique qualified fee-presence projection
+may supersede the old ordinary material receipt for this corrected cut. Missing, conflicting,
+ambiguous or in-memory correction evidence cannot authorize it. Original raw/full-hash authority
+and ordinary receipts are never rewritten, and first-CLAIMED/default source validation is unchanged.
+
+Within the correcting unit of work, position rebuilding instead receives the immutable admitted
+root identity and complete cost-result member group. It verifies the active persisted row and
+locked replay epoch before history deletion; this group is not historical authority for a later
+ordinary transaction. Generated cash legs forward the actual canonical upsert return, retaining
+the source epoch explicitly. Exact nonpersistent lot-restatement context must match the existing
+finite Decimal quantity, direction and ratio policy rather than relaxing financial comparison.
+These source contracts do not certify supported correction ingestion or live joined safety.
+
+For legacy mismatch diagnosis, capture the analytics reader's actual snapshot epoch and rank the
+cashflows it selects by transaction at or below that cut. Check same portfolio/transaction/trimmed
+security/epoch history for those selected rows. An older orphan superseded by a valid selected
+epoch is not a current failure. Retain the database backup and exact selected-key evidence before
+any repair. A missing selected history key remains insufficient evidence; do not use a mutable
+Transaction date, another epoch's history or zero flow to make the request succeed.
+
+After deploying the qualified producer change, an authorized operator can use the existing
+canonical booked-transaction replay/repair route for the exact affected original transaction ID,
+with its governed repair-delivery identity and audit evidence. The repair consumer uses the same
+combined transaction unit of work; ordinary duplicate delivery alone may be suppressed and does
+not repair derived state. Preserve original booked dates, gross amounts, currencies and pairing,
+then verify exact same-epoch history/cashflow keys, reader selection, readiness and independent
+financial figures. If source authority or repair admission is unavailable, stop for disposition.
+No direct SQL epoch/date rewrite, forced latest join or destructive reseed is a repair policy.
+A clean seed or a focused PostgreSQL pass does not certify all deployed historical cursors or
+replace a source-pinned full live validation.
+
+The owning PostgreSQL controls are in
+`tests/integration/services/portfolio_transaction_processing_service/test_int_position_history_repository.py`:
+funded paired cash suffix replay, retained epochs, rollback after staged writes and late unversioned
+interest delivery with duplicate/repair controls, full first-claim deferred rollback, source
+refusals before costs, native stale CAS/rearm and concurrent root/receipt controls. Retained-no-raw
+controls use QCP's actual snapshot selection and cashflow ranking with a labeled serving-row
+fixture: the old orphan refuses, and the selected repair has same-epoch trade-date history and
+the original signed amount. This does not certify valuation publication, the registered HTTP
+delivery or full joined runtime. Application tests cover missing lock evidence, no materialization,
+explicit fences, generated multi-effect rebuilding and distinct portfolio/security scopes.
+
 The service-owned `app/domain/transaction` package owns ordinary BUY, SELL, DIVIDEND, and INTEREST:
 
 - booking metadata and stable policy identifiers,

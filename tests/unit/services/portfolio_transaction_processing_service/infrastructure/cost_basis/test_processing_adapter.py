@@ -465,3 +465,35 @@ def _cash_account_adapter(
         reconciliation_repository=AsyncMock(spec=CorporateActionReconciliationRepository),
         effect_stager=AsyncMock(spec=CostProcessingEffectStagingPort),
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source_matches", [True, False])
+async def test_repair_source_validation_locks_before_loading_and_never_costs(source_matches):
+    transaction = replace(_cash_account_booking("BUY"), tenant_id=TEST_TENANT_ID)
+    processor = AsyncMock(spec=PreparedCostProcessingUseCase)
+    adapter = _cash_account_adapter(processor=processor, instrument=None)
+    order = []
+
+    async def lock(*args):
+        order.append("cost-lock")
+
+    async def load(*args, **kwargs):
+        order.append("canonical-source")
+        assert kwargs == {
+            "portfolio_id": transaction.portfolio_id,
+            "repair_tenant_id": TEST_TENANT_ID,
+            "repair_security_id": transaction.security_id,
+        }
+        return transaction if source_matches else replace(transaction, quantity=Decimal("26"))
+
+    adapter._processing_state.acquire_cost_basis_processing_lock.side_effect = lock
+    adapter._repository.get_booked_transaction.side_effect = load
+    if source_matches:
+        await adapter.validate_unversioned_repair_source(transaction)
+    else:
+        with pytest.raises(TransactionProcessingRejected) as rejected:
+            await adapter.validate_unversioned_repair_source(transaction)
+        assert rejected.value.reason_code == "repair_source_authority_mismatch"
+    assert order == ["cost-lock", "canonical-source"]
+    processor.execute.assert_not_awaited()

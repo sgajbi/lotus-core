@@ -230,6 +230,7 @@ class PreparedCostProcessingUseCase:
         persisted_transactions = await persist_cost_basis_transactions(
             processed=calculation.processed,
             incoming_transaction_ids={transaction.transaction_id},
+            incoming_source=transaction,
             transactions=transaction_state,
             lot_states=lot_states,
             income_offsets=income_offsets,

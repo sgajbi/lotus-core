@@ -12,6 +12,89 @@ and the task routes below to load only relevant specialist context.
 
 ## Repository Role
 
+### Financial-effect epoch binding practice
+
+Combined transaction processing binds an unversioned financial-effect transaction to the
+authoritative locked epoch returned by its materialized portfolio/security position before
+cashflow idempotency, calculation and readiness registration. Explicit epochs and rebuilt source
+epochs retain their existing fences, including nonretryable stale cashflow rejection. Unversioned
+effects without lock evidence or materialization fail closed in the unit of work. A raw semantic
+duplicate is suppressed before position processing. Ordinary first-CLAIMED unversioned REPAIR
+requires scoped locked canonical source and full original payload fingerprint equality before
+costs; only then may native position rebuilding resolve an already-materialized input. Existing
+correction and repair-delivery admissions retain their own authority. Canonical DB replay retains
+the source epoch, including None; application controls do not certify the registered HTTP path.
+Never guess or rewrite a source epoch, or default accepted current-epoch effects to zero
+or query mutable latest state to replace their source cut.
+
+Ordinary coalesced work retains a typed tenant/portfolio/security/transaction/epoch/quantity
+receipt under portfolio and state write locks, the existing replay lock, and a history read lock.
+Before continuing, it also qualifies the exact pre-existing cashflow semantic receipt and the
+complete governed historical cashflow output, including lineage and economic/group identities.
+History alone cannot admit a pending cash transaction. Declared FX contract open/close no-cash
+routes require a distinct pre-existing scoped stage receipt and absence of a transaction/epoch
+ledger; absence alone never authorizes them, and no zero-valued cashflow is fabricated.
+
+Full and date-bounded history replay share the existing derived financial projection and actual
+portfolio cost method. Fee presence is qualified in a bounded batch against an original full hash
+or independently committed scoped material receipt before derived calculation. In this separate
+derived context, a stale aggregate cannot replace hash-qualified named fees, including explicit
+zero; default original-source validation retains its aggregate equality and source refusals.
+The financial fingerprint does not bind tenant: tenant ownership comes from scoped portfolio
+admission and SQL joins, while raw/retained receipt scope is checked independently. Derived
+booking identities and fee values do not rewrite or certify original source evidence. The bounded
+reader preserves legacy representation when no original hash exists; that representation is not
+qualified source authority, and the exact coalesced financial lookup refuses it. The bounded
+replay query retains its prior anchor, date limit and deterministic order rather than loading
+whole history and filtering it in memory.
+
+An admitted correction or repair carries one immutable root identity and complete cost-result
+member group within the same unit of work. Position replay requires the active member's exact
+persisted row, locked replay epoch, scope, material and financial/lineage equality before deleting
+history; unrelated historical rows still require independent source qualification. Generated cash
+members use the actual canonical upsert return and explicitly retained source epoch. Nonpersistent
+lot-restatement context is accepted only when its complete finite Decimal values exactly match the
+existing transaction-type direction and lot-restatement policy; it is not copied into future replay.
+
+For historical derived financial reads only, an independently committed exact correction receipt
+may bind the corrected material cut after the ordinary receipt's epoch/version fence is checked.
+Both retained-receipt and derived-financial modes are required. Exact computed keys are read in
+one additional bounded, locked batch after fee facts, with a unique fee-presence projection; no
+per-row lookup, latest-receipt guess or uncommitted invocation identity qualifies. Original raw
+authority, full hash and ordinary receipt remain unchanged. This scoped source contract does not
+certify a supported correction writer, registered recovery endpoint or live joined safety.
+
+For gross 50, qualified named fees 1.25 + 0.75 yield outflow 52; explicit-zero named fees yield
+outflow 50 even when the persisted derived aggregate is stale 99. Absent named fees with an
+authoritative original booking aggregate 99 yield outflow 149. The worked table in
+`wiki/Transaction-Processing.md` distinguishes derived stale values from original booking inputs.
+
+Canonical fee replay is service-qualified through the existing reader/publisher ports; shared
+SQL loads bounded source facts without importing service policy. Original full-hash-qualified
+raw evidence preserves named amounts and None versus explicit zero. Prior-claimed replay without
+that raw receipt may use only an independently committed exact tenant/service/portfolio/ordinary
+semantic-key processing receipt and the unchanged service material identity. At most32 component
+presence hypotheses, or64 including aggregate None/zero when no positive amount contradicts it,
+must yield one exact retained match. Generated booking defaults use the existing domain policy;
+custom source metadata and economics remain material. No arbitrary amount reconstruction,
+timestamp/latest receipt selection, source epoch substitution or raw-retention guarantee applies.
+First-CLAIMED source validation disables receipt fallback, so its new claim cannot certify itself.
+Source-booked v2 FX disagreement never downgrades to v1; v1 cannot prove historical source FX.
+Absent/conflicting evidence or another epoch remains an authority gap requiring disposition.
+
+Processing locks cost/security and applicable group before Portfolio then Transaction, followed
+by referenced source read locks. Replay captures roots in deterministic order and rechecks scoped
+source facts; bounded fee/raw/receipt families are indexed once per batch and all members qualify
+before publication. Native tests must demonstrate actual supported writers, drift refusal and
+rollback; read locks do not certify absent-row phantoms or global source concurrency.
+
+Retained legacy cashflows can still lack same-epoch history. Inspect the reader's captured epoch
+and selected transaction/epoch keys before classifying an orphan; historical rows superseded in
+the same cut are not current failures. Use the supported canonical transaction repair path under
+operator authorization and verify the resulting exact source keys, dates, signed amounts and
+readiness before promotion. Do not overwrite old epochs, remove the reader refusal or assume a
+clean seed qualifies deployed history. See [Transaction Processing](wiki/Transaction-Processing.md).
+
 ### Scoped price correction practice
 
 Authoritative source ingress stages typed `AuthoritativeMarketPriceAuthorityChanged` intents

@@ -1,13 +1,14 @@
 """SQLAlchemy persistence for transaction cost-basis processing."""
 
+from collections.abc import Mapping, Sequence
 from dataclasses import fields, replace
 from decimal import Decimal
 from typing import Any
 
+from portfolio_common.database_models import Portfolio, TransactionCost
 from portfolio_common.database_models import (
     Transaction as DBTransaction,
 )
-from portfolio_common.database_models import TransactionCost
 from portfolio_common.domain.calculation_lineage import (
     CalculationLineage,
     calculation_lineage_from_payload,
@@ -27,19 +28,25 @@ from portfolio_common.infrastructure.persistence.transaction_identity_guard impo
     GeneratedTransactionIdentityCollisionError,
     transaction_identity_update_allowed,
 )
+from portfolio_common.reprocessing_replay import ReprocessingReplayError
 from portfolio_common.utils import async_timed
 from sqlalchemy import delete, func, select, true, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, joinedload
 
+from ...application.errors import TransactionProcessingRejected
 from ...domain.cost_basis import CostBasisTransaction
-from ...domain.transaction import BookedTransaction
+from ...domain.transaction import BookedTransaction, enrich_booking_metadata
 from ...domain.transaction.redemption import (
     REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS,
     REDEMPTION_TRANSACTION_TYPES,
 )
-from ..transaction_mapping.booked_transaction import to_booked_transaction_from_record
+from ..transaction_mapping.booked_transaction import (
+    to_booked_transaction_from_record,
+    to_transaction_event,
+)
+from ..transaction_replay.booked_transaction import load_qualified_transaction_fee_sources
 
 TRANSACTION_METADATA_FIELDS = (
     "economic_event_id",
@@ -244,6 +251,83 @@ def _rehydrate_transaction_fee_components(
     return components
 
 
+def project_derived_financial_transaction(
+    transaction: DBTransaction,
+    *,
+    tenant_id: str,
+    cost_basis_method: str,
+    qualified_fees: Mapping[str, Decimal | None] | None = None,
+) -> BookedTransaction:
+    """Project qualified cost facts and governed metadata without changing original source."""
+    financial = _to_persisted_booked_transaction(
+        transaction,
+        fee_components=_rehydrate_transaction_fee_components(transaction),
+        tenant_id=tenant_id,
+    )
+    financial = _with_qualified_fees(financial, qualified_fees)
+    return enrich_booking_metadata(financial, cost_basis_method=cost_basis_method)
+
+
+def _with_qualified_fees(
+    transaction: BookedTransaction, fees: Mapping[str, Decimal | None] | None
+) -> BookedTransaction:
+    if fees is None:
+        return transaction
+    return replace(
+        transaction,
+        brokerage=fees["brokerage"],
+        stamp_duty=fees["stamp_duty"],
+        exchange_fee=fees["exchange_fee"],
+        gst=fees["gst"],
+        other_fees=fees["other_fees"],
+        trade_fee=fees["trade_fee"],
+    )
+
+
+async def load_derived_financial_transactions(
+    session: AsyncSession,
+    rows: Sequence[tuple[DBTransaction, str, str]],
+    *,
+    enrich_metadata: bool = True,
+) -> tuple[BookedTransaction, ...]:
+    """Reuse bounded original fee authority before projecting derived financial effects."""
+    canonical_sources = [
+        to_transaction_event(
+            _to_persisted_booked_transaction(row, tenant_id=tenant_id),
+            correlation_id=None,
+            traceparent=None,
+        ).model_dump(mode="python")
+        | {"payload_fingerprint": row.payload_fingerprint}
+        for row, tenant_id, _method in rows
+        if row.payload_fingerprint
+    ]
+    qualified = (
+        await load_qualified_transaction_fee_sources(
+            session,
+            canonical_sources,
+            lock_sources=True,
+            allow_retained_receipt=True,
+            derived_financial=True,
+        )
+        if canonical_sources
+        else {}
+    )
+    projections = []
+    for row, tenant_id, method in rows:
+        fees = qualified.get(str(row.transaction_id))
+        if enrich_metadata:
+            projected = project_derived_financial_transaction(
+                row, tenant_id=tenant_id, cost_basis_method=method, qualified_fees=fees
+            )
+        else:
+            projected = _to_persisted_booked_transaction(
+                row, fee_components=_rehydrate_transaction_fee_components(row)
+            )
+            projected = _with_qualified_fees(projected, fees)
+        projections.append(projected)
+    return tuple(projections)
+
+
 def _positive_fee_components(fees: object | None) -> dict[str, Decimal]:
     if fees is None:
         return {}
@@ -307,7 +391,8 @@ class SqlAlchemyCostBasisTransactionRepository:
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         normalized_security_id = normalize_lookup_identifier(security_id)
         stmt = (
-            select(DBTransaction)
+            select(DBTransaction, Portfolio.tenant_id, Portfolio.cost_basis_method)
+            .join(Portfolio, Portfolio.portfolio_id == DBTransaction.portfolio_id)
             .options(joinedload(DBTransaction.costs))
             .where(
                 func.trim(DBTransaction.portfolio_id) == normalized_portfolio_id,
@@ -325,13 +410,42 @@ class SqlAlchemyCostBasisTransactionRepository:
         )
 
         result = await self.db.execute(stmt)
-        return [
-            _to_persisted_booked_transaction(
-                row,
-                fee_components=_rehydrate_transaction_fee_components(row),
+        return list(
+            await load_derived_financial_transactions(
+                self.db, result.unique().all(), enrich_metadata=False
             )
-            for row in result.unique().scalars().all()
-        ]
+        )
+
+    async def get_derived_financial_transaction(
+        self, transaction: BookedTransaction
+    ) -> BookedTransaction | None:
+        """Retain one exact owned row and project the same financial facts as a rebuild."""
+        if not transaction.tenant_id:
+            return None
+        statement = (
+            select(DBTransaction, Portfolio.tenant_id, Portfolio.cost_basis_method)
+            .join(Portfolio, Portfolio.portfolio_id == DBTransaction.portfolio_id)
+            .options(joinedload(DBTransaction.costs))
+            .where(
+                Portfolio.tenant_id == transaction.tenant_id,
+                DBTransaction.portfolio_id == transaction.portfolio_id,
+                DBTransaction.security_id == transaction.security_id,
+                DBTransaction.transaction_id == transaction.transaction_id,
+            )
+            .with_for_update(read=True, of=DBTransaction)
+        )
+        row = (await self.db.execute(statement)).unique().one_or_none()
+        if row is None:
+            return None
+        booked, tenant_id, cost_basis_method = row
+        if not booked.payload_fingerprint:
+            # Legacy history remains readable, but cannot certify original fee presence.
+            return None
+        return (
+            await load_derived_financial_transactions(
+                self.db, [(booked, tenant_id, cost_basis_method)]
+            )
+        )[0]
 
     @async_timed(repository="CostBasisTransactionRepository", method="get_linked_transaction_group")
     async def get_linked_transaction_group(
@@ -422,17 +536,97 @@ class SqlAlchemyCostBasisTransactionRepository:
 
     @async_timed(repository="CostBasisTransactionRepository", method="get_booked_transaction")
     async def get_booked_transaction(
-        self, transaction_id: str, *, portfolio_id: str | None = None
+        self,
+        transaction_id: str,
+        *,
+        portfolio_id: str | None = None,
+        repair_tenant_id: str | None = None,
+        repair_security_id: str | None = None,
     ) -> BookedTransaction | None:
         """Load one persisted transaction as an immutable domain transaction."""
 
+        repair_source = repair_tenant_id is not None
+        if repair_source:
+            # Acquire the strongest Portfolio lock needed by later acquisition-lot persistence
+            # at entry, not via a shared-to-exclusive upgrade after transaction writes.
+            owner = (
+                await self.db.execute(
+                    select(Portfolio.tenant_id)
+                    .where(Portfolio.portfolio_id == portfolio_id)
+                    .with_for_update(of=Portfolio)
+                )
+            ).scalar_one_or_none()
+            if not repair_tenant_id or owner != repair_tenant_id:
+                raise TransactionProcessingRejected(
+                    reason_code="repair_source_owner_mismatch",
+                    detail={"portfolio_id": portfolio_id, "transaction_id": transaction_id},
+                    retryable=False,
+                )
         stmt = select(DBTransaction).where(DBTransaction.transaction_id == transaction_id)
         if portfolio_id:
             stmt = stmt.where(DBTransaction.portfolio_id == portfolio_id)
+        if repair_source:
+            stmt = stmt.options(joinedload(DBTransaction.costs)).with_for_update(of=DBTransaction)
+            stmt = stmt.execution_options(populate_existing=True)
         result = await self.db.execute(stmt)
-        transaction = result.scalars().first()
+        transaction = (
+            result.unique().scalars().first() if repair_source else result.scalars().first()
+        )
         if transaction is None:
             return None
+        if repair_source:
+            if (
+                transaction.portfolio_id != portfolio_id
+                or transaction.security_id != repair_security_id
+                or not str(transaction.payload_fingerprint or "").strip()
+            ):
+                raise TransactionProcessingRejected(
+                    reason_code="repair_source_authority_mismatch",
+                    detail={"portfolio_id": portfolio_id, "transaction_id": transaction_id},
+                    retryable=False,
+                )
+            source = _to_persisted_booked_transaction(
+                transaction,
+                tenant_id=repair_tenant_id,
+            )
+            source_payload = to_transaction_event(
+                source, correlation_id=None, traceparent=None
+            ).model_dump(mode="python")
+            try:
+                fee_sources = await load_qualified_transaction_fee_sources(
+                    self.db,
+                    [
+                        source_payload
+                        | {
+                            "payload_fingerprint": transaction.payload_fingerprint,
+                        }
+                    ],
+                    lock_sources=True,
+                )
+            except ReprocessingReplayError as exc:
+                raise TransactionProcessingRejected(
+                    reason_code="repair_original_source_unavailable",
+                    detail={"portfolio_id": portfolio_id, "transaction_id": transaction_id},
+                    retryable=False,
+                ) from exc
+            fees = fee_sources[source.transaction_id]
+            source = replace(
+                source,
+                brokerage=fees["brokerage"],
+                stamp_duty=fees["stamp_duty"],
+                exchange_fee=fees["exchange_fee"],
+                gst=fees["gst"],
+                other_fees=fees["other_fees"],
+                trade_fee=fees["trade_fee"],
+            )
+            source_payload.update(fee_sources[source.transaction_id])
+            if transaction.payload_fingerprint != transaction_payload_fingerprint(source_payload):
+                raise TransactionProcessingRejected(
+                    reason_code="repair_original_source_unavailable",
+                    detail={"portfolio_id": portfolio_id, "transaction_id": transaction_id},
+                    retryable=False,
+                )
+            return source
         return _to_persisted_booked_transaction(transaction)
 
     @async_timed(repository="CostBasisTransactionRepository", method="upsert_booked_transaction")

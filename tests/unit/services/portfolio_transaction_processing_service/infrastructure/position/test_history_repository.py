@@ -1,20 +1,28 @@
 """Test SQLAlchemy mapping at the position-history repository boundary."""
 
+from dataclasses import replace
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from portfolio_common.database_models import PositionHistory, Transaction
+from portfolio_common.database_models import PositionHistory, Transaction, TransactionCost
 from portfolio_common.domain.calculation_lineage import (
     CalculationLineage,
     build_calculation_lineage,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.portfolio_transaction_processing_service.app.domain import PositionHistoryRecord
+from src.services.portfolio_transaction_processing_service.app.domain import (
+    BookedTransaction,
+    PositionHistoryRecord,
+    build_transaction_correction_identity,
+)
 from src.services.portfolio_transaction_processing_service.app.domain.position.numeric_policy import (  # noqa: E501
     POSITION_HISTORY_LEDGER_OUTPUT_V1,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis.transaction_repository import (  # noqa: E501
+    project_derived_financial_transaction,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.position.history_repository import (  # noqa: E501
     SqlAlchemyPositionHistoryRepository,
@@ -24,6 +32,322 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     PositionMaterializationProgress,
     PositionReplayWindow,
 )
+from src.services.portfolio_transaction_processing_service.app.ports.position_history import (
+    AdmittedPositionCorrectionGroup,
+)
+
+
+def _admitted_group(current, epoch=3):
+    return AdmittedPositionCorrectionGroup(
+        root_transaction=current,
+        admission_identity=build_transaction_correction_identity(current),
+        event_id="correction-event",
+        repair_delivery_id=None,
+        correction_claimed=True,
+        repair_claimed=False,
+        members=(current,),
+        replay_epoch=epoch,
+        active_transaction_id=current.transaction_id,
+    )
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "event",
+        "identity",
+        "root",
+        "duplicate",
+        "tenant",
+        "portfolio",
+        "forged",
+        "epoch",
+        "ordinary",
+    ],
+)
+def test_group_refuses_invalid_root_and_cost_result_membership(damage):
+    root = project_derived_financial_transaction(
+        _correction_row(), tenant_id="tenant-test", cost_basis_method="FIFO"
+    )
+    group = _admitted_group(root)
+    child = replace(root, transaction_id="CHILD", originating_transaction_id=root.transaction_id)
+    changes = {
+        "event": {"event_id": " "},
+        "identity": {"admission_identity": build_transaction_correction_identity(child)},
+        "root": {"members": (child,)},
+        "duplicate": {"members": (root, root)},
+        "tenant": {"members": (root, replace(child, tenant_id="other"))},
+        "portfolio": {"members": (root, replace(child, portfolio_id="other"))},
+        "forged": {"members": (root, replace(child, originating_transaction_id="HISTORY"))},
+        "epoch": {"members": (root, replace(child, epoch=7))},
+        "ordinary": {"correction_claimed": False, "repair_claimed": False},
+    }
+    with pytest.raises(ValueError, match="Admitted position group"):
+        replace(group, **changes[damage])
+
+
+@pytest.mark.asyncio
+async def test_group_projects_only_members_present_in_bounded_window_in_original_order():
+    parent_row, child_row, historical_row = (
+        _correction_row(),
+        _correction_row("CHILD"),
+        _correction_row("HISTORY"),
+    )
+    child_row.originating_transaction_id = parent_row.transaction_id
+    parent, child, historical = (
+        project_derived_financial_transaction(
+            row, tenant_id="tenant-test", cost_basis_method="FIFO"
+        )
+        for row in (parent_row, child_row, historical_row)
+    )
+    unrelated_security = replace(child, transaction_id="OTHER-SECURITY", security_id="OTHER")
+    group = replace(
+        _admitted_group(parent),
+        members=(parent, child, unrelated_security),
+        active_transaction_id=child.transaction_id,
+    )
+    repository = SqlAlchemyPositionHistoryRepository(AsyncMock(spec=AsyncSession))
+    with patch(
+        "src.services.portfolio_transaction_processing_service.app.infrastructure.position.history_repository.load_derived_financial_transactions",
+        new_callable=AsyncMock,
+    ) as qualify_history:
+        qualify_history.return_value = (historical,)
+        rows = [(child_row, "tenant-test", "FIFO"), (historical_row, "tenant-test", "FIFO")]
+        assert await repository._project_replay_transactions(rows, admitted_correction=group) == (
+            child,
+            historical,
+        )
+        qualify_history.assert_awaited_once_with(repository._session, rows[1:])
+        group.require_member(child)
+        with pytest.raises(ValueError, match="exact admitted"):
+            group.require_member(replace(child, net_cost=Decimal("123")))
+
+
+def _correction_row(transaction_id="CORRECTION"):
+    return Transaction(
+        transaction_id=transaction_id,
+        portfolio_id="PB-001",
+        instrument_id="SEC-001",
+        security_id="SEC-001",
+        transaction_type="MATURITY_REDEMPTION",
+        quantity=Decimal("10"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("10"),
+        trade_currency="SGD",
+        currency="SGD",
+        trade_fee=Decimal("0"),
+        transaction_date=datetime(2026, 4, 10, tzinfo=timezone.utc),
+        embedded_fee_amount_local=Decimal("10"),
+        principal_proceeds_local=Decimal("10"),
+        net_cost=Decimal("-9"),
+        net_cost_local=Decimal("-9"),
+        costs=[],
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "damage",
+    [
+        None,
+        "tenant",
+        "portfolio",
+        "security",
+        "material",
+        "effects",
+        "policy",
+        "cashmode",
+        "lineage",
+        "missing",
+        "empty",
+        "duplicate",
+    ],
+)
+async def test_admitted_current_correction_is_exact_and_leaves_history_qualified(damage):
+    current_row, historical_row = _correction_row(), _correction_row("HISTORICAL")
+    current = project_derived_financial_transaction(
+        current_row,
+        tenant_id="tenant-test",
+        cost_basis_method="FIFO",
+    )
+    if damage in {"tenant", "portfolio", "security"}:
+        field = {
+            "tenant": "tenant_id",
+            "portfolio": "portfolio_id",
+            "security": "security_id",
+        }[damage]
+        current = replace(current, **{field: "foreign"})
+    if damage == "material":
+        current = replace(current, embedded_fee_amount_local=Decimal("11"))
+    if damage == "effects":
+        current = replace(current, net_cost=Decimal("-8"))
+    if damage == "policy":
+        current = replace(current, calculation_policy_id="CUSTOM_UNADMITTED_POLICY")
+    if damage == "cashmode":
+        current = replace(current, cash_entry_mode="EXTERNAL")
+    if damage == "lineage":
+        current = replace(current, calculation_lineage=_calculation_lineage())
+    rows = [(historical_row, "tenant-test", "FIFO"), (current_row, "tenant-test", "FIFO")]
+    if damage == "missing":
+        rows.pop()
+    if damage == "empty":
+        rows.clear()
+    if damage == "duplicate":
+        rows.append(rows[-1])
+    repository = SqlAlchemyPositionHistoryRepository(AsyncMock(spec=AsyncSession))
+    with patch(
+        "src.services.portfolio_transaction_processing_service.app.infrastructure.position.history_repository.load_derived_financial_transactions",
+        new_callable=AsyncMock,
+    ) as qualify_history:
+        qualify_history.return_value = (replace(current, transaction_id="HISTORICAL"),)
+        if damage is not None:
+            with pytest.raises(ValueError, match="Admitted position"):
+                await repository._project_replay_transactions(
+                    rows,
+                    admitted_correction=_admitted_group(current),
+                )
+            qualify_history.assert_not_awaited()
+        else:
+            projected = await repository._project_replay_transactions(
+                rows,
+                admitted_correction=_admitted_group(current),
+            )
+            assert projected[-1] == current
+            qualify_history.assert_awaited_once_with(repository._session, rows[:1])
+
+
+@pytest.mark.asyncio
+async def test_current_admission_cannot_qualify_conflicting_historical_source():
+    row = _correction_row()
+    current = project_derived_financial_transaction(
+        row, tenant_id="tenant-test", cost_basis_method="FIFO"
+    )
+    repository = SqlAlchemyPositionHistoryRepository(AsyncMock(spec=AsyncSession))
+    with patch(
+        "src.services.portfolio_transaction_processing_service.app.infrastructure.position.history_repository.load_derived_financial_transactions",
+        new_callable=AsyncMock,
+    ) as qualify_history:
+        qualify_history.side_effect = ValueError("historical source qualification refused")
+        rows = [
+            (_correction_row("HISTORICAL"), "tenant-test", "FIFO"),
+            (row, "tenant-test", "FIFO"),
+        ]
+        with pytest.raises(ValueError, match="historical source qualification refused"):
+            await repository._project_replay_transactions(
+                rows,
+                admitted_correction=_admitted_group(current),
+            )
+        with pytest.raises(ValueError, match="historical source qualification refused"):
+            await repository._project_replay_transactions(rows, admitted_correction=None)
+
+
+@pytest.mark.asyncio
+async def test_admitted_correction_cannot_cross_replay_epoch():
+    row = _correction_row()
+    current = project_derived_financial_transaction(
+        row, tenant_id="tenant-test", cost_basis_method="FIFO"
+    )
+    session = AsyncMock(spec=AsyncSession)
+    repository = SqlAlchemyPositionHistoryRepository(session)
+    with pytest.raises(ValueError, match="conflicting replay epoch"):
+        await repository.load_replay_window(
+            portfolio_id=current.portfolio_id,
+            security_id=current.security_id,
+            position_date=current.transaction_date.date(),
+            epoch=4,
+            admitted_correction=_admitted_group(current),
+        )
+    session.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_admitted_generated_child_preserves_existing_effective_defaults():
+    row = _correction_row()
+    row.transaction_type = "INTEREST"
+    row.principal_proceeds_local = None
+    row.embedded_fee_amount_local = None
+    current = replace(
+        project_derived_financial_transaction(
+            row, tenant_id="tenant-test", cost_basis_method="FIFO"
+        ),
+        cash_entry_mode=None,
+        calculation_policy_id=None,
+        calculation_policy_version=None,
+    )
+    repository = SqlAlchemyPositionHistoryRepository(AsyncMock(spec=AsyncSession))
+    projected = await repository._project_replay_transactions(
+        [(row, "tenant-test", "FIFO")],
+        admitted_correction=_admitted_group(current),
+    )
+    assert projected == (current,)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "damage",
+    [
+        None,
+        "keys",
+        "ratio",
+        "delta",
+        "nan",
+        "nondecimal",
+        "precision",
+        "effects",
+        "lineage",
+        "type",
+    ],
+)
+async def test_admitted_restatement_retains_only_valid_cost_result_context(damage):
+    row = _correction_row()
+    row.transaction_type = "SPLIT"
+    row.quantity = Decimal("75")
+    row.embedded_fee_amount_local = None
+    row.principal_proceeds_local = None
+    row.net_cost = row.net_cost_local = Decimal("0")
+    context = {
+        "quantity_before": Decimal("75"),
+        "quantity_after": Decimal("150"),
+        "factor_numerator": Decimal("150"),
+        "factor_denominator": Decimal("75"),
+    }
+    current = replace(
+        project_derived_financial_transaction(
+            row, tenant_id="tenant-test", cost_basis_method="FIFO"
+        ),
+        lot_restatement=context,
+    )
+    if damage == "keys":
+        context["unknown"] = Decimal("1")
+    if damage == "ratio":
+        context["factor_denominator"] = Decimal("74")
+    if damage == "delta":
+        context["quantity_after"] = context["factor_numerator"] = Decimal("151")
+    if damage == "nan":
+        context["quantity_before"] = Decimal("NaN")
+    if damage == "nondecimal":
+        context["factor_numerator"] = "150"
+    if damage == "precision":
+        context["quantity_before"] = Decimal("75.00000000001")
+    if damage == "effects":
+        current = replace(current, net_cost=Decimal("1"))
+    if damage == "lineage":
+        current = replace(current, calculation_lineage=_calculation_lineage())
+    if damage == "type":
+        row.transaction_type = "MATURITY_REDEMPTION"
+        current = replace(current, transaction_type=row.transaction_type)
+    repository = SqlAlchemyPositionHistoryRepository(AsyncMock(spec=AsyncSession))
+    if damage is not None:
+        with pytest.raises(ValueError):
+            await repository._project_replay_transactions(
+                [(row, "tenant-test", "FIFO")], admitted_correction=_admitted_group(current)
+            )
+    else:
+        result = await repository._project_replay_transactions(
+            [(row, "tenant-test", "FIFO")], admitted_correction=_admitted_group(current)
+        )
+        assert result == (current,)
+        assert result[0].lot_restatement == context
 
 
 def _calculation_lineage() -> CalculationLineage:
@@ -35,6 +359,80 @@ def _calculation_lineage() -> CalculationLineage:
         output_payload={"quantity": Decimal("10")},
         numeric_output_policy=POSITION_HISTORY_LEDGER_OUTPUT_V1.lineage_identity(),
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("missing", [None, "tenant", "epoch", "history", "quantity"])
+async def test_materialized_receipt_requires_owned_locked_state_and_exact_history(missing) -> None:
+    transaction = BookedTransaction(
+        transaction_id="TX-001",
+        tenant_id="tenant-test",
+        portfolio_id="PB-001",
+        instrument_id="SEC-001",
+        security_id="SEC-001",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 4, 10, tzinfo=timezone.utc),
+        quantity=Decimal("10"),
+        price=Decimal("25"),
+        gross_transaction_amount=Decimal("250"),
+        trade_currency="SGD",
+        currency="SGD",
+    )
+    row = PositionHistory(
+        portfolio_id="PB-001",
+        security_id="SEC-001",
+        transaction_id="TX-001",
+        position_date=date(2026, 4, 10),
+        epoch=4,
+        quantity=None if missing == "quantity" else Decimal("0"),
+    )
+    owner_result, state_result, history_result = MagicMock(), MagicMock(), MagicMock()
+    owner_result.scalar_one_or_none.return_value = None if missing == "tenant" else "tenant-test"
+    state_result.scalar_one_or_none.return_value = None if missing == "epoch" else 4
+    history_result.scalars.return_value.one_or_none.return_value = (
+        None if missing == "history" else row
+    )
+    session = AsyncMock(spec=AsyncSession)
+    session.execute.side_effect = [owner_result, state_result, history_result]
+    repository = SqlAlchemyPositionHistoryRepository(session)
+    with patch.object(repository, "acquire_replay_lock", new_callable=AsyncMock) as replay_lock:
+        receipt = await repository.load_materialized_receipt(transaction, expected_epoch=4)
+    if missing is not None:
+        assert receipt is None
+    else:
+        assert receipt is not None
+        assert (receipt.tenant_id, receipt.portfolio_id, receipt.security_id) == (
+            "tenant-test",
+            "PB-001",
+            "SEC-001",
+        )
+        assert (receipt.transaction_id, receipt.epoch, receipt.quantity) == (
+            "TX-001",
+            4,
+            Decimal("0"),
+        )
+    statements = [call.args[0] for call in session.execute.await_args_list]
+    assert statements[0]._for_update_arg is not None
+    assert statements[0].compile().params["tenant_id_1"] == "tenant-test"
+    if missing == "tenant":
+        assert len(statements) == 1
+        replay_lock.assert_not_awaited()
+        return
+    assert statements[1]._for_update_arg is not None
+    assert statements[1].compile().params["epoch_1"] == 4
+    if missing == "epoch":
+        assert len(statements) == 2
+        replay_lock.assert_not_awaited()
+        return
+    replay_lock.assert_awaited_once_with(portfolio_id="PB-001", security_id="SEC-001", epoch=4)
+    assert statements[2]._for_update_arg.read is True
+    assert statements[2].compile().params == {
+        "trim_1": "PB-001",
+        "trim_2": "SEC-001",
+        "trim_3": "TX-001",
+        "epoch_1": 4,
+        "position_date_1": date(2026, 4, 10),
+    }
 
 
 @pytest.mark.asyncio
@@ -58,7 +456,7 @@ async def test_list_all_transactions_maps_orm_rows_to_booked_transactions() -> N
         calculation_lineage=lineage.lineage_payload(),
     )
     result = MagicMock()
-    result.scalars.return_value.all.return_value = [row]
+    result.unique.return_value.all.return_value = [(row, "tenant-test", "FIFO")]
     session.execute.return_value = result
     repository = SqlAlchemyPositionHistoryRepository(session)
 
@@ -97,12 +495,19 @@ async def test_load_replay_window_maps_anchor_and_transactions_in_one_query() ->
         quantity=Decimal("5"),
         price=Decimal("20"),
         gross_transaction_amount=Decimal("100"),
+        trade_fee=Decimal("99"),
         trade_currency="SGD",
         currency="SGD",
         transaction_date=datetime(2026, 4, 10, tzinfo=timezone.utc),
     )
     result = MagicMock()
-    result.all.return_value = [(transaction_row, anchor_row)]
+    transaction_row.costs = [
+        TransactionCost(fee_type="BROKERAGE", amount=Decimal("1.25"), currency="SGD"),
+        TransactionCost(fee_type="STAMP_DUTY", amount=Decimal("0.75"), currency="SGD"),
+    ]
+    result.unique.return_value.all.return_value = [
+        (transaction_row, anchor_row, "tenant-test", "FIFO")
+    ]
     session.execute.return_value = result
     repository = SqlAlchemyPositionHistoryRepository(session)
 
@@ -124,6 +529,14 @@ async def test_load_replay_window_maps_anchor_and_transactions_in_one_query() ->
         epoch=2,
     )
     assert tuple(item.transaction_id for item in window.transactions) == ("TX-002",)
+    projected = window.transactions[0]
+    assert projected.tenant_id == "tenant-test"
+    assert projected.trade_fee == Decimal("99")
+    assert projected.brokerage == Decimal("1.25")
+    assert projected.stamp_duty == Decimal("0.75")
+    assert projected.economic_event_id
+    assert projected.linked_transaction_group_id
+    assert transaction_row.trade_fee == Decimal("99")
     session.execute.assert_awaited_once()
 
 
@@ -156,7 +569,7 @@ async def test_load_replay_window_rehydrates_anchor_calculation_lineage() -> Non
         currency="SGD",
         transaction_date=datetime(2026, 4, 10, tzinfo=timezone.utc),
     )
-    result.all.return_value = [(transaction_row, row)]
+    result.unique.return_value.all.return_value = [(transaction_row, row, "tenant-test", "FIFO")]
     session.execute.return_value = result
 
     window = await SqlAlchemyPositionHistoryRepository(session).load_replay_window(
@@ -285,21 +698,40 @@ async def test_acquire_replay_lock_records_failure_without_swallowing() -> None:
 
 
 @pytest.mark.asyncio
-async def test_contains_transaction_normalizes_lineage_and_position_key() -> None:
+async def test_materialized_receipt_normalizes_lineage_and_position_key() -> None:
     session = AsyncMock(spec=AsyncSession)
     result = MagicMock()
-    result.scalar_one_or_none.return_value = 42
+    result.scalar_one_or_none.side_effect = ["tenant-test", 7]
+    result.scalars.return_value.one_or_none.return_value = PositionHistory(
+        portfolio_id="PORT_COST_01",
+        security_id="SEC01",
+        transaction_id="TX01",
+        position_date=date(2026, 4, 10),
+        epoch=7,
+        quantity=Decimal("0"),
+    )
     session.execute.return_value = result
     repository = SqlAlchemyPositionHistoryRepository(session)
 
-    materialized = await repository.contains_transaction(
+    transaction = BookedTransaction(
         portfolio_id=" PORT_COST_01 ",
         security_id=" SEC01 ",
         transaction_id=" TX01 ",
-        epoch=7,
+        instrument_id="INST01",
+        tenant_id="tenant-test",
+        transaction_date=datetime(2026, 4, 10, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        quantity=Decimal("10"),
+        price=Decimal("10"),
+        gross_transaction_amount=Decimal("100"),
+        trade_currency="SGD",
+        currency="SGD",
     )
+    with patch.object(repository, "acquire_replay_lock", new_callable=AsyncMock):
+        materialized = await repository.load_materialized_receipt(transaction, expected_epoch=7)
 
-    assert materialized is True
+    assert materialized is not None
+    assert materialized.quantity == Decimal("0")
     compiled_query = str(
         session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
@@ -307,14 +739,14 @@ async def test_contains_transaction_normalizes_lineage_and_position_key() -> Non
     assert "trim(position_history.security_id) = 'SEC01'" in compiled_query
     assert "trim(position_history.transaction_id) = 'TX01'" in compiled_query
     assert "position_history.epoch = 7" in compiled_query
-    assert "LIMIT 1" in compiled_query
+    assert "FOR UPDATE" in compiled_query
 
 
 @pytest.mark.asyncio
 async def test_load_replay_window_normalizes_key_and_orders_deterministically() -> None:
     session = AsyncMock(spec=AsyncSession)
     result = MagicMock()
-    result.all.return_value = []
+    result.unique.return_value.all.return_value = []
     session.execute.return_value = result
     repository = SqlAlchemyPositionHistoryRepository(session)
 

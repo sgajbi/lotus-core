@@ -10,7 +10,10 @@ from typing import cast
 
 from portfolio_common.db import get_async_session_factory
 from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
-from portfolio_common.reprocessing_repository import ReprocessingRepository
+from portfolio_common.reprocessing_repository import (
+    KafkaTransactionReplayPublisher,
+    ReprocessingRepository,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..application import (
@@ -60,6 +63,9 @@ from ..infrastructure.transaction_replay import (
     CanonicalTransactionReplayer,
     SqlAlchemyBookedTransactionReplayAdapter,
 )
+from ..infrastructure.transaction_replay.booked_transaction import (
+    SqlAlchemyQualifiedTransactionReplayReader,
+)
 from ..ports import TransactionProcessingObserver, TransactionProcessingUnitOfWork
 
 
@@ -100,9 +106,9 @@ class CanonicalBookedTransactionReplayerFactory:
     def __call__(self, session: AsyncSession) -> CanonicalTransactionReplayer:
         return cast(
             CanonicalTransactionReplayer,
-            ReprocessingRepository(
-                db=session,
-                kafka_producer=self.kafka_producer,
+            ReprocessingRepository.from_ports(
+                reader=SqlAlchemyQualifiedTransactionReplayReader(session),
+                publisher=KafkaTransactionReplayPublisher(self.kafka_producer),
             ),
         )
 

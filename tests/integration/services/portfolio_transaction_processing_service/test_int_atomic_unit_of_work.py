@@ -61,6 +61,8 @@ def _command(suffix: str) -> ProcessTransactionCommand:
             gross_transaction_amount=Decimal("255.00"),
             trade_currency="SGD",
             currency="SGD",
+            # Staging modules prove atomicity, not native position materialization.
+            epoch=0,
         ),
         metadata=TransactionEventMetadata(
             event_id=f"transactions.persisted-0-{suffix}",

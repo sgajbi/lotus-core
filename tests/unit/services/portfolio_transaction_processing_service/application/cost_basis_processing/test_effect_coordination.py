@@ -32,6 +32,14 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
 TENANT_ID = TenantId("tenant-test")
 
 
+def _transaction_state():
+    transaction_state = AsyncMock(spec=CostBasisTransactionStatePort)
+    transaction_state.upsert_generated_booked_transaction.side_effect = lambda transaction, **_: (
+        replace(transaction, epoch=None)
+    )
+    return transaction_state
+
+
 def _cash_reference_data() -> AsyncMock:
     reference_data = AsyncMock()
     reference_data.get_settlement_cash_account_reference.return_value = SimpleNamespace(
@@ -61,7 +69,7 @@ async def test_rebuild_resolves_only_incoming_cash_context_and_preserves_prior_c
         transaction_type="DIVIDEND",
         auto_generate_cash_leg=True,
     )
-    transaction_state = AsyncMock(spec=CostBasisTransactionStatePort)
+    transaction_state = _transaction_state()
     transaction_state.get_booked_transaction.return_value = prior_child
     reference_data = _cash_reference_data()
 
@@ -123,7 +131,7 @@ async def test_effect_coordination_links_and_stages_generated_cash_leg() -> None
         transaction_type="DIVIDEND",
         auto_generate_cash_leg=True,
     )
-    transaction_state = AsyncMock(spec=CostBasisTransactionStatePort)
+    transaction_state = _transaction_state()
     effect_stager = AsyncMock(spec=CostProcessingEffectStagingPort)
 
     result = await coordinate_cost_processing_effects(
@@ -177,7 +185,7 @@ async def test_effect_coordination_emits_separate_redemption_interest_income() -
         principal_proceeds_local=Decimal("100"),
         accrued_interest_proceeds_local=Decimal("5"),
     )
-    transaction_state = AsyncMock(spec=CostBasisTransactionStatePort)
+    transaction_state = _transaction_state()
 
     result = await coordinate_cost_processing_effects(
         tenant_id=TENANT_ID,
@@ -231,11 +239,12 @@ async def test_redemption_interest_collision_prevents_effect_staging() -> None:
         principal_proceeds_local=Decimal("100"),
         accrued_interest_proceeds_local=Decimal("5"),
     )
-    transaction_state = AsyncMock(spec=CostBasisTransactionStatePort)
+    transaction_state = _transaction_state()
 
-    async def reject_interest(transaction: BookedTransaction, **_: object) -> None:
+    async def reject_interest(transaction: BookedTransaction, **_: object) -> BookedTransaction:
         if transaction.transaction_id.endswith("-ACCRUED-INTEREST"):
             raise GeneratedTransactionIdentityCollisionError(transaction.transaction_id)
+        return replace(transaction, epoch=None)
 
     transaction_state.upsert_generated_booked_transaction.side_effect = reject_interest
     effect_stager = AsyncMock(spec=CostProcessingEffectStagingPort)
@@ -274,7 +283,7 @@ async def test_effect_coordination_supersedes_removed_redemption_interest_with_z
         principal_proceeds_local=Decimal("100"),
         accrued_interest_proceeds_local=Decimal(0),
     )
-    transaction_state = AsyncMock(spec=CostBasisTransactionStatePort)
+    transaction_state = _transaction_state()
     transaction_state.get_booked_transaction.return_value = replace(
         product_leg,
         transaction_id="REDEMPTION-CORRECTED-01-ACCRUED-INTEREST",
@@ -325,7 +334,7 @@ async def test_corrected_zero_net_redemption_clears_prior_interest_cash_link() -
         prior_interest,
         external_cash_transaction_id="REDEMPTION-ZERO-NET-CORRECTED-01-CASHLEG",
     )
-    transaction_state = AsyncMock(spec=CostBasisTransactionStatePort)
+    transaction_state = _transaction_state()
     transaction_state.get_booked_transaction.side_effect = [None, prior_interest]
 
     result = await coordinate_cost_processing_effects(
@@ -365,7 +374,7 @@ async def test_correction_neutralizes_interest_child_after_leaving_redemption() 
     )
     prior_interest = redemption.build_redemption_accrued_interest_component(original)
     assert prior_interest is not None
-    transaction_state = AsyncMock(spec=CostBasisTransactionStatePort)
+    transaction_state = _transaction_state()
     transaction_state.get_booked_transaction.side_effect = [None, prior_interest]
 
     result = await coordinate_cost_processing_effects(

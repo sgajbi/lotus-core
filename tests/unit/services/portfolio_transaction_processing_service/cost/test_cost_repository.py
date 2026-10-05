@@ -19,6 +19,7 @@ from portfolio_common.domain.transaction.numeric_policy import (
     COST_BASIS_STATE_LEDGER_OUTPUT_V1,
     TRANSACTION_COST_LEDGER_OUTPUT_V1,
 )
+from portfolio_common.events import TransactionEvent
 from sqlalchemy.dialects import postgresql
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501  # noqa: E501
@@ -57,6 +58,185 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+@pytest.mark.parametrize("aggregate", [None, Decimal("0"), Decimal("99")])
+@pytest.mark.parametrize("upstream_ids", [False, True])
+async def test_derived_projection_preserves_source_and_actual_sell_method(aggregate, upstream_ids):
+    row = DBTransaction(
+        transaction_id="SELL-DERIVED",
+        portfolio_id="PORT",
+        security_id="SEC",
+        instrument_id="SEC",
+        transaction_type="SELL",
+        transaction_date=datetime(2026, 3, 11, tzinfo=UTC),
+        quantity=Decimal("2"),
+        price=Decimal("10"),
+        gross_transaction_amount=Decimal("20"),
+        trade_fee=aggregate,
+        trade_currency="USD",
+        currency="USD",
+        payload_fingerprint="sha256:original",
+        economic_event_id="upstream-event" if upstream_ids else None,
+        linked_transaction_group_id="upstream-group" if upstream_ids else None,
+        costs=[],
+    )
+    projected = transaction_repository_module.project_derived_financial_transaction(
+        row, tenant_id="tenant-test", cost_basis_method="AVCO"
+    )
+    assert projected.calculation_policy_id == "SELL_AVCO_POLICY"
+    assert projected.trade_fee == aggregate
+    assert projected.brokerage is None
+    assert projected.tenant_id == "tenant-test"
+    if upstream_ids:
+        assert projected.economic_event_id == "upstream-event"
+        assert projected.linked_transaction_group_id == "upstream-group"
+    else:
+        assert projected.economic_event_id == "EVT-SELL-PORT-SELL-DERIVED"
+        assert projected.linked_transaction_group_id == "LTG-SELL-PORT-SELL-DERIVED"
+    assert row.payload_fingerprint == "sha256:original"
+    assert row.trade_fee == aggregate
+    assert row.economic_event_id == ("upstream-event" if upstream_ids else None)
+
+
+@pytest.mark.parametrize("missing", [None, "tenant", "row", "original_hash"])
+async def test_derived_loader_requires_exact_scoped_locked_canonical_row(missing, monkeypatch):
+    session = AsyncMock()
+    row = DBTransaction(
+        transaction_id="TX",
+        portfolio_id="PORT",
+        security_id="SEC",
+        instrument_id="SEC",
+        transaction_type="SELL",
+        transaction_date=datetime(2026, 3, 11, tzinfo=UTC),
+        quantity=Decimal("2"),
+        price=Decimal("10"),
+        gross_transaction_amount=Decimal("20"),
+        trade_currency="USD",
+        currency="USD",
+        payload_fingerprint=None if missing == "original_hash" else "sha256:original",
+        costs=[],
+    )
+    transaction = transaction_repository_module.project_derived_financial_transaction(
+        row, tenant_id=None if missing == "tenant" else "tenant-test", cost_basis_method="AVCO"
+    )
+    result = MagicMock()
+    result.unique.return_value.one_or_none.return_value = (
+        None if missing == "row" else (row, "tenant-test", "AVCO")
+    )
+    session.execute.return_value = result
+    qualifier = AsyncMock(return_value=(transaction,))
+    monkeypatch.setattr(
+        transaction_repository_module, "load_derived_financial_transactions", qualifier
+    )
+    projected = await SqlAlchemyCostBasisTransactionRepository(
+        session
+    ).get_derived_financial_transaction(transaction)
+    if missing == "tenant":
+        assert projected is None
+        session.execute.assert_not_awaited()
+        return
+    statement = session.execute.await_args.args[0]
+    query = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolios.tenant_id = 'tenant-test'" in query
+    assert "transactions.portfolio_id = 'PORT'" in query
+    assert "transactions.security_id = 'SEC'" in query
+    assert "transactions.transaction_id = 'TX'" in query
+    assert statement._for_update_arg.read is True
+    assert statement._for_update_arg.of == [DBTransaction.__table__]
+    if missing in {"row", "original_hash"}:
+        assert projected is None
+        qualifier.assert_not_awaited()
+    else:
+        assert projected == transaction
+        qualifier.assert_awaited_once_with(session, [(row, "tenant-test", "AVCO")])
+
+
+async def test_repair_target_loader_locks_portfolio_before_transaction_and_complete_fees():
+    session = AsyncMock()
+    owner = MagicMock()
+    owner.scalar_one_or_none.return_value = "tenant-test"
+    row = DBTransaction(
+        transaction_id="SOURCE",
+        portfolio_id="PORT",
+        security_id="CASH",
+        instrument_id="CASH",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 3, 11, tzinfo=UTC),
+        quantity=Decimal("10"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("10"),
+        trade_fee=Decimal("2"),
+        trade_currency="USD",
+        currency="USD",
+        payload_fingerprint="sha256:original",
+        costs=[TransactionCost(fee_type="brokerage", amount=Decimal("2"), currency="USD")],
+    )
+    source = MagicMock()
+    source.unique.return_value.scalars.return_value.first.return_value = row
+    original = TransactionEvent(
+        transaction_id="SOURCE",
+        portfolio_id="PORT",
+        instrument_id="CASH",
+        security_id="CASH",
+        transaction_type="BUY",
+        transaction_date=row.transaction_date,
+        quantity=row.quantity,
+        price=row.price,
+        gross_transaction_amount=row.gross_transaction_amount,
+        trade_currency="USD",
+        currency="USD",
+        brokerage=Decimal("2"),
+        stamp_duty=Decimal("0"),
+        exchange_fee=Decimal("0"),
+        gst=Decimal("0"),
+        other_fees=Decimal("0"),
+    )
+    row.payload_fingerprint = transaction_payload_fingerprint(original.model_dump(mode="python"))
+    fee_rows = MagicMock()
+    fee_rows.mappings.return_value.all.return_value = [
+        {
+            "transaction_id": "SOURCE",
+            "fee_type": "brokerage",
+            "amount": Decimal("2"),
+            "currency": "USD",
+        }
+    ]
+    raw_rows = MagicMock()
+    raw_rows.mappings.return_value.all.return_value = []
+    session.execute.side_effect = [owner, source, fee_rows, raw_rows]
+    booked = await SqlAlchemyCostBasisTransactionRepository(session).get_booked_transaction(
+        "SOURCE", portfolio_id="PORT", repair_tenant_id="tenant-test", repair_security_id="CASH"
+    )
+    statements = [
+        str(call.args[0].compile(dialect=postgresql.dialect()))
+        for call in session.execute.await_args_list
+    ]
+    assert "FOR UPDATE OF portfolios" in statements[0]
+    assert "FOR UPDATE OF transactions" in statements[1]
+    assert "transaction_costs" in statements[1]
+    assert len(statements) == 4
+    assert all("processed_events" not in statement for statement in statements)
+    assert booked.tenant_id == "tenant-test"
+    assert booked.brokerage == Decimal("2")
+    assert booked.other_fees == Decimal("0")
+
+
+async def test_repair_target_loader_rejects_wrong_owner_without_second_lock():
+    from src.services.portfolio_transaction_processing_service.app.application.errors import (
+        TransactionProcessingRejected,
+    )
+
+    session = AsyncMock()
+    owner = MagicMock()
+    owner.scalar_one_or_none.return_value = "different-tenant"
+    session.execute.return_value = owner
+    with pytest.raises(TransactionProcessingRejected) as rejected:
+        await SqlAlchemyCostBasisTransactionRepository(session).get_booked_transaction(
+            "SOURCE", portfolio_id="PORT", repair_tenant_id="tenant-test", repair_security_id="CASH"
+        )
+    assert rejected.value.reason_code == "repair_source_owner_mismatch"
+    assert session.execute.await_count == 1
 
 
 @pytest.mark.parametrize(
@@ -160,8 +340,8 @@ async def test_get_transaction_history_trims_portfolio_security_and_excluded_tra
         currency="USD",
         calculation_lineage=calculation_lineage.lineage_payload(),
     )
-    execute_result.unique.return_value.scalars.return_value.all.return_value = [
-        persisted_transaction
+    execute_result.unique.return_value.all.return_value = [
+        (persisted_transaction, "tenant-test", "FIFO")
     ]
     db_session.execute.return_value = execute_result
 
@@ -226,8 +406,8 @@ async def test_get_transaction_history_rehydrates_lossless_named_fee_authority()
         ],
     )
     execute_result = MagicMock()
-    execute_result.unique.return_value.scalars.return_value.all.return_value = [
-        persisted_transaction
+    execute_result.unique.return_value.all.return_value = [
+        (persisted_transaction, "tenant-test", "FIFO")
     ]
     db_session.execute.return_value = execute_result
 
@@ -287,8 +467,8 @@ async def test_get_transaction_history_rejects_invalid_named_fee_authority(
         costs=costs,
     )
     execute_result = MagicMock()
-    execute_result.unique.return_value.scalars.return_value.all.return_value = [
-        persisted_transaction
+    execute_result.unique.return_value.all.return_value = [
+        (persisted_transaction, "tenant-test", "FIFO")
     ]
     db_session.execute.return_value = execute_result
 

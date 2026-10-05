@@ -9,6 +9,7 @@ from typing import Protocol, Self
 
 from ..domain import BookedTransaction
 from ..domain.cashflow import CashflowCalculationContext
+from .position_history import AdmittedPositionCorrectionGroup, MaterializedPositionReceipt
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +30,7 @@ class PositionProcessingResult:
     cashflow_rebuild_transactions: tuple[BookedTransaction, ...] = ()
     locked_state_epoch: int | None = None
     processed_transaction_quantity: Decimal | None = None
+    materialized_receipt: MaterializedPositionReceipt | None = None
 
 
 class TransactionIdempotencyOutcome(StrEnum):
@@ -71,6 +73,14 @@ class TransactionIdempotencyPort(Protocol):
 
 
 class CostProcessingPort(Protocol):
+    async def load_derived_financial_transaction(
+        self, transaction: BookedTransaction
+    ) -> BookedTransaction | None: ...
+
+    async def validate_unversioned_repair_source(self, transaction: BookedTransaction) -> None:
+        """Retain canonical source authority in the caller's UOW before cost writes."""
+        ...
+
     async def process(
         self,
         transaction: BookedTransaction,
@@ -82,6 +92,12 @@ class CostProcessingPort(Protocol):
 
 
 class CashflowProcessingPort(Protocol):
+    async def has_materialized_effect(
+        self, transaction: BookedTransaction, *, locked_position_epoch: int
+    ) -> bool:
+        """Qualify existing financial effects without creating a receipt or ledger row."""
+        ...
+
     async def process(
         self,
         transaction: BookedTransaction,
@@ -105,6 +121,7 @@ class PositionProcessingPort(Protocol):
         correlation_id: str | None,
         traceparent: str | None,
         rebuild_existing: bool = False,
+        admitted_correction: AdmittedPositionCorrectionGroup | None = None,
     ) -> PositionProcessingResult: ...
 
 

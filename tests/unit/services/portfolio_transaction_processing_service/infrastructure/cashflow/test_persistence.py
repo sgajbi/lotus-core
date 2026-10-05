@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
@@ -6,6 +6,7 @@ import pytest
 from portfolio_common.database_models import Cashflow
 from portfolio_common.domain.calculation_lineage import build_calculation_lineage
 
+from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
     CalculatedCashflow,
     numeric_policy,
@@ -15,6 +16,127 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.ca
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+@pytest.mark.parametrize("missing", [None, "tenant", "epoch", "receipt"])
+async def test_no_effect_requires_owned_semantic_stage_and_no_transaction_epoch_ledger(missing):
+    transaction = BookedTransaction(
+        transaction_id="TX",
+        portfolio_id="PORT",
+        security_id="SEC",
+        instrument_id="SEC",
+        transaction_type="FX_FORWARD",
+        component_type="FX_CONTRACT_OPEN",
+        transaction_date=datetime(2026, 4, 10, tzinfo=timezone.utc),
+        quantity=Decimal("1"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("1"),
+        trade_currency="USD",
+        currency="USD",
+        tenant_id=None if missing == "tenant" else "tenant-test",
+        epoch=None if missing == "epoch" else 4,
+    )
+    session = AsyncMock()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None if missing == "receipt" else 42
+    session.execute.return_value = result
+    receipt = await SqlAlchemyCashflowRepository(session).load_materialized_no_effect(
+        transaction, semantic_event_id="cashflow:PORT:TX:4"
+    )
+    assert (receipt is None) == (missing is not None)
+    if missing in {"tenant", "epoch"}:
+        session.execute.assert_not_awaited()
+        return
+    statement = session.execute.await_args.args[0]
+    query = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "processed_events.tenant_id = 'tenant-test'" in query
+    assert "portfolios.tenant_id = 'tenant-test'" in query
+    assert "processed_events.portfolio_id = 'PORT'" in query
+    assert "processed_events.service_name = 'cashflow-calculator'" in query
+    assert "processed_events.event_id = 'cashflow:PORT:TX:4'" in query
+    assert "cashflows.transaction_id = 'TX'" in query
+    assert "cashflows.epoch = 4" in query
+    assert "cashflows.id IS NULL" in query
+    assert statement._for_update_arg.read is True
+    assert session.execute.await_count == 1
+
+
+@pytest.mark.parametrize("missing", [None, "tenant", "receipt", "ledger"])
+async def test_materialized_read_requires_preexisting_receipt_and_scoped_ledger(missing):
+    calculated = CalculatedCashflow(
+        transaction_id="TX-QUALIFIED",
+        portfolio_id="PB-QUALIFIED",
+        security_id="SEC-QUALIFIED",
+        cashflow_date=date(2026, 4, 10),
+        amount=Decimal("0"),
+        currency="USD",
+        classification="INVESTMENT_OUTFLOW",
+        timing="BOD",
+        calculation_type="NET",
+        is_position_flow=True,
+        is_portfolio_flow=False,
+        economic_event_id=None,
+        linked_transaction_group_id=None,
+        epoch=4,
+    )
+    row = Cashflow(
+        id=91,
+        transaction_id=calculated.transaction_id,
+        portfolio_id=calculated.portfolio_id,
+        security_id=calculated.security_id,
+        cashflow_date=calculated.cashflow_date,
+        amount=calculated.amount,
+        currency=calculated.currency,
+        classification=calculated.classification,
+        timing=calculated.timing,
+        calculation_type=calculated.calculation_type,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+        epoch=4,
+    )
+    receipt_result, ledger_result = MagicMock(), MagicMock()
+    receipt_result.scalar_one_or_none.return_value = None if missing == "receipt" else 42
+    ledger_result.scalars.return_value.one_or_none.return_value = (
+        None if missing == "ledger" else row
+    )
+    session = AsyncMock()
+    session.execute.side_effect = [receipt_result, ledger_result]
+    stored = await SqlAlchemyCashflowRepository(session).load_materialized(
+        calculated,
+        tenant_id="" if missing == "tenant" else "tenant-test",
+        semantic_event_id="cashflow:PB-QUALIFIED:TX-QUALIFIED:4",
+    )
+    if missing is not None:
+        assert stored is None
+    else:
+        assert stored is not None
+        assert stored.amount == Decimal("0")
+        assert stored.transaction_id == "TX-QUALIFIED"
+        assert stored.epoch == 4
+    if missing == "tenant":
+        session.execute.assert_not_awaited()
+        return
+    receipt_statement = session.execute.await_args_list[0].args[0]
+    assert receipt_statement._for_update_arg.read is True
+    assert receipt_statement.compile().params == {
+        "tenant_id_1": "tenant-test",
+        "portfolio_id_1": "PB-QUALIFIED",
+        "service_name_1": "cashflow-calculator",
+        "event_id_1": "cashflow:PB-QUALIFIED:TX-QUALIFIED:4",
+    }
+    if missing == "receipt":
+        assert session.execute.await_count == 1
+        return
+    ledger_statement = session.execute.await_args_list[1].args[0]
+    assert ledger_statement._for_update_arg.read is True
+    assert ledger_statement.compile().params == {
+        "tenant_id_1": "tenant-test",
+        "portfolio_id_1": "PB-QUALIFIED",
+        "security_id_1": "SEC-QUALIFIED",
+        "transaction_id_1": "TX-QUALIFIED",
+        "epoch_1": 4,
+    }
+    assert session.execute.await_count == 2
 
 
 async def test_create_reuses_existing_row_on_duplicate() -> None:

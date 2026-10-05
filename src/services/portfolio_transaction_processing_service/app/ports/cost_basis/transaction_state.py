@@ -16,6 +16,12 @@ class CostBasisTransactionStatePort(Protocol):
         exclude_id: str | None = None,
     ) -> list[BookedTransaction]: ...
 
+    async def get_derived_financial_transaction(
+        self, transaction: BookedTransaction
+    ) -> BookedTransaction | None:
+        """Retain one scoped canonical derived projection inside the current unit of work."""
+        ...
+
     async def get_linked_transaction_group(
         self,
         portfolio_id: str,
@@ -33,6 +39,8 @@ class CostBasisTransactionStatePort(Protocol):
         transaction_id: str,
         *,
         portfolio_id: str | None = None,
+        repair_tenant_id: str | None = None,
+        repair_security_id: str | None = None,
     ) -> BookedTransaction | None: ...
 
     async def upsert_booked_transaction(

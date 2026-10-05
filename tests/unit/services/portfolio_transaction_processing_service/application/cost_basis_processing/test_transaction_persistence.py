@@ -1,5 +1,6 @@
 """Application tests for calculated transaction cost-basis persistence."""
 
+from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, Mock, call
@@ -15,6 +16,8 @@ from src.services.portfolio_transaction_processing_service.app.application.cost_
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisProcessingCheckpoint,
     CostBasisTransaction,
+    Fees,
+    build_cost_basis_engine_input,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     BookedTransaction,
@@ -85,6 +88,167 @@ def _ports() -> tuple[
         AsyncMock(spec=AccruedIncomeOffsetStatePort),
         AsyncMock(spec=CostBasisPersistenceObserver),
     )
+
+
+def _source_fee_case(
+    named_fees: dict[str, Decimal], aggregate: Decimal = Decimal(0)
+) -> tuple[BookedTransaction, CostBasisTransaction, BookedTransaction]:
+    source = replace(
+        _booked_transaction(_calculated_transaction("BUY-FEE-SOURCE")),
+        tenant_id="TENANT-1",
+        epoch=3,
+        trade_fee=aggregate,
+        **named_fees,
+    )
+    engine_input = build_cost_basis_engine_input(source)
+    calculated = CostBasisTransaction(**engine_input, portfolio_base_currency="USD")
+    returned = replace(
+        source,
+        brokerage=None,
+        stamp_duty=None,
+        exchange_fee=None,
+        gst=None,
+        other_fees=None,
+        epoch=None,
+        trade_fee=Decimal(engine_input["trade_fee"]),
+        net_cost=Decimal("73"),
+        gross_cost=Decimal("70"),
+        realized_gain_loss=Decimal("13"),
+        net_cost_local=Decimal("81"),
+    )
+    return source, calculated, returned
+
+
+@pytest.mark.parametrize(
+    "named_fees,aggregate",
+    [
+        (
+            {
+                "brokerage": Decimal(1),
+                "stamp_duty": Decimal(0),
+                "exchange_fee": Decimal(0),
+                "gst": Decimal(0),
+                "other_fees": Decimal(0),
+            },
+            Decimal(1),
+        ),
+        ({"brokerage": Decimal(1)}, Decimal(1)),
+        ({"stamp_duty": Decimal(0)}, Decimal(0)),
+        ({}, Decimal(0)),
+        ({}, Decimal(1)),
+    ],
+    ids=["named", "sparse", "explicit-zero", "absent", "aggregate-only"],
+)
+async def test_incoming_source_retains_fee_presence_and_actual_financial_return(
+    named_fees: dict[str, Decimal], aggregate: Decimal
+) -> None:
+    source, calculated, returned = _source_fee_case(named_fees, aggregate)
+    repository, lot_states, income_offsets, _ = _ports()
+    repository.apply_transaction_costs_and_replace_breakdown.return_value = returned
+    (actual,) = await persist_cost_basis_transactions(
+        processed=[calculated],
+        incoming_transaction_ids={source.transaction_id},
+        incoming_source=source,
+        transactions=repository,
+        lot_states=lot_states,
+        income_offsets=income_offsets,
+    )
+    assert actual == replace(
+        returned,
+        brokerage=source.brokerage,
+        stamp_duty=source.stamp_duty,
+        exchange_fee=source.exchange_fee,
+        gst=source.gst,
+        other_fees=source.other_fees,
+    )
+    assert actual.epoch is None
+    assert source.net_cost is None
+    assert actual.net_cost == Decimal("73")
+    repository.apply_transaction_costs_and_replace_breakdown.assert_awaited_once_with(calculated)
+
+
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "missing",
+        "duplicate",
+        "wrong-incoming",
+        "tenant",
+        "portfolio",
+        "security",
+        "instrument",
+        "quantity",
+        "epoch",
+        "named-fees",
+        "aggregate",
+    ],
+)
+async def test_incoming_fee_source_rejects_calculated_conflicts_before_writes(defect: str) -> None:
+    source, calculated, _ = _source_fee_case({"brokerage": Decimal(1)}, Decimal(1))
+    rows = [calculated]
+    incoming_ids = {source.transaction_id}
+    if defect == "missing":
+        rows = []
+    elif defect == "duplicate":
+        rows.append(calculated)
+    elif defect == "wrong-incoming":
+        incoming_ids = {"OTHER"}
+    elif defect in {"tenant", "portfolio", "security", "instrument"}:
+        setattr(calculated, defect + "_id", "OTHER")
+    elif defect == "quantity":
+        calculated.quantity = Decimal(5)
+    elif defect == "epoch":
+        calculated.epoch = 4
+    elif defect == "named-fees":
+        calculated.fees = Fees(stamp_duty=Decimal(1))
+    else:
+        calculated.fees = Fees(brokerage=Decimal(2))
+    repository, lot_states, income_offsets, _ = _ports()
+    with pytest.raises(ValueError, match="Incoming fee source"):
+        await persist_cost_basis_transactions(
+            processed=rows,
+            incoming_transaction_ids=incoming_ids,
+            incoming_source=source,
+            transactions=repository,
+            lot_states=lot_states,
+            income_offsets=income_offsets,
+        )
+    repository.apply_transaction_costs_and_replace_breakdown.assert_not_awaited()
+    lot_states.upsert_buy_lot_state.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "returned_change",
+    [
+        {"tenant_id": "OTHER"},
+        {"portfolio_id": "OTHER"},
+        {"security_id": "OTHER"},
+        {"transaction_id": "OTHER"},
+        {"quantity": Decimal(5)},
+        {"epoch": 4},
+        {"brokerage": Decimal(2)},
+        {"stamp_duty": Decimal(0)},
+    ],
+    ids=["tenant", "portfolio", "security", "root", "material", "epoch", "positive", "absent-zero"],
+)
+async def test_incoming_fee_source_rejects_conflicting_actual_return(
+    returned_change: dict[str, object],
+) -> None:
+    source, calculated, returned = _source_fee_case({"brokerage": Decimal(1)}, Decimal(1))
+    repository, lot_states, income_offsets, _ = _ports()
+    repository.apply_transaction_costs_and_replace_breakdown.return_value = replace(
+        returned, **returned_change
+    )
+    with pytest.raises(ValueError, match="Incoming fee source"):
+        await persist_cost_basis_transactions(
+            processed=[calculated],
+            incoming_transaction_ids={source.transaction_id},
+            incoming_source=source,
+            transactions=repository,
+            lot_states=lot_states,
+            income_offsets=income_offsets,
+        )
+    repository.apply_transaction_costs_and_replace_breakdown.assert_awaited_once_with(calculated)
 
 
 async def test_backdated_persistence_updates_affected_suffix_and_returns_incoming_only() -> None:

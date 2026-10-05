@@ -5,6 +5,7 @@ from __future__ import annotations
 from ...application.position_history import PositionHistoryProcessor
 from ...domain import BookedTransaction
 from ...ports import PositionProcessingResult
+from ...ports.position_history import AdmittedPositionCorrectionGroup
 
 
 class PositionHistoryProcessingAdapter:
@@ -24,10 +25,12 @@ class PositionHistoryProcessingAdapter:
         correlation_id: str | None,
         traceparent: str | None,
         rebuild_existing: bool = False,
+        admitted_correction: AdmittedPositionCorrectionGroup | None = None,
     ) -> PositionProcessingResult:
         result = await self._processor.process(
             transaction,
             rebuild_existing=rebuild_existing,
+            admitted_correction=admitted_correction,
         )
         return PositionProcessingResult(
             position_record_count=result.position_record_count,
@@ -35,4 +38,5 @@ class PositionHistoryProcessingAdapter:
             cashflow_rebuild_transactions=result.rebuilt_transactions,
             locked_state_epoch=result.locked_state_epoch,
             processed_transaction_quantity=result.processed_transaction_quantity,
+            materialized_receipt=result.materialized_receipt,
         )

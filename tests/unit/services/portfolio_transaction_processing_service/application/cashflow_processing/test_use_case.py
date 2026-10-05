@@ -1,6 +1,6 @@
 """Test application-owned transaction cashflow coordination."""
 
-from dataclasses import replace
+from dataclasses import fields, replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock
@@ -14,9 +14,11 @@ from src.services.portfolio_transaction_processing_service.app.application impor
 )
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
+    CalculatedCashflow,
     CashflowCalculationContext,
     CashflowRule,
     StoredCashflow,
+    calculate_transaction_cashflow,
 )
 from src.services.portfolio_transaction_processing_service.app.ports.cashflow import (
     CashflowCalculationObserver,
@@ -25,8 +27,109 @@ from src.services.portfolio_transaction_processing_service.app.ports.cashflow im
     CashflowProcessingStatePort,
     CashflowRuleResolutionPort,
 )
+from src.services.portfolio_transaction_processing_service.app.ports.cashflow.persistence import (
+    MaterializedNoCashflowReceipt,
+)
 
 pytestmark = pytest.mark.asyncio
+
+
+@pytest.mark.parametrize("component", ["FX_CONTRACT_OPEN", "FX_CONTRACT_CLOSE"])
+@pytest.mark.parametrize(
+    "mismatch", [None, "missing", "tenant_id", "portfolio_id", "transaction_id", "epoch"]
+)
+async def test_declared_no_cashflow_requires_preexisting_exact_stage_receipt(component, mismatch):
+    use_case, rules, state, persistence, events, observer = _use_case()
+    transaction = _transaction(
+        tenant_id="tenant-test", transaction_type="FX_FORWARD", component_type=component
+    )
+    receipt = MaterializedNoCashflowReceipt("tenant-test", "PB-001", "TX-001", 3)
+    if mismatch == "missing":
+        receipt = None
+    elif mismatch is not None:
+        receipt = replace(receipt, **{mismatch: 4 if mismatch == "epoch" else "foreign"})
+    persistence.load_materialized_no_effect.return_value = receipt
+    assert await use_case.has_materialized_effect(transaction, locked_position_epoch=3) is (
+        mismatch is None
+    )
+    rules.resolve.assert_not_awaited()
+    persistence.load_materialized.assert_not_awaited()
+    persistence.create.assert_not_awaited()
+    persistence.replace.assert_not_awaited()
+    state.claim_semantic_event.assert_not_awaited()
+    events.stage_calculated_cashflow.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "mismatch",
+    [
+        None,
+        "missing",
+        "amount",
+        "currency",
+        "cashflow_date",
+        "epoch",
+        "portfolio_id",
+        "security_id",
+        "transaction_id",
+        "classification",
+        "timing",
+        "calculation_type",
+        "is_position_flow",
+        "is_portfolio_flow",
+        "lineage",
+        "missing_lineage",
+    ],
+)
+async def test_existing_materialization_checks_financial_output_without_qualification_writes(
+    mismatch,
+):
+    use_case, rules, state, persistence, events, observer = _use_case()
+    transaction = _transaction(tenant_id="tenant-test")
+    calculated = calculate_transaction_cashflow(
+        transaction,
+        rules.resolve.return_value,
+        epoch=3,
+        calculation_context=CashflowCalculationContext.HISTORICAL_REBUILD,
+    )
+    stored = StoredCashflow(
+        cashflow_id=91,
+        **{field.name: getattr(calculated, field.name) for field in fields(CalculatedCashflow)},
+    )
+    if mismatch == "missing":
+        persistence.load_materialized.return_value = None
+    else:
+        if mismatch == "lineage":
+            assert stored.calculation_lineage is not None
+            stored = replace(
+                stored,
+                calculation_lineage=replace(
+                    stored.calculation_lineage, input_content_hash="0" * 64
+                ),
+            )
+        elif mismatch == "missing_lineage":
+            stored = replace(stored, calculation_lineage=None)
+        elif mismatch is not None:
+            original = getattr(stored, mismatch)
+            changed = (
+                not original
+                if isinstance(original, bool)
+                else original + 1
+                if isinstance(original, (int, Decimal))
+                else transaction.transaction_date.date()
+                if mismatch == "cashflow_date"
+                else "different"
+            )
+            stored = replace(stored, **{mismatch: changed})
+        persistence.load_materialized.return_value = stored
+    assert await use_case.has_materialized_effect(transaction, locked_position_epoch=3) is (
+        mismatch is None
+    )
+    state.claim_semantic_event.assert_not_awaited()
+    persistence.create.assert_not_awaited()
+    persistence.replace.assert_not_awaited()
+    events.stage_calculated_cashflow.assert_not_awaited()
+    observer.calculated.assert_not_called()
 
 
 def _transaction(**overrides: object) -> BookedTransaction:

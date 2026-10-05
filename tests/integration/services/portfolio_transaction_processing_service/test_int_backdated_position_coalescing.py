@@ -6,6 +6,7 @@ from decimal import Decimal
 
 import pytest
 from portfolio_common.database_models import (
+    Cashflow,
     OutboxEvent,
     PositionHistory,
     PositionState,
@@ -51,10 +52,12 @@ pytestmark = [
 
 
 @pytest.mark.parametrize("first_cost_lock_transaction", ["middle", "earliest"])
+@pytest.mark.parametrize("fee_presence", ["positive", "zero", "absent"])
 async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_rebuild(
     clean_db,
     async_db_session: AsyncSession,
     first_cost_lock_transaction: str,
+    fee_presence: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     portfolio_id = "PORT-BACKDATED-COALESCE-01"
@@ -79,8 +82,15 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
         price="10",
         gross_amount="50",
         trade_fee="99",
-        brokerage=Decimal("1.25"),
-        stamp_duty=Decimal("0.75"),
+        brokerage=Decimal("1.25")
+        if fee_presence == "positive"
+        else (Decimal("0") if fee_presence == "zero" else None),
+        stamp_duty=Decimal("0.75")
+        if fee_presence == "positive"
+        else (Decimal("0") if fee_presence == "zero" else None),
+        exchange_fee=Decimal("0") if fee_presence == "zero" else None,
+        gst=Decimal("0") if fee_presence == "zero" else None,
+        other_fees=Decimal("0") if fee_presence == "zero" else None,
     )
     middle_buy = booked_transaction_event(
         transaction_id="BUY-BACKDATED-COALESCE-02",
@@ -104,7 +114,12 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
         ]
     )
     await async_db_session.commit()
+
     context = transaction_processing_test_context(async_db_session)
+    expected_cost = (
+        Decimal("50")
+        + {"positive": Decimal("2"), "zero": Decimal("0"), "absent": Decimal("99")}[fee_presence]
+    )
     await persist_and_process_booked_transaction(
         session=async_db_session,
         context=context,
@@ -135,11 +150,19 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
         )
     )
     await async_db_session.commit()
+    original_source_hash = await async_db_session.scalar(
+        select(DBTransaction.payload_fingerprint).where(
+            DBTransaction.transaction_id == earliest_buy.transaction_id
+        )
+    )
+    assert original_source_hash is not None
+    await async_db_session.commit()
 
     first_lock_acquired = asyncio.Event()
     release_first_lock = asyncio.Event()
     second_lock_attempted = asyncio.Event()
     second_lock_acquired = asyncio.Event()
+    release_second_lock = asyncio.Event()
     second_backend_pid: list[int] = []
     first_task: asyncio.Task | None = None
     original_acquire_lock = (
@@ -163,6 +186,7 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
         second_lock_attempted.set()
         await original_acquire_lock(repository, portfolio_id, security_id)
         second_lock_acquired.set()
+        await release_second_lock.wait()
 
     monkeypatch.setattr(
         SqlAlchemyCostBasisProcessingStateRepository,
@@ -217,6 +241,32 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
         )
         assert second_lock_acquired.is_set() is False
         release_first_lock.set()
+        await wait_for_task_signal(second_task, second_lock_acquired, timeout=15)
+        await first_task
+        async with context.session_factory() as first_committed:
+            first_flows = list(
+                (
+                    await first_committed.scalars(
+                        select(Cashflow).where(
+                            Cashflow.portfolio_id == portfolio_id, Cashflow.epoch == 1
+                        )
+                    )
+                ).all()
+            )
+            first_source_hash = await first_committed.scalar(
+                select(DBTransaction.payload_fingerprint).where(
+                    DBTransaction.transaction_id == earliest_buy.transaction_id
+                )
+            )
+        assert {row.transaction_id: row.amount for row in first_flows} == {
+            earliest_buy.transaction_id: -expected_cost,
+            middle_buy.transaction_id: Decimal("-30"),
+            current_buy.transaction_id: Decimal("-100"),
+        }
+        assert all(row.economic_event_id and row.linked_transaction_group_id for row in first_flows)
+        assert all(row.calculation_lineage for row in first_flows)
+        assert first_source_hash == original_source_hash
+        release_second_lock.set()
         results = await asyncio.wait_for(
             asyncio.gather(first_task, second_task),
             timeout=15,
@@ -224,6 +274,7 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
         assert second_lock_acquired.is_set() is True
     finally:
         release_first_lock.set()
+        release_second_lock.set()
         await cancel_pending_tasks(first_task, second_task)
 
     assert sorted(result.position_record_count for result in results) == [0, 3]
@@ -302,24 +353,28 @@ async def test_concurrent_backdated_triggers_coalesce_after_one_current_epoch_re
         Decimal("18"),
     ]
     assert [position.cost_basis for position in current_positions] == [
-        Decimal("52"),
-        Decimal("82"),
-        Decimal("182"),
+        expected_cost,
+        expected_cost + Decimal("30"),
+        expected_cost + Decimal("130"),
     ]
     assert [transaction.net_cost for transaction in canonical_transactions] == [
-        Decimal("52"),
+        expected_cost,
         Decimal("30"),
         Decimal("100"),
     ]
     assert [transaction.net_cost_local for transaction in canonical_transactions] == [
-        Decimal("52"),
+        expected_cost,
         Decimal("30"),
         Decimal("100"),
     ]
-    assert [(row.fee_type, row.amount, row.currency) for row in transaction_costs] == [
-        ("brokerage", Decimal("1.25"), "USD"),
-        ("stamp_duty", Decimal("0.75"), "USD"),
-    ]
+    expected_fees = {
+        "positive": [("brokerage", Decimal("1.25"), "USD"), ("stamp_duty", Decimal("0.75"), "USD")],
+        "zero": [],
+        "absent": [("brokerage", Decimal("99"), "USD")],
+    }
+    assert [(row.fee_type, row.amount, row.currency) for row in transaction_costs] == (
+        expected_fees[fee_presence]
+    )
     assert all(
         transaction.calculation_lineage is not None for transaction in canonical_transactions
     )

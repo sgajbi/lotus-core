@@ -1,12 +1,13 @@
 # src/libs/portfolio-common/portfolio_common/reprocessing_repository.py
 import logging
+from collections.abc import Mapping, Sequence
 from types import SimpleNamespace
 from typing import Any, cast
 
-from sqlalchemy import case, select
+from sqlalchemy import and_, case, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .database_models import Portfolio
+from .database_models import OutboxEvent, Portfolio, ProcessedEvent, TransactionCost
 from .database_models import Transaction as DBTransaction
 from .ingestion_lineage import ingestion_job_id_var, normalize_ingestion_job_id
 from .kafka_utils import KafkaProducer
@@ -106,7 +107,122 @@ class SqlAlchemyTransactionReplayReader(TransactionReplayReader):
         ordered_transaction_ids: list[str],
     ) -> list[Any]:
         result = await self._db.execute(_transactions_to_replay_stmt(ordered_transaction_ids))
-        return [SimpleNamespace(**row) for row in result.mappings().all()]
+        rows = [dict(row) for row in result.mappings().all()]
+        return [
+            SimpleNamespace(
+                **{
+                    key: value
+                    for key, value in row.items()
+                    if key in TRANSACTION_REPLAY_SOURCE_FIELD_NAMES
+                },
+            )
+            for row in rows
+        ]
+
+
+async def load_transaction_fee_facts(
+    session: AsyncSession,
+    canonical_rows: Sequence[Mapping[str, Any]],
+    *,
+    lock_sources: bool = False,
+    receipt_scopes: Sequence[tuple[str, str, str, str]] = (),
+) -> tuple[list[Mapping[str, Any]], list[Mapping[str, Any]], list[Mapping[str, Any]]]:
+    """Load bounded existing source references; interpretation belongs to the caller."""
+    if not canonical_rows:
+        return [], [], []
+    ids = [str(row["transaction_id"]) for row in canonical_rows]
+    portfolios = {row["portfolio_id"] for row in canonical_rows}
+    fee_stmt = (
+        select(
+            TransactionCost.transaction_id,
+            TransactionCost.fee_type,
+            TransactionCost.amount,
+            TransactionCost.currency,
+        )
+        .where(TransactionCost.transaction_id.in_(ids))
+        .order_by(TransactionCost.transaction_id, TransactionCost.id)
+    )
+    raw_stmt = (
+        select(OutboxEvent.aggregate_id, OutboxEvent.payload)
+        .where(
+            OutboxEvent.aggregate_type == "RawTransaction",
+            OutboxEvent.event_type == "RawTransactionPersisted",
+            OutboxEvent.aggregate_id.in_(portfolios),
+            OutboxEvent.payload["transaction_id"].as_string().in_(ids),
+        )
+        .order_by(OutboxEvent.id)
+    )
+    if lock_sources:
+        fee_stmt = fee_stmt.with_for_update(read=True, of=TransactionCost)
+        raw_stmt = raw_stmt.with_for_update(read=True, of=OutboxEvent)
+    fees = (await session.execute(fee_stmt)).mappings().all()
+    raw = (await session.execute(raw_stmt)).mappings().all()
+    receipts = []
+    if receipt_scopes:
+        receipt_stmt = (
+            select(
+                ProcessedEvent.tenant_id,
+                ProcessedEvent.service_name,
+                ProcessedEvent.portfolio_id,
+                ProcessedEvent.semantic_key,
+                ProcessedEvent.payload_fingerprint,
+            )
+            .where(
+                or_(
+                    *(
+                        and_(
+                            ProcessedEvent.tenant_id == tenant,
+                            ProcessedEvent.service_name == service,
+                            ProcessedEvent.portfolio_id == portfolio,
+                            ProcessedEvent.semantic_key == key,
+                        )
+                        for tenant, service, portfolio, key in receipt_scopes
+                    )
+                ),
+            )
+            .order_by(ProcessedEvent.id)
+        )
+        if lock_sources:
+            receipt_stmt = receipt_stmt.with_for_update(read=True, of=ProcessedEvent)
+        receipts = (await session.execute(receipt_stmt)).mappings().all()
+    return list(fees), list(raw), list(receipts)
+
+
+async def load_transaction_replay_rows(
+    session: AsyncSession,
+    transaction_ids: list[str],
+    *,
+    lock_sources: bool = False,
+) -> list[Mapping[str, Any]]:
+    """Capture roots without chasing a transaction that changes portfolio ownership."""
+    stmt = _transactions_to_replay_stmt(transaction_ids)
+    observed = (await session.execute(stmt)).mappings().all()
+    if not lock_sources or not observed:
+        return list(observed)
+    portfolios = sorted({row["portfolio_id"] for row in observed})
+    await session.execute(
+        select(Portfolio.portfolio_id)
+        .where(Portfolio.portfolio_id.in_(portfolios))
+        .order_by(Portfolio.portfolio_id)
+        .with_for_update(of=Portfolio)
+    )
+    locked = (
+        (
+            await session.execute(
+                stmt.where(DBTransaction.portfolio_id.in_(portfolios))
+                .order_by(None)
+                .order_by(DBTransaction.transaction_id)
+                .with_for_update(of=DBTransaction)
+            )
+        )
+        .mappings()
+        .all()
+    )
+    owners = {row["transaction_id"]: row["portfolio_id"] for row in observed}
+    if {row["transaction_id"]: row["portfolio_id"] for row in locked} != owners:
+        raise ValueError("Canonical replay root changed during source capture")
+    by_id = {row["transaction_id"]: row for row in locked}
+    return [by_id[row["transaction_id"]] for row in observed]
 
 
 class KafkaTransactionReplayPublisher(TransactionReplayPublisher):
@@ -145,6 +261,7 @@ def _transactions_to_replay_stmt(ordered_transaction_ids: list[str]) -> Any:
                 if field_name in DBTransaction.__table__.columns
             ),
             Portfolio.tenant_id.label("tenant_id"),
+            DBTransaction.payload_fingerprint,
         )
         .join(Portfolio, Portfolio.portfolio_id == DBTransaction.portfolio_id)
         .where(DBTransaction.transaction_id.in_(ordered_transaction_ids))

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from portfolio_common.config import KAFKA_TRANSACTIONS_PERSISTED_TOPIC
 from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.domain.transaction import transaction_payload_fingerprint
 from portfolio_common.events import TransactionEvent
 from portfolio_common.ingestion_lineage import ingestion_job_id_var
 from portfolio_common.kafka_utils import KafkaProducer
@@ -14,7 +15,10 @@ from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.reprocessing_repository import (
     ReprocessingReplayError,
     ReprocessingRepository,
+    load_transaction_fee_facts,
+    load_transaction_replay_rows,
 )
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession
 
 pytestmark = pytest.mark.asyncio
@@ -71,6 +75,15 @@ def _tenant_owned_rows(transactions: list[DBTransaction]) -> list[dict[str, obje
                 if column.name in TransactionEvent.model_fields
             },
             "tenant_id": "tenant-test",
+            "payload_fingerprint": transaction_payload_fingerprint(
+                TransactionEvent.model_validate(
+                    {
+                        column.name: getattr(transaction, column.name)
+                        for column in DBTransaction.__table__.columns
+                        if column.name in TransactionEvent.model_fields
+                    }
+                ).model_dump(mode="python")
+            ),
         }
         for transaction in transactions
     ]
@@ -79,7 +92,17 @@ def _tenant_owned_rows(transactions: list[DBTransaction]) -> list[dict[str, obje
 @pytest.fixture
 def mock_db_session() -> AsyncMock:
     """Provides a mock SQLAlchemy AsyncSession."""
-    return AsyncMock(spec=AsyncSession)
+    session = AsyncMock(spec=AsyncSession)
+
+    async def execute(statement):
+        if "transaction_costs" in str(statement) or "outbox_events" in str(statement):
+            empty = MagicMock()
+            empty.mappings.return_value.all.return_value = []
+            return empty
+        return session.execute.return_value
+
+    session.execute.side_effect = execute
+    return session
 
 
 @pytest.fixture
@@ -133,7 +156,7 @@ async def test_reprocess_transactions_by_ids_success(
 
     # ASSERT
     assert count == 1
-    mock_db_session.execute.assert_awaited_once()
+    assert mock_db_session.execute.await_count == 1
 
     mock_kafka_producer.publish_message.assert_called_once()
     call_args = mock_kafka_producer.publish_message.call_args.kwargs
@@ -460,3 +483,172 @@ async def test_reprocess_transactions_propagates_context_ingestion_job_owner():
         ("ingestion_job_id", b"job-replay-001"),
         ("lotus-transaction-processing-intent", b"repair"),
     ]
+
+
+def _mapping_result(rows):
+    result = MagicMock()
+    result.mappings.return_value.all.return_value = rows
+    return result
+
+
+def _postgresql_statement(statement):
+    compiled = statement.compile(
+        dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+    )
+    return " ".join(str(compiled).split())
+
+
+async def test_replay_source_capture_locks_original_owners_before_roots_and_preserves_order():
+    observed = [
+        {"transaction_id": "TXN_B", "portfolio_id": "P2", "quantity": 2},
+        {"transaction_id": "TXN_A", "portfolio_id": "P1", "quantity": 1},
+    ]
+    locked = [observed[1] | {"quantity": 10}, observed[0] | {"quantity": 20}]
+    session = AsyncMock(spec=AsyncSession)
+    session.execute.side_effect = [
+        _mapping_result(observed),
+        MagicMock(),
+        _mapping_result(locked),
+    ]
+
+    captured = await load_transaction_replay_rows(session, ["TXN_B", "TXN_A"], lock_sources=True)
+
+    assert captured == [locked[1], locked[0]]
+    assert captured[0] is locked[1] and captured[1] is locked[0]
+    assert session.execute.await_count == 3
+    initial, portfolios, roots = [
+        _postgresql_statement(call.args[0]) for call in session.execute.await_args_list
+    ]
+    assert "transactions.transaction_id IN ('TXN_B', 'TXN_A')" in initial
+    assert "JOIN portfolios ON portfolios.portfolio_id = transactions.portfolio_id" in initial
+    assert "ORDER BY CASE transactions.transaction_id" in initial
+    assert "FOR UPDATE" not in initial
+    assert "portfolios.portfolio_id IN ('P1', 'P2')" in portfolios
+    assert "ORDER BY portfolios.portfolio_id FOR UPDATE OF portfolios" in portfolios
+    assert "transactions.transaction_id IN ('TXN_B', 'TXN_A')" in roots
+    assert "transactions.portfolio_id IN ('P1', 'P2')" in roots
+    assert "ORDER BY transactions.transaction_id FOR UPDATE OF transactions" in roots
+    assert "ORDER BY CASE" not in roots
+
+
+@pytest.mark.parametrize("change", ["portfolio", "missing", "extra"])
+async def test_replay_source_capture_refuses_changed_locked_root_membership(change):
+    observed = [
+        {"transaction_id": "TXN_B", "portfolio_id": "P2"},
+        {"transaction_id": "TXN_A", "portfolio_id": "P1"},
+    ]
+    locked = [dict(row) for row in observed]
+    if change == "portfolio":
+        locked[0]["portfolio_id"] = "FOREIGN"
+    elif change == "missing":
+        locked.pop()
+    else:
+        locked.append({"transaction_id": "EXTRA", "portfolio_id": "P1"})
+    session = AsyncMock(spec=AsyncSession)
+    session.execute.side_effect = [
+        _mapping_result(observed),
+        MagicMock(),
+        _mapping_result(locked),
+    ]
+
+    with pytest.raises(ValueError, match="^Canonical replay root changed during source capture$"):
+        await load_transaction_replay_rows(session, ["TXN_B", "TXN_A"], lock_sources=True)
+
+    assert session.execute.await_count == 3
+    portfolios, roots = [
+        _postgresql_statement(call.args[0]) for call in session.execute.await_args_list[1:]
+    ]
+    assert "portfolios.portfolio_id IN ('P1', 'P2')" in portfolios
+    assert "transactions.portfolio_id IN ('P1', 'P2')" in roots
+    assert "transactions.transaction_id IN ('TXN_B', 'TXN_A')" in roots
+    assert "FOREIGN" not in portfolios + roots and "EXTRA" not in portfolios + roots
+
+
+@pytest.mark.parametrize("lock_sources,has_rows", [(True, False), (False, True), (False, False)])
+async def test_replay_source_capture_empty_or_unlocked_returns_without_locking(
+    lock_sources, has_rows
+):
+    observed = [{"transaction_id": "TXN_A", "portfolio_id": "P1"}] if has_rows else []
+    session = AsyncMock(spec=AsyncSession)
+    session.execute.return_value = _mapping_result(observed)
+
+    assert (
+        await load_transaction_replay_rows(session, ["TXN_A"], lock_sources=lock_sources)
+        == observed
+    )
+
+    session.execute.assert_awaited_once()
+    assert "FOR UPDATE" not in _postgresql_statement(session.execute.call_args.args[0])
+
+
+async def test_empty_public_replay_does_not_read_or_publish():
+    reader = FakeReplayReader([_replay_transaction("TXN_A")])
+    publisher = MagicMock(spec=FakeReplayPublisher)
+    repository = ReprocessingRepository.from_ports(reader=reader, publisher=publisher)
+
+    assert await repository.reprocess_transactions_by_ids([]) == 0
+
+    assert reader.requested_ids is None
+    publisher.publish_replay_message.assert_not_called()
+    publisher.confirm_replay_delivery.assert_not_called()
+
+
+async def test_empty_fee_fact_batch_does_not_query_even_with_locked_receipt_scope():
+    session = AsyncMock(spec=AsyncSession)
+
+    assert await load_transaction_fee_facts(
+        session,
+        [],
+        lock_sources=True,
+        receipt_scopes=[("TENANT", "SERVICE", "P1", "KEY")],
+    ) == ([], [], [])
+
+    session.execute.assert_not_awaited()
+
+
+@pytest.mark.parametrize("lock_sources", [False, True])
+async def test_fee_fact_queries_preserve_bounded_scope_order_and_requested_read_locks(lock_sources):
+    rows = [{"transaction_id": "TXN_B", "portfolio_id": "P1"}]
+    facts = (
+        [{"transaction_id": "TXN_B", "fee_type": "brokerage", "amount": Decimal(1)}],
+        [{"aggregate_id": "P1", "payload": {"transaction_id": "TXN_B"}}],
+        [{"tenant_id": "TENANT", "semantic_key": "KEY", "payload_fingerprint": "HASH"}],
+    )
+    session = AsyncMock(spec=AsyncSession)
+    session.execute.side_effect = [_mapping_result(family) for family in facts]
+
+    assert (
+        await load_transaction_fee_facts(
+            session,
+            rows,
+            lock_sources=lock_sources,
+            receipt_scopes=[("TENANT", "SERVICE", "P1", "KEY")],
+        )
+        == facts
+    )
+
+    assert session.execute.await_count == 3
+    fees, raw, receipts = [
+        _postgresql_statement(call.args[0]) for call in session.execute.await_args_list
+    ]
+    assert "transaction_costs.transaction_id IN ('TXN_B')" in fees
+    assert "ORDER BY transaction_costs.transaction_id, transaction_costs.id" in fees
+    assert "outbox_events.aggregate_type = 'RawTransaction'" in raw
+    assert "outbox_events.event_type = 'RawTransactionPersisted'" in raw
+    assert "outbox_events.aggregate_id IN ('P1')" in raw
+    assert "->> 'transaction_id'" in raw and "IN ('TXN_B')" in raw
+    assert "ORDER BY outbox_events.id" in raw
+    assert "processed_events.tenant_id = 'TENANT'" in receipts
+    assert "processed_events.service_name = 'SERVICE'" in receipts
+    assert "processed_events.portfolio_id = 'P1'" in receipts
+    assert "processed_events.semantic_key = 'KEY'" in receipts
+    assert "ORDER BY processed_events.id" in receipts
+    for statement, table in [
+        (fees, "transaction_costs"),
+        (raw, "outbox_events"),
+        (receipts, "processed_events"),
+    ]:
+        if lock_sources:
+            assert f"FOR SHARE OF {table}" in statement
+        else:
+            assert "FOR SHARE" not in statement and "FOR UPDATE" not in statement

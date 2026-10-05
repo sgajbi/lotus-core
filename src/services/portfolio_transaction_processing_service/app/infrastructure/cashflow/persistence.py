@@ -2,13 +2,16 @@
 
 import logging
 
-from portfolio_common.database_models import Cashflow, Portfolio, Transaction
+from portfolio_common.database_models import Cashflow, Portfolio, ProcessedEvent, Transaction
 from portfolio_common.domain.calculation_lineage import calculation_lineage_from_payload
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...domain.cashflow import CalculatedCashflow, StoredCashflow
+from ...domain.transaction import BookedTransaction
+from ...ports.cashflow.persistence import MaterializedNoCashflowReceipt
+from .processing_state import CASHFLOW_PROCESSING_SERVICE_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +21,88 @@ class SqlAlchemyCashflowRepository:
 
     def __init__(self, session: AsyncSession):
         self._session = session
+
+    async def load_materialized_no_effect(
+        self, transaction: BookedTransaction, *, semantic_event_id: str
+    ) -> MaterializedNoCashflowReceipt | None:
+        """Retain existing no-effect stage evidence; absence alone is never authority."""
+        if not transaction.tenant_id or transaction.epoch is None:
+            return None
+        receipt_id = (
+            await self._session.execute(
+                select(ProcessedEvent.id)
+                .join(Portfolio, Portfolio.portfolio_id == ProcessedEvent.portfolio_id)
+                .outerjoin(
+                    Cashflow,
+                    and_(
+                        Cashflow.transaction_id == transaction.transaction_id,
+                        Cashflow.epoch == transaction.epoch,
+                    ),
+                )
+                .where(
+                    Portfolio.tenant_id == transaction.tenant_id,
+                    Portfolio.portfolio_id == transaction.portfolio_id,
+                    ProcessedEvent.tenant_id == transaction.tenant_id,
+                    ProcessedEvent.portfolio_id == transaction.portfolio_id,
+                    ProcessedEvent.service_name == CASHFLOW_PROCESSING_SERVICE_NAME,
+                    ProcessedEvent.event_id == semantic_event_id,
+                    Cashflow.id.is_(None),
+                )
+                .with_for_update(read=True, of=ProcessedEvent)
+            )
+        ).scalar_one_or_none()
+        if receipt_id is None:
+            return None
+        return MaterializedNoCashflowReceipt(
+            tenant_id=transaction.tenant_id,
+            portfolio_id=transaction.portfolio_id,
+            transaction_id=transaction.transaction_id,
+            epoch=transaction.epoch,
+        )
+
+    async def load_materialized(
+        self,
+        cashflow: CalculatedCashflow,
+        *,
+        tenant_id: str,
+        semantic_event_id: str,
+    ) -> StoredCashflow | None:
+        """Load existing semantic and ledger facts without qualification writes."""
+        if not tenant_id:
+            return None
+        receipt = (
+            await self._session.execute(
+                select(ProcessedEvent.id)
+                .where(
+                    ProcessedEvent.tenant_id == tenant_id,
+                    ProcessedEvent.portfolio_id == cashflow.portfolio_id,
+                    ProcessedEvent.service_name == CASHFLOW_PROCESSING_SERVICE_NAME,
+                    ProcessedEvent.event_id == semantic_event_id,
+                )
+                .with_for_update(read=True, of=ProcessedEvent)
+            )
+        ).scalar_one_or_none()
+        if receipt is None:
+            return None
+        row = (
+            (
+                await self._session.execute(
+                    select(Cashflow)
+                    .join(Portfolio, Portfolio.portfolio_id == Cashflow.portfolio_id)
+                    .where(
+                        Portfolio.tenant_id == tenant_id,
+                        Cashflow.portfolio_id == cashflow.portfolio_id,
+                        Cashflow.security_id == cashflow.security_id,
+                        Cashflow.transaction_id == cashflow.transaction_id,
+                        Cashflow.epoch == cashflow.epoch,
+                    )
+                    .with_for_update(read=True, of=Cashflow)
+                )
+            )
+            .scalars()
+            .one_or_none()
+        )
+        return _to_stored_cashflow(row) if row is not None else None
 
     async def portfolio_exists(self, portfolio_id: str) -> bool:
         result = await self._session.execute(
