@@ -122,6 +122,8 @@ async def test_dlq_replayer_consumes_and_republishes(
     assert call_args["value"] == original_value
     assert ("correlation_id", correlation_id.encode("utf-8")) in call_args["headers"]
     assert ("traceparent", TRACEPARENT.encode("utf-8")) in call_args["headers"]
+    assert consumer._processed_count == 1
+    assert consumer._shutdown_finalized
 
 
 async def test_dlq_replayer_skips_malformed_message(
@@ -176,6 +178,8 @@ async def test_dlq_replayer_skips_malformed_message(
     assert call_args["topic"] == "portfolios.raw.received"
     assert call_args["key"] == "valid-key-01"
     assert call_args["value"] == {"portfolioId": "P01"}
+    assert consumer._processed_count == 2
+    assert consumer._shutdown_finalized
 
 
 async def test_dlq_replayer_does_not_commit_when_replay_flush_times_out(
@@ -220,6 +224,8 @@ async def test_dlq_replayer_does_not_commit_when_replay_flush_times_out(
 
     mock_kafka_producer.publish_message.assert_called_once()
     assert any(call.kwargs == {"timeout": 5} for call in mock_kafka_producer.flush.call_args_list)
+    assert consumer._processed_count == 1
+    assert consumer._shutdown_finalized
 
     mock_kafka_producer.publish_message.reset_mock()
     mock_kafka_producer.flush.reset_mock()

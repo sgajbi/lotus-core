@@ -234,6 +234,13 @@ respective Lotus services.
 
 ## Consumer Native-Operation Practice
 
+Operator subclasses such as `DLQReplayConsumer` must delegate polling, exact offset acknowledgement,
+drain and close to `BaseConsumer.run()`. A deadline stops admission; already submitted native work
+is joined before close and may exceed that deadline. Replay publish and confirmed flush share the
+owned native lane. Failed replay stops admission without offset acknowledgement; malformed DLQ
+records are explicitly discarded without republishing before continuing to valid records. Run the
+tool's direct static checks and owning tests: repository-default `src` gates omit `tools/`.
+
 Shared Kafka consumer contract changes must inspect every concrete caller fixture and execute
 the full affected caller test set alongside the common consumer/native/supervisor controls.
 Positive synchronous-commit fixtures must return real acknowledgement-shaped values for the
