@@ -11,7 +11,9 @@ once within its existing six-second/32KiB/20-row limits, after completion measur
 relaxing the full-profile 180-second SLO.
 
 Birth-qualified PostgreSQL PID/lock OIDs and the verified managed container identity are bounded
-observations, not a causal verdict. Container-init PID is not an application-worker PID; exact
+observations, not a causal verdict. Plain Docker label-filtered lookup avoids a Compose plugin
+child; inspect still verifies project, service and published metrics port. Container-init PID is not
+an application-worker PID; exact
 worker PID/await remain `MISSING` unless measured. Only whitelisted SQL structure is exported,
 never raw queries, literals or credentials. Follow the
 [load evidence contract](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/bank-day-load-scenario.md#replay-completion-evidence)

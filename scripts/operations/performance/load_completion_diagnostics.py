@@ -368,7 +368,17 @@ def _load_managed_worker_identity(scope: dict[str, Any]) -> dict[str, Any]:
     ):
         return {"status": "missing", "reason": "managed_identity_missing"}
     service = "portfolio_transaction_processing_service"
-    command = ["docker", "compose", "-f", compose_file, "-p", project, "ps", "-q", service]
+    # Plain Docker avoids a Compose plugin descendant retaining captured subprocess pipes.
+    command = [
+        "docker",
+        "ps",
+        "--no-trunc",
+        "--quiet",
+        "--filter",
+        f"label=com.docker.compose.project={project}",
+        "--filter",
+        f"label=com.docker.compose.service={service}",
+    ]
     result = subprocess.run(
         command, capture_output=True, text=True, check=True, timeout=DIAGNOSTIC_IO_SECONDS
     )

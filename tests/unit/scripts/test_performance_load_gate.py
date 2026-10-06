@@ -1,6 +1,8 @@
 import json
 import multiprocessing
 import os
+import subprocess
+import sys
 import time
 from argparse import Namespace
 from datetime import UTC, datetime
@@ -1220,6 +1222,7 @@ def test_statement_structure_does_not_confuse_dollar_quotes_with_parameters(quer
     [
         ("0", "observed"),
         ("17", "observed"),
+        ("17.0", "observed"),
         ("-1", "invalid"),
         ("1.5", "invalid"),
         ("NaN", "invalid"),
@@ -1242,7 +1245,7 @@ def test_counter_scrape_distinguishes_zero_missing_and_invalid(monkeypatch, valu
         transaction_processing_base_url="http://isolated", stage="transaction", outcome="processed"
     )
     assert result["status"] == status and result["scraped_at"]
-    assert result["count"] == (int(value) if status == "observed" else None)
+    assert result["count"] == (int(float(value)) if status == "observed" else None)
     if status != "observed":
         with pytest.raises(RuntimeError, match="not observed"):
             transaction_processing_load_support.transaction_processing_operation_count(
@@ -1250,6 +1253,30 @@ def test_counter_scrape_distinguishes_zero_missing_and_invalid(monkeypatch, valu
                 stage="transaction",
                 outcome="processed",
             )
+
+
+@pytest.mark.parametrize("value", [2**60 + 1, True, -1, 1.5, float("nan"), float("inf")])
+def test_counter_parser_integer_precision_and_invalid_numeric_types(monkeypatch, value):
+    support = transaction_processing_load_support
+    response = _MetricsResponse()
+    response.text = "synthetic parser sample\n"
+    monkeypatch.setattr(support.requests, "get", lambda *a, **k: response)
+    sample = SimpleNamespace(
+        name="lotus_core_transaction_processing_operations_total",
+        labels={"stage": "transaction", "outcome": "processed"},
+        value=value,
+    )
+    monkeypatch.setattr(
+        support, "text_string_to_metric_families", lambda text: [SimpleNamespace(samples=[sample])]
+    )
+    result = support.transaction_processing_operation_observation(
+        transaction_processing_base_url="http://isolated", stage="transaction", outcome="processed"
+    )
+    if type(value) is int and value >= 0:
+        assert result["status"] == "observed" and result["count"] == value
+        assert result["count"] != int(float(value))
+    else:
+        assert result["status"] == "invalid" and result["count"] is None
 
 
 @pytest.mark.parametrize(
@@ -1453,19 +1480,65 @@ def test_managed_worker_observation_is_exact_birth_qualified_and_not_worker_pid(
     assert result["worker_pid"] == result["exact_await"] == "MISSING"
     assert run.call_args_list[0].args[0] == [
         "docker",
-        "compose",
-        "-f",
-        "compose.yml",
-        "-p",
-        "owned-load",
         "ps",
-        "-q",
-        service,
+        "--no-trunc",
+        "--quiet",
+        "--filter",
+        "label=com.docker.compose.project=owned-load",
+        "--filter",
+        f"label=com.docker.compose.service={service}",
     ]
     assert all(
         call.kwargs["timeout"] == 0.5 and call.kwargs["check"] for call in run.call_args_list
     )
     assert ".Config.Env" not in run.call_args.args[0][3]
+
+
+@pytest.mark.parametrize("timeout_command", ["ps", "inspect"])
+def test_plain_docker_identity_timeout_reaps_owned_direct_process(monkeypatch, timeout_command):
+    """Use real captured pipes/timeout/cleanup, without invoking Docker or a plugin tree."""
+    native_run, native_popen = subprocess.run, subprocess.Popen
+    owned = []
+    commands = []
+
+    def track_process(*args, **kwargs):
+        child = native_popen(*args, **kwargs)
+        owned.append(child)
+        return child
+
+    def run_direct_control(command, **kwargs):
+        commands.append(command)
+        assert command[0] == "docker" and command[1] in {"ps", "inspect"}
+        assert "compose" not in command and not kwargs.get("shell", False)
+        if command[1] != timeout_command:
+            return SimpleNamespace(stdout="a" * 64)
+        # A single executable owns these pipes: no shell or Compose plugin intermediary.
+        return native_run([sys.executable, "-c", "import time; time.sleep(5)"], **kwargs)
+
+    monkeypatch.setattr(subprocess, "Popen", track_process)
+    monkeypatch.setattr(subprocess, "run", run_direct_control)
+    monkeypatch.setattr(load_completion_diagnostics, "DIAGNOSTIC_IO_SECONDS", 0.1)
+    started = time.monotonic()
+    with pytest.raises(subprocess.TimeoutExpired):
+        load_completion_diagnostics._load_managed_worker_identity(
+            {"runtime": "owned-load", "compose_file": "compose.yml", "metrics_port": 26090}
+        )
+    assert time.monotonic() - started < 2
+    assert len(owned) == 1 and owned[0].poll() is not None
+    assert len(commands) == (1 if timeout_command == "ps" else 2)
+
+
+@pytest.mark.parametrize("identifiers", ["", "a" * 12, "a" * 64 + "\n" + "b" * 64])
+def test_plain_docker_lookup_refuses_missing_truncated_or_multiple_containers(
+    monkeypatch, identifiers
+):
+    run = MagicMock(return_value=SimpleNamespace(stdout=identifiers))
+    monkeypatch.setattr(subprocess, "run", run)
+    result = load_completion_diagnostics._load_managed_worker_identity(
+        {"runtime": "owned-load", "compose_file": "compose.yml", "metrics_port": 26090}
+    )
+    assert result == {"status": "missing", "reason": "container_identity_ambiguous"}
+    assert run.call_count == 1
 
 
 @pytest.mark.parametrize(
