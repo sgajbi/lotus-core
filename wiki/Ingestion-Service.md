@@ -77,6 +77,13 @@ revision is `SUCCEEDED`. Persistence owns the single database transaction contai
 revision and notice. This does not imply live Kafka, downstream analytics qualification or general
 economic correction support.
 
+The ingestion application reaches the existing operation owner through a neutral port; persistence
+qualifies detached immutable source facts rather than session-bound rows. Complete original
+receipt, ledger output and revision material remain authority, including explicit zero and signed
+values. Framework validation and storage stay in native adapters, with the existing tenant checks,
+lock order and single borrowed transaction unchanged. This internal boundary does not introduce
+a new service, change the public command, or qualify deployment.
+
 See the [FX semantics and source-confirmation contract](https://github.com/sgajbi/lotus-core/blob/main/docs/rfc-transaction-specs/transactions/FX/FX-SLICE-6-PNL-SEMANTICS.md)
 for request fields, default-deny authority, replay integrity, lock order, migration refusal and
 the owning PostgreSQL evidence boundary. Operator completion and consumer qualification are

@@ -220,6 +220,16 @@ native consumer/database, exact protected promotion/release, deployed enrollment
 downstream analytics qualification are distinct proof boundaries. Broader economic corrections
 remain separately owned by #452.
 
+Source-confirmation applications consume framework-neutral operation ports and detached immutable
+source facts, not ORM rows or the legacy ingestion job service. The SQL adapter projects every
+transaction column except `id`, `updated_at`, `payload_fingerprint` and `calculation_lineage`;
+fingerprint and original receipt remain separate complete authority. Every revision column is
+required by the explicit fact schema; schema drift refuses rather than silently dropping fields.
+Nested source/receipt material is frozen, and projections return fresh JSON-compatible containers.
+Framework validation stays in the native adapter and returns typed refusal to the application at
+the original qualification boundary. The adapter borrows the consumer's UOW; it preserves the
+operation-before-source lock order and stages revision plus notification without committing it.
+
 ### Retained-verification delivery practice
 
 Typed retained-source proof additionally requires an exact original-six P&L presence/value

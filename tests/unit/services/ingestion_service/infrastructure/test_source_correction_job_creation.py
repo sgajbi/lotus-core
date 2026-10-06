@@ -5,7 +5,48 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.services.ingestion_service.app.infrastructure import (
+    transaction_source_correction_commands as commands,
+)
 from src.services.ingestion_service.app.services import ingestion_job_lifecycle as lifecycle
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("created", [False, True])
+async def test_native_operation_owner_projects_only_job_authority_and_preserves_replay(created):
+    native = MagicMock()
+    native.assert_ingestion_writable = AsyncMock()
+    native.create_or_get_job = AsyncMock(
+        return_value=SimpleNamespace(
+            job=SimpleNamespace(
+                job_id="operation", status="queued", idempotency_key_reference="key-ref"
+            ),
+            created=created,
+        )
+    )
+    owner = commands.NativeSourceCorrectionOperationOwner(native)
+    await owner.assert_ingestion_writable()
+    args = dict(
+        job_id="operation",
+        endpoint="/ingest/transactions/{transaction_id}/source-evidence",
+        entity_type="transaction_source_correction",
+        accepted_count=1,
+        idempotency_key="qualified-key",
+        correlation_id="correlation",
+        request_id="request",
+        trace_id="trace",
+        tenant_context=SimpleNamespace(tenant_id="tenant"),
+        request_payload={"canonical_request_sha256": "1" * 64},
+    )
+    projected = await owner.create_or_get_job(**args)
+    native.assert_ingestion_writable.assert_awaited_once()
+    native.create_or_get_job.assert_awaited_once_with(**args)
+    assert projected.created is created
+    assert projected.job.job_id == "operation" and projected.job.status == "queued"
+    assert projected.job.idempotency_key_reference == "key-ref"
+    native.commit.assert_not_called()
+    native.rollback.assert_not_called()
+    native.close.assert_not_called()
 
 
 def context(monkeypatch):

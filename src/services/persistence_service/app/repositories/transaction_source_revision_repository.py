@@ -1,5 +1,6 @@
 """Source-revision storage uses the consumer-owned CoreDB transaction only."""
 
+from collections.abc import Mapping
 from typing import cast
 
 from portfolio_common.config import (
@@ -13,13 +14,55 @@ from portfolio_common.database_models import (
     Transaction,
     TransactionSourceRevision,
 )
-from portfolio_common.event_contracts import TransactionSourceEvidenceChangedEvent
+from portfolio_common.event_contracts import (
+    TransactionSourceCorrectionRequestedEvent,
+    TransactionSourceEvidenceChangedEvent,
+)
+from portfolio_common.events import TransactionEvent
 from portfolio_common.outbox_repository import OutboxRepository
+from pydantic import ValidationError
 from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from ..ports.transaction_source_corrections import RetainedSourceRows
+from ..ports.transaction_source_facts import (
+    RawSourceSnapshot,
+    RetainedSourceRows,
+    RetainedTransactionSnapshot,
+    SourceInputRejected,
+    SourceOperationIntent,
+    SourceRevisionFact,
+)
+
+_TECHNICAL_FIELDS = frozenset({"id", "updated_at", "payload_fingerprint", "calculation_lineage"})
+
+
+def source_revision_fact(row: TransactionSourceRevision) -> SourceRevisionFact:
+    # Reflect every mapped column. A future column must expand the explicit fact
+    # schema and its projection test; never silently omit new financial authority.
+    return SourceRevisionFact.from_material(
+        {column.name: getattr(row, column.name) for column in row.__table__.columns}
+    )
+
+
+def retained_source_facts(
+    transaction: Transaction, raw: OutboxEvent, head: TransactionSourceRevision | None
+) -> RetainedSourceRows:
+    return RetainedSourceRows(
+        RetainedTransactionSnapshot(
+            portfolio_id=cast(str, transaction.portfolio_id),
+            transaction_id=cast(str, transaction.transaction_id),
+            ledger_output={
+                column.name: getattr(transaction, column.name)
+                for column in Transaction.__table__.columns
+                if column.name not in _TECHNICAL_FIELDS
+            },
+            stored_fingerprint=cast(str | None, transaction.payload_fingerprint),
+            original_receipt=transaction.calculation_lineage,
+        ),
+        RawSourceSnapshot(cast(int, raw.id), raw.payload),
+        source_revision_fact(head) if head is not None else None,
+    )
 
 
 class SourceRevisionStorageRejected(ValueError):
@@ -32,13 +75,38 @@ class TransactionSourceRevisionRepository:
         # create, commit, rollback or close another session here.
         self._db = db
 
+    @staticmethod
+    def normalize_command(
+        command: TransactionSourceCorrectionRequestedEvent,
+    ) -> TransactionSourceCorrectionRequestedEvent:
+        try:
+            return TransactionSourceCorrectionRequestedEvent.model_validate(
+                command.model_dump(mode="python", exclude_unset=True)
+            )
+        except ValidationError:
+            raise SourceInputRejected("SOURCE_COMMAND_INVALID") from None
+
+    @staticmethod
+    def decode_admitted_intent(payload: object) -> TransactionSourceCorrectionRequestedEvent:
+        try:
+            return TransactionSourceCorrectionRequestedEvent.model_validate(payload)
+        except ValidationError:
+            raise SourceInputRejected("SOURCE_COMMAND_OPERATION_UNAVAILABLE") from None
+
+    @staticmethod
+    def validate_retained_input(payload: Mapping[str, object]) -> None:
+        try:
+            TransactionEvent.model_validate(payload)
+        except ValidationError:
+            raise SourceInputRejected("SOURCE_REVISION_EVIDENCE_REJECTED") from None
+
     def _require_uow(self) -> None:
         if not self._db.in_transaction():
             raise SourceRevisionStorageRejected("SOURCE_REVISION_UOW_REQUIRED")
 
     async def committed_command(
         self, *, tenant_id: str, command_id: str
-    ) -> TransactionSourceRevision | None:
+    ) -> SourceRevisionFact | None:
         self._require_uow()
         result = await self._db.execute(
             select(TransactionSourceRevision).where(
@@ -46,11 +114,10 @@ class TransactionSourceRevisionRepository:
                 TransactionSourceRevision.command_id == command_id,
             )
         )
-        return result.scalar_one_or_none()
+        row = result.scalar_one_or_none()
+        return source_revision_fact(row) if row is not None else None
 
-    async def read_committed_source(
-        self, revision: TransactionSourceRevision
-    ) -> RetainedSourceRows:
+    async def read_committed_source(self, revision: SourceRevisionFact) -> RetainedSourceRows:
         """Read linked immutable fact and tenant-owned source in one statement snapshot.
 
         No lock is acquired on the no-effect retry path. The application must
@@ -78,7 +145,7 @@ class TransactionSourceRevisionRepository:
         if row is None:
             raise SourceRevisionStorageRejected("SOURCE_REVISION_COMMITTED_SOURCE_UNAVAILABLE")
         transaction, raw, fact = row
-        return RetainedSourceRows(transaction, raw, fact)
+        return retained_source_facts(transaction, raw, fact)
 
     async def _lock_owned_transaction(self, *, tenant_id: str, transaction_id: str) -> Transaction:
         scope_result = await self._db.execute(
@@ -113,7 +180,7 @@ class TransactionSourceRevisionRepository:
 
     async def lock_admitted_operation(
         self, *, tenant_id: str, operation_id: str, command_id: str
-    ) -> OutboxEvent:
+    ) -> SourceOperationIntent:
         """Operation SHARE precedes every canonical lock, with no later upgrade.
 
         KEY SHARE alone does not fence status/tenant updates. SHARE prevents both
@@ -156,7 +223,7 @@ class TransactionSourceRevisionRepository:
         )
         if len(events) != 1:
             raise SourceRevisionStorageRejected("SOURCE_COMMAND_OPERATION_UNAVAILABLE")
-        return events[0]
+        return SourceOperationIntent(events[0].payload)
 
     async def lock_retained_source(
         self, *, tenant_id: str, transaction_id: str
@@ -200,16 +267,16 @@ class TransactionSourceRevisionRepository:
         heads = head_result.scalars().all()
         if len(heads) > 1 or (heads and heads[0].root_raw_event_id != roots[0].id):
             raise SourceRevisionStorageRejected("SOURCE_REVISION_CHAIN_UNAVAILABLE")
-        return RetainedSourceRows(transaction, roots[0], heads[0] if heads else None)
+        return retained_source_facts(transaction, roots[0], heads[0] if heads else None)
 
-    async def stage_revision_and_notification(self, revision: TransactionSourceRevision) -> None:
+    async def stage_revision_and_notification(self, revision: SourceRevisionFact) -> None:
         """Stage only the new fact and notification, never economics or completion.
 
         The application must verify attestation, receipt, source policy and CAS
         before calling this method. Flush is not commit or HTTP success proof.
         """
         self._require_uow()
-        self._db.add(revision)
+        self._db.add(TransactionSourceRevision(**revision.material()))
         await self._db.flush()
         await OutboxRepository(self._db).create_outbox_event(
             aggregate_type="TransactionSourceRevision",

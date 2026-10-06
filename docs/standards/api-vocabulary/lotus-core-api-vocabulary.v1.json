@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-10-04T06:19:51.076699+00:00",
+  "generatedAt": "2026-10-06T03:41:12.013328+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -3315,6 +3315,34 @@
       ]
     },
     {
+      "semanticId": "lotus.expected_head_id",
+      "canonicalTerm": "expected_head_id",
+      "preferredName": "expected_head_id",
+      "description": "Unique expected head identifier.",
+      "example": "EXPECTED_HEAD_001",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.expected_head_sha256",
+      "canonicalTerm": "expected_head_sha256",
+      "preferredName": "expected_head_sha256",
+      "description": "transaction source correction request field: expected head sha256.",
+      "example": "example_expected_head_sha256",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.expected_open_position_count",
       "canonicalTerm": "expected_open_position_count",
       "preferredName": "expected_open_position_count",
@@ -3812,6 +3840,23 @@
       ],
       "observedTypes": [
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.idempotency",
+      "canonicalTerm": "idempotency",
+      "preferredName": "idempotency",
+      "description": "async command accepted field: idempotency.",
+      "example": {
+        "key": "example_key",
+        "scope": "example_scope"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "AsyncCommandIdempotency"
       ]
     },
     {
@@ -4477,6 +4522,20 @@
       "preferredName": "jurisdiction_code",
       "description": "Legal or regulatory jurisdiction code for the mandate.",
       "example": "SG",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.key",
+      "canonicalTerm": "key",
+      "preferredName": "key",
+      "description": "async command idempotency field: key.",
+      "example": "example_key",
       "type": "string",
       "locations": [
         "body"
@@ -5946,6 +6005,20 @@
       ]
     },
     {
+      "semanticId": "lotus.operation_id",
+      "canonicalTerm": "operation_id",
+      "preferredName": "operation_id",
+      "description": "Unique operation identifier.",
+      "example": "OPERATION_001",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.original_quantity",
       "canonicalTerm": "original_quantity",
       "preferredName": "original_quantity",
@@ -7223,6 +7296,34 @@
       ]
     },
     {
+      "semanticId": "lotus.realized_pnl_base",
+      "canonicalTerm": "realized_pnl_base",
+      "preferredName": "realized_pnl_base",
+      "description": "Monetary value for realized pnl base.",
+      "example": 125000.5,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.realized_pnl_local",
+      "canonicalTerm": "realized_pnl_local",
+      "preferredName": "realized_pnl_local",
+      "description": "Monetary value for realized pnl local.",
+      "example": 125000.5,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.realized_total_pnl_base",
       "canonicalTerm": "realized_total_pnl_base",
       "preferredName": "realized_total_pnl_base",
@@ -7262,6 +7363,20 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.reason",
+      "canonicalTerm": "reason",
+      "preferredName": "reason",
+      "description": "transaction source correction request field: reason.",
+      "example": "example_reason",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -7954,6 +8069,20 @@
       ],
       "observedTypes": [
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.retry_after_seconds",
+      "canonicalTerm": "retry_after_seconds",
+      "preferredName": "retry_after_seconds",
+      "description": "async command accepted field: retry after seconds.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
       ]
     },
     {
@@ -8974,6 +9103,22 @@
       ]
     },
     {
+      "semanticId": "lotus.source_cut_sha256",
+      "canonicalTerm": "source_cut_sha256",
+      "preferredName": "source_cut_sha256",
+      "description": "Material source cut for the entire matching ledger scope.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.source_digest",
       "canonicalTerm": "source_digest",
       "preferredName": "source_digest",
@@ -8999,6 +9144,20 @@
       ],
       "observedTypes": [
         "boolean"
+      ]
+    },
+    {
+      "semanticId": "lotus.source_evidence_selection",
+      "canonicalTerm": "source_evidence_selection",
+      "preferredName": "source_evidence_selection",
+      "description": "Closed FX source proof selection: current, original or an explicit owned revision.",
+      "example": "current",
+      "type": "string",
+      "locations": [
+        "query"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -9196,6 +9355,20 @@
       ],
       "observedTypes": [
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.source_revision_id",
+      "canonicalTerm": "source_revision_id",
+      "preferredName": "source_revision_id",
+      "description": "Required only for revision selection; foreign and unknown revisions are indistinguishable from absence.",
+      "example": "SOURCE_REVISION_001",
+      "type": "object",
+      "locations": [
+        "query"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -9399,6 +9572,20 @@
       ],
       "observedTypes": [
         "ReportingCurrencySupportStatus",
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.status_url",
+      "canonicalTerm": "status_url",
+      "preferredName": "status_url",
+      "description": "Current status for status url.",
+      "example": "ACTIVE",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
         "string"
       ]
     },
@@ -10262,6 +10449,26 @@
       "preferredName": "transaction",
       "description": "The exact canonical transaction record owned by this portfolio.",
       "example": {
+        "transaction_source_evidence": {
+          "contract_version": "transaction-source-evidence.v1",
+          "consumer": "core-qcp",
+          "tenant_id": "TENANT_SG",
+          "portfolio_id": "DEMO_DPM_EUR_001",
+          "transaction_id": "TXN_0001",
+          "selection": "current",
+          "status": "ACTIVE",
+          "root_raw_id": "example_value",
+          "root_raw_sha256": "example_value",
+          "revision_id": "example_value",
+          "revision_sha256": "example_value",
+          "confirmed_at": "2026-02-27T10:30:00Z",
+          "original_local_present": true,
+          "original_base_present": true,
+          "realized_fx_pnl_local": "example_value",
+          "realized_fx_pnl_base": "example_value",
+          "producer_algorithm_version": 1,
+          "source_cut_sha256": "example_source_cut_sha256"
+        },
         "transaction_id": "TXN-2026-0001",
         "transaction_date": "2026-03-01T09:30:00Z",
         "settlement_date": "2026-03-03T00:00:00Z",
@@ -10492,6 +10699,39 @@
       ]
     },
     {
+      "semanticId": "lotus.transaction_source_evidence",
+      "canonicalTerm": "transaction_source_evidence",
+      "preferredName": "transaction_source_evidence",
+      "description": "Bounded original/current/selected immutable FX source proof. Confirmation time is not the transaction financial as-of date; raw/auth payloads are excluded.",
+      "example": {
+        "contract_version": "transaction-source-evidence.v1",
+        "consumer": "core-qcp",
+        "tenant_id": "TENANT_SG",
+        "portfolio_id": "DEMO_DPM_EUR_001",
+        "transaction_id": "TXN_0001",
+        "selection": "current",
+        "status": "ACTIVE",
+        "root_raw_id": "example_value",
+        "root_raw_sha256": "example_value",
+        "revision_id": "example_value",
+        "revision_sha256": "example_value",
+        "confirmed_at": "2026-02-27T10:30:00Z",
+        "original_local_present": true,
+        "original_base_present": true,
+        "realized_fx_pnl_local": "example_value",
+        "realized_fx_pnl_base": "example_value",
+        "producer_algorithm_version": 1,
+        "source_cut_sha256": "example_source_cut_sha256"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.transaction_type",
       "canonicalTerm": "transaction_type",
       "preferredName": "transaction_type",
@@ -10514,6 +10754,26 @@
       "description": "The list of transaction records for the current page.",
       "example": [
         {
+          "transaction_source_evidence": {
+            "contract_version": "transaction-source-evidence.v1",
+            "consumer": "core-qcp",
+            "tenant_id": "TENANT_SG",
+            "portfolio_id": "DEMO_DPM_EUR_001",
+            "transaction_id": "TXN_0001",
+            "selection": "current",
+            "status": "ACTIVE",
+            "root_raw_id": "example_value",
+            "root_raw_sha256": "example_value",
+            "revision_id": "example_value",
+            "revision_sha256": "example_value",
+            "confirmed_at": "2026-02-27T10:30:00Z",
+            "original_local_present": true,
+            "original_base_present": true,
+            "realized_fx_pnl_local": "example_value",
+            "realized_fx_pnl_base": "example_value",
+            "producer_algorithm_version": 1,
+            "source_cut_sha256": "example_source_cut_sha256"
+          },
           "transaction_id": "TXN-2026-0001",
           "transaction_date": "2026-03-01T09:30:00Z",
           "settlement_date": "2026-03-03T00:00:00Z",
@@ -12434,6 +12694,40 @@
       "semanticId": "lotus.reporting_currency"
     },
     {
+      "name": "source_evidence_selection",
+      "kind": "request_option",
+      "location": "query",
+      "type": "string",
+      "required": false,
+      "default": "current",
+      "allowedValues": [
+        "current",
+        "original",
+        "revision"
+      ],
+      "description": "Closed FX source proof selection: current, original or an explicit owned revision.",
+      "example": "current",
+      "behaviorImpact": "Affects get_portfolio_transaction_record request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "source_evidence_selection",
+      "semanticId": "lotus.source_evidence_selection"
+    },
+    {
+      "name": "source_revision_id",
+      "kind": "request_option",
+      "location": "query",
+      "type": "object",
+      "required": false,
+      "default": "",
+      "allowedValues": [],
+      "description": "Required only for revision selection; foreign and unknown revisions are indistinguishable from absence.",
+      "example": "SOURCE_REVISION_001",
+      "behaviorImpact": "Affects get_portfolio_transaction_record request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "source_revision_id",
+      "semanticId": "lotus.source_revision_id"
+    },
+    {
       "name": "X-Tenant-Id",
       "kind": "request_option",
       "location": "header",
@@ -13314,6 +13608,36 @@
       "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
       "example": "tenant-sg",
       "behaviorImpact": "Affects ingest_transactions_ingest_transactions_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "transaction_id",
+      "kind": "request_option",
+      "location": "path",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Existing canonical transaction identifier.",
+      "example": "TXN_0001",
+      "behaviorImpact": "Affects submit_source_correction_ingest_transactions__transaction_id__source_evidence_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "transaction_id",
+      "semanticId": "lotus.transaction_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects submit_source_correction_ingest_transactions__transaction_id__source_evidence_post request behavior.",
       "exposure": "consumer_visible",
       "canonicalTerm": "x_tenant_id",
       "semanticId": "lotus.x_tenant_id"
@@ -20097,6 +20421,7 @@
           "source_as_of_date",
           "source_batch_fingerprint",
           "source_cut_id",
+          "source_cut_sha256",
           "source_digest",
           "source_evidence_current",
           "source_instrument_id",
@@ -20133,6 +20458,7 @@
           "transaction_date",
           "transaction_fx_rate",
           "transaction_id",
+          "transaction_source_evidence",
           "transaction_type",
           "transactions",
           "withholding_tax_amount",
@@ -20581,6 +20907,14 @@
             "attributeRef": "lotus.product_version"
           },
           {
+            "name": "source_cut_sha256",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_cut_sha256",
+            "attributeRef": "lotus.source_cut_sha256"
+          },
+          {
             "name": "portfolio_id",
             "location": "body",
             "required": true,
@@ -20627,6 +20961,14 @@
             "type": "array",
             "semanticId": "lotus.transactions",
             "attributeRef": "lotus.transactions"
+          },
+          {
+            "name": "transactions[].transaction_source_evidence",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.transaction_source_evidence",
+            "attributeRef": "lotus.transaction_source_evidence"
           },
           {
             "name": "transactions[].transaction_id",
@@ -21712,14 +22054,17 @@
           "source_as_of_date",
           "source_batch_fingerprint",
           "source_cut_id",
+          "source_cut_sha256",
           "source_digest",
           "source_evidence_current",
+          "source_evidence_selection",
           "source_instrument_id",
           "source_kind",
           "source_lineage",
           "source_product_name",
           "source_product_version",
           "source_refs",
+          "source_revision_id",
           "source_system",
           "source_transaction_reference",
           "spot_exposure_model",
@@ -21747,6 +22092,7 @@
           "transaction_date",
           "transaction_fx_rate",
           "transaction_id",
+          "transaction_source_evidence",
           "transaction_type",
           "withholding_tax_amount",
           "withholding_tax_amount_reporting_currency",
@@ -21794,6 +22140,22 @@
             "type": "object",
             "semanticId": "lotus.reporting_currency",
             "attributeRef": "lotus.reporting_currency"
+          },
+          {
+            "name": "source_evidence_selection",
+            "location": "query",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_evidence_selection",
+            "attributeRef": "lotus.source_evidence_selection"
+          },
+          {
+            "name": "source_revision_id",
+            "location": "query",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_revision_id",
+            "attributeRef": "lotus.source_revision_id"
           },
           {
             "name": "X-Tenant-Id",
@@ -22082,6 +22444,14 @@
             "attributeRef": "lotus.product_version"
           },
           {
+            "name": "source_cut_sha256",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_cut_sha256",
+            "attributeRef": "lotus.source_cut_sha256"
+          },
+          {
             "name": "portfolio_id",
             "location": "body",
             "required": true,
@@ -22104,6 +22474,14 @@
             "type": "TransactionRecord",
             "semanticId": "lotus.transaction",
             "attributeRef": "lotus.transaction"
+          },
+          {
+            "name": "transaction.transaction_source_evidence",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.transaction_source_evidence",
+            "attributeRef": "lotus.transaction_source_evidence"
           },
           {
             "name": "transaction.transaction_id",
@@ -29878,6 +30256,168 @@
             "type": "string",
             "semanticId": "lotus.job_id",
             "attributeRef": "lotus.job_id"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "submit_source_correction_ingest_transactions__transaction_id__source_evidence_post",
+      "method": "POST",
+      "path": "/ingest/transactions/{transaction_id}/source-evidence",
+      "domain": "transactions",
+      "serviceGroup": "ingestion",
+      "tags": [
+        "Transactions"
+      ],
+      "summary": "Confirm missing transaction FX source evidence",
+      "description": "What: Queue a missing-FX-source confirmation for an existing transaction.\nHow: Verify dedicated service authority and persisted tenant ownership, bind the expected evidence head and exact body, then commit an operation and signed outbox command atomically. No economic transaction is rewritten or replayed.\nWhen: Use only to confirm a server-proven absent source as explicit zero; 202 is queued intent, not successful correction or qualification. Follow status_url.",
+      "naming": {
+        "boundedContext": "transactions",
+        "canonicalTerms": [
+          "correlation_id",
+          "expected_head_id",
+          "expected_head_sha256",
+          "idempotency",
+          "key",
+          "operation_id",
+          "realized_pnl_base",
+          "realized_pnl_local",
+          "reason",
+          "retry_after_seconds",
+          "scope",
+          "status",
+          "status_url",
+          "transaction_id",
+          "x_tenant_id"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "transaction_id",
+            "location": "path",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.transaction_id",
+            "attributeRef": "lotus.transaction_id"
+          },
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
+          {
+            "name": "expected_head_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.expected_head_id",
+            "attributeRef": "lotus.expected_head_id"
+          },
+          {
+            "name": "expected_head_sha256",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.expected_head_sha256",
+            "attributeRef": "lotus.expected_head_sha256"
+          },
+          {
+            "name": "reason",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.reason",
+            "attributeRef": "lotus.reason"
+          },
+          {
+            "name": "realized_pnl_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.realized_pnl_local",
+            "attributeRef": "lotus.realized_pnl_local"
+          },
+          {
+            "name": "realized_pnl_base",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.realized_pnl_base",
+            "attributeRef": "lotus.realized_pnl_base"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 202,
+        "model": "AsyncCommandAccepted",
+        "fields": [
+          {
+            "name": "correlation_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.correlation_id",
+            "attributeRef": "lotus.correlation_id"
+          },
+          {
+            "name": "operation_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.operation_id",
+            "attributeRef": "lotus.operation_id"
+          },
+          {
+            "name": "status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.status",
+            "attributeRef": "lotus.status"
+          },
+          {
+            "name": "status_url",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.status_url",
+            "attributeRef": "lotus.status_url"
+          },
+          {
+            "name": "retry_after_seconds",
+            "location": "body",
+            "required": false,
+            "type": "integer",
+            "semanticId": "lotus.retry_after_seconds",
+            "attributeRef": "lotus.retry_after_seconds"
+          },
+          {
+            "name": "idempotency",
+            "location": "body",
+            "required": true,
+            "type": "AsyncCommandIdempotency",
+            "semanticId": "lotus.idempotency",
+            "attributeRef": "lotus.idempotency"
+          },
+          {
+            "name": "idempotency.key",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.key",
+            "attributeRef": "lotus.key"
+          },
+          {
+            "name": "idempotency.scope",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.scope",
+            "attributeRef": "lotus.scope"
           }
         ]
       }

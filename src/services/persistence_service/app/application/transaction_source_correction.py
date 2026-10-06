@@ -12,7 +12,6 @@ from portfolio_common.command_authorization import (
     authenticate_command_authorization,
     verify_command_authorization,
 )
-from portfolio_common.database_models import Transaction, TransactionSourceRevision
 from portfolio_common.domain.calculation_lineage import canonical_content_hash
 from portfolio_common.domain.transaction.source_evidence_revision import (
     FxSourceEvidenceConfirmation,
@@ -22,15 +21,12 @@ from portfolio_common.domain.transaction.source_evidence_revision import (
     verify_retained_fx_source,
 )
 from portfolio_common.event_contracts import TransactionSourceCorrectionRequestedEvent
-from portfolio_common.events import TransactionEvent
-from pydantic import ValidationError
 
 from ..ports.transaction_source_corrections import (
     RetainedSourceRows,
     TransactionSourceRevisionPort,
 )
-
-_TECHNICAL_FIELDS = frozenset({"id", "updated_at", "payload_fingerprint", "calculation_lineage"})
+from ..ports.transaction_source_facts import SourceInputRejected, SourceRevisionFact
 
 
 class SourceCorrectionRejected(ValueError):
@@ -41,7 +37,7 @@ class SourceCorrectionRejected(ValueError):
 class SourceCommandAdmission:
     command: TransactionSourceCorrectionRequestedEvent
     request_sha256: str
-    committed: TransactionSourceRevision | None
+    committed: SourceRevisionFact | None
 
 
 class TransactionSourceCorrectionApplication:
@@ -61,10 +57,8 @@ class TransactionSourceCorrectionApplication:
     ) -> SourceCommandAdmission:
         """Authenticate before the consumer claims idempotency; stage no effects."""
         try:
-            command = TransactionSourceCorrectionRequestedEvent.model_validate(
-                command.model_dump(mode="python", exclude_unset=True)
-            )
-        except ValidationError:
+            command = self._repository.normalize_command(command)
+        except SourceInputRejected:
             raise SourceCorrectionRejected("SOURCE_COMMAND_INVALID") from None
         claims = command.authorization.claims
         request_hash = command.body.canonical_request_sha256(
@@ -87,7 +81,7 @@ class TransactionSourceCorrectionApplication:
 
     async def execute(
         self, command: TransactionSourceCorrectionRequestedEvent
-    ) -> TransactionSourceRevision:
+    ) -> SourceRevisionFact:
         admission = await self.admit(command)
         command = admission.command
         claims, request_hash = command.authorization.claims, admission.request_sha256
@@ -119,7 +113,7 @@ class TransactionSourceCorrectionApplication:
             command_id=claims.command_id,
         )
         try:
-            original = TransactionSourceCorrectionRequestedEvent.model_validate(intent.payload)
+            original = self._repository.decode_admitted_intent(intent.payload_material())
             same_input = (
                 original.body.canonical_request_sha256(
                     target_transaction_id=claims.target_transaction_id
@@ -138,7 +132,7 @@ class TransactionSourceCorrectionApplication:
 
     async def _committed(
         self, command: TransactionSourceCorrectionRequestedEvent, *, request_hash: str
-    ) -> TransactionSourceRevision | None:
+    ) -> SourceRevisionFact | None:
         claims = command.authorization.claims
         row = await self._repository.committed_command(
             tenant_id=claims.tenant_id, command_id=claims.command_id
@@ -170,34 +164,28 @@ class TransactionSourceCorrectionApplication:
             self._qualify_committed(command, row, retained)
         return row
 
-    @staticmethod
     def _qualify_committed(
+        self,
         command: TransactionSourceCorrectionRequestedEvent,
-        row: TransactionSourceRevision,
+        row: SourceRevisionFact,
         retained: RetainedSourceRows,
     ) -> None:
-        raw_payload: object = retained.raw_event.payload
+        raw_payload: object = retained.raw_event.payload_material()
         if not isinstance(raw_payload, Mapping):
             raise SourceCorrectionRejected("SOURCE_REVISION_FACT_UNVERIFIED")
         try:
-            TransactionEvent.model_validate(raw_payload)
-            output = {
-                column.name: getattr(retained.transaction, column.name)
-                for column in Transaction.__table__.columns
-                if column.name not in _TECHNICAL_FIELDS
-            } | {"tenant_id": command.tenant_id}
+            self._repository.validate_retained_input(raw_payload)
+            output = retained.transaction.output_material() | {"tenant_id": command.tenant_id}
             verify_confirmed_fx_revision(
-                revision={
-                    column.name: getattr(row, column.name) for column in row.__table__.columns
-                },
+                revision=row.material(),
                 authenticated_claims=command.authorization.claims.model_dump(mode="json"),
                 reason=command.body.reason,
                 portfolio_id=command.portfolio_id,
                 raw_id=cast(int, retained.raw_event.id),
                 raw_source=raw_payload,
                 ledger_output=output,
-                stored_fingerprint=cast(str, retained.transaction.payload_fingerprint),
-                original_receipt=retained.transaction.calculation_lineage,
+                stored_fingerprint=cast(str, retained.transaction.stored_fingerprint),
+                original_receipt=retained.transaction.receipt_material(),
                 supplied_bases=command.body.supplied_bases,
                 local=command.body.realized_pnl_local,
                 base=command.body.realized_pnl_base,
@@ -211,7 +199,7 @@ class TransactionSourceCorrectionApplication:
         retained: RetainedSourceRows,
         *,
         attestation_hash: str,
-    ) -> TransactionSourceRevision:
+    ) -> SourceRevisionFact:
         raw_payload, raw_hash = self._require_current_root(command, retained)
         output, original, confirmed = self._confirm_retained_source(command, retained, raw_payload)
         presence = {
@@ -245,7 +233,7 @@ class TransactionSourceCorrectionApplication:
         transaction, raw, head = retained.transaction, retained.raw_event, retained.head
         if transaction.portfolio_id != command.portfolio_id:
             raise SourceCorrectionRejected("SOURCE_REVISION_OWNER_MISMATCH")
-        raw_payload: object = raw.payload
+        raw_payload: object = raw.payload_material()
         if not isinstance(raw_payload, Mapping):
             raise SourceCorrectionRejected("SOURCE_REVISION_RAW_AUTHORITY_UNAVAILABLE")
         try:
@@ -262,8 +250,8 @@ class TransactionSourceCorrectionApplication:
             raise SourceCorrectionRejected("SOURCE_REVISION_ALREADY_CONFIRMED")
         return raw_payload, raw_hash
 
-    @staticmethod
     def _confirm_retained_source(
+        self,
         command: TransactionSourceCorrectionRequestedEvent,
         retained: RetainedSourceRows,
         raw_payload: Mapping[str, object],
@@ -271,17 +259,13 @@ class TransactionSourceCorrectionApplication:
         transaction = retained.transaction
         claims = command.authorization.claims
         try:
-            TransactionEvent.model_validate(raw_payload)
-            output = {
-                column.name: getattr(transaction, column.name)
-                for column in Transaction.__table__.columns
-                if column.name not in _TECHNICAL_FIELDS
-            } | {"tenant_id": claims.tenant_id}
+            self._repository.validate_retained_input(raw_payload)
+            output = transaction.output_material() | {"tenant_id": claims.tenant_id}
             original = verify_retained_fx_source(
                 raw_source=raw_payload,
                 ledger_output=output,
-                stored_fingerprint=cast(str, transaction.payload_fingerprint),
-                receipt_payload=transaction.calculation_lineage,
+                stored_fingerprint=cast(str, transaction.stored_fingerprint),
+                receipt_payload=transaction.receipt_material(),
                 tenant_id=claims.tenant_id,
             )
             confirmed = confirm_missing_fx_source(
@@ -309,7 +293,7 @@ class TransactionSourceCorrectionApplication:
         return source_confirmation_material(
             raw_id=str(retained.raw_event.id),
             raw_sha256=raw_hash,
-            original_receipt=retained.transaction.calculation_lineage,
+            original_receipt=retained.transaction.receipt_material(),
             original_presence=presence,
             request_sha256=command.authorization.claims.canonical_request_sha256,
             original_output=original_output,
@@ -326,7 +310,7 @@ class TransactionSourceCorrectionApplication:
         source_values: dict[str, object],
         presence: dict[str, bool],
         receipt: dict,
-    ) -> TransactionSourceRevision:
+    ) -> SourceRevisionFact:
         claims = command.authorization.claims
         identity = {
             "revision_id": str(uuid4()),
@@ -358,4 +342,6 @@ class TransactionSourceCorrectionApplication:
             trace_id=claims.trace_id,
         )
         # Bind the complete appended fact, not only its random/time identity.
-        return TransactionSourceRevision(**fields, revision_sha256=canonical_content_hash(fields))
+        return SourceRevisionFact.from_material(
+            fields | {"revision_sha256": canonical_content_hash(fields)}
+        )
