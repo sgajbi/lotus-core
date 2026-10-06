@@ -160,7 +160,16 @@ def _fx_owned_runtime_identity():
     )
 
 
-@pytest.mark.parametrize("case", ["physical_duplicate", "semantic_duplicate", "faulting_winner"])
+@pytest.mark.parametrize(
+    "case",
+    [
+        "physical_duplicate",
+        "semantic_duplicate",
+        "faulting_winner",
+        "repair_faulting_winner",
+        "repair_vs_ordinary",
+    ],
+)
 async def test_fx_application_competing_delivery_uses_real_claim_wait_and_uow(
     clean_db, async_db_session: AsyncSession, monkeypatch, case
 ):
@@ -191,12 +200,54 @@ async def test_fx_application_competing_delivery_uses_real_claim_wait_and_uow(
     await async_db_session.commit()
     winner_context = transaction_processing_test_context(async_db_session)
     loser_context = transaction_processing_test_context(async_db_session)
+    repair_case = case in {"repair_faulting_winner", "repair_vs_ordinary"}
+    faulting_winner = case == "faulting_winner" or repair_case
+    if repair_case:
+        assert (
+            await process_booked_transaction(
+                context=winner_context,
+                event=event,
+                event_id="FX-CONCURRENT-INITIAL",
+                correlation_id="INITIAL",
+            )
+        ).status is TransactionProcessingStatus.PROCESSED
     before = await _fx_application_snapshot(winner_context.session_factory)
     winner_written, loser_entered, loser_claimed = asyncio.Event(), asyncio.Event(), asyncio.Event()
     release_winner, release_loser = asyncio.Event(), asyncio.Event()
     pids, writes = {}, {"fx-winner": 0, "fx-loser": 0}
     original_claim = IdempotencyRepository.claim_semantic_event_processing
+    original_repair_claim = IdempotencyRepository.claim_event_processing
     original_write = SqlAlchemyCostBasisTransactionRepository.upsert_booked_transaction
+    source_loads = {name: {"preloaded": 0, "fallback": 0} for name in ("fx-winner", "fx-loser")}
+    original_preloaded = (
+        SqlAlchemyCostBasisTransactionRepository.load_booked_transaction_with_fx_witness
+    )
+    original_fallback = SqlAlchemyCostBasisTransactionRepository.load_fx_retention_witness
+
+    async def observe_preloaded(repository, transaction):
+        name = asyncio.current_task().get_name()
+        if name in source_loads:
+            source_loads[name]["preloaded"] += 1
+        return await original_preloaded(repository, transaction)
+
+    async def observe_fallback(repository, transaction):
+        name = asyncio.current_task().get_name()
+        if name in source_loads:
+            source_loads[name]["fallback"] += 1
+        return await original_fallback(repository, transaction)
+
+    async def observe_repair_claim(repository, **kwargs):
+        name = asyncio.current_task().get_name()
+        if not repair_case or kwargs["event_id"] != "FX-CONCURRENT-REPAIR":
+            return await original_repair_claim(repository, **kwargs)
+        if name == "fx-loser":
+            loser_entered.set()
+        outcome = await original_repair_claim(repository, **kwargs)
+        if name == "fx-loser":
+            assert outcome
+            loser_claimed.set()
+            await release_loser.wait()
+        return outcome
 
     async def observe_claim(repository, **kwargs):
         task = asyncio.current_task()
@@ -204,7 +255,7 @@ async def test_fx_application_competing_delivery_uses_real_claim_wait_and_uow(
         if kwargs["service_name"] != "portfolio-transaction-processing" or name not in writes:
             return await original_claim(repository, **kwargs)
         pids[name] = await repository.db.scalar(select(func.pg_backend_pid()))
-        if name == "fx-loser":
+        if name == "fx-loser" and case != "repair_faulting_winner":
             loser_entered.set()
         outcome = await original_claim(repository, **kwargs)
         if name == "fx-loser" and case == "faulting_winner":
@@ -221,16 +272,32 @@ async def test_fx_application_competing_delivery_uses_real_claim_wait_and_uow(
             if name == "fx-winner" and writes[name] == 2:
                 winner_written.set()
                 await release_winner.wait()
-                if case == "faulting_winner":
+                if faulting_winner:
                     raise RuntimeError("injected-concurrent-second-fx-write")
         return persisted
 
     monkeypatch.setattr(IdempotencyRepository, "claim_semantic_event_processing", observe_claim)
+    if repair_case:
+        monkeypatch.setattr(IdempotencyRepository, "claim_event_processing", observe_repair_claim)
+        monkeypatch.setattr(
+            SqlAlchemyCostBasisTransactionRepository,
+            "load_booked_transaction_with_fx_witness",
+            observe_preloaded,
+        )
+        monkeypatch.setattr(
+            SqlAlchemyCostBasisTransactionRepository,
+            "load_fx_retention_witness",
+            observe_fallback,
+        )
     monkeypatch.setattr(
         SqlAlchemyCostBasisTransactionRepository, "upsert_booked_transaction", observe_write
     )
     event_id = "FX-CONCURRENT-WINNER"
-    loser_id = "FX-CONCURRENT-OTHER" if case == "semantic_duplicate" else event_id
+    loser_id = "FX-CONCURRENT-OTHER" if case == "semantic_duplicate" or repair_case else event_id
+    repair_arguments = {
+        "processing_intent": TransactionProcessingIntent.REPAIR,
+        "repair_delivery_id": "FX-CONCURRENT-REPAIR",
+    }
     tasks = []
     try:
         async with asyncio.timeout(20):
@@ -240,6 +307,7 @@ async def test_fx_application_competing_delivery_uses_real_claim_wait_and_uow(
                     event=event,
                     event_id=event_id,
                     correlation_id="WINNER",
+                    **(repair_arguments if repair_case else {}),
                 ),
                 name="fx-winner",
             )
@@ -251,14 +319,23 @@ async def test_fx_application_competing_delivery_uses_real_claim_wait_and_uow(
                     event=event,
                     event_id=loser_id,
                     correlation_id="LOSER",
+                    **(repair_arguments if case == "repair_faulting_winner" else {}),
                 ),
                 name="fx-loser",
             )
             tasks.append(loser)
             await loser_entered.wait()
             assert pids["fx-winner"] != pids["fx-loser"]
+            if case == "repair_vs_ordinary":
+                assert (await loser).status is TransactionProcessingStatus.DUPLICATE
+                assert writes["fx-loser"] == 0
+                assert source_loads["fx-loser"] == {"preloaded": 0, "fallback": 0}
+                print(
+                    "FX_CONCURRENT_ORDINARY_DUPLICATE",
+                    "completed before repair release; no wait",
+                )
             async with winner_context.session_factory() as observer:
-                while True:
+                while case != "repair_vs_ordinary":
                     await observer.execute(text("SELECT pg_stat_clear_snapshot()"))
                     wait = (
                         (
@@ -277,9 +354,12 @@ async def test_fx_application_competing_delivery_uses_real_claim_wait_and_uow(
                     if pids["fx-winner"] in wait["blockers"]:
                         break
                     await asyncio.sleep(0.01)
-                assert wait["wait_event_type"] == "Lock"
-                assert "processed_events" in wait["query"].lower()
-                assert "insert" in wait["query"].lower()
+                if case == "repair_vs_ordinary":
+                    wait = None
+                if wait is not None:
+                    assert wait["wait_event_type"] == "Lock"
+                    assert "processed_events" in wait["query"].lower()
+                    assert "insert" in wait["query"].lower()
                 locks = (
                     (
                         await observer.execute(
@@ -294,32 +374,54 @@ async def test_fx_application_competing_delivery_uses_real_claim_wait_and_uow(
                     .mappings()
                     .all()
                 )
-                assert any(
-                    lock["pid"] == pids["fx-loser"] and not lock["granted"] for lock in locks
-                )
+                if wait is not None:
+                    assert any(
+                        lock["pid"] == pids["fx-loser"] and not lock["granted"] for lock in locks
+                    )
                 print(
-                    "FX_CONCURRENT_WAIT",
+                    "FX_CONCURRENT_OBSERVATION" if wait is None else "FX_CONCURRENT_WAIT",
                     {
                         "case": case,
                         "pids": pids,
-                        "wait": dict(wait),
+                        "wait": dict(wait) if wait is not None else None,
                         "locks": [dict(lock) for lock in locks],
                     },
                 )
             release_winner.set()
-            if case == "faulting_winner":
+            if faulting_winner:
                 with pytest.raises(RuntimeError, match="injected-concurrent-second-fx-write"):
                     await winner
-                await loser_claimed.wait()
+                if case != "repair_vs_ordinary":
+                    await loser_claimed.wait()
                 assert writes["fx-winner"] == 2 and writes["fx-loser"] == 0
                 assert await _fx_application_snapshot(winner_context.session_factory) == before
                 print(
                     "FX_CONCURRENT_ROLLBACK",
-                    "winner rolled back; loser owns uncommitted claim "
-                    "but has made no financial writes",
+                    "winner rolled back; loser made no financial writes; "
+                    + (
+                        "ordinary duplicate completed"
+                        if case == "repair_vs_ordinary"
+                        else "loser owns uncommitted claim"
+                    ),
                 )
-                release_loser.set()
-                assert (await loser).status is TransactionProcessingStatus.PROCESSED
+                if repair_case:
+                    assert source_loads["fx-winner"] == {"preloaded": 0, "fallback": 1}
+                if case == "repair_vs_ordinary":
+                    retry = await process_booked_transaction(
+                        context=winner_context,
+                        event=event,
+                        event_id=event_id,
+                        correlation_id="REPAIR-RETRY",
+                        **repair_arguments,
+                    )
+                    assert retry.status is TransactionProcessingStatus.PROCESSED
+                else:
+                    release_loser.set()
+                    assert (await loser).status is TransactionProcessingStatus.PROCESSED
+                    if repair_case:
+                        assert source_loads["fx-loser"] == {"preloaded": 0, "fallback": 1}
+                if repair_case:
+                    print("FX_CONCURRENT_SOURCE_ROUTES", source_loads)
             else:
                 assert (await winner).status is TransactionProcessingStatus.PROCESSED
                 assert (await loser).status is TransactionProcessingStatus.DUPLICATE
@@ -328,19 +430,18 @@ async def test_fx_application_competing_delivery_uses_real_claim_wait_and_uow(
             assert after != before
             assert [
                 row for row in after["outbox_events"] if row["aggregate_type"] == "RawTransaction"
-            ] == before["outbox_events"]
+            ] == [
+                row for row in before["outbox_events"] if row["aggregate_type"] == "RawTransaction"
+            ]
             assert len(after["transactions"]) == 1
             assert len(after["position_history"]) == len(after["position_state"]) == 1
-            assert (
-                len(
-                    [
-                        row
-                        for row in after["processed_events"]
-                        if row["service_name"] == "portfolio-transaction-processing"
-                    ]
-                )
-                == 1
-            )
+            assert len(
+                [
+                    row
+                    for row in after["processed_events"]
+                    if row["service_name"] == "portfolio-transaction-processing"
+                ]
+            ) == (2 if repair_case else 1)
             assert after["pipeline_stage_state"] and not after["cashflows"]
             async with winner_context.session_factory() as verification:
                 row = (
@@ -360,6 +461,17 @@ async def test_fx_application_competing_delivery_uses_real_claim_wait_and_uow(
                     context=winner_context, event=event, event_id=retry_id, correlation_id="RETRY"
                 )
                 assert retry.status is TransactionProcessingStatus.DUPLICATE
+                assert await _fx_application_snapshot(winner_context.session_factory) == after
+            if repair_case:
+                assert (
+                    await process_booked_transaction(
+                        context=winner_context,
+                        event=event,
+                        event_id=event_id,
+                        correlation_id="REPAIR-DUPLICATE",
+                        **repair_arguments,
+                    )
+                ).status is TransactionProcessingStatus.DUPLICATE
                 assert await _fx_application_snapshot(winner_context.session_factory) == after
             async with winner_context.session_factory() as observer:
                 active = (
