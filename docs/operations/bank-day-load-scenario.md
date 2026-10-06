@@ -351,6 +351,17 @@ reconciled across all `1000` portfolios with this workflow.
 
 ### Performance-load source completion diagnostics
 
+Fee-source qualification examines the complete original cost/raw authority before requesting
+retained processing receipts. Only an explicit absence of qualified original authority admits
+the scoped receipt lookup; conflicting raw sources, malformed fees and ambiguous authority still
+refuse the complete batch before publication. Malformed named-cost signatures now produce the
+typed `TRANSACTION_REPLAY_SOURCE_INVALID` refusal with failed transaction IDs, rather than
+leaking a model-validation exception from eager correction preparation. Existing tenant/source-FX
+checks, None/zero distinctions, canonical serialization and source read locks are retained.
+Original preparation is batch-local and reused across receipt awaits only while captured inputs
+remain unchanged. This reduces unnecessary preparation/query work; it does not certify load SLOs
+or establish the cause of a historical idle transaction or portfolio wait chain.
+
 The separate `make test-performance-load-gate-full` gate retains JSON/Markdown reports in
 `output/task-runs/` when source completion raises, including profiles already evaluated and the
 active failure stage. `completion_evidence` records each HTTP202 batch's independently submitted

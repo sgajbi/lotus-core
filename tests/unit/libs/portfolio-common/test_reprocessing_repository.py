@@ -16,6 +16,7 @@ from portfolio_common.reprocessing_repository import (
     ReprocessingReplayError,
     ReprocessingRepository,
     load_transaction_fee_facts,
+    load_transaction_fee_receipts,
     load_transaction_replay_rows,
 )
 from sqlalchemy.dialects import postgresql
@@ -604,6 +605,31 @@ async def test_empty_fee_fact_batch_does_not_query_even_with_locked_receipt_scop
     ) == ([], [], [])
 
     session.execute.assert_not_awaited()
+
+
+@pytest.mark.parametrize("lock_sources", [False, True])
+async def test_receipt_only_lookup_preserves_exact_query_without_cost_or_raw_reads(lock_sources):
+    scopes = [("TENANT", "SERVICE", "P1", "KEY"), ("TENANT_B", "SERVICE", "P2", "KEY_B")]
+    receipts = [{"semantic_key": "KEY", "payload_fingerprint": "HASH"}]
+    session = AsyncMock(spec=AsyncSession)
+    session.execute.return_value = _mapping_result(receipts)
+    assert await load_transaction_fee_receipts(session, [], lock_sources=lock_sources) == []
+    session.execute.assert_not_awaited()
+    assert (
+        await load_transaction_fee_receipts(session, scopes, lock_sources=lock_sources) == receipts
+    )
+    session.execute.assert_awaited_once()
+    statement = _postgresql_statement(session.execute.await_args.args[0])
+    assert "transaction_costs" not in statement and "outbox_events" not in statement
+    for tenant, service, portfolio, key in scopes:
+        for column, value in zip(
+            ("tenant_id", "service_name", "portfolio_id", "semantic_key"),
+            (tenant, service, portfolio, key),
+            strict=True,
+        ):
+            assert f"processed_events.{column} = '{value}'" in statement
+    assert " OR " in statement and "ORDER BY processed_events.id" in statement
+    assert ("FOR SHARE OF processed_events" in statement) == lock_sources
 
 
 @pytest.mark.parametrize("lock_sources", [False, True])

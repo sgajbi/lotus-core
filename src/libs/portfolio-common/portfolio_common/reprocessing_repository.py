@@ -157,35 +157,47 @@ async def load_transaction_fee_facts(
         raw_stmt = raw_stmt.with_for_update(read=True, of=OutboxEvent)
     fees = (await session.execute(fee_stmt)).mappings().all()
     raw = (await session.execute(raw_stmt)).mappings().all()
-    receipts = []
-    if receipt_scopes:
-        receipt_stmt = (
-            select(
-                ProcessedEvent.tenant_id,
-                ProcessedEvent.service_name,
-                ProcessedEvent.portfolio_id,
-                ProcessedEvent.semantic_key,
-                ProcessedEvent.payload_fingerprint,
-            )
-            .where(
-                or_(
-                    *(
-                        and_(
-                            ProcessedEvent.tenant_id == tenant,
-                            ProcessedEvent.service_name == service,
-                            ProcessedEvent.portfolio_id == portfolio,
-                            ProcessedEvent.semantic_key == key,
-                        )
-                        for tenant, service, portfolio, key in receipt_scopes
-                    )
-                ),
-            )
-            .order_by(ProcessedEvent.id)
+    receipts = await load_transaction_fee_receipts(
+        session, receipt_scopes, lock_sources=lock_sources
+    )
+    return list(fees), list(raw), receipts
+
+
+async def load_transaction_fee_receipts(
+    session: AsyncSession,
+    receipt_scopes: Sequence[tuple[str, str, str, str]],
+    *,
+    lock_sources: bool = False,
+) -> list[Mapping[str, Any]]:
+    """Read only exact existing receipt scopes, without rereading cost or raw facts."""
+    if not receipt_scopes:
+        return []
+    receipt_stmt = (
+        select(
+            ProcessedEvent.tenant_id,
+            ProcessedEvent.service_name,
+            ProcessedEvent.portfolio_id,
+            ProcessedEvent.semantic_key,
+            ProcessedEvent.payload_fingerprint,
         )
-        if lock_sources:
-            receipt_stmt = receipt_stmt.with_for_update(read=True, of=ProcessedEvent)
-        receipts = (await session.execute(receipt_stmt)).mappings().all()
-    return list(fees), list(raw), list(receipts)
+        .where(
+            or_(
+                *(
+                    and_(
+                        ProcessedEvent.tenant_id == tenant,
+                        ProcessedEvent.service_name == service,
+                        ProcessedEvent.portfolio_id == portfolio,
+                        ProcessedEvent.semantic_key == key,
+                    )
+                    for tenant, service, portfolio, key in receipt_scopes
+                )
+            ),
+        )
+        .order_by(ProcessedEvent.id)
+    )
+    if lock_sources:
+        receipt_stmt = receipt_stmt.with_for_update(read=True, of=ProcessedEvent)
+    return list((await session.execute(receipt_stmt)).mappings().all())
 
 
 async def load_transaction_replay_rows(

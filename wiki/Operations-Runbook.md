@@ -837,6 +837,14 @@ failed gate releasable or establish its root cause.
 See [Bank-day load scenario](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/bank-day-load-scenario.md#performance-load-source-completion-diagnostics)
 for budgets, scopes, artifact interpretation and unchanged load/SLO boundaries.
 
+Fee-source qualification requests retained receipts only after complete original authority
+examination reports absence. Conflicting or malformed cost/raw facts never grant fallback
+permission. Malformed named-cost signatures produce typed `TRANSACTION_REPLAY_SOURCE_INVALID`
+with failed transaction IDs before publication, replacing the accidental validation-exception
+leak from eager correction preparation. Tenant/source-FX, None/zero, ambiguity and source-lock
+checks remain enforced; batch-local preparation is refused if inputs change across receipt awaits.
+Reduced preparation/query work is not a load-SLO or historical root-cause certification.
+
 ## Related references
 
 - [Support and Lineage](Support-and-Lineage)
