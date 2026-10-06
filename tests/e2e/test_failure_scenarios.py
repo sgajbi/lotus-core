@@ -189,7 +189,10 @@ def _exercise_deployed_native_boundary(db_engine, recovery, *, forced):
             [
                 portfolio_record(portfolio, base_currency="SGD"),
                 instrument_record(
-                    security, name="Deployed native equity", isin="SG0000000001", currency="SGD"
+                    security,
+                    name="Deployed native equity",
+                    isin=f"DEP_ISIN_{suffix}",
+                    currency="SGD",
                 ),
                 canonical_transaction_record(event),
             ]
@@ -309,7 +312,7 @@ def _exercise_deployed_native_boundary(db_engine, recovery, *, forced):
                     "later_offset": later,
                     "final_offset": later + 1,
                     "lock_key": lock,
-                    "admitted_backends": [tuple(row) for row in admitted],
+                    "admitted_backends": [dict(row) for row in admitted],
                     "financial": snapshot,
                     "identity": identity,
                 },
