@@ -681,6 +681,24 @@ async def test_get_linked_transaction_group_scopes_portfolio_without_security_fi
     )
 
 
+async def test_canonical_transaction_lookup_refuses_unexpected_fx_source_load(monkeypatch) -> None:
+    from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx.persisted_return import (  # noqa: E501
+        FxCanonicalSourceLoad,
+    )
+
+    session = AsyncMock()
+    loader = AsyncMock(return_value=FxCanonicalSourceLoad(None, None))
+    repository = SqlAlchemyCostBasisTransactionRepository(session)
+    monkeypatch.setattr(repository, "_get_booked_transaction", loader)
+    with pytest.raises(TypeError, match="unexpected FX source load"):
+        await repository.get_booked_transaction("TX-FX", portfolio_id="PORT-FX")
+    loader.assert_awaited_once_with(
+        "TX-FX", portfolio_id="PORT-FX", repair_tenant_id=None, repair_security_id=None
+    )
+    session.execute.assert_not_awaited()
+    session.commit.assert_not_awaited()
+
+
 async def test_get_booked_transaction_maps_domain_transaction_and_scopes_portfolio() -> None:
     db_session = AsyncMock()
     repository = SqlAlchemyCostBasisTransactionRepository(db_session)
