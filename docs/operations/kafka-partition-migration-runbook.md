@@ -141,6 +141,14 @@ DLQ delivery confirmation and close use that worker. Async financial processing 
 event loop: a slow broker acknowledgement must not prevent another task from finishing its SQL
 unit of work. Do not replace this boundary with independent thread submissions against one handle.
 
+Concurrent polling uses the configured native timeout while idle. With processing tasks active,
+the native poll is nonblocking; an empty result waits for task completion on the event loop for
+at most the smaller of the configured timeout and 100ms. This keeps the FIFO worker available
+for acknowledgements and cached watermark reads while servicing poll callbacks between bounded
+waits. Serial polling, partition ordering and acknowledgement authority are unchanged. Event-barrier
+tests establish this scheduling boundary; exact-source broker and full financial-load qualification
+remain separate requirements.
+
 Financial durability precedes the success offset acknowledgement; confirmed DLQ publication
 precedes a poison-message acknowledgement. Completion requires exactly one returned partition
 with the expected topic, partition and next offset and no partition error. Missing or failed

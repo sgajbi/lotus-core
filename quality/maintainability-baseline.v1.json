@@ -16,7 +16,7 @@
       "path": "src/libs/portfolio-common/portfolio_common/kafka_consumer.py",
       "rank": "C",
       "mi": 0.0,
-      "raw_mi": -13.091184086034938,
+      "raw_mi": -12.754309550101125,
       "owner": "lotus-core maintainers",
       "rationale": "Existing shared-consumer hotspot scheduled for bounded decomposition.",
       "issue": "#462"

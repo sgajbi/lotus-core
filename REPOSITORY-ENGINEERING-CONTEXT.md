@@ -318,6 +318,11 @@ before releasing partition order; a successful native call alone is not partitio
 Rebalance callbacks only invalidate generation state and must not wait reentrantly on the worker.
 Cancellation joins the submitted operation before resource close; runtime supervision also awaits
 `wait_closed()`. Native work may exceed supervision grace because asyncio cannot preempt it.
+Concurrent active polls use native timeout zero. An empty result waits for processing completion
+on the event loop, bounded by the smaller of the configured timeout and 100ms, leaving the FIFO
+worker free for acknowledgement and cached watermark operations. Keep configured idle/serial
+polling and poll callback service between waits. Event-barrier scheduling tests do not replace
+exact-source Kafka, financial PG or full-load qualification.
 
 The recording regression reproduces the prior loop stall and tests responsive unrelated UOW work,
 ordering, ownership, acknowledgement errors and actual supervisor drain. It does not certify

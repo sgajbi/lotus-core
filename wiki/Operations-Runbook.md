@@ -659,6 +659,11 @@ continues on the event loop. Durable processing and exact synchronous partition 
 precede partition release. Missing, failed or stale-assignment acknowledgements retain redelivery
 posture. Runtime supervision joins native work before close, including cancelled waiters; the
 configured grace period cannot preempt a native call and is not a proven hard teardown bound.
+Concurrent active polling uses a nonblocking native poll followed, on empty results, by a
+completion-aware event-loop wait bounded by the smaller of the configured timeout and 100ms.
+Idle and serial polling keep their configured native timeout. The single FIFO worker remains
+available for exact acknowledgements and cached watermark reads during that wait. Event-barrier
+tests prove the scheduling boundary; they do not qualify broker or financial-load behavior.
 See the [native consumer lifecycle and issue matrix](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/kafka-partition-migration-runbook.md#native-consumer-operations-and-shutdown).
 Recording responsiveness and drain tests support #795 source review; actual broker/financial PG,
 deployment shutdown and #730 full-load qualification remain open. These tests do not establish
