@@ -547,7 +547,7 @@ async def test_concurrent_profile_preserves_partition_order(
         await run_task
 
     assert processed_offsets == [1, 2]
-    assert poll_timeouts[:2] == [1.0, 0.1]
+    assert poll_timeouts[:2] == [1.0, 0.0]
     committed_messages = [
         call.kwargs["message"] for call in mock_confluent_consumer.commit.call_args_list
     ]

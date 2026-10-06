@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
-from confluent_kafka import TopicPartition
+from confluent_kafka import KafkaError, TopicPartition
 from portfolio_common import runtime_supervision, worker_runtime
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.kafka_consumer_execution import KafkaConsumerExecutionProfile
@@ -150,6 +150,221 @@ async def test_native_ack_keeps_loop_and_other_uow_responsive(composed):
         await asyncio.gather(processing, other)
     assert {call[2] for call in native.calls} == {native.calls[0][2]}
     assert native.calls[0][2] != threading.get_ident()
+
+
+async def test_active_empty_poll_does_not_hold_acknowledgement_lane(composed):
+    consumer, native = composed
+    loop = asyncio.get_running_loop()
+    active_poll, blocking_poll, watermark_done = (asyncio.Event() for _ in range(3))
+    release = threading.Event()
+    delivered = False
+    original_watermark = native.get_watermark_offsets
+
+    def poll(timeout):
+        nonlocal delivered
+        native.record("poll", timeout)
+        if not delivered:
+            delivered = True
+            return RecordedMessage()
+        loop.call_soon_threadsafe(active_poll.set)
+        if timeout > 0:
+            loop.call_soon_threadsafe(blocking_poll.set)
+            assert release.wait(10), "Recording poll was not released"
+        return None
+
+    async def process(_message):
+        await active_poll.wait()
+
+    def watermark(partition, *, cached):
+        result = original_watermark(partition, cached=cached)
+        loop.call_soon_threadsafe(watermark_done.set)
+        return result
+
+    native.poll = poll
+    native.get_watermark_offsets = watermark
+    consumer.process.side_effect = process
+    running = asyncio.create_task(consumer._run_concurrent_consumer_loop(loop))
+    blocked = asyncio.create_task(blocking_poll.wait())
+    completed = asyncio.create_task(watermark_done.wait())
+    try:
+        # Timeout is only a deadlock watchdog; the native poll/ack handshake is the oracle.
+        await asyncio.wait_for(active_poll.wait(), 10)
+        await asyncio.wait_for(
+            asyncio.wait({blocked, completed}, return_when=asyncio.FIRST_COMPLETED), 10
+        )
+        assert not blocking_poll.is_set(), "Active empty poll holds the FIFO acknowledgement lane"
+        assert watermark_done.is_set()
+    finally:
+        release.set()
+        consumer._running = False
+        await running
+        for observer in (blocked, completed):
+            observer.cancel()
+        await asyncio.gather(blocked, completed, return_exceptions=True)
+    names = [call[0] for call in native.calls]
+    assert names.index("commit_ack") < names.index("watermark")
+    assert [call[1] for call in native.calls if call[0] == "commit_ack"] == [0]
+    assert len({call[2] for call in native.calls}) == 1
+
+
+@pytest.mark.parametrize("configured_timeout", [0.05, 1.0])
+async def test_active_empty_poll_waits_off_worker_and_services_callbacks(
+    composed, configured_timeout
+):
+    consumer, native = composed
+    loop = asyncio.get_running_loop()
+    consumer.execution_profile = KafkaConsumerExecutionProfile(
+        max_in_flight_messages=2, poll_timeout_seconds=configured_timeout
+    )
+    entered, release_wait, release_handler = (asyncio.Event() for _ in range(3))
+    waits = []
+
+    async def process(_message):
+        await release_handler.wait()
+
+    def poll(timeout):
+        native.record("poll", timeout)
+        native.callbacks["on_assign"](native, [TopicPartition("recorded", 1)])
+        return None
+
+    async def wait(_loop, *, timeout_seconds):
+        waits.append(timeout_seconds)
+        entered.set()
+        await release_wait.wait()
+        return False
+
+    native.poll = poll
+    consumer.process.side_effect = process
+    consumer._wait_for_next_processing_task = wait
+    consumer._schedule_processing_task(RecordedMessage(), loop, "partition:recorded:0")
+    running = asyncio.create_task(consumer._run_concurrent_consumer_loop(loop))
+    try:
+        await asyncio.wait_for(entered.wait(), 10)
+        # While event-loop wait is suspended, the lane is available for native observations.
+        marker = await consumer._native_operations.call(lambda: native.record("control_progress"))
+        assert marker is None
+        assert [call[1] for call in native.calls if call[0] == "poll"] == [0.0]
+        assert waits == [min(configured_timeout, 0.1)]
+        assert consumer._native_operations.generation(RecordedMessage(1)) == 1
+        assert not any(call[0] == "commit_ack" for call in native.calls)
+    finally:
+        consumer._running = False
+        release_handler.set()
+        release_wait.set()
+        await running
+    assert [call[1] for call in native.calls if call[0] == "commit_ack"] == [0]
+    assert len({call[2] for call in native.calls}) == 1
+
+
+async def test_active_empty_poll_real_wait_times_out_then_wakes_on_completion(composed):
+    consumer, native = composed
+    loop = asyncio.get_running_loop()
+    release_handler = asyncio.Event()
+    observations = []
+    original_wait = asyncio.wait
+    poll_count = 0
+
+    async def process(_message):
+        await release_handler.wait()
+
+    def poll(timeout):
+        nonlocal poll_count
+        poll_count += 1
+        native.record("poll", timeout)
+        if poll_count == 2:
+            native.callbacks["on_assign"](native, [TopicPartition("recorded", 1)])
+        return None
+
+    async def observe_wait(tasks, *, timeout, return_when):
+        assert timeout == 0.1
+        assert return_when == asyncio.FIRST_COMPLETED
+        assert not active.done()
+        if observations:
+            assert poll_count == 2
+            assert consumer._native_operations.generation(RecordedMessage(1)) == 1
+            loop.call_soon(release_handler.set)
+        # Delegate to the real asyncio wait used by the unchanged consumer helper.
+        done, pending = await original_wait(tasks, timeout=timeout, return_when=return_when)
+        observations.append((done, pending))
+        if done:
+            consumer._running = False
+        return done, pending
+
+    native.poll = poll
+    consumer.process.side_effect = process
+    consumer._schedule_processing_task(RecordedMessage(), loop, "partition:recorded:0")
+    active = next(iter(consumer._in_flight_tasks))
+    with patch("portfolio_common.kafka_consumer.asyncio.wait", side_effect=observe_wait):
+        running = asyncio.create_task(consumer._run_concurrent_consumer_loop(loop))
+        try:
+            # Watchdog only: no hardware-dependent elapsed-time success threshold.
+            await asyncio.wait_for(asyncio.shield(running), 10)
+        finally:
+            consumer._running = False
+            release_handler.set()
+            await running
+    assert observations == [(set(), {active}), ({active}, set())]
+    assert not active.cancelled()
+    assert not consumer._in_flight_tasks
+    assert [call[1] for call in native.calls if call[0] == "poll"] == [0.0, 0.0]
+    assert [call[1] for call in native.calls if call[0] == "commit_ack"] == [0]
+    assert len({call[2] for call in native.calls}) == 1
+
+
+@pytest.mark.parametrize("error_kind", ["nonfatal", "partition_eof"])
+async def test_active_nonfatal_poll_stream_keeps_other_uow_and_callbacks_responsive(
+    composed, error_kind
+):
+    consumer, native = composed
+    loop = asyncio.get_running_loop()
+    first_poll, other_progress, stream_observed = (asyncio.Event() for _ in range(3))
+    release_handler = asyncio.Event()
+    poll_count = 0
+    error_message = RecordedMessage()
+    error = (
+        KafkaError(KafkaError._PARTITION_EOF)
+        if error_kind == "partition_eof"
+        else SimpleNamespace(fatal=lambda: False)
+    )
+    error_message.error = lambda: error
+
+    async def process(_message):
+        await release_handler.wait()
+
+    async def other_uow():
+        await first_poll.wait()
+        other_progress.set()
+
+    def poll(timeout):
+        nonlocal poll_count
+        poll_count += 1
+        native.record("poll", timeout)
+        native.callbacks["on_assign"](native, [TopicPartition("recorded", 1)])
+        loop.call_soon_threadsafe(first_poll.set)
+        if poll_count >= 16:
+            loop.call_soon_threadsafe(stream_observed.set)
+        return error_message
+
+    native.poll = poll
+    consumer.process.side_effect = process
+    consumer._schedule_processing_task(RecordedMessage(), loop, "partition:recorded:0")
+    active = next(iter(consumer._in_flight_tasks))
+    running = asyncio.create_task(consumer._run_concurrent_consumer_loop(loop))
+    other = asyncio.create_task(other_uow())
+    try:
+        await asyncio.wait_for(stream_observed.wait(), 10)
+        await asyncio.wait_for(other_progress.wait(), 10)
+        assert not active.done()
+        assert consumer._native_operations.generation(RecordedMessage(1)) >= 16
+        assert all(call[1] == 0.0 for call in native.calls if call[0] == "poll")
+        assert not any(call[0] == "commit_ack" for call in native.calls)
+    finally:
+        consumer._running = False
+        release_handler.set()
+        await asyncio.gather(running, other)
+    assert not active.cancelled()
+    assert [call[1] for call in native.calls if call[0] == "commit_ack"] == [0]
+    assert len({call[2] for call in native.calls}) == 1
 
 
 async def test_durable_processing_precedes_ack_and_failure_never_commits(composed):

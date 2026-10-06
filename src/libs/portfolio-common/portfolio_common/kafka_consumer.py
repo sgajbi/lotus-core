@@ -70,7 +70,7 @@ from .monitoring import (
 
 logger = logging.getLogger(__name__)
 
-_ACTIVE_PROCESSING_POLL_TIMEOUT_SECONDS = 0.1
+_ACTIVE_PROCESSING_POLL_INTERVAL_SECONDS = 0.1
 
 DLQ_REASON_CODE_VALIDATION = "VALIDATION_ERROR"
 DLQ_REASON_CODE_DESERIALIZATION = "DESERIALIZATION_ERROR"
@@ -777,9 +777,17 @@ class BaseConsumer(ConsumerShutdownMixin, ABC):
 
             msg = await self._poll_next_message(
                 loop,
-                timeout_seconds=self._concurrent_poll_timeout_seconds(),
+                timeout_seconds=(
+                    0.0 if self._in_flight_tasks else self.execution_profile.poll_timeout_seconds
+                ),
             )
             if msg is None:
+                # Wait off the FIFO worker so active tasks can acknowledge and observe lag.
+                poll_interval = min(
+                    self.execution_profile.poll_timeout_seconds,
+                    _ACTIVE_PROCESSING_POLL_INTERVAL_SECONDS,
+                )
+                await self._wait_for_next_processing_task(loop, timeout_seconds=poll_interval)
                 continue
             if self._should_skip_polled_message(msg):
                 if not self._running:
@@ -788,14 +796,6 @@ class BaseConsumer(ConsumerShutdownMixin, ABC):
             await self._dispatch_or_queue_message(msg, loop)
 
         await self._drain_in_flight_on_shutdown(loop)
-
-    def _concurrent_poll_timeout_seconds(self) -> float:
-        """Keep idle polling quiet while bounding latency around active ordered work."""
-
-        configured_timeout = self.execution_profile.poll_timeout_seconds
-        if not self._in_flight_tasks:
-            return configured_timeout
-        return min(configured_timeout, _ACTIVE_PROCESSING_POLL_TIMEOUT_SECONDS)
 
     async def _poll_next_message(
         self,
