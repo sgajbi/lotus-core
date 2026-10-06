@@ -9,10 +9,142 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from confluent_kafka import TopicPartition
+from confluent_kafka import ConsumerGroupState, TopicPartition
 
+from tests.test_support import native_consumer_boundary as native_boundary
 from tools import dlq_replayer
 from tools.dlq_replayer import DLQReplayConsumer
+
+
+@pytest.fixture
+def departure_observer(monkeypatch):
+    """Control offline metadata/time only; live acceptance keeps the native AdminClient."""
+    clock = SimpleNamespace(now=0.0)
+    requests = []
+    waits = []
+
+    def advance(seconds):
+        clock.now += seconds
+
+    monkeypatch.setattr(
+        native_boundary, "time", SimpleNamespace(monotonic=lambda: clock.now, sleep=advance)
+    )
+    monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "departure-broker:29092")
+
+    def install(results, *, request_delay=0, result_delay=0, request_error=None, missing=False):
+        pending = deque(results)
+
+        class Future:
+            def result(self, timeout):
+                waits.append(timeout)
+                advance(min(result_delay, timeout))
+                if result_delay > timeout:
+                    raise TimeoutError("Native description deadline exhausted")
+                value = pending.popleft() if len(pending) > 1 else pending[0]
+                if isinstance(value, Exception):
+                    raise value
+                return value
+
+        class Admin:
+            def describe_consumer_groups(self, groups, *, request_timeout):
+                requests.append((groups, request_timeout))
+                advance(request_delay)
+                if request_error is not None:
+                    raise request_error
+                return {} if missing else {groups[0]: Future()}
+
+        monkeypatch.setattr(native_boundary, "AdminClient", lambda config: Admin())
+
+    return SimpleNamespace(clock=clock, requests=requests, waits=waits, install=install)
+
+
+def group_description(state=ConsumerGroupState.EMPTY, members=(), group="departure-group"):
+    return SimpleNamespace(
+        group_id=group, state=state, members=[SimpleNamespace(member_id=mid) for mid in members]
+    )
+
+
+async def test_group_departure_requires_observed_empty_after_active_member(departure_observer):
+    departure_observer.install(
+        [group_description(ConsumerGroupState.STABLE, ["old-member"]), group_description()]
+    )
+    observations = native_boundary.wait_for_group_departure("departure-group")
+    assert [row["state"] for row in observations] == ["STABLE", "EMPTY"]
+    assert observations[0]["member_ids"] == ["old-member"]
+    assert observations[1]["member_ids"] == []
+    assert observations[1]["elapsed_seconds"] > 0
+    assert all(groups == ["departure-group"] for groups, _ in departure_observer.requests)
+    assert departure_observer.waits == [5, 5]
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        group_description(ConsumerGroupState.STABLE),
+        group_description(ConsumerGroupState.PREPARING_REBALANCING, ["old-member"]),
+        group_description(ConsumerGroupState.COMPLETING_REBALANCING),
+        group_description(ConsumerGroupState.DEAD),
+        group_description(ConsumerGroupState.EMPTY, ["old-member"]),
+    ],
+    ids=["stable-zero", "preparing-old-member", "completing", "dead", "empty-with-member"],
+)
+async def test_group_departure_nonready_exhausts_total_budget(departure_observer, description):
+    departure_observer.install([description], result_delay=1)
+    with pytest.raises(TimeoutError, match="deadline") as failure:
+        native_boundary.wait_for_group_departure("departure-group")
+    assert "observations=" in failure.value.__notes__[0]
+    assert departure_observer.clock.now == 60
+    assert all(0 < budget <= 5 for _, budget in departure_observer.requests)
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        group_description(group="wrong-group"),
+        group_description(ConsumerGroupState.UNKNOWN),
+        group_description(None),
+        SimpleNamespace(group_id="departure-group", state=ConsumerGroupState.EMPTY),
+        group_description(members=[""]),
+    ],
+    ids=["wrong-identity", "unknown", "missing-state", "missing-members", "missing-member-id"],
+)
+async def test_group_departure_invalid_description_fails_closed(departure_observer, description):
+    departure_observer.install([description])
+    with pytest.raises(ValueError) as failure:
+        native_boundary.wait_for_group_departure("departure-group")
+    assert "observations=" in failure.value.__notes__[0]
+    assert len(departure_observer.requests) == 1
+
+
+@pytest.mark.parametrize("stage", ["request", "future", "missing-group"])
+async def test_group_departure_native_errors_are_not_empty(departure_observer, stage):
+    departure_observer.install(
+        [TimeoutError("native request expired") if stage == "future" else group_description()],
+        request_error=RuntimeError("description failed") if stage == "request" else None,
+        missing=stage == "missing-group",
+    )
+    with pytest.raises((RuntimeError, TimeoutError, KeyError)) as failure:
+        native_boundary.wait_for_group_departure("departure-group")
+    assert "departure-group" in failure.value.__notes__[0]
+    assert len(departure_observer.requests) == 1
+
+
+async def test_group_departure_future_uses_remaining_budget_and_rejects_late_empty(
+    departure_observer,
+):
+    departure_observer.install([group_description()], request_delay=58, result_delay=2)
+    with pytest.raises(TimeoutError, match="after deadline"):
+        native_boundary.wait_for_group_departure("departure-group")
+    assert departure_observer.requests == [(["departure-group"], 5)]
+    assert departure_observer.waits == [2]
+    assert departure_observer.clock.now == 60
+
+
+async def test_group_departure_request_consuming_deadline_never_waits_future(departure_observer):
+    departure_observer.install([group_description()], request_delay=60)
+    with pytest.raises(TimeoutError, match="request exhausted deadline"):
+        native_boundary.wait_for_group_departure("departure-group")
+    assert departure_observer.waits == []
 
 
 async def test_replay_producer_uses_consumers_explicit_alternate_bootstrap():
