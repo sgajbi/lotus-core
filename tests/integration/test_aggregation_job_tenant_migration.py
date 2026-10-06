@@ -25,6 +25,9 @@ MIGRATION = (
     / "versions"
     / "c168b2c3d52f_feat_add_aggregation_job_tenant.py"
 )
+SOURCE_REVISION_MIGRATION = MIGRATION.with_name(
+    "c177b2c3d538_add_transaction_source_evidence_revisions.py"
+)
 
 PORTFOLIO_INSERT = text(
     """
@@ -58,6 +61,54 @@ def _bind_operations(migration: dict[str, Any], connection) -> None:
     migration["downgrade"].__globals__["op"] = operations
 
 
+def _source_revision_semantics(connection) -> tuple[list[dict[str, Any]], tuple, tuple]:
+    foreign_keys = inspect(connection).get_foreign_keys(
+        "transaction_source_revisions", schema="public"
+    )
+    assert {
+        "fk_source_revision_portfolio_owner",
+        "fk_source_revision_operation_owner",
+        "fk_source_revision_transaction_owner",
+    } <= {foreign_key["name"] for foreign_key in foreign_keys}
+    constraints = tuple(
+        tuple(row)
+        for row in connection.execute(
+            text(
+                "SELECT conname, pg_get_constraintdef(oid), convalidated FROM pg_constraint "
+                "WHERE conrelid = 'public.transaction_source_revisions'::regclass "
+                "AND contype = 'f' ORDER BY conname"
+            )
+        )
+    )
+    assert all(row[2] for row in constraints)
+    trigger = tuple(
+        connection.execute(
+            text(
+                """
+                SELECT t.tgname, pn.nspname, p.proname,
+                       pg_get_function_identity_arguments(p.oid), t.tgtype, t.tgenabled,
+                       t.tgconstraint, pg_get_triggerdef(t.oid), pg_get_functiondef(p.oid)
+                FROM pg_trigger t
+                JOIN pg_proc p ON p.oid = t.tgfoid
+                JOIN pg_namespace pn ON pn.oid = p.pronamespace
+                WHERE t.tgrelid = 'public.transaction_source_revisions'::regclass
+                  AND NOT t.tgisinternal
+                """
+            )
+        ).one()
+    )
+    assert trigger[:7] == (
+        "transaction_source_revision_immutable",
+        "public",
+        "reject_transaction_source_revision_mutation",
+        "",
+        27,  # BEFORE UPDATE OR DELETE, FOR EACH ROW.
+        "O",
+        0,
+    )
+    return foreign_keys, constraints, trigger
+
+
 def test_historical_rollback_setup_refuses_missing_newer_tenant_foreign_key(
     db_engine,
     clean_db,
@@ -86,9 +137,14 @@ def test_aggregation_job_cutover_quiesces_backfills_and_rejects_false_authority(
     clean_db,
 ) -> None:
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
+    source_migration: dict[str, Any] = runpy.run_path(str(SOURCE_REVISION_MIGRATION))
 
     with db_engine.begin() as connection:
+        original_source_semantics = _source_revision_semantics(connection)
         suspend_selected_history_portfolio_foreign_keys(connection)
+        _bind_operations(source_migration, connection)
+        # Real empty-history refusal, never a shortcut removal of owner constraints.
+        source_migration["downgrade"]()
         _bind_operations(migration, connection)
         if "tenant_id" in {
             column["name"]
@@ -143,6 +199,9 @@ def test_aggregation_job_cutover_quiesces_backfills_and_rejects_false_authority(
         )
         migration["upgrade"]()
         restore_selected_history_portfolio_foreign_keys(connection)
+        _bind_operations(source_migration, connection)
+        source_migration["upgrade"]()
+        assert _source_revision_semantics(connection) == original_source_semantics
 
         assert (
             connection.scalar(
