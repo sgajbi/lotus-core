@@ -116,8 +116,18 @@ async def test_native_terminal_wire_error_commits_only_after_dlq_publication(
     _, _, command, *_ = case()
     payload = command.model_dump(mode="json", exclude_unset=True) | {"schema_version": "2.0.0"}
     consumer = _consumer()
-    dlq_transport = AsyncMock(return_value=published)
-    offset_commit = MagicMock(return_value=True)
+    awaited_events = []
+
+    async def publish_to_dlq(message, error):
+        awaited_events.append("publication")
+        return published
+
+    async def commit_offset(message, generation):
+        awaited_events.append("commit")
+        return True
+
+    dlq_transport = AsyncMock(side_effect=publish_to_dlq)
+    offset_commit = AsyncMock(side_effect=commit_offset)
     monkeypatch.setattr(consumer, "_send_to_dlq_async", dlq_transport)
     monkeypatch.setattr(consumer, "_commit_after_dlq_publication", offset_commit)
     monkeypatch.setattr(consumer, "_handle_dlq_publication_failed", MagicMock())
@@ -126,7 +136,13 @@ async def test_native_terminal_wire_error_commits_only_after_dlq_publication(
     await consumer._process_polled_message(message, asyncio.get_running_loop())
     dlq_transport.assert_awaited_once()
     assert isinstance(dlq_transport.await_args.args[1], ValidationError)
-    assert offset_commit.call_count == int(published)
+    assert awaited_events == (["publication", "commit"] if published else ["publication"])
+    if published:
+        offset_commit.assert_awaited_once()
+        assert offset_commit.await_args.args[0] is message
+    else:
+        offset_commit.assert_not_called()
+        offset_commit.assert_not_awaited()
 
 
 def test_manager_registers_one_native_source_command_consumer_without_booking_alias(monkeypatch):
@@ -143,8 +159,16 @@ def test_manager_registers_one_native_source_command_consumer_without_booking_al
     monkeypatch.setattr(consumer_manager, "create_kafka_producer", MagicMock())
     monkeypatch.setattr(consumer_manager, "OutboxDispatcher", MagicMock())
     broker_substitute = MagicMock()
-    monkeypatch.setattr(kafka_consumer, "get_kafka_producer", lambda: broker_substitute)
+    producer_bootstrap_calls = []
+
+    def producer_substitute(*, bootstrap_servers):
+        assert bootstrap_servers == consumer_manager.KAFKA_BOOTSTRAP_SERVERS
+        producer_bootstrap_calls.append(bootstrap_servers)
+        return broker_substitute
+
+    monkeypatch.setattr(kafka_consumer, "get_kafka_producer", producer_substitute)
     manager = consumer_manager.ConsumerManager()
+    assert producer_bootstrap_calls == [consumer_manager.KAFKA_BOOTSTRAP_SERVERS]
     source_consumers = [
         consumer
         for consumer in manager.consumers
