@@ -14,7 +14,8 @@ from portfolio_common.exceptions import TransactionSemanticConflictError
 from portfolio_common.infrastructure.persistence.transaction_identity_guard import (
     GeneratedTransactionIdentityCollisionError,
 )
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.services.persistence_service.app.repositories.transaction_db_repo import (
@@ -192,6 +193,87 @@ async def test_concurrent_source_and_generated_creators_produce_one_owner(
             select(func.count()).where(DBTransaction.transaction_id == generated.transaction_id)
         )
     ) == 1
+    winner = source if outcomes[0] == "persisted" else generated
+    row = (
+        await async_db_session.execute(
+            select(DBTransaction).where(DBTransaction.transaction_id == generated.transaction_id)
+        )
+    ).scalar_one()
+    for field in (
+        "transaction_type",
+        "portfolio_id",
+        "security_id",
+        "cash_entry_mode",
+        "originating_transaction_id",
+        "originating_transaction_type",
+        "link_type",
+        "component_type",
+        "component_id",
+        "gross_transaction_amount",
+    ):
+        assert getattr(row, field) == getattr(winner, field), field
+    for model in (Cashflow, PositionState, OutboxEvent):
+        assert (await async_db_session.scalar(select(func.count()).select_from(model))) == 0
+
+
+@pytest.mark.parametrize(
+    ("sqlstate", "constraint", "qualified"),
+    [
+        ("23505", "uq_transaction_source_revision_owner", True),
+        ("23505", "unrelated_unique_constraint", False),
+        ("23514", "uq_transaction_source_revision_owner", False),
+        ("23502", "uq_transaction_source_revision_owner", False),
+    ],
+)
+async def test_insert_error_qualification_is_exact_and_preserves_session(
+    clean_db,
+    async_db_session: AsyncSession,
+    sqlstate: str,
+    constraint: str,
+    qualified: bool,
+) -> None:
+    """Inject real PG error metadata; only the owner unique race may reload a winner."""
+    await _seed_portfolios(async_db_session)
+    factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    incoming = _generated_event("cash")
+    assert await _persist(factory, incoming) == "persisted"
+    await async_db_session.execute(
+        text(
+            "CREATE FUNCTION test_owner_insert_error() RETURNS trigger LANGUAGE plpgsql AS $$ "
+            "BEGIN RAISE EXCEPTION 'representative insert constraint failure' "
+            f"USING ERRCODE = '{sqlstate}', CONSTRAINT = '{constraint}'; END $$"
+        )
+    )
+    await async_db_session.execute(
+        text(
+            "CREATE TRIGGER test_owner_insert_error BEFORE INSERT ON transactions "
+            "FOR EACH ROW EXECUTE FUNCTION test_owner_insert_error()"
+        )
+    )
+    await async_db_session.commit()
+    try:
+        async with factory() as session:
+            repository = TransactionDBRepository(session)
+            if qualified:
+                outcome = await repository.create_or_update_transaction(incoming)
+                assert not outcome.inserted
+                changed = incoming.model_copy(update={"gross_transaction_amount": Decimal("875")})
+                with pytest.raises(TransactionSemanticConflictError):
+                    await repository.create_or_update_transaction(changed)
+                foreign = incoming.model_copy(update={"portfolio_id": "PORT-OWNER-B"})
+                with pytest.raises(GeneratedTransactionIdentityCollisionError):
+                    await repository.create_or_update_transaction(foreign)
+            else:
+                with pytest.raises(IntegrityError) as failure:
+                    await repository.create_or_update_transaction(incoming)
+                assert failure.value.orig.sqlstate == sqlstate
+                assert failure.value.orig.__cause__.constraint_name == constraint
+            assert await session.scalar(select(func.count()).select_from(DBTransaction)) == 1
+            await session.rollback()
+    finally:
+        await async_db_session.execute(text("DROP TRIGGER test_owner_insert_error ON transactions"))
+        await async_db_session.execute(text("DROP FUNCTION test_owner_insert_error()"))
+        await async_db_session.commit()
 
 
 @pytest.mark.parametrize("family", ["cash", "interest"])

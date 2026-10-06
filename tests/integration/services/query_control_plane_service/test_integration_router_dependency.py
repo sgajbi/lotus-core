@@ -1385,8 +1385,10 @@ async def test_performance_component_economics_not_found_maps_to_problem_details
     ] == TenantId(TEST_TENANT_ID)
 
 
+@pytest.mark.parametrize("source_cut_sha256", ["a" * 64, None])
 async def test_performance_component_economics_authoritative_empty_is_ready(
     async_test_client,
+    source_cut_sha256: str | None,
 ):
     client, _mock_core_snapshot_service, mock_integration_service = async_test_client
     request = PerformanceComponentEconomicsRequest(
@@ -1402,6 +1404,7 @@ async def test_performance_component_economics_authoritative_empty_is_ready(
             portfolio_base_currency="USD",
             generated_at=datetime(2026, 4, 10, 15, tzinfo=UTC),
             is_initial_page=True,
+            source_cut_sha256=source_cut_sha256,
         )
     )
 
@@ -1436,8 +1439,8 @@ async def test_performance_component_economics_authoritative_empty_is_ready(
     }
     assert body["data_quality_status"] == "COMPLETE"
     assert body["latest_evidence_timestamp"] is None
-    assert body["source_evidence_current"] is True
-    assert body["freshness_status"] == "CURRENT"
+    assert body["source_evidence_current"] is (source_cut_sha256 is not None)
+    assert body["freshness_status"] == ("CURRENT" if source_cut_sha256 else "UNAVAILABLE")
     assert body["rows"] == []
 
 

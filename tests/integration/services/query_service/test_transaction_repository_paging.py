@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
@@ -244,11 +245,56 @@ async def test_exact_transaction_record_reuses_unique_identity_index_and_is_boun
             )
         )
 
+        # These transaction-local counterexamples must not qualify as full,
+        # physical identity indexes even though they also mention transaction_id.
+        session.execute(
+            text(
+                "CREATE UNIQUE INDEX test_paging_partial_identity ON transactions "
+                "(transaction_id) WHERE portfolio_id = 'PORT-EXACT-LOOKUP'"
+            )
+        )
+        session.execute(
+            text(
+                "CREATE UNIQUE INDEX test_paging_expression_identity ON transactions "
+                "(transaction_id, lower(portfolio_id))"
+            )
+        )
+        identity_indexes = {
+            name: (unique, columns)
+            for name, unique, columns in session.execute(
+                text(
+                    "SELECT index_class.relname, index_info.indisunique, "
+                    "array_agg(attribute.attname ORDER BY key.ordinality) "
+                    "FROM pg_index index_info "
+                    "JOIN pg_class table_class ON table_class.oid = index_info.indrelid "
+                    "JOIN pg_namespace namespace ON namespace.oid = table_class.relnamespace "
+                    "JOIN pg_class index_class ON index_class.oid = index_info.indexrelid "
+                    "CROSS JOIN LATERAL unnest(index_info.indkey) WITH ORDINALITY "
+                    "AS key(attnum, ordinality) "
+                    "JOIN pg_attribute attribute ON attribute.attrelid = table_class.oid "
+                    "AND attribute.attnum = key.attnum "
+                    "WHERE table_class.relname = 'transactions' "
+                    "AND namespace.nspname = current_schema() "
+                    "AND index_info.indisvalid "
+                    "AND index_info.indpred IS NULL AND index_info.indexprs IS NULL "
+                    "AND key.ordinality <= index_info.indnkeyatts "
+                    "GROUP BY index_class.relname, index_info.indisunique"
+                )
+            )
+        }
+        assert "test_paging_partial_identity" not in identity_indexes
+        assert "test_paging_expression_identity" not in identity_indexes
+
     assert "ix_transactions_transaction_id" in migrated_indexes
-    assert "ix_transactions_transaction_id" in plan
+    assert "Seq Scan" not in plan
+    selected_index = re.search(r"Index (?:Only )?Scan using (\w+)", plan)
+    assert selected_index is not None, plan
+    unique, columns = identity_indexes[selected_index.group(1)]
+    assert unique and "transaction_id" in columns
+    assert set(columns) <= {"transaction_id", "portfolio_id"}
     assert "portfolio_id" in plan and "transaction_id" in plan
 
-    statements: list[str] = []
+    statements: list[tuple[str, tuple[object, ...]]] = []
     sync_engine = async_db_session.bind.sync_engine
 
     def capture_sql(
@@ -259,7 +305,8 @@ async def test_exact_transaction_record_reuses_unique_identity_index_and_is_boun
         _context,
         _executemany: bool,
     ) -> None:
-        statements.append(statement)
+        assert isinstance(_parameters, tuple)
+        statements.append((statement, _parameters))
 
     event.listen(sync_engine, "before_cursor_execute", capture_sql)
     try:
@@ -267,6 +314,7 @@ async def test_exact_transaction_record_reuses_unique_identity_index_and_is_boun
             portfolio_id=portfolio_id,
             transaction_id=transaction_id,
             as_of_date=date(2026, 1, 31),
+            tenant_context=TEST_TENANT_CONTEXT,
         )
     finally:
         event.remove(sync_engine, "before_cursor_execute", capture_sql)
@@ -275,13 +323,53 @@ async def test_exact_transaction_record_reuses_unique_identity_index_and_is_boun
     assert response.portfolio_id == portfolio_id
     assert response.data_quality_status == "COMPLETE"
     data_reads = [
-        statement
-        for statement in statements
+        (statement, parameters)
+        for statement, parameters in statements
         if statement.lstrip().upper().startswith(("SELECT", "WITH"))
     ]
-    assert len(data_reads) == 3
-    assert any("transactions.transaction_id =" in statement for statement in data_reads)
-    assert any("LIMIT" in statement for statement in data_reads)
+    tenant_reads = [
+        read for read in data_reads if read[0].startswith("SELECT portfolios.portfolio_id")
+    ]
+    source_reads = [
+        read for read in data_reads if read[0].startswith("SELECT transactions.transaction_id")
+    ]
+    assert len(tenant_reads) == 1
+    assert len(source_reads) == 1  # Second proof lookup must reuse the scope cache.
+    tenant_statement, tenant_parameters = tenant_reads[0]
+    assert "portfolios.portfolio_id =" in tenant_statement
+    assert "portfolios.tenant_id =" in tenant_statement
+    assert "LIMIT" in tenant_statement
+    assert portfolio_id in tenant_parameters
+    assert TEST_TENANT_CONTEXT.tenant_id.value in tenant_parameters
+    source_statement, source_parameters = source_reads[0]
+    for predicate in (
+        "portfolios.tenant_id =",
+        "transactions.portfolio_id =",
+        "transactions.transaction_id =",
+        "transactions.fx_realized_pnl_mode =",
+    ):
+        assert predicate in source_statement
+    for value in (
+        TEST_TENANT_CONTEXT.tenant_id.value,
+        portfolio_id,
+        transaction_id,
+        "UPSTREAM_PROVIDED",
+    ):
+        assert value in source_parameters
+    ledger_reads = [read for read in data_reads if read not in tenant_reads + source_reads]
+    assert len(ledger_reads) == 3
+    assert len(data_reads) == 5  # Three original data reads plus the two named authorities.
+    page_reads = [read for read in ledger_reads if "transaction_page" in read[0]]
+    evidence_reads = [read for read in ledger_reads if "matching_ledger_transactions" in read[0]]
+    instrument_reads = [read for read in ledger_reads if "trim(instruments.security_id)" in read[0]]
+    assert len(page_reads) == len(evidence_reads) == len(instrument_reads) == 1
+    assert "LIMIT" in page_reads[0][0]
+    for statement, parameters in page_reads + evidence_reads:
+        assert "transactions.transaction_id =" in statement
+        assert "transactions.portfolio_id =" in statement
+        assert "portfolios.tenant_id =" in statement
+        assert transaction_id in parameters and portfolio_id in parameters
+        assert TEST_TENANT_CONTEXT.tenant_id.value in parameters
 
 
 async def test_transaction_ledger_identity_binds_only_selected_material_inputs(

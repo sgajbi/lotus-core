@@ -29,6 +29,7 @@ from portfolio_common.infrastructure.persistence.transaction_identity_guard impo
 )
 from sqlalchemy import exists, func, literal, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..adapters.event_record_mapper import (
@@ -321,7 +322,21 @@ class TransactionDBRepository:
                 .on_conflict_do_nothing(index_elements=["transaction_id"])
                 .returning(DBTransaction.transaction_id)
             )
-            persisted_id = (await self.db.execute(insert_stmt)).scalar_one_or_none()
+            try:
+                # The source-owner unique constraint can win a concurrent insert
+                # independently of the global transaction-id conflict arbiter.
+                # Roll back only this insert before locking/qualifying its winner.
+                async with self.db.begin_nested():
+                    persisted_id = (await self.db.execute(insert_stmt)).scalar_one_or_none()
+            except IntegrityError as error:
+                driver_error = error.orig.__cause__
+                if (
+                    getattr(error.orig, "sqlstate", None) != "23505"
+                    or getattr(driver_error, "constraint_name", None)
+                    != "uq_transaction_source_revision_owner"
+                ):
+                    raise
+                persisted_id = None
             inserted = persisted_id is not None
             persisted_transaction: DBTransaction
             if not inserted:
