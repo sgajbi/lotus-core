@@ -311,7 +311,9 @@ class BaseConsumer(ConsumerShutdownMixin, ABC):
         )
 
         if self.dlq_topic:
-            self._producer = get_kafka_producer()
+            self._producer = get_kafka_producer(
+                bootstrap_servers=self._consumer_config["bootstrap.servers"]
+            )
             self._log_consumer_event(
                 logging.INFO,
                 "Kafka consumer DLQ enabled.",
