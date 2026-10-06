@@ -6,6 +6,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock
 
 import pytest
+from portfolio_common.domain.calculation_lineage import calculation_lineage_binds_output
 from portfolio_common.infrastructure.persistence.transaction_identity_guard import (
     GeneratedTransactionIdentityCollisionError,
 )
@@ -22,6 +23,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     BookedTransaction,
     build_generated_settlement_cash_leg,
+    settlement,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisFxRatePort,
@@ -63,6 +65,39 @@ def _persistence():
         transaction, epoch=None
     )
     return persistence
+
+
+@pytest.mark.parametrize("rate", ["1", "1.0000000000", "1.2345"])
+async def test_generated_receipt_binds_rate_returned_by_persistence(rate: str) -> None:
+    product = _product_leg(
+        gross_transaction_amount=Decimal("25.0000000000"),
+        transaction_fx_rate=Decimal(rate),
+        transaction_fx_rate_origin="SOURCE_BOOKED",
+    )
+    persistence = _persistence()
+
+    def stored(transaction: BookedTransaction) -> BookedTransaction:
+        assert transaction.transaction_fx_rate is not None
+        assert transaction.transaction_fx_rate.as_tuple().exponent == -10
+        return replace(
+            transaction,
+            transaction_fx_rate=Decimal(format(transaction.transaction_fx_rate, ".10f")),
+        )
+
+    persistence.upsert_generated_booked_transaction.side_effect = stored
+    result = await link_settlement_cash_leg(
+        product_leg=product,
+        transaction_lookup=AsyncMock(spec=SettlementTransactionLookupPort),
+        transaction_persistence=persistence,
+    )
+    returned = result.generated_cash_leg
+    assert returned is not None and returned.calculation_lineage is not None
+    assert calculation_lineage_binds_output(
+        returned.calculation_lineage,
+        output_payload=settlement.generated_cash_leg._generated_cash_lineage_output(returned),
+    )
+    assert returned.transaction_fx_rate_origin == product.transaction_fx_rate_origin
+    assert str(product.transaction_fx_rate) == rate
 
 
 async def test_generated_cash_leg_is_persisted_before_linked_product_leg() -> None:

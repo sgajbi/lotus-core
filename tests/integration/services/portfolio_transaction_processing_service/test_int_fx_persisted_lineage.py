@@ -33,9 +33,12 @@ from portfolio_common.domain.transaction import (
     TRANSACTION_PAYLOAD_MATERIAL_FIELDS,
     transaction_payload_fingerprint,
 )
+from portfolio_common.domain.transaction.fx_source_presence import FX_ORIGINAL_PNL_FIELDS
 from portfolio_common.event_mapping import transaction_event_v1_payload
 from portfolio_common.events import TransactionEvent
-from portfolio_common.idempotency_repository import IdempotencyRepository
+from portfolio_common.exceptions import TransactionSemanticConflictError
+from portfolio_common.idempotency_repository import IdempotencyRepository, SemanticEventClaimOutcome
+from portfolio_common.position_state_repository import PositionStateRepository
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -44,6 +47,7 @@ from src.services.persistence_service.app.repositories.transaction_db_repo impor
 )
 from src.services.portfolio_transaction_processing_service.app.application import (
     TransactionProcessingIntent,
+    TransactionProcessingRejected,
     TransactionProcessingStatus,
 )
 from src.services.portfolio_transaction_processing_service.app.application.foreign_exchange_processing import (  # noqa: E501
@@ -67,6 +71,9 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis.transaction_repository import (  # noqa: E501
     _to_persisted_booked_transaction,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.position.processing import (  # noqa: E501
+    PositionHistoryProcessingAdapter,
 )
 from tests.test_support.transaction_processing import (
     cash_account_record,
@@ -158,6 +165,600 @@ def _fx_owned_runtime_identity():
             "image_reference": container["Config"]["Image"],
         },
     )
+
+
+def _fx_source_event(incoming):
+    return TransactionEvent(
+        **{
+            field.name: getattr(incoming, field.name)
+            for field in fields(incoming)
+            if field.name in TransactionEvent.model_fields
+            and getattr(incoming, field.name) is not None
+        }
+    )
+
+
+async def _fx_land_source(session, incoming, *, add_portfolio=True):
+    event = _fx_source_event(incoming)
+    if add_portfolio:
+        session.add(portfolio_record(incoming.portfolio_id))
+        await session.flush()
+    assert (await TransactionDBRepository(session).create_or_update_transaction(event)).inserted
+    session.add(
+        OutboxEvent(
+            aggregate_type="RawTransaction",
+            aggregate_id=incoming.portfolio_id,
+            event_type="RawTransactionPersisted",
+            topic=KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
+            payload=transaction_event_v1_payload(event),
+        )
+    )
+    await session.commit()
+    return event
+
+
+def _fx_delivery(context, event, event_id, *, repair=False):
+    return dict(
+        context=context,
+        event=event,
+        event_id=event_id,
+        correlation_id=event_id,
+        processing_intent=(
+            TransactionProcessingIntent.REPAIR if repair else TransactionProcessingIntent.STANDARD
+        ),
+        repair_delivery_id="FX-BATCH-REPAIR" if repair else None,
+    )
+
+
+async def _fx_wait_graph(factory, *, winner, loser):
+    assert winner != loser
+    async with factory() as observer:
+        while True:
+            await observer.execute(text("SELECT pg_stat_clear_snapshot()"))
+            wait = (
+                (
+                    await observer.execute(
+                        text(
+                            "SELECT pid,state,query,wait_event_type,wait_event,"
+                            "pg_blocking_pids(pid) AS blockers FROM pg_stat_activity WHERE pid=:pid"
+                        ),
+                        {"pid": loser},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            if winner in wait["blockers"]:
+                break
+            await asyncio.sleep(0.01)
+        assert wait["wait_event_type"] == "Lock"
+        locks = (
+            (
+                await observer.execute(
+                    text(
+                        "SELECT pid,locktype,mode,granted,relation::regclass::text AS relation,"
+                        "transactionid FROM pg_locks WHERE pid IN (:winner,:loser)"
+                    ),
+                    {"winner": winner, "loser": loser},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        assert any(row["pid"] == loser and not row["granted"] for row in locks)
+        print("FX_BATCH_WAIT", {"wait": dict(wait), "locks": [dict(row) for row in locks]})
+        return wait
+
+
+async def _fx_assert_bound(factory, before, events):
+    after = await _fx_application_snapshot(factory)
+
+    def raw(snapshot):
+        return [
+            row for row in snapshot["outbox_events"] if row["aggregate_type"] == "RawTransaction"
+        ]
+
+    assert raw(after) == raw(before)
+    async with factory() as verification:
+        for event in events:
+            row = (
+                await verification.execute(
+                    select(DBTransaction).where(
+                        DBTransaction.transaction_id == event.transaction_id
+                    )
+                )
+            ).scalar_one()
+            final = _to_persisted_booked_transaction(row, tenant_id=event.tenant_id)
+            assert (final.portfolio_id, final.security_id) == (
+                event.portfolio_id,
+                event.security_id,
+            )
+            assert calculation_lineage_binds_output(
+                final.calculation_lineage,
+                output_payload=fx_booked_transaction_output_payload(final),
+            )
+            if event.fx_realized_pnl_mode == "UPSTREAM_PROVIDED":
+                assert final.realized_fx_pnl_local == event.realized_fx_pnl_local
+                assert final.realized_fx_pnl_base == event.realized_fx_pnl_base
+            print(
+                "FX_BATCH_BOUND_RECEIPT",
+                final.transaction_id,
+                final.calculation_lineage.lineage_payload(),
+            )
+    return after
+
+
+async def _fx_assert_quiescent(factory):
+    async with factory() as observer:
+        active = (
+            (
+                await observer.execute(
+                    text(
+                        "SELECT pid,state,query FROM pg_stat_activity "
+                        "WHERE datname=current_database() AND pid<>pg_backend_pid() "
+                        "AND backend_type='client backend' AND state<>'idle'"
+                    )
+                )
+            )
+            .mappings()
+            .all()
+        )
+        assert not active
+        print("FX_BATCH_QUIESCENCE", list(active))
+
+
+async def _fx_finish_tasks(tasks, *releases):
+    for release in releases:
+        release.set()
+    for task in tasks:
+        if not task.done():
+            task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+
+class _FxBatchProbe:
+    """Observe unchanged SQL delegates and hold only real worker boundaries."""
+
+    def __init__(self, monkeypatch, *, hold_winner=True, fault=False, repair=False):
+        self.pids = {}
+        self.writes = {"fx-winner": 0, "fx-loser": 0}
+        self.sources = {name: {"preloaded": 0, "fallback": 0} for name in self.writes}
+        self.entered = {name: asyncio.Event() for name in self.writes}
+        self.written, self.claimed = asyncio.Event(), asyncio.Event()
+        self.release, self.release_loser = asyncio.Event(), asyncio.Event()
+        claim = IdempotencyRepository.claim_semantic_event_processing
+        repair_claim = IdempotencyRepository.claim_event_processing
+        write = SqlAlchemyCostBasisTransactionRepository.upsert_booked_transaction
+
+        async def observe_claim(repository, **kwargs):
+            name = asyncio.current_task().get_name()
+            if name in self.writes and kwargs["service_name"] == "portfolio-transaction-processing":
+                self.pids[name] = await repository.db.scalar(select(func.pg_backend_pid()))
+                if not repair or name == "fx-winner":
+                    self.entered[name].set()
+            outcome = await claim(repository, **kwargs)
+            if fault and not repair and name == "fx-loser":
+                assert outcome is SemanticEventClaimOutcome.CLAIMED
+                self.claimed.set()
+                await self.release_loser.wait()
+            return outcome
+
+        async def observe_repair_claim(
+            repository, event_id, portfolio_id, service_name, correlation_id=None, *, tenant_id=None
+        ):
+            name = asyncio.current_task().get_name()
+            target = (
+                name in self.writes
+                and event_id == "FX-BATCH-REPAIR"
+                and service_name == "portfolio-transaction-processing"
+            )
+            if target:
+                self.entered[name].set()
+            outcome = await repair_claim(
+                repository,
+                event_id,
+                portfolio_id,
+                service_name,
+                correlation_id,
+                tenant_id=tenant_id,
+            )
+            if target and fault and name == "fx-loser":
+                assert outcome
+                self.claimed.set()
+                await self.release_loser.wait()
+            return outcome
+
+        async def observe_write(repository, transaction, **kwargs):
+            persisted = await write(repository, transaction, **kwargs)
+            name = asyncio.current_task().get_name()
+            if name in self.writes:
+                self.writes[name] += 1
+                self.pids[name] = await repository.db.scalar(select(func.pg_backend_pid()))
+                if name == "fx-winner" and self.writes[name] == 2:
+                    self.written.set()
+                    if hold_winner:
+                        await self.release.wait()
+                    if fault:
+                        raise RuntimeError("injected-fx-batch-second-write")
+            return persisted
+
+        def observe_source(method, route):
+            async def observed(repository, transaction):
+                name = asyncio.current_task().get_name()
+                if name in self.sources:
+                    self.sources[name][route] += 1
+                return await method(repository, transaction)
+
+            return observed
+
+        monkeypatch.setattr(IdempotencyRepository, "claim_semantic_event_processing", observe_claim)
+        monkeypatch.setattr(IdempotencyRepository, "claim_event_processing", observe_repair_claim)
+        repository = SqlAlchemyCostBasisTransactionRepository
+        monkeypatch.setattr(repository, "upsert_booked_transaction", observe_write)
+        for method, route in [
+            ("load_booked_transaction_with_fx_witness", "preloaded"),
+            ("load_fx_retention_witness", "fallback"),
+        ]:
+            monkeypatch.setattr(
+                repository, method, observe_source(getattr(repository, method), route)
+            )
+
+
+@pytest.mark.parametrize("route", ["standard", "repair"])
+@pytest.mark.parametrize("first", ["persistence", "processing"])
+async def test_fx_persistence_and_processing_entry_orders(
+    clean_db, async_db_session: AsyncSession, monkeypatch, route, first
+):
+    _fx_owned_runtime_identity()
+    event = await _fx_land_source(async_db_session, _fx_transaction(source_system="ORIGINAL"))
+    context = transaction_processing_test_context(async_db_session)
+    if route == "repair":
+        assert (
+            await process_booked_transaction(**_fx_delivery(context, event, "FX-INITIAL"))
+        ).status is TransactionProcessingStatus.PROCESSED
+    before = await _fx_application_snapshot(context.session_factory)
+    probe = _FxBatchProbe(monkeypatch, hold_winner=first == "processing")
+    persistence_entered, persistence_ready, release_persistence = (
+        asyncio.Event(),
+        asyncio.Event(),
+        asyncio.Event(),
+    )
+    persistence_pid = {}
+
+    async def persist():
+        async with context.session_factory() as session, session.begin():
+            persistence_pid["pid"] = await session.scalar(select(func.pg_backend_pid()))
+            persistence_entered.set()
+            outcome = await TransactionDBRepository(session).create_or_update_transaction(event)
+            assert not outcome.inserted
+            persistence_ready.set()
+            if first == "persistence":
+                await release_persistence.wait()
+        return outcome
+
+    tasks = []
+    try:
+        async with asyncio.timeout(20):
+            if first == "persistence":
+                persister = asyncio.create_task(persist(), name="fx-persistence")
+                tasks.append(persister)
+                await persistence_ready.wait()
+            processor = asyncio.create_task(
+                process_booked_transaction(
+                    **_fx_delivery(context, event, "FX-ORDER", repair=route == "repair")
+                ),
+                name="fx-winner",
+            )
+            tasks.append(processor)
+            if first == "processing":
+                await probe.written.wait()
+                persister = asyncio.create_task(persist(), name="fx-persistence")
+                tasks.append(persister)
+                await persistence_entered.wait()
+            else:
+                await probe.entered["fx-winner"].wait()
+            winner, loser = (
+                (persistence_pid["pid"], probe.pids["fx-winner"])
+                if first == "persistence"
+                else (probe.pids["fx-winner"], persistence_pid["pid"])
+            )
+            wait = await _fx_wait_graph(context.session_factory, winner=winner, loser=loser)
+            assert "transactions" in wait["query"].lower()
+            release_persistence.set()
+            probe.release.set()
+            assert (await processor).status is TransactionProcessingStatus.PROCESSED
+            assert not (await persister).inserted
+            print("FX_BATCH_ENTRY_ORDER", first, route, probe.sources)
+            assert probe.sources["fx-winner"] == (
+                {"preloaded": 1, "fallback": 0}
+                if route == "standard"
+                else {"preloaded": 0, "fallback": 1}
+            )
+            after = await _fx_assert_bound(context.session_factory, before, [event])
+            assert (
+                len(after["transactions"])
+                == len(after["position_state"])
+                == len(after["position_history"])
+                == 1
+            )
+            assert (
+                await process_booked_transaction(
+                    **_fx_delivery(context, event, "FX-ORDER", repair=route == "repair")
+                )
+            ).status is TransactionProcessingStatus.DUPLICATE
+            assert await _fx_application_snapshot(context.session_factory) == after
+            await _fx_assert_quiescent(context.session_factory)
+    finally:
+        await _fx_finish_tasks(tasks, release_persistence, probe.release)
+
+
+async def test_fx_changed_persistence_source_refuses_after_processing_wait(
+    clean_db, async_db_session: AsyncSession, monkeypatch
+):
+    _fx_owned_runtime_identity()
+    event = await _fx_land_source(async_db_session, _fx_transaction(source_system="ORIGINAL"))
+    context = transaction_processing_test_context(async_db_session)
+    before = await _fx_application_snapshot(context.session_factory)
+    probe = _FxBatchProbe(monkeypatch)
+    entered, pid = asyncio.Event(), {}
+
+    async def changed_source():
+        async with context.session_factory() as session, session.begin():
+            pid["pid"] = await session.scalar(select(func.pg_backend_pid()))
+            entered.set()
+            return await TransactionDBRepository(session).create_or_update_transaction(
+                event.model_copy(
+                    update={"gross_transaction_amount": event.gross_transaction_amount + Decimal(1)}
+                )
+            )
+
+    tasks = []
+    try:
+        async with asyncio.timeout(20):
+            processor = asyncio.create_task(
+                process_booked_transaction(**_fx_delivery(context, event, "FX-CHANGED")),
+                name="fx-winner",
+            )
+            tasks.append(processor)
+            await probe.written.wait()
+            persister = asyncio.create_task(changed_source(), name="fx-persistence")
+            tasks.append(persister)
+            await entered.wait()
+            await _fx_wait_graph(
+                context.session_factory, winner=probe.pids["fx-winner"], loser=pid["pid"]
+            )
+            probe.release.set()
+            assert (await processor).status is TransactionProcessingStatus.PROCESSED
+            committed_cut = await _fx_assert_bound(context.session_factory, before, [event])
+            with pytest.raises(TransactionSemanticConflictError):
+                await persister
+            after = await _fx_application_snapshot(context.session_factory)
+            assert after == committed_cut
+            assert (
+                after["transactions"][0]["gross_transaction_amount"]
+                == event.gross_transaction_amount
+            )
+            assert len(after["processed_events"]) > 0
+            await _fx_assert_quiescent(context.session_factory)
+    finally:
+        await _fx_finish_tasks(tasks, probe.release)
+
+
+async def test_fx_stale_application_rolls_back_after_real_epoch_owner_commit(
+    clean_db, async_db_session: AsyncSession, monkeypatch
+):
+    _fx_owned_runtime_identity()
+    event = await _fx_land_source(async_db_session, _fx_transaction(source_system="ORIGINAL"))
+    context = transaction_processing_test_context(async_db_session)
+    assert (
+        await process_booked_transaction(**_fx_delivery(context, event, "FX-EPOCH-INITIAL"))
+    ).status is TransactionProcessingStatus.PROCESSED
+    entered, release = asyncio.Event(), asyncio.Event()
+    original = PositionHistoryProcessingAdapter.process
+    probe = _FxBatchProbe(monkeypatch, hold_winner=False)
+
+    async def pause_before_position(adapter, transaction, **kwargs):
+        if asyncio.current_task().get_name() == "fx-winner":
+            assert transaction.epoch == 0
+            entered.set()
+            await release.wait()
+        return await original(adapter, transaction, **kwargs)
+
+    monkeypatch.setattr(PositionHistoryProcessingAdapter, "process", pause_before_position)
+    tasks = []
+    try:
+        async with asyncio.timeout(20):
+            stale = asyncio.create_task(
+                process_booked_transaction(
+                    **_fx_delivery(
+                        context,
+                        event.model_copy(update={"epoch": 0}),
+                        "FX-EPOCH-STALE",
+                        repair=True,
+                    )
+                ),
+                name="fx-winner",
+            )
+            tasks.append(stale)
+            await entered.wait()
+            async with context.session_factory() as owner, owner.begin():
+                owner_pid = await owner.scalar(select(func.pg_backend_pid()))
+                assert owner_pid != probe.pids["fx-winner"]
+                advanced = await PositionStateRepository(owner).increment_epoch_and_reset_watermark(
+                    event.portfolio_id, event.security_id, 0, event.transaction_date.date()
+                )
+                assert advanced is not None and advanced.epoch == 1
+            owner_cut = await _fx_application_snapshot(context.session_factory)
+            assert owner_cut["position_state"][0]["epoch"] == 1
+            print(
+                "FX_BATCH_EPOCH_COMMITTED",
+                {"owner_pid": owner_pid, "stale_pid": probe.pids["fx-winner"], "epoch": 1},
+            )
+            release.set()
+            with pytest.raises(TransactionProcessingRejected) as raised:
+                await stale
+            assert raised.value.reason_code == "cashflow_epoch_rejected"
+            assert await _fx_application_snapshot(context.session_factory) == owner_cut
+            await _fx_assert_quiescent(context.session_factory)
+    finally:
+        await _fx_finish_tasks(tasks, release, probe.release)
+
+
+@pytest.mark.parametrize("scope", ["same_portfolio", "unrelated_portfolio"])
+async def test_fx_distinct_position_writer_isolation(
+    clean_db, async_db_session: AsyncSession, monkeypatch, scope
+):
+    _fx_owned_runtime_identity()
+    incoming = _fx_transaction(source_system="ORIGINAL")
+    event = await _fx_land_source(async_db_session, incoming)
+    other = replace(
+        incoming,
+        transaction_id="FX-BATCH-OTHER",
+        instrument_id="FXC-BATCH-OTHER",
+        security_id="FXC-BATCH-OTHER",
+        fx_contract_id="FXC-BATCH-OTHER",
+        component_id="FX-COMP-BATCH-OTHER",
+        economic_event_id="FX-EVT-BATCH-OTHER",
+        linked_transaction_group_id="FX-GROUP-BATCH-OTHER",
+        portfolio_id=incoming.portfolio_id if scope == "same_portfolio" else "PORT-FX-BATCH-OTHER",
+    )
+    other_event = await _fx_land_source(
+        async_db_session, other, add_portfolio=scope != "same_portfolio"
+    )
+    context = transaction_processing_test_context(async_db_session)
+    other_context = transaction_processing_test_context(async_db_session)
+    before = await _fx_application_snapshot(context.session_factory)
+    probe = _FxBatchProbe(monkeypatch)
+    tasks = []
+    try:
+        async with asyncio.timeout(20):
+            winner = asyncio.create_task(
+                process_booked_transaction(**_fx_delivery(context, event, "FX-ISOLATION-WINNER")),
+                name="fx-winner",
+            )
+            tasks.append(winner)
+            await probe.written.wait()
+            loser = asyncio.create_task(
+                process_booked_transaction(
+                    **_fx_delivery(other_context, other_event, "FX-ISOLATION-OTHER")
+                ),
+                name="fx-loser",
+            )
+            tasks.append(loser)
+            await probe.entered["fx-loser"].wait()
+            assert probe.pids["fx-winner"] != probe.pids["fx-loser"]
+            if scope == "same_portfolio":
+                wait = await _fx_wait_graph(
+                    context.session_factory,
+                    winner=probe.pids["fx-winner"],
+                    loser=probe.pids["fx-loser"],
+                )
+                assert "portfolios" in wait["query"].lower()
+                print("FX_BATCH_INHERITED_PORTFOLIO_SERIALIZATION", dict(wait))
+            else:
+                assert (await loser).status is TransactionProcessingStatus.PROCESSED
+                assert not winner.done()
+                print("FX_BATCH_UNRELATED_PROGRESS", probe.pids)
+            probe.release.set()
+            assert (await winner).status is TransactionProcessingStatus.PROCESSED
+            assert (await loser).status is TransactionProcessingStatus.PROCESSED
+            after = await _fx_assert_bound(context.session_factory, before, [event, other_event])
+            assert (
+                len(after["transactions"])
+                == len(after["position_history"])
+                == len(after["position_state"])
+                == 2
+            )
+            await _fx_assert_quiescent(context.session_factory)
+    finally:
+        await _fx_finish_tasks(tasks, probe.release)
+
+
+@pytest.mark.parametrize("route", ["standard", "repair"])
+async def test_fx_upstream_authority_survives_competing_writer_rollback(
+    clean_db, async_db_session: AsyncSession, monkeypatch, route
+):
+    _fx_owned_runtime_identity()
+    incoming = replace(
+        _fx_transaction(source_system="ORIGINAL"),
+        fx_realized_pnl_mode="UPSTREAM_PROVIDED",
+        realized_fx_pnl_local=Decimal("2.5"),
+        realized_fx_pnl_base=Decimal("2.5"),
+    )
+    event = await _fx_land_source(async_db_session, incoming)
+    context = transaction_processing_test_context(async_db_session)
+    other_context = transaction_processing_test_context(async_db_session)
+    repair = route == "repair"
+    if repair:
+        assert (
+            await process_booked_transaction(**_fx_delivery(context, event, "FX-UPSTREAM-INITIAL"))
+        ).status is TransactionProcessingStatus.PROCESSED
+    before = await _fx_application_snapshot(context.session_factory)
+    original_raw = [
+        row for row in before["outbox_events"] if row["aggregate_type"] == "RawTransaction"
+    ]
+    assert len(original_raw) == 1
+    assert all(name in original_raw[0]["payload"] for name in FX_ORIGINAL_PNL_FIELDS)
+    print(
+        "FX_BATCH_UPSTREAM_SOURCE_PRESENCE",
+        {name: original_raw[0]["payload"][name] for name in FX_ORIGINAL_PNL_FIELDS},
+    )
+    probe = _FxBatchProbe(monkeypatch, fault=True, repair=repair)
+    tasks = []
+    try:
+        async with asyncio.timeout(20):
+            winner = asyncio.create_task(
+                process_booked_transaction(
+                    **_fx_delivery(context, event, "FX-UPSTREAM-WINNER", repair=repair)
+                ),
+                name="fx-winner",
+            )
+            tasks.append(winner)
+            await probe.written.wait()
+            loser = asyncio.create_task(
+                process_booked_transaction(
+                    **_fx_delivery(other_context, event, "FX-UPSTREAM-LOSER", repair=repair)
+                ),
+                name="fx-loser",
+            )
+            tasks.append(loser)
+            await probe.entered["fx-loser"].wait()
+            wait = await _fx_wait_graph(
+                context.session_factory,
+                winner=probe.pids["fx-winner"],
+                loser=probe.pids["fx-loser"],
+            )
+            assert "processed_events" in wait["query"].lower() and "insert" in wait["query"].lower()
+            probe.release.set()
+            with pytest.raises(RuntimeError, match="injected-fx-batch-second-write"):
+                await winner
+            await probe.claimed.wait()
+            assert probe.writes == {"fx-winner": 2, "fx-loser": 0}
+            assert await _fx_application_snapshot(context.session_factory) == before
+            print("FX_BATCH_UPSTREAM_ROLLBACK", route, probe.pids)
+            probe.release_loser.set()
+            assert (await loser).status is TransactionProcessingStatus.PROCESSED
+            expected = (
+                {"preloaded": 0, "fallback": 1} if repair else {"preloaded": 1, "fallback": 0}
+            )
+            assert probe.sources == {"fx-winner": expected, "fx-loser": expected}
+            print("FX_BATCH_SOURCE_ROUTES", probe.sources)
+            after = await _fx_assert_bound(context.session_factory, before, [event])
+            assert (
+                len(after["transactions"])
+                == len(after["position_history"])
+                == len(after["position_state"])
+                == 1
+            )
+            assert (
+                await process_booked_transaction(
+                    **_fx_delivery(context, event, "FX-UPSTREAM-LOSER", repair=repair)
+                )
+            ).status is TransactionProcessingStatus.DUPLICATE
+            assert await _fx_application_snapshot(context.session_factory) == after
+            await _fx_assert_quiescent(context.session_factory)
+    finally:
+        await _fx_finish_tasks(tasks, probe.release, probe.release_loser)
 
 
 @pytest.mark.parametrize(

@@ -21,6 +21,25 @@ This slice establishes deterministic baseline realized-P&L behavior for FX rows 
 
 ## Persisted Return Qualification (#452 R2 candidate)
 
+### Generated settlement-cash rate representation (#1228)
+
+Generated settlement cash is a separate derived leg, not physical FX cash-account admission.
+Its `generated-settlement-cash` receipt version 2 binds the exact ledger representation of the
+rate before persistence: validate finite value, excess precision and magnitude against the
+unchanged `TRANSACTION_PERSISTENCE_PRECISION_V1`, then obtain that policy's fixed scale under
+adequate local precision without changing the value. Source transaction and input payload/hash,
+FX origin, global canonical hashing and all other receipts remain unchanged. Invalid rates are
+refused before receipt creation, and a null rate remains null with existing null-cost semantics.
+
+The version bump identifies this local output representation correction; it does not rewrite
+version 1 receipt history or make an old unbound receipt valid. Existing version 1 receipts are
+still decoded and qualify only by their actual persisted output binding. Preserve old raw and
+receipt evidence before independently authorized source-based repair. No automatic migration,
+backfill, new repair command or post-load receipt recomputation is introduced. Owning units
+must cover source preservation, refusal and returned-value binding; separately admitted native
+PostgreSQL proof must retain the reload binding assertion. Scope remains candidate-only until
+reviewed promotion and exact-main qualification, with economic corrections and full R2 open.
+
 FX booking carries a detached, owner-qualified pre-write witness inside the existing financial
 unit of work. When canonical loading has already acquired source locks and loaded original raw
 facts, the repository hands those facts to booking without a second raw query. Otherwise it locks

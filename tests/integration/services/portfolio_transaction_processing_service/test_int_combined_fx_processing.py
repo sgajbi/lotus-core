@@ -4,24 +4,43 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 
 import pytest
+from portfolio_common.config import KAFKA_TRANSACTIONS_PERSISTED_TOPIC
 from portfolio_common.database_models import (
+    AverageCostPoolState,
     CashAccountMaster,
     Cashflow,
     FxRate,
+    LotBasisTransferReceiptRecord,
+    LotDisposalReceiptRecord,
+    OutboxEvent,
+    PipelineStageState,
     PositionHistory,
     PositionLotState,
+    PositionState,
+    ProcessedEvent,
     TransactionCost,
 )
 from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.domain.calculation_lineage import calculation_lineage_binds_output
 from portfolio_common.domain.transaction import build_transaction_payload_identity
-from sqlalchemy import delete, select, update
+from portfolio_common.event_mapping import transaction_event_v1_payload
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.persistence_service.app.repositories.transaction_db_repo import (
+    TransactionDBRepository,
+)
 from src.services.portfolio_transaction_processing_service.app.application import (
     TransactionProcessingError,
     TransactionProcessingIntent,
     TransactionProcessingRejected,
     TransactionProcessingStatus,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.transaction.settlement.generated_cash_leg import (  # noqa: E501
+    _generated_cash_lineage_output,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis.transaction_repository import (  # noqa: E501
+    _to_persisted_booked_transaction,
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
@@ -38,6 +57,174 @@ pytestmark = [
     pytest.mark.db_direct,
     pytest.mark.regression,
 ]
+
+
+async def _account_application_snapshot(factory):
+    models = (
+        DBTransaction,
+        TransactionCost,
+        PositionLotState,
+        AverageCostPoolState,
+        Cashflow,
+        PositionHistory,
+        PositionState,
+        ProcessedEvent,
+        PipelineStageState,
+        LotDisposalReceiptRecord,
+        LotBasisTransferReceiptRecord,
+        OutboxEvent,
+    )
+    async with factory() as verification:
+        snapshot = {}
+        for model in models:
+            table = model.__table__
+            rows = (
+                (
+                    await verification.execute(
+                        select(*table.columns).order_by(*table.primary_key.columns)
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            snapshot[table.name] = [dict(row) for row in rows]
+        return snapshot
+
+
+@pytest.mark.parametrize("mapping", ["owned", "foreign_owner", "currency_mismatch"])
+async def test_generated_cash_account_mapping_has_atomic_application_outcome(
+    clean_db, async_db_session: AsyncSession, mapping
+):
+    """Qualify actual generated settlement mapping, not raw FX-account admission."""
+    portfolio_id, other_portfolio = "PORT-ACCOUNT-BATCH", "PORT-ACCOUNT-FOREIGN"
+    security_id, cash_id = "EQ-ACCOUNT-BATCH", "CASH-ACCOUNT-BATCH"
+    async_db_session.add_all([portfolio_record(portfolio_id), portfolio_record(other_portfolio)])
+    await async_db_session.flush()
+    async_db_session.add_all(
+        [
+            instrument_record(
+                security_id, name="Account batch equity", isin="SGACCOUNT001", currency="USD"
+            ),
+            instrument_record(
+                cash_id,
+                name="Account batch cash",
+                isin="CAACCOUNT001",
+                currency="USD",
+                product_type="CASH",
+                asset_class="Cash",
+            ),
+            CashAccountMaster(
+                cash_account_id=cash_id,
+                portfolio_id=other_portfolio if mapping == "foreign_owner" else portfolio_id,
+                security_id=cash_id,
+                display_name="Settlement account authority",
+                account_currency="EUR" if mapping == "currency_mismatch" else "USD",
+                lifecycle_status="ACTIVE",
+                opened_on=date(2026, 1, 1),
+            ),
+        ]
+    )
+    await async_db_session.flush()
+    event = booked_transaction_event(
+        transaction_id="DIV-ACCOUNT-BATCH",
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 4, 9, 10, tzinfo=timezone.utc),
+        transaction_type="DIVIDEND",
+        quantity="0",
+        price="0",
+        gross_amount="100",
+        trade_currency="USD",
+        cash_entry_mode="AUTO_GENERATE",
+        settlement_cash_account_id=cash_id,
+        settlement_cash_instrument_id=cash_id,
+    )
+    assert (
+        await TransactionDBRepository(async_db_session).create_or_update_transaction(event)
+    ).inserted
+    async_db_session.add(
+        OutboxEvent(
+            aggregate_type="RawTransaction",
+            aggregate_id=portfolio_id,
+            event_type="RawTransactionPersisted",
+            topic=KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
+            payload=transaction_event_v1_payload(event),
+        )
+    )
+    await async_db_session.commit()
+    context = transaction_processing_test_context(async_db_session)
+    before = await _account_application_snapshot(context.session_factory)
+    kwargs = dict(
+        context=context, event=event, event_id="ACCOUNT-BATCH", correlation_id="ACCOUNT-BATCH"
+    )
+    if mapping == "owned":
+        result = await process_booked_transaction(**kwargs)
+        assert result.status is TransactionProcessingStatus.PROCESSED
+        after = await _account_application_snapshot(context.session_factory)
+        child = [
+            row
+            for row in after["transactions"]
+            if row["transaction_id"] == event.transaction_id + "-CASHLEG"
+        ]
+        assert len(child) == 1
+        assert child[0]["portfolio_id"] == portfolio_id and child[0]["security_id"] == cash_id
+        assert child[0]["currency"] == "USD"
+        assert child[0]["gross_transaction_amount"] == Decimal("100")
+        assert child[0]["quantity"] == Decimal(0)
+        assert child[0]["net_cost"] == child[0]["net_cost_local"] == Decimal("100")
+        assert child[0]["originating_transaction_id"] == event.transaction_id
+        assert child[0]["payload_fingerprint"]
+        async with context.session_factory() as verification:
+            child_row = (
+                await verification.execute(
+                    select(DBTransaction).where(
+                        DBTransaction.transaction_id == event.transaction_id + "-CASHLEG"
+                    )
+                )
+            ).scalar_one()
+            final = _to_persisted_booked_transaction(child_row, tenant_id=event.tenant_id)
+            assert calculation_lineage_binds_output(
+                final.calculation_lineage, output_payload=_generated_cash_lineage_output(final)
+            )
+            print("ACCOUNT_BATCH_BOUND_RECEIPT", final.calculation_lineage.lineage_payload())
+        assert (
+            await process_booked_transaction(**kwargs)
+        ).status is TransactionProcessingStatus.DUPLICATE
+        assert await _account_application_snapshot(context.session_factory) == after
+    else:
+        error = (
+            TransactionProcessingError
+            if mapping == "foreign_owner"
+            else TransactionProcessingRejected
+        )
+        with pytest.raises(error) as raised:
+            await process_booked_transaction(**kwargs)
+        assert raised.value.reason_code == (
+            "cost_dependency_unavailable"
+            if mapping == "foreign_owner"
+            else "settlement_cash_account_currency_mismatch"
+        )
+        assert raised.value.retryable is (mapping == "foreign_owner")
+        assert await _account_application_snapshot(context.session_factory) == before
+        after = before
+    raw_after = [row for row in after["outbox_events"] if row["aggregate_type"] == "RawTransaction"]
+    assert raw_after == before["outbox_events"]
+    async with context.session_factory() as observer:
+        active = (
+            (
+                await observer.execute(
+                    text(
+                        "SELECT pid,state,query FROM pg_stat_activity "
+                        "WHERE datname=current_database() AND pid<>pg_backend_pid() "
+                        "AND backend_type='client backend' AND state<>'idle'"
+                    )
+                )
+            )
+            .mappings()
+            .all()
+        )
+        assert not active
+        print("ACCOUNT_BATCH_ATOMIC_OUTCOME", mapping, "generated-settlement-only", list(active))
 
 
 async def test_combined_cross_currency_buy_uses_effective_fx_rate(
