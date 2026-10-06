@@ -14,6 +14,24 @@ from confluent_kafka import TopicPartition
 from tools import dlq_replayer
 from tools.dlq_replayer import DLQReplayConsumer
 
+
+async def test_replay_producer_uses_consumers_explicit_alternate_bootstrap():
+    from portfolio_common.kafka_utils import KAFKA_BOOTSTRAP_SERVERS
+
+    bootstrap = "alternate-replay-broker:29092"
+    assert bootstrap != KAFKA_BOOTSTRAP_SERVERS
+    with patch("tools.dlq_replayer.get_kafka_producer") as producer_factory:
+        consumer = DLQReplayConsumer(
+            bootstrap_servers=bootstrap, topic="input.dlq", group_id="alternate-replay"
+        )
+        try:
+            producer_factory.assert_called_once_with(bootstrap_servers=bootstrap)
+            assert consumer._consumer_config["bootstrap.servers"] == bootstrap
+            assert consumer._producer is producer_factory.return_value
+        finally:
+            consumer._native_operations.finish()
+
+
 pytestmark = pytest.mark.asyncio
 TRACEPARENT = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
 

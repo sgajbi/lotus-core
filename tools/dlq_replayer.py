@@ -31,7 +31,9 @@ class DLQReplayConsumer(BaseConsumer):
 
     def __init__(self, limit: Optional[int] = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._producer: KafkaProducer = get_kafka_producer()
+        self._producer: KafkaProducer = get_kafka_producer(
+            bootstrap_servers=self._consumer_config["bootstrap.servers"]
+        )
         self._limit = limit
         self._processed_count = 0
         # Operator limits count attempts; serial admission prevents overshooting them.
