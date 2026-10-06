@@ -748,6 +748,80 @@ async def _original_snapshot(factory, identity):
         return dict(transaction), dict(raw)
 
 
+@pytest.mark.parametrize("missing_basis", ["local", "base"])
+@pytest.mark.parametrize("companion", [Decimal("0"), Decimal("12"), Decimal("-12")])
+async def test_signed_zero_confirmation_survives_actual_pg_fresh_reload_and_retry(
+    source_confirmation_db, source_status_client, missing_basis, companion
+):
+    client, factory = source_confirmation_db
+    identity = await _seed(factory, companion, missing_basis=missing_basis)
+    original = await _original_snapshot(factory, identity)
+    command, accepted = await _submit(
+        client,
+        factory,
+        identity,
+        confirmation={"realized_pnl_" + missing_basis: "-0"},
+    )
+    consumer = TransactionSourceCorrectionConsumer(
+        bootstrap_servers="explicit-broker-substitute:9092",
+        topic="transactions.source_correction.commands",
+        group_id="signed-zero-source-confirmation-db-proof",
+        dlq_topic=None,
+    )
+    message = _CapturedIntentMessage(command)
+    await consumer.process_message(message)
+    async with factory() as db:
+        revision = (await db.scalars(select(TransactionSourceRevision))).one()
+        material = {
+            column.name: getattr(revision, column.name) for column in revision.__table__.columns
+        }
+        assert (
+            canonical_content_hash(
+                {key: value for key, value in material.items() if key != "revision_sha256"}
+            )
+            == revision.revision_sha256
+        )
+        value = getattr(revision, "source_" + missing_basis)
+        assert value.is_zero() and not value.is_signed()
+        revision_id, revision_hash = revision.revision_id, revision.revision_sha256
+    # Independent reads and native owning retry must verify the committed complete fact.
+    ledger = await _read_ledger(factory, identity[2])
+    qcp = await _read_qcp(factory, page_size=10)
+    assert ledger.transaction.transaction_source_evidence.status == "CONFIRMED"
+    assert qcp.rows[0].transaction_source_evidence.status == "CONFIRMED"
+    assert ledger.transaction.transaction_source_evidence.revision_sha256 == revision_hash
+    assert qcp.rows[0].transaction_source_evidence.revision_id == revision_id
+    expected_local = Decimal("0") if missing_basis == "local" else companion
+    expected_base = companion if missing_basis == "local" else Decimal("0")
+    assert (ledger.transaction.realized_fx_pnl_local, ledger.transaction.realized_fx_pnl_base) == (
+        expected_local,
+        expected_base,
+    )
+    assert (qcp.rows[0].realized_fx_pnl_local, qcp.rows[0].realized_fx_pnl_base) == (
+        expected_local,
+        expected_base,
+    )
+    assert qcp.rows[0].transaction_source_evidence.revision_sha256 == revision_hash
+    assert ledger.transaction.transaction_source_evidence.revision_id == revision_id
+    response = await source_status_client.get(accepted["status_url"], headers=_headers())
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "SUCCEEDED"
+    assert response.json()["revision_id"] == revision_id
+    assert response.json()["revision_sha256"] == revision_hash
+    await consumer.process_message(message)
+    async with factory() as db:
+        assert await db.scalar(select(func.count()).select_from(TransactionSourceRevision)) == 1
+        assert (
+            await db.scalar(
+                select(func.count())
+                .select_from(OutboxEvent)
+                .where(OutboxEvent.event_type == "TransactionSourceEvidenceChanged")
+            )
+            == 1
+        )
+    assert await _original_snapshot(factory, identity) == original
+
+
 @pytest_asyncio.fixture
 async def source_status_client(source_confirmation_db, monkeypatch):
     _, factory = source_confirmation_db

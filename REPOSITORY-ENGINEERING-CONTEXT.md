@@ -215,6 +215,13 @@ v2 producer preserves all six original P&L presence/value pairs before unchanged
 QCP and operational ledger readers share qualified current/original/explicit-revision evidence
 and bind the material snapshot/source cut; missing authority stays unavailable. Original raw,
 receipts, signed companions, capital/total values and cash/cost/replay effects remain immutable.
+Source-cut booked-output material preserves every field/null and validates exact transaction
+persistence precision before context-independent fixed-scale Decimal encoding. Equivalent scale
+and signed zero bind identically; quantum changes remain material. This is not global lineage/raw/
+receipt/revision/CAS normalization. NEW confirmation values encode unsigned zero before their
+receipt/material/revision hash; persisted revision history is never re-encoded. The calculated-output
+guard structurally proves exact material encoding and bounded hash/lineage consumers rather than
+allowlisting a lineage gap. Earlier unmerged cut encodings require continuation restart.
 The implementation contract is `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-6-PNL-SEMANTICS.md`;
 native consumer/database, exact protected promotion/release, deployed enrollment, live Kafka and
 downstream analytics qualification are distinct proof boundaries. Broader economic corrections

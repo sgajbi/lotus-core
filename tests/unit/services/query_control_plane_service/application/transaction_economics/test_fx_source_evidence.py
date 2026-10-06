@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.database_models import Transaction, TransactionSourceRevision
 from portfolio_common.domain.calculation_lineage import (
     build_calculation_lineage,
     calculation_lineage_binds_output,
@@ -26,7 +27,9 @@ from portfolio_common.domain.transaction.payload_identity import (
 from portfolio_common.domain.transaction.source_evidence_revision import (
     retained_fx_output_payload,
 )
+from portfolio_common.financial_numeric import ExactNumeric
 from portfolio_common.infrastructure.transaction_source_evidence import (
+    _material_source_row,
     transaction_receipt_output,
 )
 
@@ -41,6 +44,67 @@ from src.services.query_control_plane_service.app.infrastructure import (
     transaction_economics_sources,
 )
 from tests.test_support.fx_source_evidence import TENANT, fx_source_fixture
+
+
+@pytest.mark.parametrize(
+    "column",
+    [column for column in Transaction.__table__.columns if isinstance(column.type, ExactNumeric)],
+    ids=lambda column: column.name,
+)
+def test_source_cut_binds_every_persisted_numeric_column_without_scale_or_value_loss(column):
+    assert (column.type.precision, column.type.scale) == (18, 10)
+    raw, _, ledger = fx_source_fixture(Decimal("0"), Decimal("0"))
+    row = (ledger, SimpleNamespace(id=17, payload=raw), None, None, None)
+    setattr(ledger, column.name, Decimal("12"))
+    first = canonical_content_hash(_material_source_row(row, TENANT.value))
+    setattr(ledger, column.name, Decimal("12.0000000000"))
+    assert canonical_content_hash(_material_source_row(row, TENANT.value)) == first
+    assert str(getattr(ledger, column.name)) == "12.0000000000"
+    setattr(ledger, column.name, Decimal("12.0000000001"))
+    assert canonical_content_hash(_material_source_row(row, TENANT.value)) != first
+    setattr(ledger, column.name, None)
+    missing = canonical_content_hash(_material_source_row(row, TENANT.value))
+    setattr(ledger, column.name, Decimal("0"))
+    assert canonical_content_hash(_material_source_row(row, TENANT.value)) != missing
+    assert _material_source_row(row, TENANT.value)["booked_output"].keys() == (
+        transaction_receipt_output(ledger, TENANT.value).keys()
+    )
+
+
+@pytest.mark.parametrize(
+    "axis", ["root", "receipt", "fingerprint", "revision", "intent", "operation"]
+)
+def test_source_cut_keeps_all_non_numeric_authority_material_distinguishable(axis):
+    raw, _, ledger = fx_source_fixture(Decimal("0"), Decimal("0"))
+    root = SimpleNamespace(id=17, payload=raw)
+    revision = SimpleNamespace(
+        **{c.name: None for c in TransactionSourceRevision.__table__.columns}
+    )
+    intent = SimpleNamespace(payload={"source": "original"})
+    operation = SimpleNamespace(
+        tenant_id=TENANT.value,
+        job_id="job",
+        entity_type="transaction",
+        endpoint="/ingest/transaction-source-corrections",
+        status="queued",
+        accepted_count=1,
+    )
+    row = (ledger, root, revision, intent, operation)
+    first = canonical_content_hash(_material_source_row(row, TENANT.value))
+    if axis == "root":
+        root.payload = raw | {"realized_fx_pnl_local": "1"}
+    elif axis == "receipt":
+        ledger.calculation_lineage = ledger.calculation_lineage | {"algorithm_version": 99}
+    elif axis == "fingerprint":
+        ledger.payload_fingerprint = "changed"
+    elif axis == "revision":
+        revision.revision_sha256 = "a" * 64
+    elif axis == "intent":
+        intent.payload = {"source": "changed"}
+    else:
+        operation.status = "completed"
+    assert canonical_content_hash(_material_source_row(row, TENANT.value)) != first
+
 
 fx_booked_transaction_output_payload = baseline_processing.fx_booked_transaction_output_payload
 build_performance_component_economics_totals = (

@@ -26,6 +26,9 @@ HEAD_DLQ_MIGRATION = (
     / "versions"
     / "c176b2c3d537_scope_dlq_replay_audit_tenant.py"
 )
+SOURCE_REVISION_MIGRATION = HEAD_DLQ_MIGRATION.with_name(
+    "c177b2c3d538_add_transaction_source_evidence_revisions.py"
+)
 
 PORTFOLIO_INSERT = text(
     """
@@ -217,7 +220,12 @@ def test_portfolio_tenant_cutover_rejects_ambiguous_rows_then_applies_and_rolls_
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
 
     with db_engine.begin() as connection:
+        source_foreign_keys = inspect(connection).get_foreign_keys("transaction_source_revisions")
         head_schema = connection.begin_nested()
+        source_migration: dict[str, Any] = runpy.run_path(str(SOURCE_REVISION_MIGRATION))
+        _bind_operations(source_migration, connection)
+        # Run the real empty-history refusal before descending to its dependency.
+        source_migration["downgrade"]()
         head_migration: dict[str, Any] = runpy.run_path(str(HEAD_DLQ_MIGRATION))
         _bind_operations(head_migration, connection)
         head_migration["downgrade"]()
@@ -371,3 +379,7 @@ def test_portfolio_tenant_cutover_rejects_ambiguous_rows_then_applies_and_rolls_
             column["name"] for column in inspect(connection).get_columns("ingestion_jobs")
         }
         head_schema.rollback()
+        assert (
+            inspect(connection).get_foreign_keys("transaction_source_revisions")
+            == source_foreign_keys
+        )
