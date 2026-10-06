@@ -1,8 +1,10 @@
 """Validate and persist one foreign-exchange transaction component."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime, timedelta
 
 from portfolio_common.domain.transaction.fx_source_presence import FX_ORIGINAL_PNL_FIELDS
+from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
 
 from ...domain.transaction import BookedTransaction
 from ...domain.transaction.fx import (
@@ -40,6 +42,15 @@ async def book_foreign_exchange_transaction(
     if witness is None:
         witness = await transaction_persistence.load_fx_retention_witness(transaction)
     original = qualify_fx_booking_source(transaction, witness, booking_context)
+    if (
+        witness is None
+        and transaction.created_at is None
+        and normalize_transaction_control_code(transaction.fx_realized_pnl_mode) == "NONE"
+    ):
+        timestamp = await transaction_persistence.load_fx_creation_timestamp()
+        if not isinstance(timestamp, datetime) or timestamp.utcoffset() != timedelta(0):
+            raise ValueError("FX server creation timestamp must be an aware UTC datetime")
+        transaction = replace(transaction, created_at=timestamp)
     source_pnl = dict(zip(FX_ORIGINAL_PNL_FIELDS, original, strict=True))
     processed_transaction = build_fx_processed_transaction(transaction, original_pnl=source_pnl)
     assert_fx_processed_transaction_valid(processed_transaction)

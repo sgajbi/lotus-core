@@ -34,8 +34,18 @@ claim and absent epoch; a processed row additionally qualifies its retained rece
 existing original-source policy. Original six Decimal/null values remain distinct from normalized
 zero/defaulted totals, and the admitted source FX rate and origin must match.
 
-The first persistence return may retain only an omitted `source_system` equal to the witnessed
-pre-write value. All other persistence-shaped material and the submitted receipt remain exact.
+The first persistence return may retain an omitted `source_system` or `created_at` only when
+equal to the locked pre-write value. Creation chronology is non-economic metadata under shared
+payload identity, but remains in the governed FX output receipt. For a genuine fresh row with no
+witness and no supplied creation timestamp, the owning persistence port admits PostgreSQL's
+transaction timestamp from the same session before receipt projection. It must be an aware UTC
+datetime; no new session, commit or lock is introduced. Existing witnesses and supplied timestamps
+require no timestamp query. All other persistence-shaped material and the submitted receipt remain exact.
+The owning repository parses original outbox dates with the existing event parser for typed
+source identity. Original JSON/hash/event ID and six source presence facts remain unchanged.
+The internal handoff permits only aware same-instant date representation changes, preserves
+absent/null presence, and rejects changed non-time facts. It does not reconstruct source from
+enriched ledger output or rewrite shared identity policy.
 Rebinding keeps the original six source values; a second return must equal the rebound row and
 receipt. Refusal escapes through the existing financial UOW rollback before downstream effects.
 Local unit proof is separate from native PostgreSQL write rollback, concurrent lock behavior,

@@ -22,8 +22,14 @@ transaction domain; valuation, timeseries, and downstream analytics remain separ
 The #452 R2 candidate qualifies FX persistence returns using detached pre-write facts in the
 same financial UOW. `NONE` retains the raw-absent route; `UPSTREAM_PROVIDED` qualifies original
 raw facts and distinguishes initial publication from processed receipt replay. Only an omitted
-source system matching the witnessed durable value may be retained on the first return. Original
+source system or creation timestamp matching the locked durable value may be retained on the
+first return. Witnessless fresh rows with omitted creation chronology admit the same PostgreSQL
+transaction clock before projection; chronology remains bound in the output receipt, with strict
+aware UTC datetime validation and no extra query for witnesses or supplied timestamps. Original
 six P&L Decimal/null values survive rebinding; the second row and receipt must match exactly.
+Source identity uses the owning adapter's event-parsed dates; original raw JSON/hash remain
+separate evidence. The domain verifies the handoff preserves aware instants, absent/null presence
+and every non-time fact, preventing a typed projection from masking a changed original source.
 The implementation reuses already loaded facts and adds no portfolio-wide serialization or
 economic correction authority. Local units do not establish native PG rollback/concurrency or
 merged-main acceptance. See [FX P&L semantics](../docs/rfc-transaction-specs/transactions/FX/FX-SLICE-6-PNL-SEMANTICS.md).

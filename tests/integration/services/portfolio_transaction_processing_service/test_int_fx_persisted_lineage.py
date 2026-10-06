@@ -1,19 +1,26 @@
 """PostgreSQL proof for final-row foreign-exchange calculation lineage."""
 
-from dataclasses import fields
+from dataclasses import fields, replace
 from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
+from portfolio_common.config import KAFKA_TRANSACTIONS_PERSISTED_TOPIC
+from portfolio_common.database_models import OutboxEvent
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.domain.calculation_lineage import calculation_lineage_binds_output
 from portfolio_common.domain.transaction import (
     TRANSACTION_PAYLOAD_MATERIAL_FIELDS,
     transaction_payload_fingerprint,
 )
+from portfolio_common.event_mapping import transaction_event_v1_payload
+from portfolio_common.events import TransactionEvent
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.services.persistence_service.app.repositories.transaction_db_repo import (
+    TransactionDBRepository,
+)
 from src.services.portfolio_transaction_processing_service.app.application.foreign_exchange_processing import (  # noqa: E501
     book_foreign_exchange_transaction,
 )
@@ -21,7 +28,11 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
     BookedTransaction,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
+    build_fx_processed_transaction,
     fx_booked_transaction_output_payload,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx.persisted_return import (  # noqa: E501
+    FxBookingContext,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     SqlAlchemyCostBasisTransactionRepository,
@@ -71,6 +82,152 @@ def _fx_transaction(*, source_system: str | None) -> BookedTransaction:
         fx_realized_pnl_mode="NONE",
         source_system=source_system,
     )
+
+
+async def test_fx_initial_none_fresh_insert_binds_server_creation_timestamp(
+    clean_db, async_db_session: AsyncSession
+) -> None:
+    incoming = _fx_transaction(source_system=None)
+    async_db_session.add(portfolio_record(incoming.portfolio_id))
+    await async_db_session.commit()
+    result = await book_foreign_exchange_transaction(
+        transaction=incoming,
+        transaction_persistence=SqlAlchemyCostBasisTransactionRepository(async_db_session),
+        booking_context=FxBookingContext(initial_publication=True, admitted_epoch=None),
+    )
+    await async_db_session.commit()
+    row = (
+        await async_db_session.execute(
+            select(DBTransaction).where(DBTransaction.transaction_id == incoming.transaction_id)
+        )
+    ).scalar_one()
+    assert result.transaction.created_at == row.created_at
+    assert row.created_at is not None
+    assert row.calculation_lineage == result.transaction.calculation_lineage.lineage_payload()
+    assert calculation_lineage_binds_output(
+        result.transaction.calculation_lineage,
+        output_payload=fx_booked_transaction_output_payload(result.transaction),
+    )
+
+
+@pytest.mark.parametrize("date_style", ["wire", "microseconds", "equivalent_offset"])
+@pytest.mark.parametrize("tamper", [None, "date", "offset_instant", "source_system"])
+async def test_fx_initial_upstream_persisted_raw_keeps_original_presence_and_timestamp(
+    clean_db, async_db_session: AsyncSession, date_style: str, tamper: str | None
+) -> None:
+    incoming = replace(
+        _fx_transaction(source_system="ORIGINAL"),
+        fx_realized_pnl_mode="UPSTREAM_PROVIDED",
+        realized_capital_pnl_local=None,
+        realized_fx_pnl_local=Decimal("2.5"),
+        realized_total_pnl_local=None,
+        realized_capital_pnl_base=Decimal("0"),
+        realized_fx_pnl_base=Decimal("2.5"),
+        realized_total_pnl_base=None,
+    )
+    event = TransactionEvent(
+        **{
+            field.name: getattr(incoming, field.name)
+            for field in fields(incoming)
+            if field.name in TransactionEvent.model_fields
+            and getattr(incoming, field.name) is not None
+        }
+    )
+    async_db_session.add(portfolio_record(incoming.portfolio_id))
+    await async_db_session.flush()
+    outcome = await TransactionDBRepository(async_db_session).create_or_update_transaction(event)
+    assert outcome.inserted
+    raw_payload = transaction_event_v1_payload(event)
+    if date_style == "microseconds":
+        raw_payload["transaction_date"] = "2026-04-01T09:00:00.000000Z"
+        raw_payload["settlement_date"] = "2026-07-01T09:00:00.000000Z"
+    elif date_style == "equivalent_offset":
+        raw_payload["transaction_date"] = "2026-04-01T17:00:00+08:00"
+        raw_payload["settlement_date"] = "2026-07-01T17:00:00+08:00"
+    if tamper == "date":
+        raw_payload["transaction_date"] = "2026-04-02T09:00:00Z"
+    elif tamper == "offset_instant":
+        raw_payload["transaction_date"] = "2026-04-01T09:00:00+08:00"
+    elif tamper == "source_system":
+        raw_payload["source_system"] = "FOREIGN"
+    async_db_session.add(
+        OutboxEvent(
+            aggregate_type="RawTransaction",
+            aggregate_id=incoming.portfolio_id,
+            event_type="RawTransactionPersisted",
+            topic=KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
+            payload=raw_payload,
+        )
+    )
+    await async_db_session.commit()
+    before_timestamp = (
+        await async_db_session.execute(
+            select(DBTransaction.created_at).where(
+                DBTransaction.transaction_id == incoming.transaction_id
+            )
+        )
+    ).scalar_one()
+    print(
+        "FX_INITIAL_RAW_IDENTITY",
+        {
+            "ledger": (
+                await async_db_session.execute(
+                    select(DBTransaction.payload_fingerprint).where(
+                        DBTransaction.transaction_id == incoming.transaction_id
+                    )
+                )
+            ).scalar_one(),
+            "raw": transaction_payload_fingerprint(raw_payload),
+            "typed_dates": (repr(event.transaction_date), repr(event.settlement_date)),
+            "wire_dates": (raw_payload["transaction_date"], raw_payload["settlement_date"]),
+        },
+    )
+    if tamper is not None:
+        with pytest.raises(ValueError, match="original raw fingerprint"):
+            await book_foreign_exchange_transaction(
+                transaction=incoming,
+                transaction_persistence=SqlAlchemyCostBasisTransactionRepository(async_db_session),
+                booking_context=FxBookingContext(initial_publication=True, admitted_epoch=None),
+            )
+        await async_db_session.rollback()
+        factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+        async with factory() as verification:
+            row = (
+                await verification.execute(
+                    select(DBTransaction).where(
+                        DBTransaction.transaction_id == incoming.transaction_id
+                    )
+                )
+            ).scalar_one()
+            assert row.calculation_lineage is None
+            assert row.source_system == incoming.source_system
+            assert row.created_at == before_timestamp
+        return
+    result = await book_foreign_exchange_transaction(
+        transaction=incoming,
+        transaction_persistence=SqlAlchemyCostBasisTransactionRepository(async_db_session),
+        booking_context=FxBookingContext(initial_publication=True, admitted_epoch=None),
+    )
+    await async_db_session.commit()
+    assert result.transaction.created_at == before_timestamp
+    assert result.transaction.calculation_lineage is not None
+    expected = build_fx_processed_transaction(replace(incoming, created_at=before_timestamp))
+    assert result.transaction.calculation_lineage.input_content_hash == (
+        expected.calculation_lineage.input_content_hash
+    )
+    assert calculation_lineage_binds_output(
+        result.transaction.calculation_lineage,
+        output_payload=fx_booked_transaction_output_payload(result.transaction),
+    )
+    assert result.transaction.calculation_lineage.input_content_hash != (
+        build_fx_processed_transaction(result.transaction).calculation_lineage.input_content_hash
+    )
+    replayed = await book_foreign_exchange_transaction(
+        transaction=result.transaction,
+        transaction_persistence=SqlAlchemyCostBasisTransactionRepository(async_db_session),
+        booking_context=FxBookingContext(initial_publication=False, admitted_epoch=None),
+    )
+    assert replayed.transaction == result.transaction
 
 
 async def test_fx_reprocessing_receipt_binds_optional_value_retained_by_conflict_update(
