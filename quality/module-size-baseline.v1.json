@@ -4,7 +4,7 @@
   "scan_roots": [
     "src"
   ],
-  "recorded_on": "2026-10-02",
+  "recorded_on": "2026-10-05",
   "tracked_files_only": true,
   "entries": [
     {
@@ -49,7 +49,7 @@
     },
     {
       "path": "src/libs/portfolio-common/portfolio_common/kafka_consumer.py",
-      "lines": 1629,
+      "lines": 1591,
       "owner": "lotus-core maintainers",
       "rationale": "Legacy shared consumer pending lifecycle, decoding, dispatch and telemetry decomposition.",
       "issue": "#462",

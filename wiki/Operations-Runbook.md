@@ -654,6 +654,16 @@ is failed, use that component identity in supervision logs to distinguish a live
 replay-consumer, dispatcher, or health-server exit; readiness payloads intentionally remain bounded
 and do not expose raw exceptions.
 
+`BaseConsumer` serializes native client operations on an owned worker while async financial work
+continues on the event loop. Durable processing and exact synchronous partition acknowledgement
+precede partition release. Missing, failed or stale-assignment acknowledgements retain redelivery
+posture. Runtime supervision joins native work before close, including cancelled waiters; the
+configured grace period cannot preempt a native call and is not a proven hard teardown bound.
+See the [native consumer lifecycle and issue matrix](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/kafka-partition-migration-runbook.md#native-consumer-operations-and-shutdown).
+Recording responsiveness and drain tests support #795 source review; actual broker/financial PG,
+deployment shutdown and #730 full-load qualification remain open. These tests do not establish
+full-load causation or joined/live/scale readiness.
+
 Metric vocabulary is guarded by `make metric-vocabulary-guard`. HTTP request metrics use
 `endpoint_template` for route templates; raw `path`, portfolio/account/client/security IDs,
 request/correlation/trace IDs, payload fields, stack traces, and raw exception text are forbidden
@@ -799,6 +809,28 @@ Treat these as `lotus-platform` issues:
 
 When shared infrastructure ownership is the issue, move to `lotus-platform`. When the issue is core
 domain truth, replay, persistence, or supportability behavior, stay in `lotus-core`.
+
+## Performance-load failure evidence
+
+The performance-load gate publishes partial completed-profile results and exact accepted batch
+IDs/counts when source drain fails. Inspect JSON `completion_evidence` for the active failure
+stage, deadline domain counts, replay not-run status and supported acknowledgement lineage.
+Portfolio aggregate claims cannot certify an exact source prefix. Diagnostic/report failures
+preserve the original enforcing exception/nonzero exit; unavailable is never zero/pass.
+
+Only a matching managed isolated runtime admits bounded read-only timeout probes for database
+lifecycle/outbox/DLQ/waits, existing PTP metrics and sampled raw/persisted Kafka committed/end
+offsets. Collection/byte/record limits and explicit cleanup status apply; no subscription, commit,
+replay, application mutation or financial/ordering relaxation occurs. Probes use shared Kafka
+transport policy and the governed database factory (`performance-load-gate`,
+`NullPool`, two-second connection timeout). Read-only sessions retain 500ms statement and 100ms
+lock limits, owned connection/engine cleanup and the six-second child response budget. Invalid
+security is unavailable evidence, never a plaintext fallback. Actual metric availability
+and genuine SQL/Kafka semantics require the existing runtime lane. This evidence does not make a
+failed gate releasable or establish its root cause.
+
+See [Bank-day load scenario](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/bank-day-load-scenario.md#performance-load-source-completion-diagnostics)
+for budgets, scopes, artifact interpretation and unchanged load/SLO boundaries.
 
 ## Related references
 

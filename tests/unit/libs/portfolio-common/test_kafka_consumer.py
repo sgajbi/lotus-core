@@ -6,6 +6,7 @@ import logging
 from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
 import pytest
+from confluent_kafka import TopicPartition
 from portfolio_common import consumer_dlq_tenant
 from portfolio_common.consumer_error_evidence import redacted_payload_text
 from portfolio_common.events import TransactionEvent
@@ -154,7 +155,11 @@ async def test_consumer_fails_before_client_construction_for_plaintext_productio
 @pytest.fixture
 def mock_confluent_consumer() -> MagicMock:
     """Provides a mock of the underlying confluent_kafka.Consumer."""
-    return MagicMock()
+    consumer = MagicMock()
+    consumer.commit.side_effect = lambda *, message, asynchronous: [
+        TopicPartition(message.topic(), message.partition(), message.offset() + 1)
+    ]
+    return consumer
 
 
 @pytest.fixture
@@ -809,6 +814,8 @@ async def test_run_loop_retries_post_dlq_commit_without_republishing(
         if commit_attempts == 1:
             raise RuntimeError("coordinator unavailable")
         test_consumer.shutdown()
+        message = kwargs["message"]
+        return [TopicPartition(message.topic(), message.partition(), message.offset() + 1)]
 
     test_consumer.process_message_mock.side_effect = terminal_failure
     test_consumer._send_to_dlq_async = AsyncMock(return_value=True)
@@ -1149,15 +1156,12 @@ async def test_default_disabled_retry_budget_discards_queued_same_partition_offs
         offset=42,
     )
     polled_messages = [failed_msg, later_msg]
-    event_loop = asyncio.get_running_loop()
-    later_message_polled = asyncio.Event()
+    later_message_queued = asyncio.Event()
 
     def poll(_timeout):
         if not polled_messages:
             return None
         msg = polled_messages.pop(0)
-        if msg is later_msg:
-            event_loop.call_soon_threadsafe(later_message_polled.set)
         return msg
 
     mock_confluent_consumer.poll.side_effect = poll
@@ -1171,12 +1175,20 @@ async def test_default_disabled_retry_budget_discards_queued_same_partition_offs
         ),
     )
 
+    dispatch_or_queue = consumer._dispatch_or_queue_message
+
+    async def queue_then_signal(msg, loop):
+        await dispatch_or_queue(msg, loop)
+        if msg is later_msg:
+            later_message_queued.set()
+
     async def fail_first_then_stop(msg):
         if msg is failed_msg:
-            await later_message_polled.wait()
+            await later_message_queued.wait()
             raise RetryableConsumerError("dependency unavailable")
         consumer.shutdown()
 
+    consumer._dispatch_or_queue_message = AsyncMock(side_effect=queue_then_signal)
     consumer.process_message_mock.side_effect = fail_first_then_stop
     consumer._send_to_dlq_async = AsyncMock()
 
@@ -1481,7 +1493,7 @@ async def test_run_loop_commit_failure_emits_standard_consumer_metric(
         await test_consumer.run()
 
     assert ("commit_failed", "successful_processing") in _consumer_event_outcomes(event_metric)
-    assert ("success", "processed") in _consumer_event_outcomes(event_metric)
+    assert ("commit_failed", "redelivery_required") in _consumer_event_outcomes(event_metric)
     _assert_standard_metric_labels(event_metric)
 
 
@@ -2330,6 +2342,7 @@ async def test_shutdown_logs_flush_timeout_without_raising(
 
     with patch("portfolio_common.kafka_consumer.logger.error") as mock_log_error:
         test_consumer.shutdown()
+        await test_consumer.wait_closed()
 
     mock_confluent_consumer.close.assert_called_once()
     mock_kafka_producer.flush.assert_called_once_with(timeout=5)
@@ -2339,19 +2352,20 @@ async def test_shutdown_logs_flush_timeout_without_raising(
     )
 
 
-async def test_shutdown_wakes_consumer_before_close(
+async def test_shutdown_awaits_serialized_close(
     test_consumer: ConcreteTestConsumer,
     mock_confluent_consumer: MagicMock,
 ):
     test_consumer._consumer = mock_confluent_consumer
 
     test_consumer.shutdown()
+    await test_consumer.wait_closed()
 
-    mock_confluent_consumer.wakeup.assert_called_once()
+    mock_confluent_consumer.wakeup.assert_not_called()
     mock_confluent_consumer.close.assert_called_once()
 
 
-async def test_shutdown_continues_to_close_when_wakeup_fails(
+async def test_shutdown_does_not_use_unowned_wakeup(
     test_consumer: ConcreteTestConsumer,
     mock_confluent_consumer: MagicMock,
 ):
@@ -2360,9 +2374,11 @@ async def test_shutdown_continues_to_close_when_wakeup_fails(
 
     with patch("portfolio_common.kafka_consumer.logger.warning") as mock_warning:
         test_consumer.shutdown()
+        await test_consumer.wait_closed()
 
     mock_confluent_consumer.close.assert_called_once()
-    assert "Consumer wakeup failed during shutdown." in mock_warning.call_args.args[0]
+    mock_confluent_consumer.wakeup.assert_not_called()
+    mock_warning.assert_not_called()
 
 
 async def test_shutdown_logs_close_failure_without_raising(
@@ -2374,8 +2390,9 @@ async def test_shutdown_logs_close_failure_without_raising(
 
     with patch("portfolio_common.kafka_consumer.logger.error") as mock_log_error:
         test_consumer.shutdown()
+        await test_consumer.wait_closed()
 
-    mock_confluent_consumer.wakeup.assert_called_once()
+    mock_confluent_consumer.wakeup.assert_not_called()
     assert "Consumer close failed during shutdown." in mock_log_error.call_args.args[0]
 
 
@@ -2390,6 +2407,7 @@ async def test_shutdown_logs_close_and_flush_failures_without_raising(
 
     with patch("portfolio_common.kafka_consumer.logger.error") as mock_log_error:
         test_consumer.shutdown()
+        await test_consumer.wait_closed()
 
     assert mock_log_error.call_count == 2
     assert "Consumer close failed during shutdown." == mock_log_error.call_args_list[0].args[0]
@@ -2410,6 +2428,7 @@ async def test_shutdown_failures_emit_standard_consumer_metrics(
         patch("portfolio_common.kafka_consumer.logger.error"),
     ):
         test_consumer.shutdown()
+        await test_consumer.wait_closed()
 
     outcomes = _consumer_event_outcomes(event_metric)
     assert ("shutdown_failed", "consumer_close") in outcomes

@@ -8,6 +8,7 @@ import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from confluent_kafka import TopicPartition
 from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.kafka_consumer_execution import KafkaConsumerExecutionProfile
 
@@ -23,6 +24,14 @@ from src.services.portfolio_transaction_processing_service.app.delivery.kafka im
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+def _acknowledging_kafka_consumer() -> MagicMock:
+    consumer = MagicMock()
+    consumer.commit.side_effect = lambda *, message, asynchronous: [
+        TopicPartition(message.topic(), message.partition(), message.offset() + 1)
+    ]
+    return consumer
 
 
 def _message(
@@ -175,7 +184,7 @@ async def test_run_loop_preserves_replay_partition_order_and_reports_backlog() -
         offset=8,
     )
     polled_messages = [first_message, second_message]
-    kafka_consumer = MagicMock()
+    kafka_consumer = _acknowledging_kafka_consumer()
     kafka_consumer.poll.side_effect = lambda _timeout: (
         polled_messages.pop(0) if polled_messages else None
     )
@@ -240,10 +249,12 @@ async def test_run_loop_preserves_replay_partition_order_and_reports_backlog() -
     kafka_consumer.close.assert_called_once_with()
 
 
-async def test_run_loop_drains_active_replay_before_closing_kafka() -> None:
+async def test_run_loop_drains_active_replay_before_closing_kafka(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     use_case = AsyncMock()
     message = _message()
-    kafka_consumer = MagicMock()
+    kafka_consumer = _acknowledging_kafka_consumer()
     kafka_consumer.poll.return_value = message
     replay_started = asyncio.Event()
     release_replay = asyncio.Event()
@@ -279,6 +290,8 @@ async def test_run_loop_drains_active_replay_before_closing_kafka() -> None:
 
     kafka_consumer.commit.assert_called_once_with(message=message, asynchronous=False)
     kafka_consumer.close.assert_called_once_with()
+    assert consumer._shutdown_finalized is True
+    assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
 
 
 async def test_consumer_propagates_replay_invariant_violation_as_terminal() -> None:

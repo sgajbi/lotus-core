@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -160,6 +161,7 @@ def ingest_transactions(
     security_prefix: str,
     transaction_date: str,
     sequence_offset: int = 0,
+    on_accepted: Callable[[list[str], requests.Response], None] | None = None,
 ) -> tuple[list[str], int]:
     transaction_ids: list[str] = []
     total_batches = 0
@@ -185,10 +187,34 @@ def ingest_transactions(
                 f"status={response.status_code}: {response.text[:300]}"
             )
         transaction_ids.extend(str(item["transaction_id"]) for item in transactions)
+        if on_accepted is not None:
+            on_accepted([str(item["transaction_id"]) for item in transactions], response)
         total_batches += 1
         if sleep_seconds_between_batches > 0:
             time.sleep(sleep_seconds_between_batches)
     return transaction_ids, total_batches
+
+
+def accepted_batch_evidence(ids: list[str], response: requests.Response) -> dict[str, Any]:
+    """Keep exact submitted identities and supported acknowledgement fields, never payloads."""
+    acknowledgement: dict[str, str] = {}
+    status = "unavailable"
+    try:
+        body = response.json()
+        for field in ("job_id", "correlation_id", "request_id", "trace_id"):
+            value = body.get(field)
+            if isinstance(value, str) and len(value) <= 128:
+                acknowledgement[field] = value
+        status = "observed" if acknowledgement.get("job_id") else "unavailable"
+    except (ValueError, AttributeError, TypeError):
+        pass
+    return {
+        "submitted_ids": ids,
+        "submitted_count": len(ids),
+        "http_status": 202,
+        "acknowledgement_status": status,
+        "acknowledgement": acknowledgement,
+    }
 
 
 def seed_load_context(
@@ -300,6 +326,7 @@ def wait_for_transaction_processing(
     expected: int,
     expected_processing_claim_minimum: int,
     timeout_seconds: int,
+    on_timeout: Callable[[TransactionProcessingCounts], None] | None = None,
 ) -> float | None:
     started = time.time()
     deadline = started + timeout_seconds
@@ -329,6 +356,8 @@ def wait_for_transaction_processing(
             portfolio_id=portfolio_id,
             transaction_id_prefix=transaction_id_prefix,
         )
+    if on_timeout is not None:
+        on_timeout(counts)
     print(
         "Transaction processing drain timed out: "
         f"portfolio_id={portfolio_id}, prefix={transaction_id_prefix}, expected={expected}, "
