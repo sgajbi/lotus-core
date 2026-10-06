@@ -48,6 +48,15 @@ absent/null presence, and rejects changed non-time facts. It does not reconstruc
 enriched ledger output or rewrite shared identity policy.
 Rebinding keeps the original six source values; a second return must equal the rebound row and
 receipt. Refusal escapes through the existing financial UOW rollback before downstream effects.
+An omitted `FX_CONTRACT_OPEN` open-transaction link remains an original raw fact. The detached
+witness retains that value separately from the supported output default to the transaction's
+own ID. Source qualification projects only that exact derived self-link back to the qualified
+original value; explicit source links and every other material field remain exact. A repair's
+position group compares the same canonical self-link relationship only with a genuine bound
+FX output receipt. Within that qualified comparison, an original omitted mode may match the
+existing derived `NONE` default; explicit modes remain exact. Its original root/admission and
+global semantic identities remain unchanged;
+arbitrary link substitution cannot acquire this qualification.
 Local unit proof is separate from native PostgreSQL write rollback, concurrent lock behavior,
 protected promotion and exact-main validation. Those acceptance boundaries and broader #452
 economic commands remain open; no schema, source-confirmation authority or policy floor changes.

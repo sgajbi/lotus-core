@@ -2,13 +2,22 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal
 from enum import StrEnum
 from typing import Protocol
 
+from portfolio_common.domain.calculation_lineage import calculation_lineage_binds_output
+from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
+
 from ..domain import BookedTransaction, PositionHistoryRecord, PositionRecalculationState
+from ..domain.transaction.fx.baseline_processing import (
+    FX_BASELINE_CALCULATION_ALGORITHM_ID,
+    FX_BASELINE_CALCULATION_ALGORITHM_VERSION,
+    fx_persisted_transaction_material,
+)
+from ..domain.transaction.fx.models import FX_BUSINESS_TRANSACTION_TYPES
 from ..domain.transaction.semantic_identity import (
     TransactionSemanticIdentity,
     build_transaction_correction_identity,
@@ -108,7 +117,7 @@ class AdmittedPositionCorrectionGroup:
                 if member.tenant_id != root.tenant_id:
                     raise ValueError("Admitted position group has conflicting root tenant")
                 if build_transaction_semantic_identity(member) != (
-                    build_transaction_semantic_identity(root)
+                    build_transaction_semantic_identity(_canonical_fx_position_root(root, member))
                 ):
                     raise ValueError("Admitted position group has conflicting root material")
             elif member.originating_transaction_id != root.transaction_id:
@@ -119,6 +128,35 @@ class AdmittedPositionCorrectionGroup:
     def require_member(self, transaction: BookedTransaction) -> None:
         if transaction not in self.members:
             raise ValueError("Position input is not an exact admitted cost-result member")
+
+
+def _canonical_fx_position_root(
+    root: BookedTransaction, member: BookedTransaction
+) -> BookedTransaction:
+    """Qualify existing output defaults without changing the original admission identity."""
+    receipt = member.calculation_lineage
+    if (
+        normalize_transaction_control_code(root.transaction_type) in FX_BUSINESS_TRANSACTION_TYPES
+        and normalize_transaction_control_code(root.component_type) == "FX_CONTRACT_OPEN"
+        and root.fx_contract_open_transaction_id is None
+        and member.fx_contract_open_transaction_id == root.transaction_id
+        and receipt is not None
+        and receipt.algorithm_id == FX_BASELINE_CALCULATION_ALGORITHM_ID
+        and receipt.algorithm_version == FX_BASELINE_CALCULATION_ALGORITHM_VERSION
+        and calculation_lineage_binds_output(
+            receipt, output_payload=fx_persisted_transaction_material(member)
+        )
+    ):
+        return replace(
+            root,
+            fx_contract_open_transaction_id=root.transaction_id,
+            fx_realized_pnl_mode=(
+                "NONE"
+                if root.fx_realized_pnl_mode is None and member.fx_realized_pnl_mode == "NONE"
+                else root.fx_realized_pnl_mode
+            ),
+        )
+    return root
 
 
 class PositionHistoryRepository(Protocol):

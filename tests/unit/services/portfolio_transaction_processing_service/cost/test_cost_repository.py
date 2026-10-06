@@ -182,7 +182,8 @@ async def test_fx_witness_reuses_loaded_facts_or_reads_only_target_row(mode, pre
 
 
 @pytest.mark.parametrize("mode", ["NONE", "UPSTREAM_PROVIDED"])
-async def test_fx_handoff_detaches_preloaded_source_without_repository_state(mode):
+@pytest.mark.parametrize("original_link", [None, "FX-RETENTION", "PROVIDED-OPEN"])
+async def test_fx_handoff_detaches_preloaded_source_without_repository_state(mode, original_link):
     before = BookedTransaction(
         transaction_id="FX-RETENTION",
         portfolio_id="P1",
@@ -198,6 +199,7 @@ async def test_fx_handoff_detaches_preloaded_source_without_repository_state(mod
         currency="USD",
         source_system="ORIGINAL",
         fx_realized_pnl_mode=mode,
+        fx_contract_open_transaction_id=original_link,
     )
     session = AsyncMock()
     repository = SqlAlchemyCostBasisTransactionRepository(session)
@@ -218,6 +220,7 @@ async def test_fx_handoff_detaches_preloaded_source_without_repository_state(mod
     if mode == "UPSTREAM_PROVIDED":
         assert witness.raw_source.raw_event_id == 17
         assert witness.original_pnl == (None,) * 6
+        assert witness.raw_source.original_contract_open_transaction_id == original_link
     assert vars(repository) == {"db": session}
     session.execute.assert_not_awaited()
 

@@ -1,25 +1,48 @@
 """PostgreSQL proof for final-row foreign-exchange calculation lineage."""
 
+import importlib
+import json
+import os
+import subprocess
 from dataclasses import fields, replace
 from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
 from portfolio_common.config import KAFKA_TRANSACTIONS_PERSISTED_TOPIC
-from portfolio_common.database_models import OutboxEvent
+from portfolio_common.database_models import (
+    AverageCostPoolState,
+    Cashflow,
+    LotBasisTransferReceiptRecord,
+    LotDisposalReceiptRecord,
+    OutboxEvent,
+    PipelineStageState,
+    PositionHistory,
+    PositionLotState,
+    PositionState,
+    ProcessedEvent,
+    TransactionCost,
+)
 from portfolio_common.database_models import Transaction as DBTransaction
-from portfolio_common.domain.calculation_lineage import calculation_lineage_binds_output
+from portfolio_common.domain.calculation_lineage import (
+    calculation_lineage_binds_output,
+    canonical_content_hash,
+)
 from portfolio_common.domain.transaction import (
     TRANSACTION_PAYLOAD_MATERIAL_FIELDS,
     transaction_payload_fingerprint,
 )
 from portfolio_common.event_mapping import transaction_event_v1_payload
 from portfolio_common.events import TransactionEvent
-from sqlalchemy import select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.services.persistence_service.app.repositories.transaction_db_repo import (
     TransactionDBRepository,
+)
+from src.services.portfolio_transaction_processing_service.app.application import (
+    TransactionProcessingIntent,
+    TransactionProcessingStatus,
 )
 from src.services.portfolio_transaction_processing_service.app.application.foreign_exchange_processing import (  # noqa: E501
     book_foreign_exchange_transaction,
@@ -37,7 +60,19 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     SqlAlchemyCostBasisTransactionRepository,
 )
-from tests.test_support.transaction_processing import portfolio_record
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis.reference_data_repository import (  # noqa: E501
+    SqlAlchemyCostBasisReferenceDataRepository,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis.transaction_repository import (  # noqa: E501
+    _to_persisted_booked_transaction,
+)
+from tests.test_support.transaction_processing import (
+    cash_account_record,
+    instrument_record,
+    portfolio_record,
+    process_booked_transaction,
+    transaction_processing_test_context,
+)
 
 pytestmark = [
     pytest.mark.asyncio,
@@ -45,6 +80,443 @@ pytestmark = [
     pytest.mark.db_direct,
     pytest.mark.regression,
 ]
+
+
+async def _fx_application_snapshot(factory):
+    models = (
+        DBTransaction,
+        TransactionCost,
+        PositionLotState,
+        AverageCostPoolState,
+        Cashflow,
+        PositionHistory,
+        PositionState,
+        ProcessedEvent,
+        PipelineStageState,
+        LotDisposalReceiptRecord,
+        LotBasisTransferReceiptRecord,
+        OutboxEvent,
+    )
+    async with factory() as verification:
+        snapshot = {}
+        for model in models:
+            table = model.__table__
+            rows = (
+                (
+                    await verification.execute(
+                        select(*table.columns).order_by(*table.primary_key.columns)
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            snapshot[table.name] = [dict(row) for row in rows]
+        print(
+            "FX_UOW_SNAPSHOT",
+            {
+                "pid": await verification.scalar(select(func.pg_backend_pid())),
+                "tables": {
+                    name: {"count": len(rows), "hash": canonical_content_hash(rows)}
+                    for name, rows in snapshot.items()
+                },
+            },
+        )
+        return snapshot
+
+
+def _fx_owned_runtime_identity():
+    project = os.environ["COMPOSE_PROJECT_NAME"]
+    result = subprocess.run(
+        [
+            "docker",
+            "ps",
+            "--filter",
+            "label=com.docker.compose.project=" + project,
+            "--filter",
+            "label=com.docker.compose.service=postgres",
+            "-q",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    ids = result.stdout.splitlines()
+    assert len(ids) == 1
+    result = subprocess.run(
+        ["docker", "inspect", ids[0]], check=True, capture_output=True, text=True
+    )
+    container = json.loads(result.stdout)[0]
+    assert container["Config"]["Labels"]["com.docker.compose.project"] == project
+    print(
+        "FX_UOW_RUNTIME",
+        {
+            "project": project,
+            "container": container["Id"],
+            "image_id": container["Image"],
+            "image_reference": container["Config"]["Image"],
+        },
+    )
+
+
+@pytest.mark.parametrize("mode", ["NONE", "UPSTREAM_PROVIDED"])
+@pytest.mark.parametrize("route", ["standard", "repair"])
+@pytest.mark.parametrize("fault_write", [1, 2])
+@pytest.mark.parametrize("component", ["FX_CONTRACT_OPEN", "FX_CASH_SETTLEMENT_BUY"])
+async def test_fx_application_uow_rolls_back_actual_write_fault_then_retries(
+    clean_db, async_db_session: AsyncSession, monkeypatch, mode, route, fault_write, component
+):
+    await _assert_fx_application_uow_fault(
+        async_db_session, monkeypatch, mode, route, fault_write, component
+    )
+
+
+async def test_fx_application_uow_explicit_original_contract_linkage_control(
+    clean_db, async_db_session: AsyncSession, monkeypatch
+):
+    await _assert_fx_application_uow_fault(
+        async_db_session,
+        monkeypatch,
+        "UPSTREAM_PROVIDED",
+        "standard",
+        1,
+        "FX_CONTRACT_OPEN",
+        explicit_source_linkage=True,
+    )
+
+
+@pytest.mark.parametrize("route", ["standard", "repair"])
+async def test_fx_application_uow_omitted_mode_preserves_default_after_second_write_fault(
+    clean_db, async_db_session: AsyncSession, monkeypatch, route
+):
+    await _assert_fx_application_uow_fault(
+        async_db_session, monkeypatch, None, route, 2, "FX_CONTRACT_OPEN"
+    )
+
+
+async def _assert_fx_application_uow_fault(
+    async_db_session,
+    monkeypatch,
+    mode,
+    route,
+    fault_write,
+    component,
+    *,
+    explicit_source_linkage=False,
+):
+    _fx_owned_runtime_identity()
+    incoming = replace(
+        _fx_transaction(source_system="ORIGINAL"),
+        fx_realized_pnl_mode=mode,
+        realized_capital_pnl_local=None,
+        realized_total_pnl_local=None,
+        realized_capital_pnl_base=Decimal("0"),
+        realized_total_pnl_base=None,
+        realized_fx_pnl_local=Decimal("2.5") if mode == "UPSTREAM_PROVIDED" else None,
+        realized_fx_pnl_base=Decimal("2.5") if mode == "UPSTREAM_PROVIDED" else None,
+    )
+    if component == "FX_CASH_SETTLEMENT_BUY":
+        incoming = replace(
+            incoming,
+            instrument_id="CASH-USD-FX-UOW",
+            security_id="CASH-USD-FX-UOW",
+            settlement_cash_account_id="ACCOUNT-USD-FX-UOW",
+            settlement_cash_instrument_id="CASH-USD-FX-UOW",
+            component_type=component,
+            fx_cash_leg_role="BUY",
+            linked_fx_cash_leg_id="FX-COMP-SELL-001",
+        )
+    if explicit_source_linkage:
+        incoming = replace(incoming, fx_contract_open_transaction_id=incoming.transaction_id)
+    event = TransactionEvent(
+        **{
+            field.name: getattr(incoming, field.name)
+            for field in fields(incoming)
+            if field.name in TransactionEvent.model_fields
+            and getattr(incoming, field.name) is not None
+        }
+    )
+    async_db_session.add(portfolio_record(incoming.portfolio_id))
+    await async_db_session.flush()
+    if component == "FX_CASH_SETTLEMENT_BUY":
+        async_db_session.add(
+            instrument_record(
+                incoming.security_id,
+                name="FX UOW USD settlement cash",
+                isin="CASHUSD-FX-UOW",
+                currency="USD",
+                product_type="CASH",
+                asset_class="Cash",
+            )
+        )
+        await async_db_session.flush()
+        async_db_session.add(
+            cash_account_record(
+                incoming.settlement_cash_account_id,
+                portfolio_id=incoming.portfolio_id,
+                security_id=incoming.security_id,
+                account_currency="USD",
+            )
+        )
+        await async_db_session.flush()
+        references = SqlAlchemyCostBasisReferenceDataRepository(async_db_session)
+        lookup = dict(
+            portfolio_id=incoming.portfolio_id,
+            tenant_id=incoming.tenant_id,
+            cash_account_id=incoming.settlement_cash_account_id,
+            as_of_date=incoming.settlement_date.date(),
+        )
+        cash_reference = await references.get_settlement_cash_account_reference(**lookup)
+        assert cash_reference is not None
+        assert cash_reference.security_id == incoming.security_id
+        assert cash_reference.account_currency == cash_reference.instrument_currency == "USD"
+        assert cash_reference.instrument_product_type == "CASH"
+        assert (
+            await references.get_settlement_cash_account_reference(
+                **(lookup | {"portfolio_id": "PORT-FX-UOW-WRONG-OWNER"})
+            )
+            is None
+        )
+        print(
+            "FX_UOW_SCOPE",
+            "account ownership verified by native reference adapter; not generated-cash route",
+        )
+        print("FX_UOW_CASH_SETUP", event.model_dump(mode="json"))
+    outcome = await TransactionDBRepository(async_db_session).create_or_update_transaction(event)
+    assert outcome.inserted
+    raw_payload = transaction_event_v1_payload(event)
+    if mode is None:
+        assert "fx_realized_pnl_mode" not in event.model_fields_set
+        raw_payload.pop("fx_realized_pnl_mode")
+        assert event.fx_realized_pnl_mode is None
+        assert "fx_realized_pnl_mode" not in raw_payload
+        assert {
+            name: raw_payload[name]
+            for name in (
+                "realized_capital_pnl_local",
+                "realized_total_pnl_local",
+                "realized_capital_pnl_base",
+                "realized_total_pnl_base",
+                "realized_fx_pnl_local",
+                "realized_fx_pnl_base",
+            )
+        } == {
+            "realized_capital_pnl_local": None,
+            "realized_total_pnl_local": None,
+            "realized_capital_pnl_base": "0",
+            "realized_total_pnl_base": None,
+            "realized_fx_pnl_local": None,
+            "realized_fx_pnl_base": None,
+        }
+    async_db_session.add(
+        OutboxEvent(
+            aggregate_type="RawTransaction",
+            aggregate_id=incoming.portfolio_id,
+            event_type="RawTransactionPersisted",
+            topic=KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
+            payload=raw_payload,
+        )
+    )
+    await async_db_session.commit()
+    context = transaction_processing_test_context(async_db_session)
+    booking = importlib.import_module(
+        "src.services.portfolio_transaction_processing_service.app.application."
+        "foreign_exchange_processing.booking"
+    )
+    processing = importlib.import_module(
+        "src.services.portfolio_transaction_processing_service.app.application.process_transaction"
+    )
+    semantics = importlib.import_module(
+        "src.services.portfolio_transaction_processing_service.app.domain.transaction.semantic_identity"
+    )
+    retention = importlib.import_module(
+        "src.services.portfolio_transaction_processing_service.app.domain.transaction.fx.persisted_return"
+    )
+    qualify_source = booking.qualify_fx_booking_source
+    admit_group = processing._admitted_position_group
+
+    def describe_fields(left, right):
+        return {
+            name: {"before": repr(left.get(name)), "after": repr(right.get(name))}
+            for name in left.keys() | right.keys()
+            if left.get(name) != right.get(name)
+        }
+
+    def observe_qualification(transaction, witness, booking_context):
+        if witness is not None:
+            original_material = retention.fx_source_material(incoming)
+            durable_material = retention.fx_source_material(witness.durable_before)
+            prepared_material = retention.fx_source_material(transaction)
+            print(
+                "FX_UOW_SOURCE_BOUNDARY",
+                {
+                    "explicit_original_linkage": explicit_source_linkage,
+                    "route": route,
+                    "context": repr(booking_context),
+                    "original_to_durable": describe_fields(original_material, durable_material),
+                    "durable_to_prepared": describe_fields(durable_material, prepared_material),
+                    "original_fingerprint": transaction_payload_fingerprint(original_material),
+                    "raw_fingerprint": witness.raw_source.material_fingerprint
+                    if witness.raw_source
+                    else None,
+                    "prepared_fingerprint": transaction_payload_fingerprint(prepared_material),
+                },
+            )
+        return qualify_source(transaction, witness, booking_context)
+
+    def observe_group(command, identity, members, **kwargs):
+        root = semantics._material_payload(command.transaction, include_source_booked_fx=False)
+        for member in members:
+            if member.transaction_id == command.transaction.transaction_id:
+                material = semantics._material_payload(member, include_source_booked_fx=False)
+                print(
+                    "FX_UOW_POSITION_BOUNDARY",
+                    {
+                        "route": route,
+                        "admission": repr(identity),
+                        "root_identity": repr(
+                            semantics.build_transaction_semantic_identity(command.transaction)
+                        ),
+                        "member_identity": repr(
+                            semantics.build_transaction_semantic_identity(member)
+                        ),
+                        "differences": describe_fields(root, material),
+                        "root_epoch": command.transaction.epoch,
+                        "member_epoch": member.epoch,
+                    },
+                )
+        return admit_group(command, identity, members, **kwargs)
+
+    monkeypatch.setattr(booking, "qualify_fx_booking_source", observe_qualification)
+    monkeypatch.setattr(processing, "_admitted_position_group", observe_group)
+    if route == "repair":
+        initial = await process_booked_transaction(
+            context=context, event=event, event_id="FX-UOW-FIRST", correlation_id="FX-UOW-FIRST"
+        )
+        assert initial.status is TransactionProcessingStatus.PROCESSED
+    before = await _fx_application_snapshot(context.session_factory)
+    written = []
+    source_loads = {"preloaded": 0, "fallback": 0}
+    preloaded = SqlAlchemyCostBasisTransactionRepository.load_booked_transaction_with_fx_witness
+    fallback = SqlAlchemyCostBasisTransactionRepository.load_fx_retention_witness
+
+    async def observe_preloaded(repository, transaction):
+        source_loads["preloaded"] += 1
+        return await preloaded(repository, transaction)
+
+    async def observe_fallback(repository, transaction):
+        source_loads["fallback"] += 1
+        return await fallback(repository, transaction)
+
+    original = SqlAlchemyCostBasisTransactionRepository.upsert_booked_transaction
+
+    async def write_then_fault(repository, transaction, **kwargs):
+        persisted = await original(repository, transaction, **kwargs)
+        if transaction.transaction_id == incoming.transaction_id:
+            written.append(persisted)
+            print(
+                "FX_UOW_ACTUAL_WRITE",
+                {
+                    "write": len(written),
+                    "session": id(repository.db),
+                    "pid": await repository.db.scalar(select(func.pg_backend_pid())),
+                    "lineage": persisted.calculation_lineage.lineage_payload(),
+                    "created_at": repr(persisted.created_at),
+                },
+            )
+            if len(written) == fault_write:
+                raise RuntimeError("injected-after-fx-write-" + str(fault_write))
+        return persisted
+
+    intent = (
+        TransactionProcessingIntent.REPAIR
+        if route == "repair"
+        else TransactionProcessingIntent.STANDARD
+    )
+    kwargs = dict(
+        context=context,
+        event=event,
+        event_id="FX-UOW-FAULT",
+        correlation_id="FX-UOW-FAULT",
+        processing_intent=intent,
+        repair_delivery_id="FX-UOW-REPAIR" if route == "repair" else None,
+    )
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            SqlAlchemyCostBasisTransactionRepository, "upsert_booked_transaction", write_then_fault
+        )
+        patch.setattr(
+            SqlAlchemyCostBasisTransactionRepository,
+            "load_booked_transaction_with_fx_witness",
+            observe_preloaded,
+        )
+        patch.setattr(
+            SqlAlchemyCostBasisTransactionRepository, "load_fx_retention_witness", observe_fallback
+        )
+        with pytest.raises(RuntimeError, match="injected-after-fx-write-" + str(fault_write)):
+            await process_booked_transaction(**kwargs)
+    assert len(written) == fault_write
+    assert source_loads == (
+        {"preloaded": 1, "fallback": 0} if route == "standard" else {"preloaded": 0, "fallback": 1}
+    )
+    print("FX_UOW_SOURCE_ROUTE", source_loads)
+    assert await _fx_application_snapshot(context.session_factory) == before
+    retry = await process_booked_transaction(**kwargs)
+    assert retry.status is TransactionProcessingStatus.PROCESSED
+    after = await _fx_application_snapshot(context.session_factory)
+    assert after != before
+    original_raw = [
+        row for row in before["outbox_events"] if row["aggregate_type"] == "RawTransaction"
+    ]
+    assert original_raw
+    assert [
+        row for row in after["outbox_events"] if row["aggregate_type"] == "RawTransaction"
+    ] == original_raw
+    assert after["transactions"][0]["calculation_lineage"] is not None
+    assert after["transactions"][0]["gross_cost"] == Decimal(0)
+    async with context.session_factory() as verification:
+        final_row = (
+            await verification.execute(
+                select(DBTransaction).where(DBTransaction.transaction_id == incoming.transaction_id)
+            )
+        ).scalar_one()
+        final_booked = _to_persisted_booked_transaction(final_row, tenant_id=incoming.tenant_id)
+        if mode is None:
+            assert final_booked.fx_realized_pnl_mode == "NONE"
+        assert calculation_lineage_binds_output(
+            final_booked.calculation_lineage,
+            output_payload=fx_booked_transaction_output_payload(final_booked),
+        )
+        print("FX_UOW_FINAL_RECEIPT", final_booked.calculation_lineage.lineage_payload())
+    assert after["position_history"] and after["position_state"]
+    assert after["processed_events"] and after["pipeline_stage_state"]
+    assert len(after["outbox_events"]) > len(before["outbox_events"])
+    if component == "FX_CASH_SETTLEMENT_BUY":
+        assert after["cashflows"] and retry.cashflow_record_count == 1
+        assert after["cashflows"][0]["amount"] == incoming.buy_amount
+    else:
+        assert not after["cashflows"] and retry.cashflow_record_count == 0
+        print("FX_UOW_SCOPE", "contract-open no-cash; physical cash rollback not certified")
+    assert not after["position_lot_state"] and not after["average_cost_pool_state"]
+    print("FX_UOW_SCOPE", "FX baseline costs in transaction row; equity lots/pools not applicable")
+    duplicate = await process_booked_transaction(**kwargs)
+    assert duplicate.status is TransactionProcessingStatus.DUPLICATE
+    assert await _fx_application_snapshot(context.session_factory) == after
+    async with context.session_factory() as verification:
+        active = (
+            (
+                await verification.execute(
+                    text(
+                        "SELECT pid,state,query FROM pg_stat_activity "
+                        "WHERE datname=current_database() AND pid<>pg_backend_pid() "
+                        "AND backend_type='client backend' AND state<>'idle'"
+                    )
+                )
+            )
+            .mappings()
+            .all()
+        )
+        print("FX_UOW_QUIESCENCE", [dict(row) for row in active])
+        assert not active
 
 
 def _fx_transaction(*, source_system: str | None) -> BookedTransaction:
