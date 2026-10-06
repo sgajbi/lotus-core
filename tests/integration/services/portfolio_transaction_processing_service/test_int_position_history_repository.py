@@ -25,9 +25,13 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.domain.transaction import build_transaction_payload_identity
 from portfolio_common.events import TransactionEvent
-from portfolio_common.idempotency_repository import IdempotencyRepository
+from portfolio_common.idempotency_repository import IdempotencyRepository, SemanticEventClaimOutcome
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.position_state_repository import PositionStateRepository
+from portfolio_common.reprocessing_replay import (
+    TRANSACTION_REPLAY_SOURCE_INVALID,
+    ReprocessingReplayError,
+)
 from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import IntegrityError
@@ -71,6 +75,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.position.h
     build_position_history,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.transaction.semantic_identity import (  # noqa: E501
+    build_transaction_correction_identity,
     build_transaction_semantic_identity,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow import (
@@ -310,12 +315,88 @@ async def test_materialization_progress_is_epoch_scoped(
     )
 
 
+async def _stage_replay_window_fee_authority(session: AsyncSession, authority: str) -> None:
+    """Bind a genuine corrected cut to committed receipts, not to raw absence alone."""
+    raw = await session.scalar(
+        select(OutboxEvent).where(
+            OutboxEvent.event_type == "RawTransactionPersisted",
+            OutboxEvent.payload["transaction_id"].as_string() == "TX_POSITION_HISTORY_E0_B",
+        )
+    )
+    original = TransactionEvent.model_validate(raw.payload)
+    original_hash = build_transaction_payload_identity(
+        original.model_dump(mode="python"), tenant_id=TEST_TENANT_ID
+    ).payload_fingerprint
+    assert (
+        await session.scalar(
+            select(Transaction.payload_fingerprint).where(
+                Transaction.transaction_id == original.transaction_id
+            )
+        )
+        == original_hash
+    )
+    assert original.epoch is None  # The stored transaction has no event epoch field.
+    corrected = original.model_copy(update={"transaction_date": datetime(2025, 8, 7, tzinfo=UTC)})
+    corrected_hash = build_transaction_payload_identity(
+        corrected.model_dump(mode="python"), tenant_id=TEST_TENANT_ID
+    ).payload_fingerprint
+    assert corrected_hash != original_hash
+    await session.execute(
+        update(Transaction)
+        .where(Transaction.transaction_id == original.transaction_id)
+        .values(transaction_date=corrected.transaction_date)
+    )
+    ordinary = build_transaction_semantic_identity(
+        map_transaction_event(original, event_id="identity").transaction
+    )
+    correction = build_transaction_correction_identity(
+        map_transaction_event(corrected, event_id="identity").transaction
+    )
+    assert f":{PORTFOLIO_ID}:{original.transaction_id}:0:sha256:" in correction.semantic_key
+    writer = IdempotencyRepository(session)
+    identities = [ordinary] if authority == "missing-correction" else [ordinary, correction]
+    for index, identity in enumerate(identities):
+        assert (
+            await writer.claim_semantic_event_processing(
+                event_id=f"window-fee-{authority}-{index}",
+                portfolio_id=PORTFOLIO_ID,
+                service_name="portfolio-transaction-processing",
+                semantic_key=identity.semantic_key,
+                payload_fingerprint=identity.payload_fingerprint,
+                tenant_id=TEST_TENANT_ID,
+            )
+            is SemanticEventClaimOutcome.CLAIMED
+        )
+    if authority == "conflicting-original":
+        # Valid fallback receipts cannot authorize a raw source contradicting the original hash.
+        raw.payload = corrected.model_dump(mode="json")
+    else:
+        await session.delete(raw)
+
+
+async def _replay_window_authority_cut(session: AsyncSession) -> list[list[dict]]:
+    """Capture independent persisted authority before and after the read/rollback."""
+    return [
+        [
+            dict(row)
+            for row in (
+                await session.execute(select(model.__table__).order_by(model.id))
+            ).mappings()
+        ]
+        for model in (Transaction, TransactionCost, OutboxEvent, ProcessedEvent)
+    ]
+
+
+@pytest.mark.parametrize(
+    "authority", ["original", "correction", "missing-correction", "conflicting-original"]
+)
 @pytest.mark.parametrize("row_count", [2, 5])
 async def test_replay_window_loads_exact_anchor_and_ordered_transactions_once(
     clean_db,
     position_history_repository_data: None,
     async_db_session: AsyncSession,
     row_count: int,
+    authority: str,
 ) -> None:
     del clean_db, position_history_repository_data
     original_hash = await async_db_session.scalar(
@@ -352,10 +433,13 @@ async def test_replay_window_loads_exact_anchor_and_ordered_transactions_once(
         .where(Transaction.transaction_id == "TX_POSITION_HISTORY_E0_B")
         .values(trade_fee=Decimal("99"))
     )
+    if authority != "original":
+        await _stage_replay_window_fee_authority(async_db_session, authority)
     await async_db_session.commit()
+    before = await _replay_window_authority_cut(async_db_session)
     repository = SqlAlchemyPositionHistoryRepository(async_db_session)
     statements: list[str] = []
-    correction_parameters: list[object] = []
+    receipt_parameters: list[tuple[str, object]] = []
 
     def capture_statement(
         _conn,
@@ -367,35 +451,64 @@ async def test_replay_window_loads_exact_anchor_and_ordered_transactions_once(
     ) -> None:
         statements.append(" ".join(statement.split()))
         if "FROM processed_events" in statement:
-            correction_parameters.extend(_parameters)
+            receipt_parameters.append((statement, _parameters))
 
     sync_engine = async_db_session.bind.sync_engine
     sqlalchemy_event.listen(sync_engine, "before_cursor_execute", capture_statement)
     try:
-        window = await repository.load_replay_window(
+        arguments = dict(
             portfolio_id=f" {PORTFOLIO_ID} ",
             security_id=f" {SECURITY_ID} ",
             position_date=date(2025, 8, 6),
             epoch=0,
         )
+        if authority in {"missing-correction", "conflicting-original"}:
+            with pytest.raises(ReprocessingReplayError) as rejected:
+                await repository.load_replay_window(**arguments)
+            assert rejected.value.reason_code == TRANSACTION_REPLAY_SOURCE_INVALID
+            assert rejected.value.failed_transaction_ids == ["TX_POSITION_HISTORY_E0_B"]
+            assert rejected.value.published_record_count == 0
+            window = None
+        else:
+            window = await repository.load_replay_window(**arguments)
     finally:
         sqlalchemy_event.remove(sync_engine, "before_cursor_execute", capture_statement)
 
-    # One bounded anchor/source read and four bounded authority reads, at both
-    # two and five rows. Any per-row authority query violates this contract.
-    assert len(statements) == 5
+    # Original authority needs no receipt query; genuine absence adds two scoped batches.
+    pending = authority in {"correction", "missing-correction"}
+    assert len(statements) == (5 if pending else 3)
     assert sum("transactions.transaction_date >=" in sql for sql in statements) == 1
     for authority_table in ("transaction_costs", "outbox_events"):
         assert sum(f"FROM {authority_table}" in sql for sql in statements) == 1
-    assert sum("FROM processed_events" in sql for sql in statements) == 2
-    correction_keys = [
-        value
-        for value in correction_parameters
-        if isinstance(value, str) and value.startswith("transaction-correction:")
-    ]
-    assert correction_keys
-    assert all(f":{PORTFOLIO_ID}:" in key and ":sha256:" in key for key in correction_keys)
+        assert any(f"FOR SHARE OF {authority_table}" in sql for sql in statements)
+    assert len(receipt_parameters) == (2 if pending else 0)
+    for sql, parameters in receipt_parameters:
+        assert "FOR SHARE OF processed_events" in sql
+        values = list(parameters.values()) if isinstance(parameters, dict) else list(parameters)
+        assert TEST_TENANT_ID in values
+        assert PORTFOLIO_ID in values
+        assert "portfolio-transaction-processing" in values
+        keys = [
+            value for value in values if isinstance(value, str) and value.startswith("transaction-")
+        ]
+        assert keys
+        assert all(f":{PORTFOLIO_ID}:TX_POSITION_HISTORY_E0_B:" in key for key in keys)
+        assert not any("%" in key for key in keys)
+    if pending:
+        parameters = receipt_parameters[-1][1]
+        values = parameters.values() if isinstance(parameters, dict) else parameters
+        correction_keys = [
+            value
+            for value in values
+            if isinstance(value, str) and value.startswith("transaction-correction:")
+        ]
+        assert correction_keys
+        assert all(":0:sha256:" in key for key in correction_keys)
     assert not any("LIKE" in sql.upper() for sql in statements)
+    await async_db_session.rollback()
+    assert await _replay_window_authority_cut(async_db_session) == before
+    if window is None:
+        return
     assert window.anchor is not None
     assert window.anchor.transaction_id == "TX_POSITION_HISTORY_E0_A"
     assert window.anchor.epoch == 0
@@ -404,6 +517,7 @@ async def test_replay_window_loads_exact_anchor_and_ordered_transactions_once(
         "TX_POSITION_HISTORY_E1_A",
         *additional_ids,
     )
+    assert len(window.transactions) == row_count
     projected = window.transactions[0]
     assert projected.tenant_id == TEST_TENANT_ID
     assert projected.trade_fee == Decimal("2")
@@ -411,6 +525,9 @@ async def test_replay_window_loads_exact_anchor_and_ordered_transactions_once(
     assert projected.stamp_duty == Decimal("0.75")
     assert projected.economic_event_id
     assert projected.linked_transaction_group_id
+    assert projected.transaction_date == datetime(
+        2025, 8, 6 if authority == "original" else 7, tzinfo=UTC
+    )
     assert "transactions.transaction_date >=" in statements[0]
     stored = await async_db_session.scalar(
         select(Transaction).where(Transaction.transaction_id == "TX_POSITION_HISTORY_E0_B")
