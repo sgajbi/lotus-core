@@ -311,8 +311,10 @@ def project(raw, output, basis):
     @classmethod
     def _inert_presence_annotation(cls, node: ast.expr | None, aliases: dict) -> bool:
         """Closed grammar for the actual owners' inert type declarations."""
-        if node is None or isinstance(node, ast.Constant) and (
-            node.value is None or isinstance(node.value, str)
+        if (
+            node is None
+            or isinstance(node, ast.Constant)
+            and (node.value is None or isinstance(node.value, str))
         ):
             return True
         if isinstance(node, ast.Name):
@@ -343,13 +345,14 @@ def project(raw, output, basis):
         if function.decorator_list or getattr(function, "type_params", ()):
             return False
         parameters = [
-            *function.args.posonlyargs, *function.args.args, *function.args.kwonlyargs,
+            *function.args.posonlyargs,
+            *function.args.args,
+            *function.args.kwonlyargs,
             *([function.args.vararg] if function.args.vararg else []),
             *([function.args.kwarg] if function.args.kwarg else []),
         ]
         if not all(
-            cls._inert_presence_annotation(argument.annotation, aliases)
-            for argument in parameters
+            cls._inert_presence_annotation(argument.annotation, aliases) for argument in parameters
         ) or not cls._inert_presence_annotation(function.returns, aliases):
             return False
         try:
@@ -362,8 +365,10 @@ def project(raw, output, basis):
 
     def inert_retained_annotation(self, node: ast.expr | None) -> bool:
         """Closed type grammar for registered retained owners, resolved at definition time."""
-        if node is None or isinstance(node, ast.Constant) and (
-            node.value is None or node.value is Ellipsis or isinstance(node.value, str)
+        if (
+            node is None
+            or isinstance(node, ast.Constant)
+            and (node.value is None or node.value is Ellipsis or isinstance(node.value, str))
         ):
             return True
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
@@ -371,11 +376,17 @@ def project(raw, output, basis):
                 node.right
             )
         supported = {
-            "collections.abc.Mapping", "typing.Mapping", "typing.Literal", "decimal.Decimal",
-            "datetime.datetime", "portfolio_common.events.TransactionEvent",
+            "collections.abc.Mapping",
+            "typing.Mapping",
+            "typing.Literal",
+            "decimal.Decimal",
+            "datetime.datetime",
+            "portfolio_common.events.TransactionEvent",
             "app.domain.transaction_economics.BookedTransactionEconomics",
             "app.domain.transaction_economics.FxPnlSourceEvidence",
-            "@basis_type", "@confirmation_type", "@literal_type",
+            "@basis_type",
+            "@confirmation_type",
+            "@literal_type",
         }
         if isinstance(node, (ast.Name, ast.Attribute)):
             if isinstance(node, ast.Name) and node.id not in self.aliases:

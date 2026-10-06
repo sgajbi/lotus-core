@@ -768,12 +768,23 @@ def test_retained_verification_registration_is_not_an_allowlist(tmp_path, mutati
         )
     assert evaluate(tmp_path, contract)
 
+
 @pytest.mark.parametrize(
     "suffix",
     [
-        "\ndef harmless(value: Mapping[str, Decimal | None], *, ready: bool = True) -> tuple[Decimal | None, ...]:\n    return ()\n",
-        "\nfrom decimal import Decimal as Amount\ndef harmless(value: Amount | None = None) -> FxSourceEvidenceConfirmation:\n    return None\n",
-        "\nimport decimal as amounts\ndef harmless(value: amounts.Decimal | None = None) -> tuple[FxCurrencyBasis, ...]:\n    return ()\n",
+        (
+            "\ndef harmless(value: Mapping[str, Decimal | None], *, ready: boo"
+            "l = True) -> tuple[Decimal | None, ...]:\n    return ()\n"
+        ),
+        (
+            "\nfrom decimal import Decimal as Amount\ndef harmless(value: Amoun"
+            "t | None = None) -> FxSourceEvidenceConfirmation:\n    return Non"
+            "e\n"
+        ),
+        (
+            "\nimport decimal as amounts\ndef harmless(value: amounts.Decimal |"
+            " None = None) -> tuple[FxCurrencyBasis, ...]:\n    return ()\n"
+        ),
     ],
 )
 def test_retained_owner_accepts_supported_resolved_inert_headers(tmp_path, suffix):
@@ -2496,8 +2507,138 @@ def test_main_reports_success_and_findings(
 
 
 # Fixed reviewed source fixtures: independent of live producer/guard files.
-_TYPED_RETAINED_OWNER_FIXTURE = 'from collections.abc import Mapping\nfrom dataclasses import dataclass, replace\nfrom decimal import Decimal, InvalidOperation\nfrom typing import Literal, cast\nfrom portfolio_common.domain.calculation_lineage import build_calculation_lineage, calculation_lineage_binds_output, calculation_lineage_from_payload, canonical_content_hash\nfrom .fx_source_admission import FX_SOURCE_ADMISSION_TYPES\nfrom .fx_source_presence import fx_original_pnl_values, fx_source_presence_input_payload\nfrom .numeric_policy import TRANSACTION_COST_LEDGER_OUTPUT_V1\nfrom .payload_identity import transaction_payload_fingerprint, transaction_payload_pre_upstream_fingerprint\nFxCurrencyBasis = Literal[\'local\', \'base\']\n\nclass SourceEvidenceConfirmationRejected(ValueError):\n    """Bounded reason without input values or financial identifiers."""\n\n@dataclass(frozen=True, slots=True)\nclass FxPnlBasisEvidence:\n    source: Decimal | None\n    capital: Decimal\n    fx: Decimal\n    total: Decimal\n\n    def __post_init__(self) -> None:\n        for field_name in (\'source\', \'capital\', \'fx\', \'total\'):\n            value = getattr(self, field_name)\n            if value is None and field_name == \'source\':\n                continue\n            if not isinstance(value, Decimal):\n                raise TypeError(\'FX evidence values must be Decimal\')\n            if not value.is_finite():\n                raise ValueError(\'FX evidence values must be finite\')\n\n@dataclass(frozen=True, slots=True)\nclass FxSourceEvidenceConfirmation:\n    local: FxPnlBasisEvidence\n    base: FxPnlBasisEvidence\n    confirmed_bases: tuple[FxCurrencyBasis, ...] = ()\n\n    def __post_init__(self) -> None:\n        if not isinstance(self.local, FxPnlBasisEvidence) or not isinstance(self.base, FxPnlBasisEvidence):\n            raise TypeError(\'FX confirmation requires typed currency-basis evidence\')\n\ndef retained_fx_output_payload(ledger_output: Mapping[str, object]) -> dict[str, object]:\n    """Complete persisted FX output projection; never manufacture an old receipt."""\n    policy = TRANSACTION_COST_LEDGER_OUTPUT_V1\n    quantum = Decimal(1).scaleb(-policy.scale)\n    output: dict[str, object] = {}\n    for name, value in ledger_output.items():\n        if value is None:\n            continue\n        if isinstance(value, Decimal):\n            with policy.arithmetic_context():\n                value = policy.normalize(value, field_name=name).quantize(quantum, rounding=policy.rounding)\n        output[name] = value\n    return output\n\ndef _verify_v1_fx_source(*, raw_source: Mapping[str, object], ledger_output: Mapping[str, object], receipt_payload: object) -> FxSourceEvidenceConfirmation:\n    receipt = calculation_lineage_from_payload(receipt_payload)\n    policy = TRANSACTION_COST_LEDGER_OUTPUT_V1\n    if receipt is None or receipt.algorithm_id != \'foreign-exchange-baseline-processing\' or receipt.algorithm_version != 1 or (receipt.intermediate_precision != policy.working_precision) or (receipt.numeric_output_policy != policy.lineage_identity()) or (not calculation_lineage_binds_output(receipt, output_payload=retained_fx_output_payload(ledger_output))):\n        raise SourceEvidenceConfirmationRejected(\'FX_SOURCE_RECEIPT_UNAVAILABLE\')\n    return FxSourceEvidenceConfirmation(local=_retained_basis(raw_source, ledger_output, \'local\'), base=_retained_basis(raw_source, ledger_output, \'base\'))\n\ndef _verify_v2_fx_source(*, raw_source: Mapping[str, object], ledger_output: Mapping[str, object], receipt_payload: object) -> FxSourceEvidenceConfirmation:\n    receipt = calculation_lineage_from_payload(receipt_payload)\n    policy = TRANSACTION_COST_LEDGER_OUTPUT_V1\n    if receipt is None or receipt.algorithm_id != \'foreign-exchange-baseline-processing\' or receipt.algorithm_version != 2 or (receipt.intermediate_precision != policy.working_precision) or (receipt.numeric_output_policy != policy.lineage_identity()) or (not calculation_lineage_binds_output(receipt, output_payload=retained_fx_output_payload(ledger_output))):\n        raise SourceEvidenceConfirmationRejected(\'FX_SOURCE_RECEIPT_UNAVAILABLE\')\n    if receipt.input_content_hash != canonical_content_hash(fx_source_presence_input_payload(source_values=fx_original_pnl_values(raw_source), booked_output=retained_fx_output_payload(ledger_output))):\n        raise SourceEvidenceConfirmationRejected(\'FX_SOURCE_INPUT_UNAVAILABLE\')\n    return FxSourceEvidenceConfirmation(local=_retained_basis(raw_source, ledger_output, \'local\'), base=_retained_basis(raw_source, ledger_output, \'base\'))\n\ndef _retained_basis(raw: Mapping[str, object], output: Mapping[str, object], basis: str) -> FxPnlBasisEvidence:\n    source = raw.get(f\'realized_fx_pnl_{basis}\')\n    if source is not None:\n        if not isinstance(source, (str, Decimal)):\n            raise SourceEvidenceConfirmationRejected(\'FX_SOURCE_AMOUNT_INVALID\')\n        try:\n            source = TRANSACTION_COST_LEDGER_OUTPUT_V1.normalize(Decimal(source), field_name=\'fx_source\')\n        except (InvalidOperation, ValueError, ArithmeticError):\n            raise SourceEvidenceConfirmationRejected(\'FX_SOURCE_AMOUNT_INVALID\') from None\n        if source != output.get(f\'realized_fx_pnl_{basis}\'):\n            raise SourceEvidenceConfirmationRejected(\'FX_SOURCE_OUTPUT_MISMATCH\')\n    try:\n        return FxPnlBasisEvidence(source=cast(Decimal | None, source), capital=cast(Decimal, output[f\'realized_capital_pnl_{basis}\']), fx=cast(Decimal, output[f\'realized_fx_pnl_{basis}\']), total=cast(Decimal, output[f\'realized_total_pnl_{basis}\']))\n    except (KeyError, TypeError, ValueError):\n        raise SourceEvidenceConfirmationRejected(\'FX_SOURCE_OUTPUT_UNAVAILABLE\') from None'
-_TYPED_PRESENCE_FIXTURE = '"""Bind original FX P/L presence separately from normalized booked economics."""\n\nfrom collections.abc import Mapping\nfrom decimal import Decimal, InvalidOperation\n\nFX_ORIGINAL_PNL_PRESENCE_POLICY = "fx-original-pnl-presence@2"\nFX_ORIGINAL_PNL_FIELDS = (\n    "realized_capital_pnl_local",\n    "realized_fx_pnl_local",\n    "realized_total_pnl_local",\n    "realized_capital_pnl_base",\n    "realized_fx_pnl_base",\n    "realized_total_pnl_base",\n)\n\n\ndef fx_original_pnl_values(raw_source: Mapping[str, object]) -> dict[str, object]:\n    """Recover six exact retained source values, never persisted defaulted amounts."""\n    values: dict[str, object] = {}\n    for name in FX_ORIGINAL_PNL_FIELDS:\n        value = raw_source.get(name)\n        if value is not None:\n            if not isinstance(value, (str, Decimal)):\n                raise ValueError("Original FX source amount is not exact decimal text")\n            try:\n                value = Decimal(value)\n            except InvalidOperation:\n                raise ValueError("Original FX source amount is invalid") from None\n            if not value.is_finite():\n                raise ValueError("Original FX source amount must be finite")\n        values[name] = value\n    return values\n\n\ndef fx_source_presence_input_payload(\n    *, source_values: Mapping[str, object], booked_output: Mapping[str, object]\n) -> dict[str, object]:\n    """Produce the v2 input projection independently of service calculation code.\n\n    A null original amount is not an explicit zero. Original finite Decimal values\n    remain unrounded; booked economics have their existing governed output scale.\n    The complete booked projection binds all unchanged inputs and derived outputs.\n    This receipt does not itself confirm an absent source or revise financial values.\n    """\n    original: dict[str, object] = {}\n    for name in FX_ORIGINAL_PNL_FIELDS:\n        if name not in source_values:\n            raise ValueError(f"Original FX source projection is missing {name}")\n        value = source_values[name]\n        if value is not None and (not isinstance(value, Decimal) or not value.is_finite()):\n            raise ValueError(f"Original FX source {name} must be a finite Decimal or null")\n        original[name] = {"present": value is not None, "value": value}\n    return {\n        "source_presence_policy": FX_ORIGINAL_PNL_PRESENCE_POLICY,\n        "original_pnl": original,\n        "booked_economics": dict(booked_output),\n    }\n'
+_TYPED_RETAINED_OWNER_FIXTURE = (
+    "from collections.abc import Mapping\nfrom dataclasses import data"
+    "class, replace\nfrom decimal import Decimal, InvalidOperation\nfro"
+    "m typing import Literal, cast\nfrom portfolio_common.domain.calcu"
+    "lation_lineage import build_calculation_lineage, calculation_lin"
+    "eage_binds_output, calculation_lineage_from_payload, canonical_c"
+    "ontent_hash\nfrom .fx_source_admission import FX_SOURCE_ADMISSION"
+    "_TYPES\nfrom .fx_source_presence import fx_original_pnl_values, f"
+    "x_source_presence_input_payload\nfrom .numeric_policy import TRAN"
+    "SACTION_COST_LEDGER_OUTPUT_V1\nfrom .payload_identity import tran"
+    "saction_payload_fingerprint, transaction_payload_pre_upstream_fi"
+    "ngerprint\nFxCurrencyBasis = Literal['local', 'base']\n\nclass Sour"
+    'ceEvidenceConfirmationRejected(ValueError):\n    """Bounded reaso'
+    'n without input values or financial identifiers."""\n\n@dataclass('
+    "frozen=True, slots=True)\nclass FxPnlBasisEvidence:\n    source: D"
+    "ecimal | None\n    capital: Decimal\n    fx: Decimal\n    total: De"
+    "cimal\n\n    def __post_init__(self) -> None:\n        for field_na"
+    "me in ('source', 'capital', 'fx', 'total'):\n            value = "
+    "getattr(self, field_name)\n            if value is None and field"
+    "_name == 'source':\n                continue\n            if not i"
+    "sinstance(value, Decimal):\n                raise TypeError('FX e"
+    "vidence values must be Decimal')\n            if not value.is_fin"
+    "ite():\n                raise ValueError('FX evidence values must"
+    " be finite')\n\n@dataclass(frozen=True, slots=True)\nclass FxSource"
+    "EvidenceConfirmation:\n    local: FxPnlBasisEvidence\n    base: Fx"
+    "PnlBasisEvidence\n    confirmed_bases: tuple[FxCurrencyBasis, ..."
+    "] = ()\n\n    def __post_init__(self) -> None:\n        if not isin"
+    "stance(self.local, FxPnlBasisEvidence) or not isinstance(self.ba"
+    "se, FxPnlBasisEvidence):\n            raise TypeError('FX confirm"
+    "ation requires typed currency-basis evidence')\n\ndef retained_fx_"
+    "output_payload(ledger_output: Mapping[str, object]) -> dict[str,"
+    ' object]:\n    """Complete persisted FX output projection; never '
+    'manufacture an old receipt."""\n    policy = TRANSACTION_COST_LED'
+    "GER_OUTPUT_V1\n    quantum = Decimal(1).scaleb(-policy.scale)\n   "
+    " output: dict[str, object] = {}\n    for name, value in ledger_ou"
+    "tput.items():\n        if value is None:\n            continue\n   "
+    "     if isinstance(value, Decimal):\n            with policy.arit"
+    "hmetic_context():\n                value = policy.normalize(value"
+    ", field_name=name).quantize(quantum, rounding=policy.rounding)\n "
+    "       output[name] = value\n    return output\n\ndef _verify_v1_fx"
+    "_source(*, raw_source: Mapping[str, object], ledger_output: Mapp"
+    "ing[str, object], receipt_payload: object) -> FxSourceEvidenceCo"
+    "nfirmation:\n    receipt = calculation_lineage_from_payload(recei"
+    "pt_payload)\n    policy = TRANSACTION_COST_LEDGER_OUTPUT_V1\n    i"
+    "f receipt is None or receipt.algorithm_id != 'foreign-exchange-b"
+    "aseline-processing' or receipt.algorithm_version != 1 or (receip"
+    "t.intermediate_precision != policy.working_precision) or (receip"
+    "t.numeric_output_policy != policy.lineage_identity()) or (not ca"
+    "lculation_lineage_binds_output(receipt, output_payload=retained_"
+    "fx_output_payload(ledger_output))):\n        raise SourceEvidence"
+    "ConfirmationRejected('FX_SOURCE_RECEIPT_UNAVAILABLE')\n    return"
+    " FxSourceEvidenceConfirmation(local=_retained_basis(raw_source, "
+    "ledger_output, 'local'), base=_retained_basis(raw_source, ledger"
+    "_output, 'base'))\n\ndef _verify_v2_fx_source(*, raw_source: Mappi"
+    "ng[str, object], ledger_output: Mapping[str, object], receipt_pa"
+    "yload: object) -> FxSourceEvidenceConfirmation:\n    receipt = ca"
+    "lculation_lineage_from_payload(receipt_payload)\n    policy = TRA"
+    "NSACTION_COST_LEDGER_OUTPUT_V1\n    if receipt is None or receipt"
+    ".algorithm_id != 'foreign-exchange-baseline-processing' or recei"
+    "pt.algorithm_version != 2 or (receipt.intermediate_precision != "
+    "policy.working_precision) or (receipt.numeric_output_policy != p"
+    "olicy.lineage_identity()) or (not calculation_lineage_binds_outp"
+    "ut(receipt, output_payload=retained_fx_output_payload(ledger_out"
+    "put))):\n        raise SourceEvidenceConfirmationRejected('FX_SOU"
+    "RCE_RECEIPT_UNAVAILABLE')\n    if receipt.input_content_hash != c"
+    "anonical_content_hash(fx_source_presence_input_payload(source_va"
+    "lues=fx_original_pnl_values(raw_source), booked_output=retained_"
+    "fx_output_payload(ledger_output))):\n        raise SourceEvidence"
+    "ConfirmationRejected('FX_SOURCE_INPUT_UNAVAILABLE')\n    return F"
+    "xSourceEvidenceConfirmation(local=_retained_basis(raw_source, le"
+    "dger_output, 'local'), base=_retained_basis(raw_source, ledger_o"
+    "utput, 'base'))\n\ndef _retained_basis(raw: Mapping[str, object], "
+    "output: Mapping[str, object], basis: str) -> FxPnlBasisEvidence:"
+    "\n    source = raw.get(f'realized_fx_pnl_{basis}')\n    if source "
+    "is not None:\n        if not isinstance(source, (str, Decimal)):\n"
+    "            raise SourceEvidenceConfirmationRejected('FX_SOURCE_"
+    "AMOUNT_INVALID')\n        try:\n            source = TRANSACTION_C"
+    "OST_LEDGER_OUTPUT_V1.normalize(Decimal(source), field_name='fx_s"
+    "ource')\n        except (InvalidOperation, ValueError, Arithmetic"
+    "Error):\n            raise SourceEvidenceConfirmationRejected('FX"
+    "_SOURCE_AMOUNT_INVALID') from None\n        if source != output.g"
+    "et(f'realized_fx_pnl_{basis}'):\n            raise SourceEvidence"
+    "ConfirmationRejected('FX_SOURCE_OUTPUT_MISMATCH')\n    try:\n     "
+    "   return FxPnlBasisEvidence(source=cast(Decimal | None, source)"
+    ", capital=cast(Decimal, output[f'realized_capital_pnl_{basis}'])"
+    ", fx=cast(Decimal, output[f'realized_fx_pnl_{basis}']), total=ca"
+    "st(Decimal, output[f'realized_total_pnl_{basis}']))\n    except ("
+    "KeyError, TypeError, ValueError):\n        raise SourceEvidenceCo"
+    "nfirmationRejected('FX_SOURCE_OUTPUT_UNAVAILABLE') from None"
+)
+_TYPED_PRESENCE_FIXTURE = (
+    '"""Bind original FX P/L presence separately from normalized book'
+    'ed economics."""\n\nfrom collections.abc import Mapping\nfrom decim'
+    "al import Decimal, InvalidOperation\n\nFX_ORIGINAL_PNL_PRESENCE_PO"
+    'LICY = "fx-original-pnl-presence@2"\nFX_ORIGINAL_PNL_FIELDS = (\n '
+    '   "realized_capital_pnl_local",\n    "realized_fx_pnl_local",\n  '
+    '  "realized_total_pnl_local",\n    "realized_capital_pnl_base",\n '
+    '   "realized_fx_pnl_base",\n    "realized_total_pnl_base",\n)\n\n\nde'
+    "f fx_original_pnl_values(raw_source: Mapping[str, object]) -> di"
+    'ct[str, object]:\n    """Recover six exact retained source values'
+    ', never persisted defaulted amounts."""\n    values: dict[str, ob'
+    "ject] = {}\n    for name in FX_ORIGINAL_PNL_FIELDS:\n        value"
+    " = raw_source.get(name)\n        if value is not None:\n          "
+    "  if not isinstance(value, (str, Decimal)):\n                rais"
+    'e ValueError("Original FX source amount is not exact decimal tex'
+    't")\n            try:\n                value = Decimal(value)\n    '
+    "        except InvalidOperation:\n                raise ValueErro"
+    'r("Original FX source amount is invalid") from None\n            '
+    'if not value.is_finite():\n                raise ValueError("Orig'
+    'inal FX source amount must be finite")\n        values[name] = va'
+    "lue\n    return values\n\n\ndef fx_source_presence_input_payload(\n  "
+    "  *, source_values: Mapping[str, object], booked_output: Mapping"
+    '[str, object]\n) -> dict[str, object]:\n    """Produce the v2 inpu'
+    "t projection independently of service calculation code.\n\n    A n"
+    "ull original amount is not an explicit zero. Original finite Dec"
+    "imal values\n    remain unrounded; booked economics have their ex"
+    "isting governed output scale.\n    The complete booked projection"
+    " binds all unchanged inputs and derived outputs.\n    This receip"
+    "t does not itself confirm an absent source or revise financial v"
+    'alues.\n    """\n    original: dict[str, object] = {}\n    for name'
+    " in FX_ORIGINAL_PNL_FIELDS:\n        if name not in source_values"
+    ':\n            raise ValueError(f"Original FX source projection i'
+    's missing {name}")\n        value = source_values[name]\n        i'
+    "f value is not None and (not isinstance(value, Decimal) or not v"
+    'alue.is_finite()):\n            raise ValueError(f"Original FX so'
+    'urce {name} must be a finite Decimal or null")\n        original['
+    'name] = {"present": value is not None, "value": value}\n    retur'
+    'n {\n        "source_presence_policy": FX_ORIGINAL_PNL_PRESENCE_P'
+    'OLICY,\n        "original_pnl": original,\n        "booked_economi'
+    'cs": dict(booked_output),\n    }\n'
+)
+
 
 def _typed_original_presence_fixture(root: Path, version: int = 2) -> tuple[Path, Path, Path]:
     """Exercise the actual structural grammar, independent of shipping callable names."""
@@ -2544,9 +2685,7 @@ def _typed_original_presence_fixture(root: Path, version: int = 2) -> tuple[Path
     authored = FixtureImports().visit(ast.Module(body=nodes, type_ignores=[]))
     retained.write_text(ast.unparse(authored) + "\n", encoding="utf-8")
     presence = root / "src/owner/presence.py"
-    presence.write_text(
-        _TYPED_PRESENCE_FIXTURE, encoding="utf-8"
-    )
+    presence.write_text(_TYPED_PRESENCE_FIXTURE, encoding="utf-8")
     boundary = f"src/owner/retained.py::_verify_v{version}_fx_source"
     spec = {
         "receipt_parameter": "receipt_payload",
@@ -2853,10 +2992,14 @@ def test_v2_projection_malformed_shape_is_refused_without_crashing(tmp_path, sha
     presence.write_text(ast.unparse(ast.fix_missing_locations(module)), encoding="utf-8")
     assert evaluate(tmp_path, contract)
 
+
 @pytest.mark.parametrize(
     "suffix",
     [
-        "def harmless(raw: Mapping[str, object], limit: int = 1, *, absent: object = None) -> dict[str, object]:\n    return {}\n",
+        (
+            "def harmless(raw: Mapping[str, object], limit: int = 1, *, absen"
+            "t: object = None) -> dict[str, object]:\n    return {}\n"
+        ),
         "def harmless(raw: 'Mapping[str, object]') -> 'dict[str, object]':\n    return {}\n",
     ],
 )
@@ -2889,9 +3032,10 @@ def test_v2_presence_owner_refuses_import_time_rebinding(tmp_path, header):
         compile(source, "<external-import-effect-control>", "exec", dont_inherit=True),
         namespace,
     )
-    assert namespace["fx_original_pnl_values"]({"realized_fx_pnl_local": "0"})[
-        "realized_fx_pnl_local"
-    ] is None
+    assert (
+        namespace["fx_original_pnl_values"]({"realized_fx_pnl_local": "0"})["realized_fx_pnl_local"]
+        is None
+    )
     assert evaluate(tmp_path, contract)
 
 
@@ -2916,9 +3060,13 @@ def test_v2_presence_owner_refuses_unsupported_definition_grammar(tmp_path, chan
     elif change == "selected-return-annotation":
         source = source.replace(") -> dict[str, object]:", ") -> " + effect + ":", 1)
     elif change == "selected-default":
-        source = source.replace("raw_source: Mapping[str, object]", "raw_source: Mapping[str, object] = " + effect)
+        source = source.replace(
+            "raw_source: Mapping[str, object]", "raw_source: Mapping[str, object] = " + effect
+        )
     elif change == "selected-decorator":
-        source = source.replace("def fx_original_pnl_values", "@(lambda fn: fn)\ndef fx_original_pnl_values")
+        source = source.replace(
+            "def fx_original_pnl_values", "@(lambda fn: fn)\ndef fx_original_pnl_values"
+        )
     elif change == "unapproved-import":
         source += "\nfrom unapproved_owner import register\n"
     elif change == "shadowed-annotation-type":

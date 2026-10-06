@@ -33,6 +33,7 @@ from ..domain.transaction_economics import (
     TransactionCostComponentEvidence,
 )
 
+
 def _start_of_day(value: date) -> datetime:
     return datetime.combine(value, time.min, tzinfo=UTC)
 
