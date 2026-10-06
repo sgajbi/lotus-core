@@ -1,7 +1,7 @@
 {
   "schema_version": "lotus.core.maintainability-baseline.v1",
   "max_allowed_rank": "B",
-  "recorded_on": "2026-10-02",
+  "recorded_on": "2026-10-05",
   "tracked_files_only": true,
   "entries": [
     {
@@ -17,7 +17,7 @@
       "path": "src/libs/portfolio-common/portfolio_common/kafka_consumer.py",
       "rank": "C",
       "mi": 0.0,
-      "raw_mi": -16.55547973112307,
+      "raw_mi": -13.08533950079481,
       "owner": "lotus-core maintainers",
       "rationale": "Existing shared-consumer hotspot scheduled for bounded decomposition.",
       "issue": "#462"

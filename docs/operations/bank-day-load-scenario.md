@@ -349,6 +349,47 @@ reconciled across all `1000` portfolios with this workflow.
 
 ## Current Known Harness Hardening
 
+### Performance-load source completion diagnostics
+
+The separate `make test-performance-load-gate-full` gate retains JSON/Markdown reports in
+`output/task-runs/` when source completion raises, including profiles already evaluated and the
+active failure stage. `completion_evidence` records each HTTP202 batch's independently submitted
+transaction IDs/counts and supported job/correlation acknowledgement fields. A missing
+acknowledgement is unavailable, not zero. Replay storm is explicitly not run when its source
+admission fails. Report errors do not replace the original enforcing exception; a report error
+after an otherwise successful run remains nonzero.
+
+At a source timeout, deadline raw/cost/cashflow/position counts remain distinct from portfolio
+aggregate claims. The latter can include older profiles and cannot certify the current prefix.
+Additional observations occur after the drain deadline and do not relax the 240-second window,
+independent profile SLOs, 640-record burst, 120-record replay source, 20-security shape or economics.
+
+Diagnostics require the managed isolated runtime and matching database/PTP endpoints. The
+collector in `scripts/operations/performance/load_completion_diagnostics.py` owns these probes.
+Its separate owned process has a six-second response budget and bounded stop/reap attempts (two 0.2-second
+joins). Its absence is reported as stopped/not-started or unconfirmed; cleanup errors remain
+diagnostic evidence and never replace the load failure. Read-only PostgreSQL uses the shared
+database factory with the existing `performance-load-gate` identity and `NullPool`: a supported
+two-second connect limit, 500ms statement limit and 100ms lock limit. Profile limits are scoped to
+the private diagnostic child; inherited URL/security validation is retained. The owned connection
+and engine are closed/disposed on success and failure. It validates governed tenant ownership
+and returns at most20 rows per probe. It captures exact submitted-ID outcomes, ingestion-job and
+outbox lifecycle counts/oldest ages, supported DLQ/failure reason codes, and isolated-runtime
+wait/blocker identities. It excludes SQL text, payloads, credentials and unrelated business rows.
+
+The existing PTP metrics interface provides bounded runtime inflight/backlog/cached-lag samples;
+these are not prefix-level completion. Broker reads sample at most10 partitions per raw/persisted
+topic using existing group committed offsets and low/end watermarks, without joining a consumer
+group, storing offsets, committing or creating topics. Shared Kafka connection policy supplies
+validated transport credentials and trust; invalid security yields unavailable evidence before
+client construction. Sampling is not a whole-topic proof.
+Metrics I/O and broker calls have 500ms timeouts. Metrics input and diagnostic output each have a
+32KiB byte limit; JSON reports have a 256KiB limit. Missing interfaces/permissions, exceeded
+budgets and probe failures are explicitly unavailable/exhausted rather than zero or passing.
+The current actual PTP exposition size remains a runtime validation requirement; a byte-budget
+result is not consumer evidence. These diagnostics support investigation, not a causal assertion,
+financial fix, throughput certification or accepted main.
+
 The harness now includes two protections discovered during smoke execution:
 
 1. reference/master data materialization barriers before transaction load, so

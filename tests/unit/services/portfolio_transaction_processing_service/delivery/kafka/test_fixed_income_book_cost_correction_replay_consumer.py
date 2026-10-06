@@ -8,6 +8,7 @@ from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from confluent_kafka import TopicPartition
 from portfolio_common.event_mapping import EventContractValidationError
 from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.kafka_consumer_execution import KafkaConsumerExecutionProfile
@@ -33,6 +34,14 @@ from src.services.portfolio_transaction_processing_service.app.domain.fixed_inco
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+def _acknowledging_kafka_consumer() -> MagicMock:
+    consumer = MagicMock()
+    consumer.commit.side_effect = lambda *, message, asynchronous: [
+        TopicPartition(message.topic(), message.partition(), message.offset() + 1)
+    ]
+    return consumer
 
 
 def _intent() -> FixedIncomeBookCostCorrectionReplayIntent:
@@ -171,7 +180,7 @@ async def test_dependency_retry_exhaustion_publishes_dlq_and_commits_offset() ->
         "broker unavailable"
     )
     consumer = _dlq_consumer(use_case, retryable_failure_max_attempts=2)
-    consumer._consumer = MagicMock()
+    consumer._consumer = _acknowledging_kafka_consumer()
     consumer._send_to_dlq_async = AsyncMock(return_value=True)
     message = _message()
 
@@ -186,7 +195,7 @@ async def test_dependency_retry_exhaustion_publishes_dlq_and_commits_offset() ->
 async def test_poison_contract_publishes_dlq_and_commits_offset_without_replay() -> None:
     use_case = AsyncMock()
     consumer = _dlq_consumer(use_case)
-    consumer._consumer = MagicMock()
+    consumer._consumer = _acknowledging_kafka_consumer()
     consumer._send_to_dlq_async = AsyncMock(return_value=True)
     payload = _payload()
     payload["schema_version"] = "2.0.0"
@@ -197,6 +206,7 @@ async def test_poison_contract_publishes_dlq_and_commits_offset_without_replay()
     use_case.execute.assert_not_awaited()
     consumer._send_to_dlq_async.assert_awaited_once()
     consumer._consumer.commit.assert_called_once_with(message=message, asynchronous=False)
+    assert consumer._running is True
 
 
 async def test_missing_canonical_anchor_fails_closed_for_dlq_evidence() -> None:

@@ -9,6 +9,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from confluent_kafka import TopicPartition
 from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.kafka_consumer_execution import KafkaConsumerExecutionProfile
 from sqlalchemy.exc import DBAPIError, IntegrityError
@@ -315,6 +316,7 @@ async def test_consumer_exhausts_owned_dependency_budget_without_runtime_restart
         retryable_failure_max_attempts=2,
     )
     consumer._consumer = MagicMock()
+    consumer._consumer.commit.return_value = [TopicPartition("transactions.persisted", 3, 43)]
     consumer._send_to_dlq_async = AsyncMock(return_value=True)
     message = _message()
 
@@ -362,6 +364,7 @@ async def test_consumer_retries_financial_rejection_then_commits_success_without
         retryable_failure_max_attempts=2,
     )
     consumer._consumer = MagicMock()
+    consumer._consumer.commit.return_value = [TopicPartition("transactions.persisted", 3, 43)]
     consumer._send_to_dlq_async = AsyncMock(return_value=True)
     message = _message()
 

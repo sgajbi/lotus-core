@@ -1,5 +1,8 @@
 import json
+import multiprocessing
 import os
+import time
+from argparse import Namespace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -8,6 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from scripts.operations import performance_load_gate, transaction_processing_load_support
+from scripts.operations.performance import load_completion_diagnostics
 from scripts.operations.performance_load_gate import (
     DRAIN_OBSERVATION_TIMEOUT_SECONDS,
     GOVERNED_LOAD_PORTFOLIO_ID,
@@ -740,7 +744,7 @@ def test_main_reenters_under_managed_dynamic_runtime(
         "HOST_DATABASE_URL",
     ):
         monkeypatch.delenv(environment_key, raising=False)
-    args = SimpleNamespace(
+    args = Namespace(
         repo_root=str(tmp_path),
         compose_file="docker-compose.yml",
         ingestion_base_url=None,
@@ -779,16 +783,16 @@ def test_main_reenters_under_managed_dynamic_runtime(
     reentered: list[tuple[object, object]] = []
     original_main = performance_load_gate.main
 
-    monkeypatch.setattr(
-        performance_load_gate,
-        "prepare_managed_compose_run",
-        lambda **kwargs: prepared.append(kwargs) or managed_run,
-    )
-    monkeypatch.setattr(
-        performance_load_gate,
-        "main",
-        lambda args, managed: reentered.append((args, managed)) or 0,
-    )
+    def prepare(**kwargs):
+        prepared.append(kwargs)
+        return managed_run
+
+    def reenter(args, managed):
+        reentered.append((args, managed))
+        return 0
+
+    monkeypatch.setattr(performance_load_gate, "prepare_managed_compose_run", prepare)
+    monkeypatch.setattr(performance_load_gate, "main", reenter)
 
     assert original_main(args, None) == 0
     assert prepared[0]["scope"] == "performance-load-gate"
@@ -798,3 +802,561 @@ def test_main_reenters_under_managed_dynamic_runtime(
     assert args.transaction_processing_base_url == "http://localhost:26090"
     assert args.host_database_url.endswith("localhost:26432/portfolio_db")
     assert reentered == [(args, managed_run)]
+
+
+@pytest.fixture
+def load_boundary(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """Exercise real main/report sequencing without any runtime or network."""
+    args = SimpleNamespace(
+        repo_root=str(tmp_path),
+        output_dir="reports",
+        profile_tier="full",
+        enforce=True,
+        skip_compose=True,
+        ready_timeout_seconds=1,
+        drain_timeout_seconds=240,
+        ingestion_base_url="http://isolated-ingestion",
+        query_base_url="http://isolated-query",
+        event_replay_base_url="http://isolated-replay",
+        transaction_processing_base_url="http://isolated-ptp",
+        host_database_url="postgresql://user:secret@localhost:5432/portfolio_db",
+        ops_token="secret",
+    )
+    engine = MagicMock()
+    engine.url.render_as_string.return_value = args.host_database_url
+    for name in ("_wait_ready", "_seed_load_context"):
+        monkeypatch.setattr(performance_load_gate, name, lambda **kwargs: None)
+    monkeypatch.setattr(
+        performance_load_gate, "create_sync_database_engine", lambda **kwargs: engine
+    )
+    monkeypatch.setattr(
+        performance_load_gate,
+        "_next_transaction_timestamp",
+        lambda **kwargs: datetime(2026, 10, 5, tzinfo=UTC),
+    )
+    monkeypatch.setattr(
+        performance_load_gate,
+        "_get_health_snapshot",
+        lambda **kwargs: {
+            "summary": {"backlog_jobs": 0},
+            "slo": {"backlog_age_seconds": 0},
+            "error_budget": {
+                "dlq_events_in_window": 0,
+                "dlq_budget_events_per_window": 10,
+                "replay_backlog_pressure_ratio": 0,
+            },
+        },
+    )
+    monkeypatch.setattr(performance_load_gate, "_processed_event_count", lambda **kwargs: 9000)
+    monkeypatch.setattr(transaction_processing_load_support.time, "sleep", lambda seconds: None)
+    response = MagicMock(status_code=202)
+    response.json.return_value = {"job_id": "load-job", "correlation_id": "load-correlation"}
+    monkeypatch.setattr(performance_load_gate.requests, "post", lambda *args, **kwargs: response)
+    monkeypatch.setattr(
+        performance_load_gate, "_repair_replay_completion_count", lambda **kwargs: 0
+    )
+    replay = MagicMock(return_value=360)
+    monkeypatch.setattr(performance_load_gate, "_trigger_replay_storm", replay)
+    monkeypatch.setattr(
+        performance_load_gate, "_wait_for_repair_replay_completion", lambda **kwargs: 1
+    )
+    return args, replay, tmp_path
+
+
+def _retained_report(tmp_path: Path) -> dict:
+    payload: dict = json.loads(next((tmp_path / "reports").glob("*.json")).read_text())
+    return payload
+
+
+def test_main_source_timeout_preserves_partial_results_and_exact_inputs(load_boundary, monkeypatch):
+    args, replay, tmp_path = load_boundary
+    drains = iter([1.0, None, None])
+    counts = transaction_processing_load_support.TransactionProcessingCounts(24, 24, 24, 24, 9000)
+
+    def wait(**kwargs):
+        value = next(drains)
+        if value is None:
+            kwargs["on_timeout"](counts)
+        return value
+
+    monkeypatch.setattr(performance_load_gate, "_wait_for_transaction_processing", wait)
+    monkeypatch.setattr(
+        performance_load_gate,
+        "collect_load_completion_diagnostics",
+        lambda **kwargs: {"status": "unavailable", "reason": "no_interface"},
+    )
+    with pytest.raises(
+        TimeoutError, match="Replay source transactions did not complete before replay"
+    ):
+        performance_load_gate.main(args)
+    report = _retained_report(tmp_path)
+    assert report["overall_passed"] is False
+    assert [p["records_submitted"] for p in report["profiles"]] == [200, 640]
+    assert report["profiles"][0]["checks_passed"] is True
+    assert report["profiles"][1]["checks_passed"] is False
+    evidence = report["completion_evidence"]
+    assert evidence["stage"] == "replay_source"
+    assert evidence["replay_storm_status"] == "not_run"
+    assert evidence["profiles_not_run"] == ["replay_storm"]
+    batches = evidence["submitted_batches"]
+    assert [
+        sum(b["submitted_count"] for b in batches[name])
+        for name in ("steady_state", "burst", "replay_source")
+    ] == [200, 640, 120]
+    assert (
+        len(
+            {
+                identifier
+                for group in batches.values()
+                for b in group
+                for identifier in b["submitted_ids"]
+            }
+        )
+        == 960
+    )
+    assert evidence["source_timeouts"][1]["drain_deadline_counts"]["transaction_count"] == 24
+    assert evidence["source_timeouts"][1]["claims_scope"] == "portfolio_aggregate_not_exact_prefix"
+    replay.assert_not_called()
+
+
+def test_main_success_keeps_original_workload_and_admission(load_boundary, monkeypatch):
+    args, replay, tmp_path = load_boundary
+    wait = MagicMock(return_value=1.0)
+    monkeypatch.setattr(performance_load_gate, "_wait_for_transaction_processing", wait)
+    collector = MagicMock()
+    monkeypatch.setattr(performance_load_gate, "collect_load_completion_diagnostics", collector)
+    assert performance_load_gate.main(args) == 0
+    assert [call.kwargs["expected"] for call in wait.call_args_list] == [200, 640, 120]
+    assert all(call.kwargs["timeout_seconds"] == 240 for call in wait.call_args_list)
+    report = _retained_report(tmp_path)
+    assert report["overall_passed"] is True
+    assert report["completion_evidence"]["replay_storm_status"] == "completed"
+    assert report["completion_evidence"]["profiles_not_run"] == []
+    replay.assert_called_once()
+    collector.assert_not_called()
+
+
+@pytest.mark.parametrize("collector_error", [PermissionError, TimeoutError])
+def test_diagnostic_and_report_errors_never_mask_original_timeout(
+    load_boundary, monkeypatch, collector_error, capsys
+):
+    args, replay, _ = load_boundary
+    monkeypatch.setattr(
+        performance_load_gate, "_wait_for_transaction_processing", lambda **kwargs: None
+    )
+    monkeypatch.setattr(
+        performance_load_gate,
+        "collect_load_completion_diagnostics",
+        MagicMock(side_effect=collector_error("private details")),
+    )
+    monkeypatch.setattr(
+        performance_load_gate,
+        "_write_report",
+        MagicMock(side_effect=OSError("publication unavailable")),
+    )
+    with pytest.raises(
+        TimeoutError, match="Replay source transactions did not complete before replay"
+    ):
+        performance_load_gate.main(args)
+    assert "Load report unavailable: OSError" in capsys.readouterr().err
+    replay.assert_not_called()
+
+
+def test_report_publication_failure_makes_success_nonzero(load_boundary, monkeypatch):
+    args, _, _ = load_boundary
+    monkeypatch.setattr(
+        performance_load_gate, "_wait_for_transaction_processing", lambda **kwargs: 1
+    )
+    monkeypatch.setattr(
+        performance_load_gate,
+        "_write_report",
+        MagicMock(side_effect=OSError("publication failure")),
+    )
+    with pytest.raises(OSError, match="publication failure"):
+        performance_load_gate.main(args)
+
+
+def test_partial_ingestion_retains_only_accepted_input_before_original_error(
+    load_boundary, monkeypatch
+):
+    args, _, tmp_path = load_boundary
+    accepted = MagicMock(status_code=202)
+    accepted.json.return_value = {"job_id": "first-job", "payload": "must not retain"}
+    rejected = MagicMock(status_code=503, text="denied")
+    monkeypatch.setattr(
+        performance_load_gate.requests, "post", MagicMock(side_effect=[accepted, rejected])
+    )
+    with pytest.raises(RuntimeError, match="status=503"):
+        performance_load_gate.main(args)
+    report = _retained_report(tmp_path)
+    assert report["profiles"] == []
+    assert report["overall_passed"] is False
+    batches = report["completion_evidence"]["submitted_batches"]["steady_state"]
+    assert len(batches) == 1 and batches[0]["submitted_count"] == 40
+    assert "payload" not in batches[0]["acknowledgement"]
+
+
+def test_diagnostic_collection_refuses_unbound_runtime_before_any_io(monkeypatch):
+    spawn = MagicMock()
+    monkeypatch.setattr(load_completion_diagnostics.multiprocessing, "get_context", spawn)
+    result = load_completion_diagnostics.collect_load_completion_diagnostics(
+        database_url="secret",
+        metrics_url="http://foreign",
+        kafka_bootstrap_servers="foreign",
+        scope={},
+        isolated_runtime=False,
+    )
+    assert result["status"] == "unavailable"
+    spawn.assert_not_called()
+
+
+def test_collection_budget_terminates_owned_probe_without_waiting_for_io(monkeypatch):
+    context = MagicMock()
+    receiver, sender = MagicMock(), MagicMock()
+    receiver.poll.return_value = False
+    context.Pipe.return_value = (receiver, sender)
+    process = context.Process.return_value
+    process.pid = 123
+    process.is_alive.side_effect = [True, False]
+    monkeypatch.setattr(
+        load_completion_diagnostics.multiprocessing, "get_context", lambda mode: context
+    )
+    result = load_completion_diagnostics.collect_load_completion_diagnostics(
+        database_url="secret",
+        metrics_url="http://isolated",
+        kafka_bootstrap_servers="isolated",
+        scope={"run_id": "run", "submitted_ids": ["private-ID"]},
+        isolated_runtime=True,
+    )
+    assert result == {
+        "status": "budget_exhausted",
+        "scope": {"run_id": "run"},
+        "child_cleanup": {"status": "stopped", "errors": []},
+    }
+    receiver.poll.assert_called_once_with(6.0)
+    process.terminate.assert_called_once()
+    process.join.assert_called_once_with(timeout=0.2)
+    receiver.recv_bytes.assert_not_called()
+
+
+def test_probe_worker_distinguishes_failure_missing_and_byte_budget(monkeypatch):
+    support = load_completion_diagnostics
+    monkeypatch.setattr(
+        support, "_load_database_diagnostics", MagicMock(side_effect=PermissionError("secret SQL"))
+    )
+    sender = MagicMock()
+    monkeypatch.setattr(support, "_load_consumer_metrics", lambda url: {"status": "unavailable"})
+    monkeypatch.setattr(
+        support, "_load_consumer_offsets", lambda *args: {"status": "observed", "partitions": []}
+    )
+    support._diagnostic_worker(
+        sender,
+        "secret",
+        "url",
+        "broker",
+        {"run_id": "run"},
+    )
+    result = json.loads(sender.send_bytes.call_args.args[0])
+    assert result["probes"]["database"] == {"status": "unavailable", "reason": "PermissionError"}
+    assert result["probes"]["ptp_metrics"]["status"] == "unavailable"
+    assert "secret" not in sender.send_bytes.call_args.args[0].decode()
+    monkeypatch.setattr(support, "_load_consumer_metrics", lambda url: {"data": "x" * 40000})
+    support._diagnostic_worker(sender, "secret", "url", "broker", {"run_id": "run"})
+    assert json.loads(sender.send_bytes.call_args.args[0])["status"] == "byte_budget_exhausted"
+
+
+def test_database_probes_are_exact_scoped_read_only_and_permission_failure_is_honest():
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchmany.return_value = [{"transaction_count": 24, "portfolio_aggregate_claims": 9000}]
+    cursor.execute.side_effect = [None, PermissionError("denied"), None, None, None]
+    scope = {
+        "submitted_ids": ["TX_exact_1"],
+        "ingestion_job_ids": ["job"],
+        "portfolio_id": GOVERNED_LOAD_PORTFOLIO_ID,
+    }
+    result = load_completion_diagnostics._load_database_probes(connection, scope, object)
+    assert result["outbox_lifecycle"]["status"] == "unavailable"
+    assert result["exact_prefix_counts"]["rows"][0]["transaction_count"] == 24
+    connection.rollback.assert_called_once()
+    for call in cursor.execute.call_args_list:
+        query, params = call.args
+        assert query.lstrip().startswith("SELECT")
+        assert "query," not in query and "payload_excerpt" not in query
+        assert params
+    exact = cursor.execute.call_args_list[0]
+    assert "transaction_id=ANY(%s)" in exact.args[0]
+    assert scope["submitted_ids"] in exact.args[1]
+
+
+def test_missing_acknowledgement_never_becomes_zero_rejects():
+    connection = MagicMock()
+    scope = {
+        "submitted_ids": ["TX_exact_1"],
+        "ingestion_job_ids": [],
+        "portfolio_id": GOVERNED_LOAD_PORTFOLIO_ID,
+    }
+    result = load_completion_diagnostics._load_database_probes(connection, scope, object)
+    assert result["consumer_rejections"]["status"] == "unavailable"
+    assert result["ingestion_lifecycle"]["status"] == "unavailable"
+
+
+def _diagnostic_test_child(sender, database_url, metrics_url, broker, scope, *probes):
+    """Real isolated subprocess test: no DB, Kafka, HTTP, Docker or product execution."""
+    if scope.get("block"):
+        time.sleep(10)
+    else:
+        sender.send_bytes(json.dumps({"status": "observed", "probe": "test_only"}).encode())
+    sender.close()
+
+
+@pytest.mark.parametrize("block", [False, True])
+def test_real_owned_probe_process_completion_and_timeout_are_reaped(monkeypatch, block):
+    support = load_completion_diagnostics
+    native = multiprocessing.get_context("spawn")
+    children = []
+
+    class Context:
+        Pipe = staticmethod(native.Pipe)
+
+        @staticmethod
+        def Process(*, target, args, daemon):
+            child = native.Process(target=_diagnostic_test_child, args=args, daemon=daemon)
+            children.append(child)
+            return child
+
+    monkeypatch.setattr(support.multiprocessing, "get_context", lambda mode: Context())
+    monkeypatch.setattr(support, "DIAGNOSTIC_BUDGET_SECONDS", 2.0 if not block else 0.1)
+    result = support.collect_load_completion_diagnostics(
+        database_url="unused",
+        metrics_url="unused",
+        kafka_bootstrap_servers="unused",
+        scope={"block": block},
+        isolated_runtime=True,
+    )
+    assert result["status"] == ("budget_exhausted" if block else "observed")
+    assert result["child_cleanup"]["status"] == "stopped"
+    assert all(child._closed for child in children)
+
+
+def test_process_start_and_cleanup_failures_are_data_not_replacement_exceptions(monkeypatch):
+    context = MagicMock()
+    receiver, sender = MagicMock(), MagicMock()
+    context.Pipe.return_value = (receiver, sender)
+    process = context.Process.return_value
+    process.start.side_effect = OSError("start failure with secret")
+    process.pid = None
+    process.close.side_effect = OSError("close failure")
+    monkeypatch.setattr(
+        load_completion_diagnostics.multiprocessing, "get_context", lambda mode: context
+    )
+    result = load_completion_diagnostics.collect_load_completion_diagnostics(
+        database_url="secret",
+        metrics_url="url",
+        kafka_bootstrap_servers="broker",
+        scope={},
+        isolated_runtime=True,
+    )
+    assert result["status"] == "unavailable" and result["reason"] == "OSError"
+    assert result["child_cleanup"] == {"status": "not_started", "errors": ["OSError"]}
+    assert "secret" not in json.dumps(result)
+
+
+def test_cleanup_terminate_error_uses_kill_and_confirms_absence():
+    process = MagicMock(pid=123)
+    process.is_alive.side_effect = [True, True, False]
+    process.terminate.side_effect = OSError("denied")
+    result = load_completion_diagnostics._stop_diagnostic_process(process)
+    assert result == {"status": "stopped", "errors": ["OSError"]}
+    process.kill.assert_called_once()
+
+
+def test_cleanup_guard_reports_unconfirmed_stop_honestly():
+    process = MagicMock(pid=123)
+    process.is_alive.return_value = True
+    process.terminate.side_effect = OSError("denied")
+    process.kill.side_effect = OSError("denied")
+    assert load_completion_diagnostics._stop_diagnostic_process(process)["status"] == "unconfirmed"
+    process.close.assert_not_called()
+
+
+def test_database_connection_has_native_read_only_short_limits_and_owner_guard(monkeypatch):
+    from portfolio_common import db
+    from sqlalchemy.pool import NullPool
+
+    engine = MagicMock()
+    connection = engine.raw_connection.return_value
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchone.return_value = {"tenant_id": "foreign"}
+    create = MagicMock(return_value=engine)
+    monkeypatch.setattr(db, "create_engine", create)
+    monkeypatch.setenv("LOTUS_CORE_DB_CONNECT_TIMEOUT_SECONDS", "60")
+    monkeypatch.setenv("LOTUS_CORE_DB_STATEMENT_TIMEOUT_MS", "3000")
+    result = load_completion_diagnostics._load_database_diagnostics(
+        "postgresql://operator:nondefault-secret@isolated/db?sslmode=require",
+        {"portfolio_id": GOVERNED_LOAD_PORTFOLIO_ID},
+    )
+    assert result["status"] == "unavailable"
+    settings = create.call_args.kwargs
+    assert settings["poolclass"] is NullPool
+    assert settings["connect_args"]["connect_timeout"] == 2
+    assert settings["connect_args"]["application_name"] == "performance-load-gate"
+    assert "statement_timeout=500" in settings["connect_args"]["options"]
+    assert "sslmode=require" in create.call_args.args[0]
+    connection.set_session.assert_called_once_with(readonly=True, autocommit=True)
+    assert cursor.execute.call_args_list[0].args == ("SET lock_timeout = '100ms'",)
+    assert cursor.execute.call_count == 2
+    connection.close.assert_called_once()
+    engine.dispose.assert_called_once()
+    assert os.environ["LOTUS_CORE_DB_CONNECT_TIMEOUT_SECONDS"] == "60"
+    assert os.environ["LOTUS_CORE_DB_STATEMENT_TIMEOUT_MS"] == "3000"
+
+
+@pytest.mark.parametrize("stage", ["connection", "read_only", "owner", "probe", "close"])
+def test_diagnostic_database_failure_disposes_engine_and_closes_connection(monkeypatch, stage):
+    engine = MagicMock()
+    connection = engine.raw_connection.return_value
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchone.return_value = {"tenant_id": load_completion_diagnostics.LOAD_TENANT_ID}
+    monkeypatch.setattr(
+        load_completion_diagnostics, "_diagnostic_database_engine", lambda url: engine
+    )
+    if stage == "connection":
+        engine.raw_connection.side_effect = PermissionError("refused")
+    elif stage == "read_only":
+        connection.set_session.side_effect = PermissionError("refused")
+    elif stage == "owner":
+        cursor.execute.side_effect = PermissionError("refused")
+    elif stage == "probe":
+        monkeypatch.setattr(
+            load_completion_diagnostics,
+            "_load_database_probes",
+            MagicMock(side_effect=PermissionError),
+        )
+    else:
+        connection.close.side_effect = PermissionError("refused")
+    with pytest.raises(PermissionError):
+        load_completion_diagnostics._load_database_diagnostics(
+            "unused",
+            {
+                "portfolio_id": GOVERNED_LOAD_PORTFOLIO_ID,
+                "submitted_ids": [],
+                "ingestion_job_ids": [],
+            },
+        )
+    engine.dispose.assert_called_once()
+    if stage != "connection":
+        connection.close.assert_called_once()
+
+
+def test_diagnostic_database_security_refusal_preserves_parent_profile(monkeypatch):
+    from portfolio_common import db
+    from portfolio_common.runtime_settings import RuntimeConfigurationError
+
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("LOTUS_CORE_DB_CONNECT_TIMEOUT_SECONDS", "60")
+    create = MagicMock()
+    monkeypatch.setattr(db, "create_engine", create)
+    with pytest.raises(RuntimeConfigurationError):
+        load_completion_diagnostics._diagnostic_database_engine("postgresql://user@isolated/db")
+    create.assert_not_called()
+    assert os.environ["LOTUS_CORE_DB_CONNECT_TIMEOUT_SECONDS"] == "60"
+
+
+def test_diagnostic_database_inherited_invalid_profile_is_not_weakened(monkeypatch):
+    from portfolio_common import db
+    from portfolio_common.database_runtime_profile import DatabaseRuntimeProfileError
+
+    monkeypatch.setenv("LOTUS_CORE_DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS", "1")
+    create = MagicMock()
+    monkeypatch.setattr(db, "create_engine", create)
+    with pytest.raises(DatabaseRuntimeProfileError):
+        load_completion_diagnostics._diagnostic_database_engine(
+            "postgresql://operator:nondefault-secret@isolated/db"
+        )
+    create.assert_not_called()
+    assert os.environ["LOTUS_CORE_DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS"] == "1"
+
+
+@pytest.mark.parametrize("missing,oversized", [(False, False), (True, False), (False, True)])
+def test_consumer_metrics_missing_and_byte_limits_never_become_zero(
+    monkeypatch, missing, oversized
+):
+    support = load_completion_diagnostics
+    response = MagicMock()
+    body = (
+        b"unrelated_metric 1\n"
+        if missing
+        else b'kafka_consumer_in_flight_messages{service="portfolio-transaction-processing",'
+        b'topic="transactions.persisted",group_id="portfolio_transaction_processing_group"} 12\n'
+    )
+    if oversized:
+        body += b"x" * support.DIAGNOSTIC_MAX_BYTES
+    response.iter_content.return_value = [body]
+    response.__enter__.return_value = response
+    get = MagicMock(return_value=response)
+    monkeypatch.setattr(support.requests, "get", get)
+    result = load_completion_diagnostics._load_consumer_metrics("http://isolated/metrics")
+    assert result["status"] == (
+        "byte_budget_exhausted" if oversized else "unavailable" if missing else "observed"
+    )
+    if not missing and not oversized:
+        assert result["samples"][0]["value"] == 12
+        assert result["scope"] == "runtime_aggregate_not_prefix"
+    assert get.call_args.kwargs["timeout"] == 0.5
+
+
+@pytest.mark.parametrize("protocol", ["SSL", "SASL_SSL"])
+def test_native_kafka_offset_reads_do_not_join_store_or_commit(monkeypatch, protocol):
+    import confluent_kafka
+
+    consumer = MagicMock()
+    consumer.list_topics.return_value.topics = {
+        name: SimpleNamespace(error=None, partitions={0: object()})
+        for name in ("transactions.raw.received", "transactions.persisted")
+    }
+    consumer.committed.return_value = [SimpleNamespace(offset=5, error=None)]
+    consumer.get_watermark_offsets.return_value = (0, 12)
+    factory = MagicMock(return_value=consumer)
+    monkeypatch.setattr(confluent_kafka, "Consumer", factory)
+    monkeypatch.setenv("KAFKA_SECURITY_PROTOCOL", protocol)
+    monkeypatch.setenv("KAFKA_SSL_CA_LOCATION", "/deployment/trust.pem")
+    monkeypatch.setenv("KAFKA_SASL_MECHANISM", "SCRAM-SHA-512")
+    monkeypatch.setenv("KAFKA_SASL_USERNAME", "diagnostic-operator")
+    monkeypatch.setenv("KAFKA_SASL_PASSWORD", "inherited-secret")
+    result = load_completion_diagnostics._load_consumer_offsets("isolated", time.monotonic() + 10)
+    assert [row["committed"] for row in result["partitions"]] == [5, 5]
+    assert [row["end"] for row in result["partitions"]] == [12, 12]
+    for call in factory.call_args_list:
+        assert call.args[0]["enable.auto.commit"] is False
+        assert call.args[0]["enable.auto.offset.store"] is False
+        assert call.args[0]["allow.auto.create.topics"] is False
+        assert call.args[0]["security.protocol"] == protocol
+        assert call.args[0]["ssl.ca.location"] == "/deployment/trust.pem"
+        if protocol == "SASL_SSL":
+            assert call.args[0]["sasl.mechanism"] == "SCRAM-SHA-512"
+            assert call.args[0]["sasl.username"] == "diagnostic-operator"
+            assert call.args[0]["sasl.password"] == "inherited-secret"
+    for method in (consumer.subscribe, consumer.assign, consumer.commit, consumer.store_offsets):
+        method.assert_not_called()
+
+
+@pytest.mark.parametrize("protocol", ["SSL", "PLAINTEXT", "INVALID"])
+def test_kafka_security_refusal_is_unavailable_without_client_construction(monkeypatch, protocol):
+    import confluent_kafka
+
+    factory = MagicMock()
+    monkeypatch.setattr(confluent_kafka, "Consumer", factory)
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("KAFKA_SECURITY_PROTOCOL", protocol)
+    monkeypatch.delenv("KAFKA_SSL_CA_LOCATION", raising=False)
+    monkeypatch.setattr(load_completion_diagnostics, "_load_database_diagnostics", lambda *args: {})
+    monkeypatch.setattr(load_completion_diagnostics, "_load_consumer_metrics", lambda *args: {})
+    sender = MagicMock()
+    load_completion_diagnostics._diagnostic_worker(sender, "unused", "unused", "isolated", {})
+    result = json.loads(sender.send_bytes.call_args.args[0])
+    assert result["probes"]["consumer_offsets"] == {
+        "status": "unavailable",
+        "reason": "RuntimeConfigurationError",
+    }
+    factory.assert_not_called()

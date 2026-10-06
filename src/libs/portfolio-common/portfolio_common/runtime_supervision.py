@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import inspect
 from collections.abc import Callable, Sequence
 
 from .runtime_settings import RuntimeConfigurationError
@@ -115,13 +116,20 @@ async def shutdown_runtime_components(
 
     Consumers are shut down first, then service-local stop callbacks are invoked,
     then the embedded web server is asked to exit, and finally all runtime tasks
-    are awaited with `return_exceptions=True` to guarantee bounded shutdown.
+    are awaited with `return_exceptions=True`. Deadline cancellation does not
+    preempt a native client operation; its owner must join it before reporting
+    resource release, even when that exceeds the supervision grace period.
     """
     _shutdown_consumers(consumers, logger)
     _run_stop_callbacks(stop_callbacks, logger)
     _signal_server_exit(server)
+    close_tasks = [
+        asyncio.create_task(wait_closed(), name=f"consumer-close:{index}")
+        for index, consumer in enumerate(consumers)
+        if inspect.iscoroutinefunction(wait_closed := getattr(consumer, "wait_closed", None))
+    ]
     await _await_runtime_tasks(
-        tasks,
+        [*tasks, *close_tasks],
         _resolve_shutdown_timeout_seconds(consumers, shutdown_timeout_seconds),
         logger,
     )

@@ -247,6 +247,37 @@ Core does not own performance or risk conclusions, advisory recommendations, man
 client report composition, or the unified front-office experience. Those remain with their
 respective Lotus services.
 
+## Consumer Native-Operation Practice
+
+Operator subclasses such as `DLQReplayConsumer` must delegate polling, exact offset acknowledgement,
+drain and close to `BaseConsumer.run()`. A deadline stops admission; already submitted native work
+is joined before close and may exceed that deadline. Replay publish and confirmed flush share the
+owned native lane. Failed replay stops admission without offset acknowledgement; malformed DLQ
+records are explicitly discarded without republishing before continuing to valid records. Run the
+tool's direct static checks and owning tests: repository-default `src` gates omit `tools/`.
+
+Shared Kafka consumer contract changes must inspect every concrete caller fixture and execute
+the full affected caller test set alongside the common consumer/native/supervisor controls.
+Positive synchronous-commit fixtures must return real acknowledgement-shaped values for the
+message's topic, partition and next offset, with no partition error; a commit-call assertion alone
+does not establish successful acknowledgement. Preserve negative acknowledgement and drain/order
+assertions when updating fixtures.
+
+`BaseConsumer` uses one owned FIFO worker for native construction/subscription, poll, pause/resume,
+synchronous offset acknowledgement, cached watermark reads, DLQ confirmation and close. Keep
+async financial UOWs and metrics on the event loop. Await exact topic/partition/next-offset success
+before releasing partition order; a successful native call alone is not partition acknowledgement.
+Rebalance callbacks only invalidate generation state and must not wait reentrantly on the worker.
+Cancellation joins the submitted operation before resource close; runtime supervision also awaits
+`wait_closed()`. Native work may exceed supervision grace because asyncio cannot preempt it.
+
+The recording regression reproduces the prior loop stall and tests responsive unrelated UOW work,
+ordering, ownership, acknowledgement errors and actual supervisor drain. It does not certify
+broker/PG semantics, deployment teardown bounds, full-load causation or accepted main. #795,
+#730 and the #483 rebuild alternative remain bounded as described in the
+[partition runbook](docs/operations/kafka-partition-migration-runbook.md#native-consumer-operations-and-shutdown).
+Financial locks, epochs, SQL atomicity, topology, pool sizes and SLOs retain their existing policy.
+
 ## Current-State Summary
 
 - `query_service` is the operational read plane.
@@ -678,6 +709,39 @@ schema, machine-readable contracts, or executable evidence.
   the stable runtime identity on every sample and fail closed when a required runtime hot path is
   absent; cumulative duration and mean are attribution evidence, not percentile or saturation
   proof.
+
+## Performance-load diagnostic practice
+
+`scripts/operations/performance_load_gate.py` owns partial-report publication at its original
+exception boundary. `transaction_processing_load_support.py` owns supported acknowledgement
+lineage and the shared completion/fixture probes. The existing performance package owns
+`scripts/operations/performance/load_completion_diagnostics.py` for isolated bounded process,
+database, metric and Kafka diagnostics. Main imports it directly; shared support has no reverse
+import or compatibility alias. Keep
+portfolio aggregate claims separate from prefix domain counts; replay not-run, missing evidence,
+budget exhaustion and unconfirmed child cleanup cannot become successful or zero observations.
+Never relax economics, input cardinality, financial admission, ordering or drain SLOs to collect
+diagnostics. Preserve the original nonzero exception even if collection/publication fails.
+Use `tests/unit/scripts/test_performance_load_gate.py` for focused native script/report/process
+proof; its mocks do not certify PostgreSQL/Kafka semantics, actual metric exposition availability,
+pipeline cause or main readiness. See `docs/operations/bank-day-load-scenario.md` for operator
+budgets and supportability limits.
+
+Diagnostic clients must use `portfolio_common.db.create_sync_database_engine` and
+`portfolio_common.connection_security.build_kafka_connection_config`. Retain inherited validated
+security/trust, governed operator identity and `NullPool`; diagnostic profile limits belong only
+to the private child. The supported connection-timeout minimum is two seconds. Do not substitute
+raw DBAPI connections, plaintext defaults or constructor aliases to evade source-wide guards.
+For script/client slices, run these existing checks from the Core root before publication in
+addition to focused tests and checks on every changed file; default `src` checks omit scripts:
+
+```powershell
+python scripts/development/repository_python.py -m pytest tests/unit/contracts/test_app_local_runtime_security_contract.py::test_direct_kafka_clients_cannot_bypass_shared_transport_security tests/unit/libs/portfolio-common/test_db.py::test_database_engines_use_governed_factory -q
+```
+
+```bash
+python scripts/development/repository_python.py -m pytest tests/unit/contracts/test_app_local_runtime_security_contract.py::test_direct_kafka_clients_cannot_bypass_shared_transport_security tests/unit/libs/portfolio-common/test_db.py::test_database_engines_use_governed_factory -q
+```
 
 ## Context Maintenance Rule
 
