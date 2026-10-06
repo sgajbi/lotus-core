@@ -536,6 +536,124 @@ async def test_booking_lineage_is_deterministic_and_changes_with_material_fx_out
     )
 
 
+@pytest.mark.parametrize("original_link", [None, "FX-OPEN-001", "PROVIDED-OPEN"])
+@pytest.mark.parametrize("processed", [False, True])
+async def test_original_contract_link_survives_exact_derived_self_link(original_link, processed):
+    from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx.linkage import (  # noqa: E501
+        enrich_fx_transaction_metadata,
+    )
+
+    raw = _foreign_exchange_transaction(
+        tenant_id="tenant-fx",
+        fx_contract_id="FXC-EURUSD-001",
+        fx_contract_open_transaction_id=original_link,
+        realized_capital_pnl_local=None,
+        realized_total_pnl_local=None,
+        realized_capital_pnl_base=Decimal(0),
+        realized_total_pnl_base=None,
+    )
+    canonical = enrich_fx_transaction_metadata(raw)
+    before = build_fx_processed_transaction(canonical) if processed else raw
+    witness = _retention_witness(before, raw)
+    assert witness.raw_source.original_contract_open_transaction_id == original_link
+    persistence = _transaction_persistence()
+    persistence.load_fx_retention_witness.return_value = witness
+    result = await book_foreign_exchange_transaction(
+        transaction=enrich_fx_transaction_metadata(before),
+        transaction_persistence=persistence,
+        booking_context=FxBookingContext(initial_publication=not processed, admitted_epoch=None),
+    )
+    assert result.transaction.fx_contract_open_transaction_id == (
+        original_link or raw.transaction_id
+    )
+    assert witness.raw_source.material_fingerprint == transaction_payload_fingerprint(
+        fx_source_material(raw)
+    )
+    assert calculation_lineage_binds_output(
+        result.transaction.calculation_lineage,
+        output_payload=fx_booked_transaction_output_payload(result.transaction),
+    )
+
+
+async def test_omitted_mode_preserves_existing_effective_none_default():
+    from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
+        enrich_fx_transaction_metadata,
+    )
+
+    original = _foreign_exchange_transaction(
+        tenant_id="tenant-fx",
+        fx_contract_id="FXC-EURUSD-001",
+        fx_realized_pnl_mode=None,
+        realized_capital_pnl_local=None,
+        realized_fx_pnl_local=None,
+        realized_total_pnl_local=None,
+        realized_capital_pnl_base=Decimal(0),
+        realized_fx_pnl_base=None,
+        realized_total_pnl_base=None,
+    )
+    persistence = _transaction_persistence()
+    witness = FxPersistenceWitness(original, None, None)
+    persistence.load_fx_retention_witness.return_value = witness
+    result = await book_foreign_exchange_transaction(
+        transaction=enrich_fx_transaction_metadata(original),
+        transaction_persistence=persistence,
+        booking_context=FxBookingContext(initial_publication=True, admitted_epoch=None),
+    )
+    assert original.fx_realized_pnl_mode is None
+    assert witness.durable_before.fx_realized_pnl_mode is None
+    assert result.transaction.fx_realized_pnl_mode == "NONE"
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "link",
+        "explicit_link",
+        "owner",
+        "component",
+        "amount",
+        "date",
+        "epoch",
+        "mode",
+        "rate",
+        "origin",
+        "pnl",
+    ],
+)
+async def test_derived_contract_link_cannot_hide_changed_original_material(damage):
+    from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx.linkage import (  # noqa: E501
+        enrich_fx_transaction_metadata,
+    )
+
+    raw = _foreign_exchange_transaction(
+        tenant_id="tenant-fx",
+        fx_contract_id="FXC-EURUSD-001",
+        fx_contract_open_transaction_id="PROVIDED-OPEN" if damage == "explicit_link" else None,
+    )
+    updates = {
+        "link": {"fx_contract_open_transaction_id": "ARBITRARY"},
+        "explicit_link": {"fx_contract_open_transaction_id": raw.transaction_id},
+        "owner": {"tenant_id": "FOREIGN"},
+        "component": {"component_type": "FX_CASH_SETTLEMENT_BUY"},
+        "amount": {"gross_transaction_amount": Decimal("999")},
+        "date": {"transaction_date": raw.transaction_date + timedelta(hours=1)},
+        "epoch": {"epoch": 3},
+        "mode": {"fx_realized_pnl_mode": "NONE"},
+        "rate": {"transaction_fx_rate": Decimal("9")},
+        "origin": {"transaction_fx_rate_origin": "SOURCE_BOOKED"},
+        "pnl": {"realized_capital_pnl_local": Decimal("99")},
+    }
+    persistence = _transaction_persistence()
+    persistence.load_fx_retention_witness.return_value = _retention_witness(raw)
+    with pytest.raises(ValueError):
+        await book_foreign_exchange_transaction(
+            transaction=replace(enrich_fx_transaction_metadata(raw), **updates[damage]),
+            transaction_persistence=persistence,
+            booking_context=FxBookingContext(initial_publication=True, admitted_epoch=None),
+        )
+    persistence.upsert_booked_transaction.assert_not_awaited()
+
+
 @pytest.mark.parametrize("field_name", ["transaction_date", "settlement_date", "created_at"])
 async def test_booking_rejects_timezone_ambiguous_fx_lineage_timestamps(
     field_name: str,

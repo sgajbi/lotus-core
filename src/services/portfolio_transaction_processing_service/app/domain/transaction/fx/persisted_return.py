@@ -28,6 +28,7 @@ from .baseline_processing import (
     fx_booked_transaction_output_payload,
     fx_persisted_transaction_material,
 )
+from .models import FX_BUSINESS_TRANSACTION_TYPES
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +50,7 @@ class FxRawSourceFacts:
     material_fingerprint: str
     transaction_fx_rate: Decimal | None
     transaction_fx_rate_origin: str | None
+    original_contract_open_transaction_id: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,6 +118,9 @@ def qualify_fx_raw_source(
         raise ValueError("FX original rate is not exact decimal text")
     rate = Decimal(rate_value) if rate_value is not None else None
     origin = raw.get("transaction_fx_rate_origin")
+    open_link = raw.get("fx_contract_open_transaction_id")
+    if open_link is not None and not isinstance(open_link, str):
+        raise ValueError("FX original contract-open link is invalid")
     if (rate is not None and not rate.is_finite()) or (
         origin is not None and not isinstance(origin, str)
     ):
@@ -135,6 +140,7 @@ def qualify_fx_raw_source(
         material_fingerprint=fingerprint,
         transaction_fx_rate=rate,
         transaction_fx_rate_origin=cast(str | None, origin),
+        original_contract_open_transaction_id=cast(str | None, open_link),
     )
 
 
@@ -190,6 +196,10 @@ def qualify_fx_booking_source(
         for name in ("tenant_id", "portfolio_id", "security_id", "transaction_id")
     ):
         raise ValueError("FX durable witness owner mismatch")
+    if normalize_transaction_control_code(transaction.fx_realized_pnl_mode or "NONE") != (
+        normalize_transaction_control_code(before.fx_realized_pnl_mode or "NONE")
+    ):
+        raise ValueError("FX admitted source mode changed")
     if normalize_transaction_control_code(transaction.fx_realized_pnl_mode) != "UPSTREAM_PROVIDED":
         return original_fx_pnl_values(transaction)
     raw = witness.raw_source
@@ -210,6 +220,15 @@ def qualify_fx_booking_source(
     material.update(zip(FX_ORIGINAL_PNL_FIELDS, raw.original_pnl, strict=True))
     if transaction.source_system is None:
         material["source_system"] = before.source_system
+    if (
+        normalize_transaction_control_code(transaction.transaction_type)
+        in FX_BUSINESS_TRANSACTION_TYPES
+        and normalize_transaction_control_code(transaction.component_type) == "FX_CONTRACT_OPEN"
+        and raw.original_contract_open_transaction_id is None
+        and transaction.fx_contract_open_transaction_id == transaction.transaction_id
+    ):
+        # The exact self-link is a supported output default, never a replacement source fact.
+        material["fx_contract_open_transaction_id"] = None
     if (
         transaction_payload_fingerprint(material) != raw.material_fingerprint
         or transaction.transaction_fx_rate != raw.transaction_fx_rate

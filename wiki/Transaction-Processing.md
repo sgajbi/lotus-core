@@ -30,9 +30,16 @@ six P&L Decimal/null values survive rebinding; the second row and receipt must m
 Source identity uses the owning adapter's event-parsed dates; original raw JSON/hash remain
 separate evidence. The domain verifies the handoff preserves aware instants, absent/null presence
 and every non-time fact, preventing a typed projection from masking a changed original source.
+An omitted contract-open transaction link is retained in the original raw witness while the
+existing FX engine derives the output self-link. Only that exact relationship is qualified;
+explicit links and all other material remain exact. Repair position-group comparison also
+requires a bound FX output receipt. Within that qualified comparison, original omitted mode
+may match the existing derived `NONE` default; explicit modes remain exact. This leaves the
+original root/admission, global semantic identity and historical idempotency hashes unchanged.
+Arbitrary links remain refusals.
 The implementation reuses already loaded facts and adds no portfolio-wide serialization or
 economic correction authority. Local units do not establish native PG rollback/concurrency or
-merged-main acceptance. See [FX P&L semantics](../docs/rfc-transaction-specs/transactions/FX/FX-SLICE-6-PNL-SEMANTICS.md).
+merged-main acceptance. See [FX P&L semantics](https://github.com/sgajbi/lotus-core/blob/main/docs/rfc-transaction-specs/transactions/FX/FX-SLICE-6-PNL-SEMANTICS.md).
 
 Before processing, fresh applicable FX `UPSTREAM_PROVIDED` sources require local/base FX P&L;
 zero and signed amounts are valid. HTTP rejects incomplete sources before publication. Raw

@@ -19,9 +19,15 @@ from src.services.portfolio_transaction_processing_service.app.domain import (
     BookedTransaction,
     PositionHistoryRecord,
     PositionRecalculationState,
+    build_transaction_semantic_identity,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.position import (
     reducer as position_reducer,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
+    build_fx_processed_transaction,
+    enrich_fx_transaction_metadata,
+    fx_booked_transaction_output_payload,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     PositionHistoryObserver,
@@ -456,6 +462,127 @@ def test_admitted_correction_requires_explicit_tenant_authority() -> None:
             False,
             (transaction,),
         )
+
+
+@pytest.mark.parametrize(
+    "source_link,mode", [(None, None), (None, "NONE"), ("T1", "NONE"), ("PROVIDED-OPEN", "NONE")]
+)
+def test_fx_position_group_preserves_original_identity_and_binds_canonical_link(source_link, mode):
+    root = replace(_fx_position_root(source_link), fx_realized_pnl_mode=mode)
+    identity = build_transaction_semantic_identity(root)
+    member = build_fx_processed_transaction(enrich_fx_transaction_metadata(root))
+    member = replace(member, **fx_booked_transaction_output_payload(member))
+    group = AdmittedPositionCorrectionGroup(
+        root, identity, "event", "repair", False, True, (member,)
+    )
+    assert group.root_transaction is root and group.admission_identity is identity
+    assert build_transaction_semantic_identity(root) == identity
+    assert group.members == (member,)
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "link",
+        "explicit_link",
+        "owner",
+        "epoch",
+        "amount",
+        "component",
+        "missing_receipt",
+        "unbound_receipt",
+        "wrong_algorithm",
+    ],
+)
+@pytest.mark.parametrize("mode", [None, "NONE"])
+def test_fx_position_group_refuses_unqualified_link_projection(damage, mode):
+    root = replace(
+        _fx_position_root("PROVIDED-OPEN" if damage == "explicit_link" else None),
+        fx_realized_pnl_mode=mode,
+    )
+    member = build_fx_processed_transaction(enrich_fx_transaction_metadata(root))
+    member = replace(member, **fx_booked_transaction_output_payload(member))
+    updates = {
+        "link": {"fx_contract_open_transaction_id": "ARBITRARY"},
+        "explicit_link": {"fx_contract_open_transaction_id": root.transaction_id},
+        "owner": {"tenant_id": "FOREIGN"},
+        "epoch": {"epoch": 7},
+        "amount": {"gross_transaction_amount": Decimal("999")},
+        "component": {"component_type": "FX_CASH_SETTLEMENT_BUY"},
+        "missing_receipt": {"calculation_lineage": None},
+        "unbound_receipt": {"created_at": datetime(2026, 1, 2, tzinfo=timezone.utc)},
+        "wrong_algorithm": {
+            "calculation_lineage": replace(member.calculation_lineage, algorithm_id="OTHER")
+        },
+    }
+    member = replace(member, **updates[damage])
+    with pytest.raises(ValueError):
+        AdmittedPositionCorrectionGroup(
+            root,
+            build_transaction_semantic_identity(root),
+            "event",
+            "repair",
+            False,
+            True,
+            (member,),
+        )
+
+
+@pytest.mark.parametrize(
+    "source_mode,output_mode", [("NONE", "UPSTREAM_PROVIDED"), ("UPSTREAM_PROVIDED", "NONE")]
+)
+def test_fx_position_group_refuses_explicit_mode_change_with_bound_receipt(
+    source_mode, output_mode
+):
+    root = replace(_fx_position_root(None), fx_realized_pnl_mode=source_mode)
+    member = build_fx_processed_transaction(
+        enrich_fx_transaction_metadata(replace(root, fx_realized_pnl_mode=output_mode))
+    )
+    member = replace(member, **fx_booked_transaction_output_payload(member))
+    with pytest.raises(ValueError, match="conflicting root material"):
+        AdmittedPositionCorrectionGroup(
+            root,
+            build_transaction_semantic_identity(root),
+            "event",
+            "repair",
+            False,
+            True,
+            (member,),
+        )
+
+
+def _fx_position_root(source_link):
+    return replace(
+        _transaction(),
+        tenant_id="tenant-fx",
+        transaction_id="T1",
+        transaction_type="FX_FORWARD",
+        component_type="FX_CONTRACT_OPEN",
+        component_id="FX-OPEN",
+        quantity=Decimal(0),
+        price=Decimal(0),
+        fx_contract_id="S1",
+        instrument_id="S1",
+        security_id="S1",
+        fx_contract_open_transaction_id=source_link,
+        gross_transaction_amount=Decimal("1095"),
+        trade_currency="USD",
+        currency="USD",
+        pair_base_currency="EUR",
+        pair_quote_currency="USD",
+        buy_currency="USD",
+        sell_currency="EUR",
+        buy_amount=Decimal("1095"),
+        sell_amount=Decimal("1000"),
+        contract_rate=Decimal("1.095"),
+        fx_realized_pnl_mode="NONE",
+        spot_exposure_model="NONE",
+        fx_rate_quote_convention="QUOTE_PER_BASE",
+        economic_event_id="EVT-FX",
+        linked_transaction_group_id="LTG-FX",
+        calculation_policy_id="FX_DEFAULT_POLICY",
+        calculation_policy_version="1.0.0",
+    )
 
 
 @pytest.mark.asyncio
