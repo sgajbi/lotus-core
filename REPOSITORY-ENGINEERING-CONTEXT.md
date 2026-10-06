@@ -241,6 +241,13 @@ When qualifying original JSON raw, reuse the supported event parser for typed da
 Keep raw JSON/hash/event ID unchanged; verify the internal projection preserves aware instants,
 absent/null presence and all non-time facts. Never substitute enriched ledger defaults for raw
 source or rewrite the shared identity policy to make a retention witness pass.
+For contract-open returns, retain an omitted original open-transaction link in the detached
+witness while qualifying only the existing derived self-link. Position comparison may project
+that self-link and original omitted mode to the existing `NONE` default only with a genuine
+output-bound FX baseline receipt; explicit modes/links and other material remain exact. Keep
+original root/admission, raw facts and global semantic identities/historical hashes unchanged.
+Scoped actual UOW rollback/retry evidence is separate from account-admission negatives,
+competing-writer lock behavior and concurrency/scale, which remain unproven by this slice.
 Do not weaken `FirstPublicationSourceAuthority.matches`, add broad portfolio serialization or
 claim native rollback/concurrency/main acceptance from local units. Native PG and promotion
 remain separately admitted boundaries in the FX Slice 6 contract.
