@@ -817,6 +817,15 @@ application-worker PID or await, which remain MISSING unless measured. Raw SQL i
 the bounded collector retains only whitelisted structure with literal/unknown-token redaction and
 ambiguous-syntax refusal. This is diagnostic supportability, not a financial/runtime cause proof.
 
+Diagnostic consumer metrics also have a separate 1MiB input bound, public known-label filtering
+and finite-value admission; malformed/private/nonfinite input is unavailable, not zero.
+Read-only, nonjoining Kafka offsets sample raw, persisted and replay-request groups round-robin
+within 20 rows, with per-group failures and truncation explicit. PostgreSQL lock observations
+prioritize blocker heads/edges, qualify both PID births against the preceding activity sample,
+and report row truncation; incomplete or stale births do not certify edges. Application
+task/backend mapping remains MISSING. Substantial lock SQL changes require scoped native
+PostgreSQL proof after source/test freeze and runtime authorization, beyond mocks/query text.
+
 `scripts/operations/performance_load_gate.py` owns partial-report publication at its original
 exception boundary. `transaction_processing_load_support.py` owns supported acknowledgement
 lineage and the shared completion/fixture probes. The existing performance package owns

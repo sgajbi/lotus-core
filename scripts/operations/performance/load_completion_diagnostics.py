@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import math
 import multiprocessing
 import os
 import re
 import subprocess
 import time
+from collections.abc import Iterator
+from contextlib import ExitStack
 from datetime import UTC, datetime
 from typing import Any
 
@@ -21,8 +24,14 @@ from scripts.operations.transaction_processing_load_support import LOAD_TENANT_I
 
 DIAGNOSTIC_BUDGET_SECONDS = 6.0
 DIAGNOSTIC_MAX_BYTES = 32768
+DIAGNOSTIC_METRICS_INPUT_MAX_BYTES = 1024 * 1024
 DIAGNOSTIC_MAX_ROWS = 20
 DIAGNOSTIC_IO_SECONDS = 0.5
+_OFFSET_SCOPES = (
+    ("transactions.raw.received", "persistence_group_transactions"),
+    ("transactions.persisted", "portfolio_transaction_processing_group"),
+    ("transactions.reprocessing.requested", "portfolio_transaction_replay_request_group"),
+)
 
 # Export only known schema identifiers and grammar, never arbitrary SQL values/names.
 _STATEMENT_WORDS = frozenset(
@@ -312,14 +321,33 @@ def _load_database_probes(
             ),
         ),
         "runtime_db_locks": (
-            """SELECT a.pid, a.backend_start, l.locktype, l.database AS database_oid,
+            """WITH activity AS MATERIALIZED (
+              SELECT pid, backend_start, application_name, pg_blocking_pids(pid) AS blockers
+              FROM pg_stat_activity WHERE datname=current_database()),
+            edges AS (
+              SELECT w.pid AS waiter_pid, w.backend_start AS waiter_backend_start,
+                b.pid AS blocker_pid, b.backend_start AS blocker_backend_start
+              FROM activity w CROSS JOIN LATERAL unnest(w.blockers) AS p(pid)
+              JOIN activity b ON b.pid=p.pid WHERE w.application_name=ANY(%s))
+            SELECT a.pid, a.backend_start, l.locktype, l.database AS database_oid,
             l.relation AS relation_oid, l.mode, l.granted, l.transactionid::text AS transaction_id,
-            l.classid, l.objid, l.objsubid FROM pg_locks l
-            JOIN pg_stat_activity a ON a.pid=l.pid
-            WHERE a.datname=current_database() AND (a.application_name=ANY(%s) OR a.pid IN (
-              SELECT unnest(pg_blocking_pids(pid)) FROM pg_stat_activity
-              WHERE datname=current_database() AND application_name=ANY(%s)))
-            ORDER BY a.pid,l.granted,l.locktype LIMIT 20""",
+            l.classid, l.objid, l.objsubid, edge.waiter_pid, edge.waiter_backend_start,
+            edge.blocker_pid, edge.blocker_backend_start,
+            CASE WHEN edge.blocker_pid IS NULL THEN 'runtime_sample'
+              WHEN l.granted THEN 'blocker_head' ELSE 'waiting_edge' END AS blocking_role,
+            count(*) OVER() AS total_rows FROM pg_locks l
+            JOIN activity a ON a.pid=l.pid
+            LEFT JOIN LATERAL (SELECT e.* FROM edges e WHERE
+              (l.pid=e.waiter_pid AND NOT l.granted) OR
+              (l.pid=e.blocker_pid AND l.granted AND EXISTS (
+                SELECT 1 FROM pg_locks w WHERE w.pid=e.waiter_pid AND NOT w.granted
+                AND ROW(l.locktype,l.database,l.relation,l.page,l.tuple,l.virtualxid,
+                  l.transactionid,l.classid,l.objid,l.objsubid) IS NOT DISTINCT FROM
+                    ROW(w.locktype,w.database,w.relation,w.page,w.tuple,w.virtualxid,
+                      w.transactionid,w.classid,w.objid,w.objsubid)))) edge ON true
+            WHERE a.application_name=ANY(%s) OR edge.blocker_pid IS NOT NULL
+            ORDER BY (edge.blocker_pid IS NULL), edge.waiter_pid,
+              l.granted DESC, a.backend_start, a.pid, l.locktype LIMIT 21""",
             tuple(
                 ["portfolio-transaction-processing", "persistence-service", "outbox-dispatcher"]
                 for _ in range(2)
@@ -334,7 +362,18 @@ def _load_database_probes(
         try:
             with connection.cursor(cursor_factory=cursor_factory) as cursor:
                 cursor.execute(query, params)
-                rows = [dict(row) for row in cursor.fetchmany(DIAGNOSTIC_MAX_ROWS)]
+                fetched = [dict(row) for row in cursor.fetchmany(DIAGNOSTIC_MAX_ROWS + 1)]
+            if name == "runtime_db_locks":
+                _qualify_lock_edges(fetched, result.get("runtime_db_waits", {}).get("rows", []))
+                fetched.sort(
+                    key=lambda row: (
+                        row.get("edge_identity_status") != "observed",
+                        row.get("waiter_pid") or row.get("pid") or 0,
+                        row.get("blocking_role") != "blocker_head",
+                    )
+                )
+            rows = fetched[:DIAGNOSTIC_MAX_ROWS]
+            totals = [row.pop("total_rows") for row in rows if "total_rows" in row]
             if name == "runtime_db_waits":
                 for row in rows:
                     row["statement"] = _statement_structure(row.pop("private_statement", None))
@@ -348,12 +387,35 @@ def _load_database_probes(
                 "status": "observed",
                 "rows": rows,
                 "row_limit": DIAGNOSTIC_MAX_ROWS,
+                "truncated": len(fetched) > DIAGNOSTIC_MAX_ROWS
+                or any(total > DIAGNOSTIC_MAX_ROWS for total in totals),
+                "observed_total_rows": max(totals) if totals else None,
                 "scope": "isolated_runtime" if name.startswith("runtime_db_") else "submitted_ids",
             }
         except Exception as exc:
             connection.rollback()
             result[name] = {"status": "unavailable", "reason": type(exc).__name__}
     return result
+
+
+def _qualify_lock_edges(rows: list[dict[str, Any]], waits: list[dict[str, Any]]) -> None:
+    """Never associate a reused PID with a previously observed backend birth."""
+    births = {row["pid"]: row.get("backend_start") for row in waits if row.get("pid")}
+    for row in rows:
+        if row.get("blocking_role") not in {"blocker_head", "waiting_edge"}:
+            continue
+        identities = [
+            (row.get(role + "_pid"), row.get(role + "_backend_start"))
+            for role in ("waiter", "blocker")
+        ]
+        if any(pid in births and births[pid] != birth for pid, birth in identities):
+            row["edge_identity_status"] = "stale_birth"
+            row["blocking_role"] = "unqualified"
+        elif all(pid and birth and births.get(pid) == birth for pid, birth in identities):
+            row["edge_identity_status"] = "observed"
+        else:
+            row["edge_identity_status"] = "missing_birth_observation"
+        row["exact_await"] = "MISSING"
 
 
 def _load_managed_worker_identity(scope: dict[str, Any]) -> dict[str, Any]:
@@ -433,41 +495,61 @@ def _load_consumer_metrics(metrics_url: str) -> dict[str, Any]:
         "kafka_consumer_backlog_pressure_total",
         "kafka_consumer_partition_lag_messages",
     }
-    samples = []
+    samples: list[dict[str, Any]] = []
     with requests.get(metrics_url, timeout=DIAGNOSTIC_IO_SECONDS, stream=True) as response:
         response.raise_for_status()
         raw = bytearray()
         for chunk in response.iter_content(4096):
             raw.extend(chunk)
-            if len(raw) > DIAGNOSTIC_MAX_BYTES:
-                return {"status": "byte_budget_exhausted"}
-    for family in text_string_to_metric_families(raw.decode()):
-        for sample in family.samples:
-            if (
-                sample.name in names
-                and sample.labels.get("service") == "portfolio-transaction-processing"
-            ):
-                samples.append(
-                    {
-                        "name": sample.name,
-                        "labels": {
-                            key: str(value)[:128]
-                            for key, value in sample.labels.items()
-                            if key in {"service", "topic", "group_id", "partition", "reason"}
-                        },
-                        "value": sample.value,
-                    }
-                )
+            if len(raw) > DIAGNOSTIC_METRICS_INPUT_MAX_BYTES:
+                return {"status": "byte_budget_exhausted", "reason": "metrics_input_limit"}
+    truncated = False
+    try:
+        for family in text_string_to_metric_families(raw.decode()):
+            for sample in family.samples:
+                if sample.name not in names or sample.labels.get("service") != (
+                    "portfolio-transaction-processing"
+                ):
+                    continue
+                if not _public_consumer_labels(sample.labels):
+                    return {"status": "unavailable", "reason": "private_or_unknown_metric_labels"}
+                if not math.isfinite(sample.value):
+                    return {"status": "unavailable", "reason": "nonfinite_metric_value"}
                 if len(samples) == DIAGNOSTIC_MAX_ROWS:
-                    break
-        if len(samples) == DIAGNOSTIC_MAX_ROWS:
-            break
+                    truncated = True
+                    continue
+                samples.append(
+                    {"name": sample.name, "labels": dict(sample.labels), "value": sample.value}
+                )
+    except (ValueError, UnicodeError):
+        return {"status": "unavailable", "reason": "malformed_metrics"}
     return {
         "status": "observed" if samples else "unavailable",
         "samples": samples,
         "scope": "runtime_aggregate_not_prefix",
         "lag_semantics": "cached_high_watermark_minus_committed",
+        "truncated": truncated,
+        "input_byte_limit": DIAGNOSTIC_METRICS_INPUT_MAX_BYTES,
     }
+
+
+def _public_consumer_labels(labels: dict[str, str]) -> bool:
+    allowed = {"service", "topic", "group_id", "partition", "reason"}
+    if set(labels) - allowed:
+        return False
+    values = {
+        "topic": {topic for topic, _ in _OFFSET_SCOPES},
+        "group_id": {group for _, group in _OFFSET_SCOPES},
+        "reason": {
+            "max_in_flight_reached",
+            "pending_buffer_capacity_reached",
+            "ordering_key_busy",
+            "capacity_full",
+        },
+    }
+    return all(key not in labels or labels[key] in choices for key, choices in values.items()) and (
+        "partition" not in labels or bool(re.fullmatch(r"[0-9]{1,9}", labels["partition"]))
+    )
 
 
 def _load_consumer_offsets(bootstrap_servers: str, deadline: float) -> dict[str, Any]:
@@ -479,36 +561,74 @@ def _load_consumer_offsets(bootstrap_servers: str, deadline: float) -> dict[str,
         bootstrap_servers, service_name="performance-load-gate"
     )
     result: list[dict[str, Any]] = []
-    for topic, group in (
-        ("transactions.raw.received", "persistence_group_transactions"),
-        ("transactions.persisted", "portfolio_transaction_processing_group"),
-    ):
-        consumer = Consumer(
-            {
-                **connection_config,
-                "group.id": group,
-                "enable.auto.commit": False,
-                "enable.auto.offset.store": False,
-                "socket.timeout.ms": 500,
-                "allow.auto.create.topics": False,
-            }
-        )
-        try:
-            metadata = consumer.list_topics(topic, timeout=DIAGNOSTIC_IO_SECONDS)
-            info = metadata.topics.get(topic)
-            if info is None or info.error:
-                raise ValueError("topic_metadata_unavailable")
-            partitions = sorted(info.partitions)
-            for partition in partitions[: DIAGNOSTIC_MAX_ROWS // 2]:
+    groups: list[dict[str, Any]] = []
+    with ExitStack() as cleanup:
+        pending: list[tuple[Consumer, dict[str, Any], Iterator[int]]] = []
+        for topic, group in _OFFSET_SCOPES:
+            if time.monotonic() >= deadline:
+                return {
+                    "status": "budget_exhausted",
+                    "partitions": result,
+                    "groups": groups,
+                    "group_joined": False,
+                }
+            consumer = Consumer(
+                {
+                    **connection_config,
+                    "group.id": group,
+                    "enable.auto.commit": False,
+                    "enable.auto.offset.store": False,
+                    "socket.timeout.ms": 500,
+                    "allow.auto.create.topics": False,
+                }
+            )
+            cleanup.callback(consumer.close)
+            observation: dict[str, Any] = {"topic": topic, "group_id": group, "status": "observed"}
+            groups.append(observation)
+            try:
+                metadata = consumer.list_topics(topic, timeout=DIAGNOSTIC_IO_SECONDS)
+                info = metadata.topics.get(topic)
+                if info is None or info.error:
+                    raise ValueError("topic_metadata_unavailable")
+                partition_ids = sorted(info.partitions)
+                observation["total_partitions"] = len(partition_ids)
+                pending.append((consumer, observation, iter(partition_ids)))
+            except Exception as exc:
+                observation.update(status="unavailable", reason=type(exc).__name__)
+        while pending and len(result) < DIAGNOSTIC_MAX_ROWS:
+            remaining: list[tuple[Consumer, dict[str, Any], Iterator[int]]] = []
+            for consumer, observation, partitions in pending:
+                partition = next(partitions, None)
+                if partition is None:
+                    continue
                 if time.monotonic() >= deadline:
-                    return {"status": "budget_exhausted", "partitions": result}
-                key = TopicPartition(topic, partition)
-                committed = consumer.committed([key], timeout=DIAGNOSTIC_IO_SECONDS)[0]
-                low, high = consumer.get_watermark_offsets(key, timeout=DIAGNOSTIC_IO_SECONDS)
+                    return {
+                        "status": "budget_exhausted",
+                        "partitions": result,
+                        "groups": groups,
+                        "group_joined": False,
+                    }
+                if len(result) == DIAGNOSTIC_MAX_ROWS:
+                    remaining.append((consumer, observation, partitions))
+                    break
+                key = TopicPartition(observation["topic"], partition)
+                try:
+                    committed = consumer.committed([key], timeout=DIAGNOSTIC_IO_SECONDS)[0]
+                    if time.monotonic() >= deadline:
+                        return {
+                            "status": "budget_exhausted",
+                            "partitions": result,
+                            "groups": groups,
+                            "group_joined": False,
+                        }
+                    low, high = consumer.get_watermark_offsets(key, timeout=DIAGNOSTIC_IO_SECONDS)
+                except Exception as exc:
+                    observation.update(status="unavailable", reason=type(exc).__name__)
+                    continue
                 result.append(
                     {
-                        "topic": topic,
-                        "group_id": group,
+                        "topic": observation["topic"],
+                        "group_id": observation["group_id"],
                         "partition": partition,
                         "committed": committed.offset
                         if committed.offset >= 0 and not committed.error
@@ -516,10 +636,17 @@ def _load_consumer_offsets(bootstrap_servers: str, deadline: float) -> dict[str,
                         "low": low,
                         "end": high,
                         "scope": "partition_not_prefix",
-                        "total_partitions": len(partitions),
-                        "sample_limit": DIAGNOSTIC_MAX_ROWS // 2,
+                        "total_partitions": observation["total_partitions"],
                     }
                 )
-        finally:
-            consumer.close()
-    return {"status": "observed", "partitions": result, "group_joined": False}
+                remaining.append((consumer, observation, partitions))
+            pending = remaining
+    return {
+        "status": "observed" if all(g["status"] == "observed" for g in groups) else "partial",
+        "partitions": result,
+        "groups": groups,
+        "group_joined": False,
+        "row_limit": DIAGNOSTIC_MAX_ROWS,
+        "truncated": sum(g.get("total_partitions", 0) for g in groups) > len(result),
+        "sampling": "round_robin_across_three_groups",
+    }

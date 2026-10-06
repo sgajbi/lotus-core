@@ -1,6 +1,7 @@
 import json
 import multiprocessing
 import os
+import re
 import subprocess
 import sys
 import time
@@ -1105,7 +1106,10 @@ def test_database_probes_are_exact_scoped_read_only_and_permission_failure_is_ho
     connection.rollback.assert_called_once()
     for call in cursor.execute.call_args_list:
         query, params = call.args
-        assert query.lstrip().startswith("SELECT")
+        assert query.lstrip().startswith(("SELECT", "WITH"))
+        assert not re.search(
+            r"\b(INSERT|UPDATE|DELETE|MERGE|CREATE|ALTER|DROP|TRUNCATE)\b", query, re.I
+        )
         assert "payload_excerpt" not in query
         if "AS private_statement" in query:
             assert "left(query,2048) AS private_statement" in query
@@ -1601,9 +1605,7 @@ def test_lock_probe_qualifies_pid_birth_and_keeps_null_relation_noncausal():
     wait = result["runtime_db_waits"]["rows"][0]
     assert wait["exact_await"] == "MISSING"
     queries = [c.args[0] for c in cursor.execute.call_args_list]
-    assert any(
-        "JOIN pg_stat_activity a ON a.pid=l.pid" in q and "a.backend_start" in q for q in queries
-    )
+    assert any("JOIN activity a ON a.pid=l.pid" in q and "a.backend_start" in q for q in queries)
 
 
 @pytest.mark.parametrize("birth,passed", [(123, True), (124, False), ("MISSING", False)])
@@ -1922,7 +1924,7 @@ def test_consumer_metrics_missing_and_byte_limits_never_become_zero(
         b'topic="transactions.persisted",group_id="portfolio_transaction_processing_group"} 12\n'
     )
     if oversized:
-        body += b"x" * support.DIAGNOSTIC_MAX_BYTES
+        body += b"x" * support.DIAGNOSTIC_METRICS_INPUT_MAX_BYTES
     response.iter_content.return_value = [body]
     response.__enter__.return_value = response
     get = MagicMock(return_value=response)
@@ -1944,7 +1946,11 @@ def test_native_kafka_offset_reads_do_not_join_store_or_commit(monkeypatch, prot
     consumer = MagicMock()
     consumer.list_topics.return_value.topics = {
         name: SimpleNamespace(error=None, partitions={0: object()})
-        for name in ("transactions.raw.received", "transactions.persisted")
+        for name in (
+            "transactions.raw.received",
+            "transactions.persisted",
+            "transactions.reprocessing.requested",
+        )
     }
     consumer.committed.return_value = [SimpleNamespace(offset=5, error=None)]
     consumer.get_watermark_offsets.return_value = (0, 12)
@@ -1956,8 +1962,9 @@ def test_native_kafka_offset_reads_do_not_join_store_or_commit(monkeypatch, prot
     monkeypatch.setenv("KAFKA_SASL_USERNAME", "diagnostic-operator")
     monkeypatch.setenv("KAFKA_SASL_PASSWORD", "inherited-secret")
     result = load_completion_diagnostics._load_consumer_offsets("isolated", time.monotonic() + 10)
-    assert [row["committed"] for row in result["partitions"]] == [5, 5]
-    assert [row["end"] for row in result["partitions"]] == [12, 12]
+    assert [row["committed"] for row in result["partitions"]] == [5, 5, 5]
+    assert [row["end"] for row in result["partitions"]] == [12, 12, 12]
+    assert factory.call_count == consumer.close.call_count == 3
     for call in factory.call_args_list:
         assert call.args[0]["enable.auto.commit"] is False
         assert call.args[0]["enable.auto.offset.store"] is False
@@ -1970,6 +1977,238 @@ def test_native_kafka_offset_reads_do_not_join_store_or_commit(monkeypatch, prot
             assert call.args[0]["sasl.password"] == "inherited-secret"
     for method in (consumer.subscribe, consumer.assign, consumer.commit, consumer.store_offsets):
         method.assert_not_called()
+
+
+def _diagnostic_metrics_response(monkeypatch, body):
+    response = MagicMock()
+    response.__enter__.return_value = response
+    response.iter_content.return_value = [
+        body[index : index + 4096] for index in range(0, len(body), 4096)
+    ]
+    monkeypatch.setattr(
+        load_completion_diagnostics.requests, "get", MagicMock(return_value=response)
+    )
+    return response
+
+
+@pytest.mark.parametrize("value", ["1", "NaN", "+Inf", "-Inf"])
+def test_diagnostic_metric_values_are_finite_strict_json_or_unavailable(monkeypatch, value):
+    body = (
+        'kafka_consumer_in_flight_messages{service="portfolio-transaction-processing"} '
+        + value
+        + "\n"
+    ).encode()
+    _diagnostic_metrics_response(monkeypatch, body)
+    result = load_completion_diagnostics._load_consumer_metrics("http://isolated/metrics")
+    json.dumps(result, allow_nan=False)
+    if value == "1":
+        assert result["status"] == "observed"
+        assert result["samples"][0]["value"] == 1
+    else:
+        assert result == {"status": "unavailable", "reason": "nonfinite_metric_value"}
+
+
+def test_diagnostic_metrics_larger_than_output_budget_still_projects_bounded_samples(monkeypatch):
+    support = load_completion_diagnostics
+    body = b"# unrelated exposition padding\n" * 2500
+    body += b'kafka_consumer_in_flight_messages{service="portfolio-transaction-processing"} 3\n'
+    assert support.DIAGNOSTIC_MAX_BYTES < len(body) < support.DIAGNOSTIC_METRICS_INPUT_MAX_BYTES
+    response = _diagnostic_metrics_response(monkeypatch, body)
+    result = support._load_consumer_metrics("http://isolated/metrics")
+    assert result["status"] == "observed" and result["samples"][0]["value"] == 3
+    assert len(json.dumps(result).encode()) < support.DIAGNOSTIC_MAX_BYTES == 32768
+    response.__exit__.assert_called_once()
+
+
+@pytest.mark.parametrize("body", [b"\xff", b'metric{bad="unterminated} 1\n'])
+def test_diagnostic_malformed_metrics_refuse_without_exporting_input(monkeypatch, body):
+    _diagnostic_metrics_response(monkeypatch, body)
+    result = load_completion_diagnostics._load_consumer_metrics("http://isolated/metrics")
+    assert result == {"status": "unavailable", "reason": "malformed_metrics"}
+
+
+@pytest.mark.parametrize(
+    "private_label",
+    [
+        'tenant_id="private-client"',
+        'topic="private-client"',
+        'group_id="private-client"',
+        'reason="private-client"',
+    ],
+)
+def test_diagnostic_metrics_refuse_private_label_scope_and_values(monkeypatch, private_label):
+    body = (
+        'kafka_consumer_in_flight_messages{service="portfolio-transaction-processing",'
+        + private_label
+        + "} 9\n"
+    ).encode()
+    _diagnostic_metrics_response(monkeypatch, body)
+    result = load_completion_diagnostics._load_consumer_metrics("http://isolated/metrics")
+    assert result["status"] == "unavailable" and "private-client" not in json.dumps(result)
+    assert "samples" not in result
+
+
+def test_diagnostic_metrics_row_truncation_is_explicit(monkeypatch):
+    body = "".join(
+        'kafka_consumer_partition_lag_messages{service="portfolio-transaction-processing",partition="'
+        + str(i)
+        + '"} 1\n'
+        for i in range(25)
+    ).encode()
+    _diagnostic_metrics_response(monkeypatch, body)
+    result = load_completion_diagnostics._load_consumer_metrics("http://isolated/metrics")
+    assert result["truncated"] and len(result["samples"]) == 20
+
+
+def _diagnostic_offset_clients(monkeypatch, partition_count):
+    import confluent_kafka
+
+    monkeypatch.setenv("KAFKA_SECURITY_PROTOCOL", "SSL")
+    monkeypatch.setenv("KAFKA_SSL_CA_LOCATION", "/deployment/trust.pem")
+    groups = [
+        "persistence_group_transactions",
+        "portfolio_transaction_processing_group",
+        "portfolio_transaction_replay_request_group",
+    ]
+    topics = [
+        "transactions.raw.received",
+        "transactions.persisted",
+        "transactions.reprocessing.requested",
+    ]
+    clients = {}
+    for group, topic in zip(groups, topics, strict=True):
+        client = MagicMock()
+        client.list_topics.return_value.topics = {
+            topic: SimpleNamespace(error=None, partitions=dict.fromkeys(range(partition_count)))
+        }
+        client.committed.return_value = [SimpleNamespace(offset=5, error=None)]
+        client.get_watermark_offsets.return_value = (0, 12)
+        clients[group] = client
+    factory = MagicMock(side_effect=lambda config: clients[config["group.id"]])
+    monkeypatch.setattr(confluent_kafka, "Consumer", factory)
+    return clients, factory
+
+
+def test_diagnostic_three_groups_share_twenty_rows_fairly_without_joining(monkeypatch):
+    clients, factory = _diagnostic_offset_clients(monkeypatch, 12)
+    result = load_completion_diagnostics._load_consumer_offsets("isolated", time.monotonic() + 10)
+    assert result["status"] == "observed" and result["truncated"]
+    rows = result["partitions"]
+    assert len(rows) == 20
+    assert [sum(row["group_id"] == group for row in rows) for group in clients] == [7, 7, 6]
+    assert len({row["group_id"] for row in rows[:3]}) == 3
+    assert factory.call_count == 3
+    for client in clients.values():
+        client.close.assert_called_once()
+        for operation in (client.subscribe, client.assign, client.commit, client.store_offsets):
+            operation.assert_not_called()
+
+
+@pytest.mark.parametrize("failure", ["metadata", "offset", "construction"])
+def test_diagnostic_offset_failure_keeps_other_group_evidence_and_closes_owners(
+    monkeypatch, failure
+):
+    clients, factory = _diagnostic_offset_clients(monkeypatch, 1)
+    replay = clients["portfolio_transaction_replay_request_group"]
+    if failure == "metadata":
+        replay.list_topics.side_effect = RuntimeError("private-client")
+    elif failure == "offset":
+        replay.committed.side_effect = RuntimeError("private-client")
+    else:
+        factory.side_effect = [
+            clients["persistence_group_transactions"],
+            RuntimeError("private-client"),
+        ]
+        with pytest.raises(RuntimeError):
+            load_completion_diagnostics._load_consumer_offsets("isolated", time.monotonic() + 10)
+        clients["persistence_group_transactions"].close.assert_called_once()
+        replay.close.assert_not_called()
+        return
+    result = load_completion_diagnostics._load_consumer_offsets("isolated", time.monotonic() + 10)
+    assert result["status"] == "partial" and len(result["partitions"]) == 2
+    assert result["groups"][2]["status"] == "unavailable"
+    assert "private-client" not in json.dumps(result)
+    for client in clients.values():
+        client.close.assert_called_once()
+
+
+def test_diagnostic_offset_deadline_closes_all_clients_without_claiming_zero(monkeypatch):
+    clients, _ = _diagnostic_offset_clients(monkeypatch, 1)
+    monkeypatch.setattr(
+        load_completion_diagnostics.time, "monotonic", MagicMock(side_effect=[0, 0, 0, 0, 9])
+    )
+    result = load_completion_diagnostics._load_consumer_offsets("isolated", 6)
+    assert result["status"] == "budget_exhausted" and result["partitions"] == []
+    for client in clients.values():
+        client.close.assert_called_once()
+
+
+@pytest.mark.parametrize("stale", [False, True])
+def test_diagnostic_lock_projection_qualifies_sql_ordered_rows_and_reports_truncation(
+    monkeypatch, stale
+):
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    waits = [
+        {"pid": 100, "backend_start": "wait-birth"},
+        {"pid": 200, "backend_start": "head-birth"},
+    ]
+    edge = {
+        "waiter_pid": 100,
+        "waiter_backend_start": "wait-birth",
+        "blocker_pid": 200,
+        "blocker_backend_start": "old-birth" if stale else "head-birth",
+    }
+    locks = [
+        {"pid": i, "backend_start": "noise", "blocking_role": "runtime_sample", "total_rows": 32}
+        for i in range(1, 31)
+    ]
+    locks += [
+        {
+            **edge,
+            "pid": 200,
+            "backend_start": "head-birth",
+            "blocking_role": "blocker_head",
+            "granted": True,
+            "relation_oid": None,
+            "total_rows": 32,
+        },
+        {
+            **edge,
+            "pid": 100,
+            "backend_start": "wait-birth",
+            "blocking_role": "waiting_edge",
+            "granted": False,
+            "total_rows": 32,
+        },
+    ]
+    # Model the driver cap and SQL ordering, not Python recovery of unseen rows.
+    # Actual priority over lower-PID noise requires the separate native PG proof.
+    sql_ordered = locks[-2:] + locks[:19]
+    cursor.fetchmany.side_effect = [[], [], waits, sql_ordered]
+    assert len(sql_ordered) == load_completion_diagnostics.DIAGNOSTIC_MAX_ROWS + 1
+    result = load_completion_diagnostics._load_database_probes(
+        connection, {"submitted_ids": [], "ingestion_job_ids": [], "portfolio_id": "p"}, object
+    )
+    projected = result["runtime_db_locks"]
+    assert projected["truncated"] and len(projected["rows"]) == 20
+    if not stale:
+        assert [row["blocking_role"] for row in projected["rows"][:2]] == [
+            "blocker_head",
+            "waiting_edge",
+        ]
+        assert all(row["edge_identity_status"] == "observed" for row in projected["rows"][:2])
+        assert projected["rows"][0]["relation_oid"] is None
+    else:
+        assert not any(row.get("edge_identity_status") == "observed" for row in projected["rows"])
+    query = cursor.execute.call_args_list[-1].args[0]
+    assert (
+        "AS MATERIALIZED" in query
+        and "waiter_backend_start" in query
+        and "blocker_backend_start" in query
+    )
+    assert "IS NOT DISTINCT FROM" in query and "ORDER BY (edge.blocker_pid IS NULL)" in query
+    assert "LIMIT 21" in query and cursor.fetchmany.call_args.args == (21,)
 
 
 @pytest.mark.parametrize("protocol", ["SSL", "PLAINTEXT", "INVALID"])
