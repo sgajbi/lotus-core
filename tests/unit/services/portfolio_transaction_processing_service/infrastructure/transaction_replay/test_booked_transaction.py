@@ -12,7 +12,6 @@ from portfolio_common.domain.transaction import transaction_payload_fingerprint
 from portfolio_common.domain.transaction.fee_components import TRANSACTION_FEE_COMPONENT_FIELDS
 from portfolio_common.events import TransactionEvent
 from portfolio_common.reprocessing_replay import ReprocessingReplayError
-from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError
 
 from src.services.portfolio_transaction_processing_service.app.application import (
@@ -86,7 +85,7 @@ def _fee_fact_session(facts):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("raw_source", [False, True])
 @pytest.mark.parametrize("fields", [{}, {"gst": Decimal(0)}, {"brokerage": Decimal(1)}])
-async def test_fee_batch_reuses_real_preparation_without_changing_receipt_query(
+async def test_fee_batch_requests_receipts_only_without_original_authority(
     monkeypatch, fields, raw_source
 ):
     from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay import (  # noqa: E501
@@ -94,35 +93,25 @@ async def test_fee_batch_reuses_real_preparation_without_changing_receipt_query(
     )
 
     rows, facts, expected = _fee_preparation_batch(fields, raw_source=raw_source)
-    expected_keys = [
-        key
-        for row in rows
-        for key, _, _ in module._correction_fee_hypotheses(
-            row,
-            {
-                cost["fee_type"]: cost["amount"]
-                for cost in facts[0]
-                if cost["transaction_id"] == row["transaction_id"]
-            },
-        )
-    ]
     constructor = MagicMock(wraps=module._correction_fee_hypotheses)
     monkeypatch.setattr(module, "_correction_fee_hypotheses", constructor)
     session = _fee_fact_session(facts)
-    projected = await module.load_qualified_transaction_fee_sources(
-        session, rows, lock_sources=True, allow_retained_receipt=True, derived_financial=True
+    assert (
+        await module.load_qualified_transaction_fee_sources(
+            session, rows, lock_sources=True, allow_retained_receipt=True, derived_financial=True
+        )
+        == expected
     )
-    assert projected == expected
     statements = [call.args[0] for call in session.execute.await_args_list]
-    assert len(statements) == 4
-    assert "FOR UPDATE" in str(statements[-1])
-    actual_keys = [
-        value
-        for value in statements[-1].compile().params.values()
-        if isinstance(value, str) and value.startswith("transaction-correction:")
-    ]
-    assert actual_keys == expected_keys
-    assert constructor.call_count == len(rows)
+    # Without raw, the fixture retains a derived FX cut that requires material authority.
+    assert len(statements) == (2 if raw_source else 4)
+    from sqlalchemy.dialects import postgresql
+
+    assert "FOR SHARE OF transaction_costs" in str(
+        statements[0].compile(dialect=postgresql.dialect())
+    )
+    assert "FOR SHARE OF outbox_events" in str(statements[1].compile(dialect=postgresql.dialect()))
+    assert constructor.call_count == (0 if raw_source else len(rows))
 
 
 @pytest.mark.asyncio
@@ -147,17 +136,47 @@ async def test_prepared_query_positive_fees_never_replace_cost_validation(damage
     else:
         cost["amount"] = Decimal(0) if damage == "zero" else Decimal(-1)
     session = _fee_fact_session(facts)
-    early_refusal = damage in {"unknown", "negative", "infinite"}
-    expected_error = ValidationError if early_refusal else ReprocessingReplayError
-    # Exact predecessor class and query stage are retained; validation is not moved.
-    with pytest.raises(expected_error):
+    # Malformed costs are a deliberate typed source refusal, never fallback permission.
+    with pytest.raises(ReprocessingReplayError) as failure:
         await module.load_qualified_transaction_fee_sources(
             session,
             rows,
             allow_retained_receipt=True,
             derived_financial=True,
         )
-    assert session.execute.await_count == (3 if early_refusal else 4)
+    assert failure.value.reason_code == "TRANSACTION_REPLAY_SOURCE_INVALID"
+    assert failure.value.failed_transaction_ids == ["PREP-0"]
+    assert session.execute.await_count == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("damage", ["unknown", "negative", "infinite"])
+async def test_malformed_fee_authority_is_typed_before_any_replay_publication(monkeypatch, damage):
+    from portfolio_common.reprocessing_repository import ReprocessingRepository
+
+    from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay import (  # noqa: E501
+        booked_transaction as module,
+    )
+
+    rows, facts, _ = _fee_preparation_batch({"brokerage": Decimal(1)})
+    cost = facts[0][0]
+    if damage == "unknown":
+        cost["fee_type"] = "unqualified"
+    else:
+        cost["amount"] = Decimal(-1) if damage == "negative" else Decimal("Infinity")
+    session = _fee_fact_session(facts)
+    monkeypatch.setattr(module, "load_transaction_replay_rows", AsyncMock(return_value=rows))
+    publisher = MagicMock()
+    replayer = ReprocessingRepository.from_ports(
+        reader=module.SqlAlchemyQualifiedTransactionReplayReader(session), publisher=publisher
+    )
+    with pytest.raises(ReprocessingReplayError) as failure:
+        await replayer.reprocess_transactions_by_ids([row["transaction_id"] for row in rows])
+    assert failure.value.reason_code == "TRANSACTION_REPLAY_SOURCE_INVALID"
+    assert failure.value.failed_transaction_ids == ["PREP-0"]
+    publisher.publish_replay_message.assert_not_called()
+    publisher.confirm_replay_delivery.assert_not_called()
+    assert session.execute.await_count == 2
 
 
 @pytest.mark.asyncio
@@ -167,7 +186,10 @@ async def test_fee_preparation_rechecks_changed_input_after_receipt_query(monkey
         booked_transaction as module,
     )
 
-    rows, facts, _ = _fee_preparation_batch({"brokerage": Decimal(1)})
+    _, _, canonical, costs, ordinary, correction = _corrected_fee_fixture(
+        fields={"brokerage": Decimal(1)}
+    )
+    rows, facts = [canonical], [costs, [], [ordinary], [correction]]
     constructor = MagicMock(wraps=module._correction_fee_hypotheses)
     monkeypatch.setattr(module, "_correction_fee_hypotheses", constructor)
     session = _fee_fact_session(facts)
@@ -187,7 +209,7 @@ async def test_fee_preparation_rechecks_changed_input_after_receipt_query(monkey
         await module.load_qualified_transaction_fee_sources(
             session, rows, allow_retained_receipt=True, derived_financial=True
         )
-    assert constructor.call_count == len(rows) + 1
+    assert constructor.call_count == len(rows)
 
 
 def test_prepared_hypotheses_are_defensive_immutable_and_input_specific(monkeypatch):
@@ -229,6 +251,135 @@ def test_distinct_rows_with_same_transaction_id_do_not_share_preparation():
     left = module._FeeAuthorityPreparation().correction_hypotheses(first, {})
     right = module._FeeAuthorityPreparation().correction_hypotheses(second, {})
     assert {key for key, _, _ in left}.isdisjoint(key for key, _, _ in right)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("presence_mask", range(32))
+async def test_original_source_batch_preserves_every_none_zero_mask_without_receipts(presence_mask):
+    from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay import (  # noqa: E501
+        booked_transaction as module,
+    )
+
+    fields = {
+        name: Decimal(0) if presence_mask & (1 << index) else None
+        for index, name in enumerate(TRANSACTION_FEE_COMPONENT_FIELDS)
+    }
+    original, canonical, costs, _ = _retained_fee_fixture(fields, source_fx=True)
+    session = _fee_fact_session(
+        [
+            costs,
+            [
+                {
+                    "aggregate_id": original.portfolio_id,
+                    "payload": original.model_dump(mode="python"),
+                }
+            ],
+        ]
+    )
+    projected = await module.load_qualified_transaction_fee_sources(
+        session, [canonical], allow_retained_receipt=True, derived_financial=True
+    )
+    assert projected == {"TXN": fields | {"trade_fee": original.trade_fee}}
+    assert session.execute.await_count == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("damage", [None, "raw-conflict", "duplicate", "foreign", "fingerprint"])
+async def test_mixed_batch_receipt_scope_is_pending_only_and_original_exam_is_not_repeated(
+    monkeypatch, damage
+):
+    from sqlalchemy.dialects import postgresql
+
+    from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay import (  # noqa: E501
+        booked_transaction as module,
+    )
+
+    rows, facts, expected = _fee_preparation_batch({}, raw_source=True)
+    _, corrected, canonical, costs, ordinary, correction = _corrected_fee_fixture()
+    rows.append(canonical)
+    facts[0].extend(costs)
+    facts[2] = [ordinary]
+    facts[3] = [correction]
+    if damage == "raw-conflict":
+        facts[1][0]["payload"]["quantity"] += Decimal(1)
+    elif damage == "duplicate":
+        facts[3].append(dict(correction))
+    elif damage == "foreign":
+        correction["tenant_id"] = "foreign"
+    elif damage == "fingerprint":
+        correction["payload_fingerprint"] = "sha256:" + "f" * 64
+    examine = MagicMock(wraps=module._qualify_original_fee_source)
+    monkeypatch.setattr(module, "_qualify_original_fee_source", examine)
+    session = _fee_fact_session(facts)
+    if damage:
+        with pytest.raises(ReprocessingReplayError):
+            await module.load_qualified_transaction_fee_sources(
+                session,
+                rows,
+                lock_sources=True,
+                allow_retained_receipt=True,
+                derived_financial=True,
+            )
+        if damage == "raw-conflict":
+            assert session.execute.await_count == 2
+            return
+    else:
+        projected = await module.load_qualified_transaction_fee_sources(
+            session, rows, lock_sources=True, allow_retained_receipt=True, derived_financial=True
+        )
+        assert projected == expected | {
+            "TXN": {name: getattr(corrected, name) for name in TRANSACTION_FEE_COMPONENT_FIELDS}
+            | {"trade_fee": corrected.trade_fee}
+        }
+    assert examine.call_count == len(rows)
+    assert session.execute.await_count == 4
+    statements = [call.args[0] for call in session.execute.await_args_list[2:]]
+    for statement in statements:
+        sql = str(statement.compile(dialect=postgresql.dialect()))
+        assert "FOR SHARE OF processed_events" in sql
+        assert "ORDER BY processed_events.id" in sql
+        parameters = str(statement.compile().params)
+        assert "PREP-" not in parameters
+        assert "tenant-test" in parameters and "P1" in parameters
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("boundary", ["ordinary", "correction"])
+@pytest.mark.parametrize("mutation", ["canonical", "cost", "raw"])
+async def test_mixed_batch_rejects_changed_original_input_after_receipt_await(boundary, mutation):
+    from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay import (  # noqa: E501
+        booked_transaction as module,
+    )
+
+    rows, facts, _ = _fee_preparation_batch({"brokerage": Decimal(1)}, raw_source=True)
+    _, _, canonical, costs, ordinary, correction = _corrected_fee_fixture()
+    rows.append(canonical)
+    facts[0].extend(costs)
+    facts[2], facts[3] = [ordinary], [correction]
+    session = _fee_fact_session(facts)
+    results = session.execute.side_effect
+    calls = 0
+
+    async def execute(statement):
+        nonlocal calls
+        calls += 1
+        result = next(results)
+        if calls == (3 if boundary == "ordinary" else 4):
+            if mutation == "canonical":
+                rows[0]["quantity"] += Decimal(1)
+            elif mutation == "cost":
+                facts[0][0]["amount"] = Decimal(2)
+            else:
+                facts[1][0]["payload"]["quantity"] += Decimal(1)
+        return result
+
+    session.execute.side_effect = execute
+    with pytest.raises(ReprocessingReplayError) as failure:
+        await module.load_qualified_transaction_fee_sources(
+            session, rows, allow_retained_receipt=True, derived_financial=True
+        )
+    assert failure.value.failed_transaction_ids == ["PREP-0"]
+    assert calls == (3 if boundary == "ordinary" else 4)
 
 
 @pytest.mark.asyncio
