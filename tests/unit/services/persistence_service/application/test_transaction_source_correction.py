@@ -180,6 +180,52 @@ async def test_missing_zero_confirmation_preserves_every_original_field_and_rece
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("missing_basis", ["local", "base"])
+@pytest.mark.parametrize("companion", [Decimal("0"), Decimal("12"), Decimal("-12")])
+async def test_signed_zero_writer_hash_survives_unsigned_reload_and_real_retry(
+    missing_basis, companion
+):
+    changes = (
+        {"realized_pnl_local": "-0"}
+        if missing_basis == "local"
+        else {"realized_pnl_local": str(companion), "realized_pnl_base": "-0"}
+    )
+    use_case, repo, command, ledger, raw, _ = case(
+        local=None if missing_basis == "local" else companion,
+        base=companion if missing_basis == "local" else None,
+        changes=changes,
+    )
+    immutable_raw = deepcopy(raw)
+    immutable_output = {
+        column.name: deepcopy(getattr(ledger, column.name)) for column in ledger.__table__.columns
+    }
+    fact = await use_case.execute(command)
+    value = getattr(fact, "source_" + missing_basis)
+    assert value.is_zero() and not value.is_signed() and value.as_tuple().exponent == -10
+    material = fact.material()
+    assert (
+        canonical_content_hash(
+            {key: value for key, value in material.items() if key != "revision_sha256"}
+        )
+        == fact.revision_sha256
+    )
+    row = TransactionSourceRevision(**material)
+    setattr(row, "source_" + missing_basis, value.copy_abs())
+    repo.committed_command.side_effect = lambda **kwargs: storage.source_revision_fact(row)
+    repo.read_committed_source.side_effect = lambda revision: storage.retained_source_facts(
+        ledger, OutboxEvent(id=7, payload=raw), row
+    )
+    repo.stage_revision_and_notification.reset_mock()
+    retried = await use_case.execute(command)
+    assert retried.revision_sha256 == fact.revision_sha256
+    repo.stage_revision_and_notification.assert_not_awaited()
+    assert raw == immutable_raw
+    assert {
+        column.name: getattr(ledger, column.name) for column in ledger.__table__.columns
+    } == immutable_output
+
+
+@pytest.mark.asyncio
 async def test_invalid_signature_refuses_before_any_repository_lookup():
     use_case, repo, command, *_ = case()
     command = command.model_copy(

@@ -29,6 +29,17 @@
       "lineage_gap_callsites": []
     },
     "TRANSACTION_COST_LEDGER_OUTPUT_V1": {
+      "numeric_material_encodings": {
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/source_evidence_revision.py::canonical_transaction_numeric_material": {
+          "exact_validator": "portfolio_common.domain.transaction.numeric_policy.require_transaction_persistence_precision",
+          "consumers": {
+            "src/libs/portfolio-common/portfolio_common/domain/transaction/source_evidence_revision.py::source_confirmation_material": "lineage-material",
+            "src/libs/portfolio-common/portfolio_common/infrastructure/transaction_source_evidence.py::_material_source_row": {
+              "source_cut_reader": "src/libs/portfolio-common/portfolio_common/infrastructure/transaction_source_evidence.py::SqlAlchemyTransactionSourceEvidence.read"
+            }
+          }
+        }
+      },
       "declaration_path": "src/libs/portfolio-common/portfolio_common/domain/transaction/numeric_policy.py",
       "owner": "portfolio-transaction-processing-service",
       "output_family": "transaction-cost",

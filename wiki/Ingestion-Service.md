@@ -102,6 +102,13 @@ invalidates QCP continuation; stale/unbound tokens refuse. Confirmation time is 
 by Core, not a new financial business date. Unqualified FX and dependent totals stay null; original
 financial transactions, signed companions and receipts remain unchanged.
 
+Source-cut financial values bind exact persisted numeric values, not ORM formatting: equivalent
+Decimal scale or signed zero does not change the cut, while null and real amount changes do.
+Newly accepted confirmation values encode unsigned zero before material/revision hashing, preserving
+fresh database verification. No financial rounding or historical hash rewrite occurs; exact encoding
+and its bounded consumers are structurally guarded. An earlier unmerged cut encoding is not
+a compatible continuation token; restart a refused continuation to obtain the current cut.
+
 Producer v2 binds six original P&L presence/value pairs before unchanged financial normalization.
 Original v1 history needs independent retained raw evidence, never inferred presence from storage
 zero. Consumer-native PostgreSQL proof, protected promotion/mainline release and live runtime

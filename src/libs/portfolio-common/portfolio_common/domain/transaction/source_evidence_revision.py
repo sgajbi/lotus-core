@@ -19,7 +19,10 @@ from portfolio_common.domain.calculation_lineage import (
 
 from .fx_source_admission import FX_SOURCE_ADMISSION_TYPES
 from .fx_source_presence import fx_original_pnl_values, fx_source_presence_input_payload
-from .numeric_policy import TRANSACTION_COST_LEDGER_OUTPUT_V1
+from .numeric_policy import (
+    TRANSACTION_COST_LEDGER_OUTPUT_V1,
+    require_transaction_persistence_precision,
+)
 from .payload_identity import (
     transaction_payload_fingerprint,
     transaction_payload_pre_upstream_fingerprint,
@@ -41,7 +44,7 @@ def source_confirmation_material(
     """Normalize and bind identical material for append and independent verification."""
     policy = TRANSACTION_COST_LEDGER_OUTPUT_V1
     original_output_sha256 = canonical_content_hash(retained_fx_output_payload(original_output))
-    confirmed_values = retained_fx_output_payload(confirmed_source)
+    confirmed_values = canonical_transaction_numeric_material(confirmed_source)
     lineage = build_calculation_lineage(
         algorithm_id="fx-source-evidence-confirmation",
         algorithm_version=1,
@@ -189,6 +192,27 @@ class FxSourceEvidenceConfirmation:
             self.base, FxPnlBasisEvidence
         ):
             raise TypeError("FX confirmation requires typed currency-basis evidence")
+
+
+def canonical_transaction_numeric_material(
+    ledger_output: Mapping[str, object],
+) -> dict[str, object]:
+    """Encode complete numeric material independent of ORM Decimal representation.
+
+    Used for source cuts and newly accepted confirmation values before hashing.
+    Do not rewrite raw evidence, original receipts or persisted revision history.
+    Exact persistence validation precedes quantization; no amount is rounded.
+    """
+    policy = TRANSACTION_COST_LEDGER_OUTPUT_V1
+    output = dict(ledger_output)
+    for name, value in ledger_output.items():
+        if isinstance(value, Decimal):
+            require_transaction_persistence_precision(value, field_name=name)
+            with policy.arithmetic_context():
+                quantum = Decimal(1).scaleb(-policy.scale)
+                unsigned_zero = value.copy_abs() if value.is_zero() else value
+                output[name] = unsigned_zero.quantize(quantum)
+    return output
 
 
 def retained_fx_output_payload(ledger_output: Mapping[str, object]) -> dict[str, object]:

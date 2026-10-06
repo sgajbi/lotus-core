@@ -268,6 +268,17 @@ the whole-window source cut changes. The old token then receives HTTP 400
 `QCP_SOURCE_EVIDENCE_INVALID_REQUEST`; restart with no token to establish a new cut. Never edit a
 token, infer it from a timestamp or combine pages from different cuts as one complete window.
 
+Booked financial material in the source cut uses the exact transaction persistence scale,
+independent of ORM Decimal representation or arithmetic context. Equivalent signed zero and
+trailing-scale values bind the same cut; real quantum changes and null-versus-zero remain distinct.
+All material keys remain bound. Newly accepted confirmation values also encode unsigned zero,
+after exact persistence validation and before receipt/material/revision hashing, so a fresh database
+reload preserves the same complete fact. The guard proves this value-preserving material shape
+and its hash/lineage consumers, not an exemption from economic lineage. A token from an earlier
+unmerged cut encoding must be refused and restarted, not reinterpreted.
+Global lineage hashes, retained raw bytes, receipts, revision/CAS identities and booked amounts
+are not rewritten or rounded.
+
 The actual owning PostgreSQL consumer matrix covers genuine version-1/version-2 producers,
 zero/+12/-12 companions, independently reloaded QCP/ledger cuts, stale outside-page continuation,
 immutable original selection, unknown/foreign revision refusal and late/tampered authority. Its

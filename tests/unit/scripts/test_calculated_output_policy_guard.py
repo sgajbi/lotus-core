@@ -17,6 +17,246 @@ from scripts.quality.calculated_output_policy_guard import (
     evaluate,
     main,
 )
+from scripts.quality.hash_material_encoding_proof import ENCODER
+
+
+def _numeric_encoding_fixture(root):
+    _write_policy(root, used=False)
+    policy = root / "src/owner/numeric_policy.py"
+    policy.write_text(
+        policy.read_text()
+        + "\nfrom portfolio_common.domain.financial.precision import DecimalPrecisionPolicy\n"
+        "PRECISION = DecimalPrecisionPolicy(name='exact', precision=18, scale=10)\n"
+        "def exact(value, *, field_name):\n    if value is None:\n        return None\n"
+        "    return PRECISION.require_exact(value, field_name=field_name)\n"
+    )
+    source = root / "src/owner/encoding.py"
+    source.write_text(
+        "from decimal import Decimal as D\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1 as POLICY, exact\n"
+        "from portfolio_common.domain.calculation_lineage import "
+        "build_calculation_lineage, canonical_content_hash\n"
+        + ENCODER
+        + """
+def confirmation(source):
+    values = encode(source)
+    receipt = build_calculation_lineage(algorithm_id='test', algorithm_version=1,
+        intermediate_precision=64, numeric_output_policy=POLICY.lineage_identity(),
+        input_payload={}, output_payload={'confirmed': values})
+    return values, receipt
+def hash_material(row):
+    return {'numeric': encode(row)}
+def read(rows):
+    material = sorted([hash_material(row) for row in rows], key=canonical_content_hash)
+    digest = canonical_content_hash({'source_candidates': material})
+    return digest
+"""
+    )
+    contract = _contract(
+        root,
+        numeric_material_encodings={
+            "src/owner/encoding.py::encode": {
+                "exact_validator": "owner.numeric_policy.exact",
+                "consumers": {
+                    "src/owner/encoding.py::confirmation": "lineage-material",
+                    "src/owner/encoding.py::hash_material": {
+                        "source_cut_reader": "src/owner/encoding.py::read"
+                    },
+                },
+            }
+        },
+    )
+    return source, policy, contract
+
+
+def test_exact_numeric_material_encoding_proves_shape_and_consumers(tmp_path):
+    source, _, contract = _numeric_encoding_fixture(tmp_path)
+    assert evaluate(tmp_path, contract) == ()
+    # Role/import aliases, not incidental local names, are structural authority.
+    text = source.read_text().replace("quantum", "scale_unit").replace("unsigned", "zero_encoded")
+    source.write_text(text)
+    assert evaluate(tmp_path, contract) == ()
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "omit-validation",
+        "validate-after-quantize",
+        "rounding",
+        "quantum",
+        "ambient-context",
+        "drop-null",
+        "mutate-input",
+        "arithmetic",
+        "fake-validator",
+        "shadow-validator",
+        "extra-caller",
+        "economic-write",
+        "material-escape",
+        "missing-source",
+        "missing-classification",
+    ],
+)
+def test_exact_numeric_material_encoding_refuses_bad_shape_or_consumer(tmp_path, mutation):
+    source, policy, contract = _numeric_encoding_fixture(tmp_path)
+    text = source.read_text()
+    if mutation == "omit-validation":
+        text = text.replace("            exact(value, field_name=name)\n", "")
+    elif mutation == "validate-after-quantize":
+        text = text.replace("            exact(value, field_name=name)\n", "").replace(
+            "                output[name] = unsigned.quantize(quantum)",
+            "                output[name] = unsigned.quantize(quantum)\n"
+            "                exact(value, field_name=name)",
+        )
+    elif mutation == "rounding":
+        text = text.replace(
+            "exact(value, field_name=name)", "POLICY.normalize(value, field_name=name)"
+        )
+    elif mutation == "quantum":
+        text = text.replace("-policy.scale", "-2")
+    elif mutation == "ambient-context":
+        text = text.replace("policy.arithmetic_context()", "unproved_context()")
+    elif mutation == "drop-null":
+        text = text.replace(
+            "output = dict(material)",
+            "output = {key: value for key, value in material.items() if value is not None}",
+        )
+    elif mutation == "mutate-input":
+        text = text.replace("output = dict(material)", "output = material")
+    elif mutation == "arithmetic":
+        text = text.replace("unsigned.quantize(quantum)", "unsigned.quantize(quantum) + D(1)")
+    elif mutation == "fake-validator":
+        policy.write_text(
+            policy.read_text().replace(
+                "return PRECISION.require_exact(value, field_name=field_name)", "return value"
+            )
+        )
+    elif mutation == "shadow-validator":
+        text += "\nexact = lambda value, **kwargs: value\n"
+    elif mutation == "extra-caller":
+        text += "\ndef publish_amounts(source):\n    return encode(source)\n"
+    elif mutation == "economic-write":
+        text = text.replace(
+            "return {'numeric': encode(row)}", "row.amount = encode(row)\n    return row"
+        )
+    elif mutation == "material-escape":
+        text = text.replace("    return digest", "    persist(material)\n    return digest")
+    elif mutation == "missing-source":
+        source.unlink()
+        assert evaluate(tmp_path, contract)
+        return
+    else:
+        _rewrite_contract(
+            contract,
+            lambda payload: payload["policies"]["TEST_LEDGER_OUTPUT_V1"].pop(
+                "numeric_material_encodings"
+            ),
+        )
+    source.write_text(text)
+    findings = evaluate(tmp_path, contract)
+    assert findings
+
+
+def test_exact_numeric_material_bad_shape_has_native_nonzero(tmp_path, monkeypatch):
+    source, _, contract = _numeric_encoding_fixture(tmp_path)
+    source.write_text(source.read_text().replace("output = dict(material)", "output = material"))
+    monkeypatch.setattr(
+        "sys.argv", ["guard", "--repo-root", str(tmp_path), "--contract", str(contract)]
+    )
+    assert main() != 0
+
+
+@pytest.mark.parametrize(
+    "target, before, after",
+    [
+        ("source", "", "\nclass D: pass\n"),
+        ("source", "", "\ngetattr = 1\n"),
+        ("source", "", "\nclass getattr: pass\n"),
+        ("source", "", "\nfrom other import getattr\n"),
+        ("source", "", "\nif True:\n    POLICY = None\n"),
+        ("source", "", "\nif True:\n    from other import exact\n"),
+        ("source", "", "\nif True:\n    dict = None\n"),
+        ("source", "", "\nfrom other import *\n"),
+        (
+            "source",
+            "def confirmation(source):",
+            "def confirmation(source, build_calculation_lineage):",
+        ),
+        (
+            "source",
+            "    values = encode(source)",
+            "    build_calculation_lineage = None\n    values = encode(source)",
+        ),
+        ("source", "def read(rows):", "def read(rows, canonical_content_hash):"),
+        ("source", "def read(rows):", "def read(rows, sorted):"),
+        ("source", "def hash_material(row):", "def hash_material(row, getattr):"),
+        ("source", "def read(rows):", "def read(rows):\n    class sorted: pass"),
+        (
+            "source",
+            "def read(rows):",
+            "def read(rows):\n    from other import canonical_content_hash",
+        ),
+        ("source", "def read(rows):", "def read(rows):\n    global sorted"),
+        ("policy", "", "\nclass DecimalPrecisionPolicy: pass\n"),
+        ("policy", "", "\nclass PRECISION: pass\n"),
+        ("policy", "", "\nif True:\n    PRECISION = None\n"),
+        (
+            "policy",
+            "def exact(value, *, field_name):",
+            "def exact(value, *, field_name, PRECISION):",
+        ),
+        ("source", "", "\ndef effect(value=replace_authority()): pass\n"),
+        ("source", "", "\nclass Effect:\n    replace_authority()\n"),
+        ("source", "", "\n@replace_authority\ndef effect(): pass\n"),
+        ("source", "def read(rows):", "def read(rows, **sorted):"),
+        (
+            "source",
+            "def read(rows):",
+            "def read(rows):\n    try: pass\n    except Exception as sorted: pass",
+        ),
+        (
+            "source",
+            "def read(rows):",
+            "def read(rows):\n    canonical_content_hash.__code__ = None",
+        ),
+    ],
+)
+def test_numeric_encoding_rejects_binding_shadows(tmp_path, target, before, after):
+    source, policy, contract = _numeric_encoding_fixture(tmp_path)
+    assert evaluate(tmp_path, contract) == ()
+    path = source if target == "source" else policy
+    text = path.read_text()
+    path.write_text(text.replace(before, after) if before else text + after)
+    findings = evaluate(tmp_path, contract)
+    assert any("unproved exact numeric material encoding" in finding for finding in findings)
+
+
+@pytest.mark.parametrize("mutation", ["wrong-import", "assignment", "class-shadow"])
+def test_numeric_encoding_resolves_receipt_projection(tmp_path, mutation):
+    source, _, contract = _numeric_encoding_fixture(tmp_path)
+    text = (
+        source.read_text().replace(
+            "return {'numeric': encode(row)}",
+            "return {'numeric': encode(row), 'receipt': transaction_receipt_output(row)}",
+        )
+        + "\ndef transaction_receipt_output(row):\n    return {'value': row}\n"
+    )
+    source.write_text(text)
+    assert evaluate(tmp_path, contract) == ()
+    if mutation == "wrong-import":
+        text = text.replace(
+            "def transaction_receipt_output(row):\n    return {'value': row}",
+            "from other import transaction_receipt_output",
+        )
+    elif mutation == "assignment":
+        text += "\ntransaction_receipt_output = 1\n"
+    else:
+        text += "\nclass transaction_receipt_output: pass\n"
+    source.write_text(text)
+    assert any(
+        "unproved exact numeric material encoding" in item for item in evaluate(tmp_path, contract)
+    )
 
 
 def _write_policy(

@@ -11,6 +11,7 @@ from decimal import ROUND_HALF_EVEN
 from pathlib import Path
 from typing import Any, cast
 
+from scripts.quality.hash_material_encoding_proof import prove_encoding
 from scripts.quality.retained_source_projection import RetainedSourceProjection
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -29,6 +30,7 @@ POLICY_KEYS = {
     "lineage_gap_callsites",
 }
 OPTIONAL_POLICY_KEYS = {
+    "numeric_material_encodings",
     "lineage_boundary_callsites",
     "lineage_boundary_covered_callsites",
     "lineage_boundary_terminal_callsites",
@@ -2020,6 +2022,32 @@ def evaluate(repo_root: Path, contract_path: Path) -> tuple[str, ...]:
             | control_flow_gaps[constant]
             | terminal_control_flow_gaps[constant]
         )
+        encodings = policy.get("numeric_material_encodings", {})
+        if not isinstance(encodings, dict) or list(encodings) != sorted(encodings):
+            findings.append(f"{constant}: invalid numeric material encoding specifications")
+            encodings = {}
+        for encoder, specification in encodings.items():
+            if (
+                encoder not in execution_callsites
+                or not isinstance(specification, dict)
+                or not prove_encoding(
+                    repo_root,
+                    encoder,
+                    specification,
+                    policy_symbol=f"{_source_module(declaration.declaration_path)}.{constant}",
+                    policy_path=declaration.declaration_path,
+                    precision=declaration.precision,
+                    scale=declaration.scale,
+                    module_name=_source_module,
+                    callers=exact_call_graph,
+                    lineage=lineage_callsites,
+                )
+            ):
+                findings.append(
+                    f"{constant}: unproved exact numeric material encoding at {encoder}"
+                )
+            else:
+                computed_gaps.discard(encoder)
         retained_boundaries, retained_findings = _retained_boundaries(
             repo_root, constant, declaration, policy, exact_call_graph, computed_gaps
         )

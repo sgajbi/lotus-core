@@ -30,6 +30,7 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.domain.calculation_lineage import canonical_content_hash
 from portfolio_common.domain.transaction.source_evidence_revision import (
+    canonical_transaction_numeric_material,
     verify_confirmed_fx_revision,
     verify_retained_fx_source,
 )
@@ -49,7 +50,9 @@ class _SourceIdentity(TypedDict):
 def _material_source_row(row: tuple, tenant_id: str) -> dict[str, object]:
     transaction, root, revision, intent, operation = row
     return {
-        "booked_output": transaction_receipt_output(transaction, tenant_id),
+        "booked_output": canonical_transaction_numeric_material(
+            transaction_receipt_output(transaction, tenant_id)
+        ),
         "original_receipt": transaction.calculation_lineage,
         "original_fingerprint": transaction.payload_fingerprint,
         "root": {"id": root.id, "payload": root.payload} if root is not None else None,
