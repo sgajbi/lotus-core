@@ -19,6 +19,7 @@ from tests.test_support.native_consumer_boundary import (
     publish,
     read_record,
     unique_topics,
+    wait_for_group_departure,
 )
 from tools.dlq_replayer import DLQReplayConsumer
 
@@ -351,6 +352,10 @@ async def test_real_publication_refusal_preserves_input_offset_and_same_group_re
         assert isinstance(failed.refusal.__cause__, RuntimeError)
         assert "confirmation timed out" in str(failed.refusal.__cause__)
         assert failed.outage.recovery_evidence is not None
+        assert committed_offset(group, input_topic) == offset
+        # Local close and broker health do not prove restored group membership left.
+        # Certify redelivery after observed departure, not immediate in-rebalance recovery.
+        await asyncio.to_thread(wait_for_group_departure, group)
         assert committed_offset(group, input_topic) == offset
         retry = DLQReplayConsumer(
             bootstrap_servers=_kafka_bootstrap_host(),

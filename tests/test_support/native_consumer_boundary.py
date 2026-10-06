@@ -12,7 +12,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import TypeVar
 
-from confluent_kafka import Consumer, Message, TopicPartition
+from confluent_kafka import Consumer, ConsumerGroupState, Message, TopicPartition
 from confluent_kafka.admin import AdminClient, NewTopic
 from portfolio_common.connection_security import build_kafka_connection_config
 from portfolio_common.database_models import (
@@ -79,6 +79,73 @@ def initialize_offset(group: str, topic: str, partition: int = 0) -> None:
         assert result[0].error is None and result[0].offset == 0
     finally:
         reader.close()
+
+
+def wait_for_group_departure(group: str) -> list[dict[str, object]]:
+    """Observe real broker departure without joining, deleting or changing offsets.
+
+    Broker recovery restored a member with a measured 30-second session. Allow
+    60 seconds for that session and metadata convergence, leaving the replayer's
+    production 15-second admission deadline unchanged.
+    """
+    started = time.monotonic()
+    deadline = started + 60
+    observations: list[dict[str, object]] = []
+    admin = AdminClient(
+        build_kafka_connection_config(
+            os.environ["KAFKA_BOOTSTRAP_SERVERS"], service_name="native group departure observer"
+        )
+    )
+    backoff = 0.05
+    try:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("Native group departure deadline exhausted")
+            request_budget = min(5, remaining)
+            futures = admin.describe_consumer_groups([group], request_timeout=request_budget)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("Native group departure request exhausted deadline")
+            description = futures[group].result(timeout=min(request_budget, remaining))
+            elapsed = time.monotonic() - started
+            if elapsed >= 60:
+                raise TimeoutError("Native group departure result arrived after deadline")
+            state = getattr(description, "state", None)
+            members = getattr(description, "members", None)
+            observed_group = getattr(description, "group_id", None)
+            member_ids = (
+                [getattr(member, "member_id", None) for member in members]
+                if isinstance(members, list)
+                else None
+            )
+            observation = {
+                "group": observed_group,
+                "state": state.name if isinstance(state, ConsumerGroupState) else None,
+                "member_ids": member_ids,
+                "elapsed_seconds": round(elapsed, 6),
+            }
+            observations.append(observation)
+            print("Native group departure: " + json.dumps(observation), flush=True)
+            if observed_group != group:
+                raise ValueError("Native group departure description has wrong identity")
+            if not isinstance(state, ConsumerGroupState) or state == ConsumerGroupState.UNKNOWN:
+                raise ValueError("Native group departure state is unknown")
+            if member_ids is None or any(not isinstance(mid, str) or not mid for mid in member_ids):
+                raise ValueError("Native group departure members are unavailable")
+            if state == ConsumerGroupState.EMPTY and not member_ids:
+                return observations
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("Native group departure deadline exhausted")
+            time.sleep(min(backoff, remaining))
+            backoff = min(backoff * 2, 0.5)
+    except Exception as error:
+        error.add_note(
+            f"Native group departure failed for {group!r} after "
+            f"{time.monotonic() - started:.6f}s; observations={json.dumps(observations)}"
+        )
+        raise
 
 
 @contextmanager
