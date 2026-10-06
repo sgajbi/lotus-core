@@ -421,8 +421,9 @@ rows, fences and outbox records may predate this replay and are not its durable 
 wait/lock observations bind PID to `backend_start` and retain database/relation OIDs, including
 NULL relation for transaction-ID locks; NULL is not a causal table attribution. The collector
 observes the exact managed service container ID, creation/start timestamps and container-init
-PID, with project/service label verification. Container-init PID is not an observed application
-worker PID. Application-worker PID and exact Python await remain `MISSING` unless independently
+PID, using plain Docker label-filtered `ps` (no Compose plugin child), followed by exact
+project/service/published-port inspect verification. Container-init PID is not an observed
+application worker PID. Application-worker PID and exact Python await remain `MISSING` unless independently
 measured. This snapshot alone cannot establish a restart history or the cause of a load failure.
 
 The existing PTP metrics interface provides bounded runtime inflight/backlog/cached-lag samples;

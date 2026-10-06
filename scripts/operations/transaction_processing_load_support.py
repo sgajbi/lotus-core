@@ -493,7 +493,12 @@ def transaction_processing_operation_observation(
         if len(matches) != 1:
             return {**observation, "reason": "absent" if not matches else "ambiguous"}
         sample = matches[0]
-        if not math.isfinite(sample.value) or sample.value < 0 or not sample.value.is_integer():
+        value = sample.value
+        valid_integer = type(value) is int and value >= 0
+        valid_float = (
+            type(value) is float and math.isfinite(value) and value >= 0 and value.is_integer()
+        )
+        if not (valid_integer or valid_float):
             return {**observation, "status": "invalid", "reason": "counter_value"}
         if set(sample.labels) != {"stage", "outcome"}:
             return {**observation, "status": "invalid", "reason": "counter_labels"}

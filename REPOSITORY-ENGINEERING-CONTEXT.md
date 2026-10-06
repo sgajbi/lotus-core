@@ -773,7 +773,9 @@ collector's 32KiB projected-output budget is unchanged. Partial accepted counts 
 accepted IDs or durable completion receipts. Replay timeout invokes the existing collector once
 after completion measurement, preserving the failed verdict and profile deadline/SLO.
 Database PID observations require backend birth identity and lock OIDs; NULL relation is not an
-inferred table. The exact managed container's birth/init-PID metadata is distinct from an actual
+inferred table. Managed-container lookup uses plain Docker label-filtered `ps`, not a Compose
+plugin process; inspect verifies exact project/service/published port. Its birth/init-PID metadata
+is distinct from an actual
 application-worker PID or await, which remain MISSING unless measured. Raw SQL is never exported;
 the bounded collector retains only whitelisted structure with literal/unknown-token redaction and
 ambiguous-syntax refusal. This is diagnostic supportability, not a financial/runtime cause proof.
