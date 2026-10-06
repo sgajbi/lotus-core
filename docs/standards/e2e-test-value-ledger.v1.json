@@ -8,7 +8,7 @@
     "smoke_suite": "e2e-smoke",
     "runtime_mode": "live_worker",
     "environment_profile": "e2e",
-    "expected_full_node_count": 68,
+    "expected_full_node_count": 70,
     "expected_smoke_node_count": 7,
     "baseline_run": "github-actions:29185995035",
     "baseline_full_runtime_seconds": 1082,
@@ -41,6 +41,64 @@
   },
   "review_evidence": {},
   "capability_profiles": {
+    "deployed-consumer-financial-recovery": {
+      "owner": "lotus-core/consumer-lifecycle-and-financial-processing",
+      "invariant": "The actual deployed transaction worker drains admitted work on SIGTERM and redelivers unacknowledged work after SIGKILL without duplicate durable financial effects; Kafka acknowledgement follows financial durability.",
+      "production_defect_class": "Premature acknowledgement, lost admitted work, duplicate lot/cash/position/receipt/outbox effects, or incomplete consumer shutdown.",
+      "fixture_boundary": "Both nodes use the same generated isolated e2e-all Docker fixture with distinct portfolio/security/transaction seeds. Before each signal, actual source/image/project/container identity and the production advisory-lock blocker establish admission to the real worker; recovery and fixture teardown remain mandatory.",
+      "external_dependencies": [
+        "PostgreSQL",
+        "Kafka",
+        "Docker Compose",
+        "Deployed transaction-processing worker"
+      ],
+      "source_contracts": [
+        "tests/e2e/E2E_TEST_PLAN.md",
+        "docs/standards/test-lane-governance.v1.json",
+        "wiki/Operations-Runbook.md"
+      ],
+      "lower_layer_proofs": [
+        "tests/test_support/native_consumer_boundary.py",
+        "tests/integration/services/portfolio_transaction_processing_service/test_int_native_consumer_boundary.py"
+      ],
+      "non_duplication_rationale": "Native integration owns broker/database financial boundary controls; only these deployed nodes establish the actual image/container admission boundary and exercise real SIGTERM/SIGKILL recovery with complete persisted financial snapshots and input offsets.",
+      "observed_runtime_evidence": {
+        "classification": "Local native deployed evidence only; not GitHub Actions or #729 closure evidence.",
+        "source_commit": "bc71f2252705d281d9824723ded4d23b04a1ec1c",
+        "source_tree": "fca8d6883a0758f7da769b16aa54fd7eba519ac4",
+        "fixture": "lotus-e2e-e2e-all-d756a62a",
+        "native_exit": 0,
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0,
+        "elapsed_seconds": 113.94,
+        "log_sha256": "105dd97b3db621c0c91aa1b4e7638cd94e46fc666c2c8c3ef6e921384272bde9",
+        "junit_sha256": "32edc4550075754e6eed7920d063a348665ca9a99ffcdc80ed61fccb7c56b4a7",
+        "compose_log_sha256": "e22804894af0de61c146d5adc236ea950c7f3c62523eeea2b14f8f2a460fb888",
+        "financial_oracle": "BUY 10 at 25.50: one lot/position quantity 10, cost basis 255, cash -255, canonical receipt, FIFO checkpoint and expected outbox; duplicate delivery leaves the full snapshot unchanged.",
+        "forced": {
+          "signal": "SIGKILL",
+          "duration_seconds": 86.601,
+          "input_offsets": [
+            0,
+            1
+          ],
+          "final_committed_offset": 2,
+          "observation": "Before financial effects, actual worker is interrupted with offset unchanged; restore/redelivery completes exactly once and acknowledges the duplicate."
+        },
+        "graceful": {
+          "signal": "SIGTERM",
+          "duration_seconds": 26.259,
+          "input_offsets": [
+            2,
+            3
+          ],
+          "final_committed_offset": 4,
+          "observation": "Admitted work drains with production shutdown-success logs and first acknowledgement before restore; subsequent duplicate leaves the full snapshot unchanged."
+        },
+        "limits": "No new mutation-test or negative fault-detection campaign, no before/after full-suite runtime comparison, no hard native join bound, no joined/live/concurrency/load or accepted-main certification. Prior admission/setup failures do not prove production fault detection. Both nodes remain needs-review under unchanged #729 closure policy."
+      }
+    },
     "complex-portfolio-lifecycle": {
       "owner": "lotus-core/portfolio-lifecycle",
       "invariant": "A heterogeneous private-banking portfolio remains economically and contractually consistent across ingestion, positions, and query APIs.",
@@ -269,6 +327,8 @@
     {"ownership_id": "e2e-014", "nodeid": "tests/e2e/test_dual_currency_workflow.py::test_realized_pnl_dual_currency", "capability_profile": "cost-basis-and-currency", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-015", "nodeid": "tests/e2e/test_dual_currency_workflow.py::test_unrealized_pnl_dual_currency", "capability_profile": "cost-basis-and-currency", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-016", "nodeid": "tests/e2e/test_failure_scenarios.py::test_db_outage_recovery", "capability_profile": "recovery-and-reprocessing", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-071", "nodeid": "tests/e2e/test_failure_scenarios.py::test_deployed_forced_interruption_redelivers_without_duplicate_financial_effects", "capability_profile": "deployed-consumer-financial-recovery", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-072", "nodeid": "tests/e2e/test_failure_scenarios.py::test_deployed_graceful_stop_drains_admitted_financial_work", "capability_profile": "deployed-consumer-financial-recovery", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-017", "nodeid": "tests/e2e/test_fx_lifecycle.py::test_fx_lifecycle_cash_positions_reflect_settlement_pairs", "capability_profile": "fx-contract-lifecycle", "current_lanes": ["e2e-smoke", "e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-018", "nodeid": "tests/e2e/test_fx_lifecycle.py::test_fx_lifecycle_position_history_tracks_contract_open_and_close", "capability_profile": "fx-contract-lifecycle", "current_lanes": ["e2e-smoke", "e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-019", "nodeid": "tests/e2e/test_fx_lifecycle.py::test_fx_lifecycle_transactions_cover_spot_forward_and_swap", "capability_profile": "fx-contract-lifecycle", "current_lanes": ["e2e-smoke", "e2e-all"], "review_decision": "needs-review"},
