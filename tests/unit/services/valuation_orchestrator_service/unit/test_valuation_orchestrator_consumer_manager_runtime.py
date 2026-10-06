@@ -151,7 +151,13 @@ async def test_consumer_manager_applies_only_valid_merged_runtime_overrides(
         "LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON",
         '{"valuation_orchestrator_group_readiness": {"heartbeat.interval.ms": 30000}}',
     )
-    monkeypatch.setattr(shared_kafka_consumer, "get_kafka_producer", lambda: object())
+    producer_bootstrap_servers: list[str] = []
+
+    def get_producer(*, bootstrap_servers: str):
+        producer_bootstrap_servers.append(bootstrap_servers)
+        return object()
+
+    monkeypatch.setattr(shared_kafka_consumer, "get_kafka_producer", get_producer)
 
     manager = consumer_manager.ConsumerManager()
     readiness_consumer = next(
@@ -176,3 +182,6 @@ async def test_consumer_manager_applies_only_valid_merged_runtime_overrides(
     assert price_consumer._consumer_config["heartbeat.interval.ms"] == 3000
     assert fx_consumer.topic == "fx_rates.persisted"
     assert fx_consumer._consumer_config["session.timeout.ms"] == 30000
+    assert producer_bootstrap_servers == [
+        consumer._consumer_config["bootstrap.servers"] for consumer in manager.consumers
+    ]
