@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence, Set
-from dataclasses import asdict, fields, replace
+from dataclasses import fields, replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TypedDict
 
 from portfolio_common.domain.calculation_lineage import build_calculation_lineage
+from portfolio_common.domain.transaction.fx_source_presence import (
+    FX_ORIGINAL_PNL_FIELDS,
+    fx_source_presence_input_payload,
+)
 from portfolio_common.domain.transaction.numeric_policy import (
     TRANSACTION_COST_LEDGER_OUTPUT_V1,
 )
@@ -22,7 +26,7 @@ from .validation import validate_fx_transaction
 
 FX_BASELINE_REALIZED_PNL_MODES = {"NONE", "UPSTREAM_PROVIDED"}
 FX_BASELINE_CALCULATION_ALGORITHM_ID = "foreign-exchange-baseline-processing"
-FX_BASELINE_CALCULATION_ALGORITHM_VERSION = 1
+FX_BASELINE_CALCULATION_ALGORITHM_VERSION = 2
 
 _NON_PERSISTED_BOOKED_TRANSACTION_FIELDS = frozenset(
     {
@@ -61,15 +65,18 @@ class FxBaselineProcessingUpdate(TypedDict):
 def build_fx_processed_transaction(transaction: BookedTransaction) -> BookedTransaction:
     """Apply explicit baseline cost and realized-P&L semantics to an FX component."""
 
+    original_pnl = {name: getattr(transaction, name) for name in FX_ORIGINAL_PNL_FIELDS}
     update = build_fx_baseline_processing_update(transaction)
     processed_transaction = replace(transaction, **update, calculation_lineage=None)
-    canonical_input = FxCanonicalTransaction.from_transaction(processed_transaction)
+    output = fx_booked_transaction_output_payload(processed_transaction)
     lineage = build_calculation_lineage(
         algorithm_id=FX_BASELINE_CALCULATION_ALGORITHM_ID,
         algorithm_version=FX_BASELINE_CALCULATION_ALGORITHM_VERSION,
         intermediate_precision=TRANSACTION_COST_LEDGER_OUTPUT_V1.working_precision,
-        input_payload=_canonical_fx_lineage_payload(asdict(canonical_input)),
-        output_payload=fx_booked_transaction_output_payload(processed_transaction),
+        input_payload=fx_source_presence_input_payload(
+            source_values=original_pnl, booked_output=output
+        ),
+        output_payload=output,
         numeric_output_policy=TRANSACTION_COST_LEDGER_OUTPUT_V1.lineage_identity(),
     )
     return replace(processed_transaction, calculation_lineage=lineage)
@@ -85,12 +92,6 @@ def fx_booked_transaction_output_payload(
         for field in fields(transaction)
         if field.name not in _NON_PERSISTED_BOOKED_TRANSACTION_FIELDS
         and (value := getattr(transaction, field.name)) is not None
-    }
-
-
-def _canonical_fx_lineage_payload(payload: Mapping[str, object]) -> dict[str, object]:
-    return {
-        key: _canonical_fx_lineage_value(value, field_path=key) for key, value in payload.items()
     }
 
 

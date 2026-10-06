@@ -6,6 +6,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Literal
 
+from portfolio_common.api_contract.transaction_source_evidence import TransactionSourceEvidence
 from portfolio_common.reference_data_paging import ReferencePageMetadata, ReferencePageRequest
 from portfolio_common.source_data_product_metadata import (
     SourceDataProductRuntimeMetadata,
@@ -286,6 +287,14 @@ class PerformanceComponentEconomicsRow(BaseModel):
         ),
         examples=["FX_SOURCE_INCOMPLETE"],
     )
+    transaction_source_evidence: TransactionSourceEvidence | None = Field(
+        None,
+        description=(
+            "Bounded qualified original/current FX source authority. Confirmation time is "
+            "knowledge recorded by Core, not the financial business as-of date. No raw source "
+            "or authorization payload is exposed."
+        ),
+    )
     source_lineage: dict[str, str] = Field(
         default_factory=dict,
         description="Row-level source lineage for component economics evidence.",
@@ -404,6 +413,15 @@ class PerformanceComponentEconomicsSupportability(BaseModel):
 
 
 class PerformanceComponentEconomicsResponse(SourceDataProductRuntimeMetadata):
+    source_cut_sha256: str | None = Field(
+        None,
+        pattern="^[0-9a-f]{64}$",
+        description=(
+            "Repeatable-read material source cut for the entire matching window, not just this "
+            "page. Continuations require this same cut; latest_evidence_timestamp is descriptive "
+            "and is not source authority."
+        ),
+    )
     product_name: Literal["PerformanceComponentEconomics"] = product_name_field(
         "PerformanceComponentEconomics"
     )

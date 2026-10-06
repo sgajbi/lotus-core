@@ -430,6 +430,9 @@ def test_critical_lifecycle_suite_has_repository_native_make_target() -> None:
 
 def test_query_authority_db_contract_executes_tenant_and_service_regressions() -> None:
     assert get_suite("query-authority-db-contract") == [
+        "tests/integration/services/persistence_service/"
+        "test_transaction_source_correction_postgresql.py::"
+        "test_actual_pg_source_confirmation_qcp_ledger_cut",
         "tests/integration/services/query_control_plane_service/"
         "test_historical_fx_evidence_postgresql.py",
         "tests/integration/services/query_control_plane_service/"
@@ -450,6 +453,64 @@ def test_query_authority_db_contract_executes_tenant_and_service_regressions() -
     assert SUITE_ENV_PROFILE["query-authority-db-contract"] == "integration"
     assert SUITE_RUNTIME_MODE["query-authority-db-contract"] == "db_direct"
     assert "test-query-authority-db-contract:" in Path("Makefile").read_text(encoding="utf-8")
+
+
+SOURCE_CONFIRMATION_PG_FILE = (
+    "tests/integration/services/persistence_service/"
+    "test_transaction_source_correction_postgresql.py"
+)
+SOURCE_CONFIRMATION_CONSUMER_NODE = (
+    SOURCE_CONFIRMATION_PG_FILE + "::test_actual_pg_source_confirmation_qcp_ledger_cut"
+)
+
+
+def test_source_confirmation_manifest_retains_native_producer_consumer_and_transport_proof() -> (
+    None
+):
+    registrations = {
+        "critical-db-coverage": [SOURCE_CONFIRMATION_PG_FILE],
+        "transaction-fx-contract": [SOURCE_CONFIRMATION_PG_FILE],
+        "query-authority-db-contract": [SOURCE_CONFIRMATION_CONSUMER_NODE],
+        "ops-contract": [
+            "tests/unit/services/ingestion_service/routers/test_transaction_source_corrections.py",
+            "tests/unit/services/event_replay_service/infrastructure/"
+            "test_source_correction_operation_status.py",
+        ],
+    }
+    for suite, selectors in registrations.items():
+        assert SUITE_RUNTIME_MODE[suite] == "db_direct"
+        assert SUITE_ENV_PROFILE[suite] == "integration"
+        for selector in selectors:
+            assert get_suite(suite).count(selector) == 1
+    assert SOURCE_CONFIRMATION_PG_FILE not in get_suite("unit-db")
+
+
+@pytest.mark.parametrize(
+    "suite,selector",
+    [
+        ("critical-db-coverage", SOURCE_CONFIRMATION_PG_FILE),
+        ("transaction-fx-contract", SOURCE_CONFIRMATION_PG_FILE),
+        ("query-authority-db-contract", SOURCE_CONFIRMATION_CONSUMER_NODE),
+        (
+            "ops-contract",
+            "tests/unit/services/ingestion_service/routers/test_transaction_source_corrections.py",
+        ),
+        (
+            "ops-contract",
+            "tests/unit/services/event_replay_service/infrastructure/test_source_correction_operation_status.py",
+        ),
+    ],
+)
+@pytest.mark.parametrize("mutation", ["missing", "duplicate"])
+def test_source_confirmation_manifest_rejects_missing_or_duplicate_proof(
+    monkeypatch, suite, selector, mutation
+) -> None:
+    selectors = [path for path in get_suite(suite) if path != selector]
+    if mutation == "duplicate":
+        selectors.extend([selector, selector])
+    monkeypatch.setitem(SUITES, suite, selectors)
+    with pytest.raises(AssertionError):
+        test_source_confirmation_manifest_retains_native_producer_consumer_and_transport_proof()
 
 
 def test_local_pr_aggregate_runs_critical_lifecycle_suite() -> None:

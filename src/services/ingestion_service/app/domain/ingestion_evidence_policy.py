@@ -299,6 +299,11 @@ INGESTION_EVIDENCE_POLICY_REGISTRY = IngestionEvidencePolicyRegistry(
         _fingerprint_policy(
             "/ingest/transactions", "transaction", classification=PayloadClassification.RESTRICTED
         ),
+        _fingerprint_policy(
+            "/ingest/transactions/{transaction_id}/source-evidence",
+            "transaction_source_correction",
+            classification=PayloadClassification.RESTRICTED,
+        ),
         _replay_policy("/ingest/business-dates", "business_date", partial_replay_eligible=True),
         _fingerprint_policy(
             "/ingest/portfolio-bundle",

@@ -37,6 +37,7 @@ def build_performance_component_economics_response(
     portfolio_base_currency: str,
     generated_at: datetime,
     request_scope_fingerprint: str | None = None,
+    source_cut_sha256: str | None = None,
     has_more: bool = False,
     next_page_token: str | None = None,
     is_initial_page: bool,
@@ -67,6 +68,7 @@ def build_performance_component_economics_response(
         as_of_date=request.as_of_date,
         window=request.window,
         request_fingerprint=fingerprint,
+        source_cut_sha256=source_cut_sha256,
         rows=rows,
         component_totals=build_performance_component_economics_totals(
             rows,
@@ -104,6 +106,7 @@ def build_performance_component_economics_response(
                 "as_of_date": request.as_of_date,
                 "window": request.window.model_dump(mode="json"),
                 "request_fingerprint": fingerprint,
+                "source_cut_sha256": source_cut_sha256,
                 "rows": [row.model_dump(mode="json") for row in rows],
                 "portfolio_base_currency": portfolio_base_currency,
                 "has_more": has_more,
@@ -113,8 +116,10 @@ def build_performance_component_economics_response(
                 "data_quality_status": data_quality_status,
             },
             lineage=performance_component_economics_source_lineage(),
-            source_evidence_current=True if authoritative_empty else None,
-            freshness_status="CURRENT" if authoritative_empty else None,
+            source_evidence_current=bool(source_cut_sha256) and (bool(rows) or authoritative_empty),
+            freshness_status=(
+                "CURRENT" if source_cut_sha256 and (rows or authoritative_empty) else "UNAVAILABLE"
+            ),
         ),
     )
 

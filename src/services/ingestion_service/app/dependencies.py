@@ -152,3 +152,29 @@ def get_reference_data_ingestion_command_handler(
         ingestion_job_service=ingestion_job_service,
         idempotency_replay_reader=idempotency_replay_reader,
     )
+
+
+def get_transaction_source_correction_submitter():
+    from portfolio_common.command_authorization import load_command_authorization_policy
+
+    from .application.transaction_source_corrections import SubmitTransactionSourceCorrection
+    from .infrastructure.transaction_source_correction_commands import (
+        SqlAlchemySourceCorrectionCommandStager,
+    )
+    from .infrastructure.workflow_stores import SqlAlchemyIngestionJobStore
+
+    def service_factory(submission):
+        stager = SqlAlchemySourceCorrectionCommandStager(
+            submission, load_command_authorization_policy()
+        )
+        evidence = get_ingestion_service_settings().evidence_hmac
+        store = SqlAlchemyIngestionJobStore(
+            session_factory=get_async_db_session,
+            fingerprint_key_id=evidence.key_id,
+            fingerprint_hmac_secret=evidence.hmac_secret,
+            fingerprint_previous_keys=evidence.previous_keys,
+            on_created=stager.stage,
+        )
+        return IngestionJobService(job_store=store)
+
+    return SubmitTransactionSourceCorrection(service_factory)

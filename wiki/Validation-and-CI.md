@@ -612,3 +612,26 @@ timestamp, git SHA, runtime profile, status, generated artifacts, affected docum
 wiki validation, README/wiki front-door synchronization, API vocabulary generation, generated API
 route catalog checks, critical-path coverage contract checks, RFC-0083 closure checks, RFC status
 ledger checks, supported-feature truth, and runbook validation.
+
+## Typed original-input structural proof
+
+The calculated-output guard can qualify a registered typed retained boundary's complete
+original-six P&L presence/value projection, immutable finite bases and receipt input/output
+binding. It rejects omissions, alias mutation, shadowed bindings and unqualified helper escapes.
+Fixed reviewed fixtures remain independent of live producer files. Authored-source inventory
+selection still excludes generated build directories while retaining untracked authored files
+and rejecting an empty inventory.
+
+Presence-owner module bindings use a closed inert-declaration grammar: only the supported
+standard-library imports, literal module bindings/defaults, approved type annotations and
+undecorated functions are admitted. Evaluated calls in definition headers are refused even
+on unrelated functions. Unrelated function bodies are not a general purity proof; selected
+projector and builder bodies still require their separate exact structural templates.
+Every function declaration in a registered retained-owner module also requires inert defaults,
+resolved supported type annotations and no decorators, including unrelated functions and class
+methods. Typed immutable evidence and literal type aliases retain their separate structural
+qualification. This header check is not a general import or function-body purity proof.
+
+This is static source proof, not production v2 registration, database execution, actual consumer
+qualification or release certification. Run the owning guard and focused unit controls through
+the repository Python authority; full protected gates remain required for promotion.

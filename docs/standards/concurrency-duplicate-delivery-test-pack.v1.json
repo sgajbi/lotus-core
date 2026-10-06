@@ -12,6 +12,21 @@
   },
   "scenarios": [
     {
+      "id": "signed_source_confirmation_immutable_cas_and_retry",
+      "description": "Authenticated commands serialize through the existing financial UOW; committed retries independently requalify complete retained authority without another revision or notice.",
+      "status": "implemented",
+      "lane": "critical-db-coverage-and-query-authority-db-contract",
+      "owning_issues": ["sgajbi/lotus-core#452", "sgajbi/lotus-core#1176", "sgajbi/lotus-core#531"],
+      "evidence": [
+        "tests/integration/services/persistence_service/test_transaction_source_correction_postgresql.py",
+        "tests/unit/services/persistence_service/application/test_transaction_source_correction.py"
+      ],
+      "deterministic_primitives": ["actual PostgreSQL separate sessions and lock waits", "expected immutable revision-head CAS", "native transaction rollback", "signed captured-command substitute"],
+      "state_assertions": ["one immutable revision and notification effect", "stale head refuses after native wait", "operation authority rechecked after lock wait", "rollback removes revision and notification", "original financial/raw/receipt identity remains immutable"],
+      "protected_failure_modes": ["idempotency bypassing crypto", "expired replay promoting incomplete fact", "concurrent duplicate effects", "partial financial/source write"],
+      "remaining_scope": "Live Kafka, deployed identity enrollment and production concurrency capacity are not established by local native controls."
+    },
+    {
       "id": "same_idempotency_key_concurrent_submit",
       "description": "Concurrent claims of the same processed-event fence converge to one durable processed_events row.",
       "status": "implemented",

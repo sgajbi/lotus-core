@@ -35,6 +35,46 @@ def test_shared_config_does_not_publish_unused_mongodb_credentials() -> None:
     assert "MONGO_URL" not in source
 
 
+@pytest.mark.parametrize(
+    "canonical_name, semantic_type",
+    [
+        ("transactions.source_correction.commands", "command"),
+        ("transactions.source_evidence.changed", "fact"),
+    ],
+)
+def test_source_correction_topics_have_one_active_partition_contract(canonical_name, semantic_type):
+    from portfolio_common import config
+
+    definitions = [
+        topic for topic in config.KAFKA_TOPIC_DEFINITIONS if topic.canonical_name == canonical_name
+    ]
+    assert len(definitions) == 1
+    definition = definitions[0]
+    assert definition.lifecycle_status == "active"
+    assert definition.semantic_type == semantic_type and definition.scope == "transaction"
+    assert definition.partition_count == 12
+    assert config.KAFKA_TOPIC_PARTITION_COUNTS[definition.runtime_name] == 12
+
+
+def test_source_correction_group_rejects_capacity_above_topic_partitions(monkeypatch):
+    monkeypatch.setenv(
+        "LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_GROUP_OVERRIDES_JSON",
+        '{"persistence_group_source_corrections":{"max_in_flight_messages":13}}',
+    )
+    with pytest.raises(ValueError, match="governed partition capacity 12"):
+        load_kafka_consumer_execution_profile("persistence_group_source_corrections")
+
+
+@pytest.mark.parametrize("capacity", [1, 12])
+def test_source_correction_group_accepts_governed_capacity_boundaries(monkeypatch, capacity):
+    monkeypatch.setenv(
+        "LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_GROUP_OVERRIDES_JSON",
+        '{"persistence_group_source_corrections":{"max_in_flight_messages":' + str(capacity) + "}}",
+    )
+    profile = load_kafka_consumer_execution_profile("persistence_group_source_corrections")
+    assert profile.max_in_flight_messages == capacity
+
+
 def test_kafka_bootstrap_loader_prefers_host_runtime_authority() -> None:
     assert (
         load_kafka_bootstrap_servers(

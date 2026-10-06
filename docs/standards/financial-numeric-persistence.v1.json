@@ -2,8 +2,8 @@
   "schema_version": "2.0.0",
   "model_path": "src/libs/portfolio-common/portfolio_common/database_models.py",
   "expected_inventory": {
-    "numeric_columns": 147,
-    "tables": 37
+    "numeric_columns": 149,
+    "tables": 38
   },
   "profiles": {
     "finite": {
@@ -131,6 +131,7 @@
     "risk_free_series": "benchmark-reference-data",
     "instrument_lookthrough_components": "benchmark-reference-data",
     "transactions": "transaction-economics",
+    "transaction_source_revisions": "transaction-economics",
     "transaction_costs": "transaction-economics",
     "cashflows": "transaction-economics",
     "position_lot_state": "cost-basis-state",
@@ -228,6 +229,10 @@
     },
     "instrument_lookthrough_components": {
       "component_weight": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"}
+    },
+    "transaction_source_revisions": {
+      "source_local": {"profile": "finite", "rollout_status": "orm-enforced"},
+      "source_base": {"profile": "finite", "rollout_status": "orm-enforced"}
     },
     "transactions": {
       "quantity": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},

@@ -1,4 +1,6 @@
 from fastapi import Depends
+from portfolio_common.db import get_async_db_session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.ingestion_service.app.application import ResolveTransactionReprocessingTargets
 from src.services.ingestion_service.app.dependencies import (
@@ -21,6 +23,16 @@ from .application.replay_payload_dispatcher import (
     IngestionServiceReplayPayloadDispatcher,
     ReplayPayloadDispatcher,
 )
+from .infrastructure.source_correction_operation_status import (
+    SqlAlchemySourceCorrectionOperationStatus,
+)
+
+
+def get_source_correction_operation_status(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> SqlAlchemySourceCorrectionOperationStatus:
+    """Borrow the owning read session; defer policy loading until authorized read."""
+    return SqlAlchemySourceCorrectionOperationStatus(db)
 
 
 def get_replay_payload_dispatcher(

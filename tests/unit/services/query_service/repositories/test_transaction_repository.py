@@ -5,6 +5,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.database_models import Transaction
+from portfolio_common.infrastructure.transaction_source_evidence import (
+    SqlAlchemyTransactionSourceEvidence,
+)
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.application.transaction_query import (
@@ -162,8 +166,11 @@ async def test_get_transactions_exact_identity_is_portfolio_scoped_and_reuses_un
     repository: TransactionRepository,
     mock_db_session: AsyncMock,
 ) -> None:
+    from tests.test_support.tenant import TEST_TENANT_CONTEXT
+
+    repository._source_evidence_for_scope = AsyncMock(return_value={})
     await repository.get_transactions(
-        query_spec=_query_spec(transaction_id="TX-EXACT"),
+        query_spec=_query_spec(transaction_id="TX-EXACT", tenant_id=TEST_TENANT_CONTEXT.tenant_id),
         skip=0,
         limit=2,
     )
@@ -173,6 +180,7 @@ async def test_get_transactions_exact_identity_is_portfolio_scoped_and_reuses_un
 
     assert "transactions.portfolio_id = 'P1'" in compiled_query
     assert "transactions.transaction_id = 'TX-EXACT'" in compiled_query
+    assert "portfolios.tenant_id = 'tenant-test'" in compiled_query
     assert "LIMIT 2" in compiled_query
     exact_lookup_index = next(
         index
@@ -621,3 +629,43 @@ async def test_get_transaction_ledger_input_evidence_applies_complete_scope_filt
     assert "transactions.transaction_date >= '2025-01-01 00:00:00+00:00'" in compiled_query
     assert "transactions.transaction_date < '2025-02-01 00:00:00+00:00'" in compiled_query
     assert "transactions.transaction_date < '2025-01-16 00:00:00+00:00'" in compiled_query
+
+
+@pytest.mark.parametrize("selection", ["original", "current", "revision"])
+async def test_source_evidence_join_includes_only_selected_revision_metadata(selection):
+    session = AsyncMock(spec=AsyncSession)
+    result = MagicMock()
+    result.all.return_value = []
+    session.execute.return_value = result
+    proofs = await SqlAlchemyTransactionSourceEvidence(session).read(
+        tenant_id="TENANT-A",
+        portfolio_id="P1",
+        transaction_ids=["TX1", "TX2"],
+        consumer="core-ledger",
+        selection=selection,
+        revision_id="REV1" if selection == "revision" else None,
+    )
+    statement = session.execute.call_args.args[0]
+    query = str(
+        statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+    assert "portfolios.tenant_id = 'TENANT-A'" in query
+    assert "transactions.portfolio_id = 'P1'" in query
+    assert "transactions.transaction_id IN ('TX1', 'TX2')" in query
+    if selection == "original":
+        assert "LEFT OUTER JOIN transaction_source_revisions ON false" in query
+        assert "NOT (EXISTS" not in query
+    else:
+        assert "ON false" not in query
+        assert "transaction_source_revisions.tenant_id = 'TENANT-A'" in query
+        if selection == "current":
+            assert "NOT (EXISTS" in query
+            assert "predecessor_revision_id = transaction_source_revisions.revision_id" in query
+        else:
+            assert "transaction_source_revisions.revision_id = 'REV1'" in query
+            assert "NOT (EXISTS" not in query
+    assert set(proofs) == {"TX1", "TX2"}
+    assert all(proof.status == "UNAVAILABLE" for proof in proofs.values())
+    session.execute.assert_awaited_once()
+    session.commit.assert_not_awaited()
+    session.add.assert_not_called()

@@ -17,6 +17,109 @@ pytestmark = pytest.mark.asyncio
 TEST_TENANT_ID = TenantId("tenant-test")
 
 
+async def test_performance_snapshot_is_first_statement_and_borrowed_session_is_not_committed():
+    session = AsyncMock(spec=AsyncSession)
+    session.in_transaction.return_value = False
+    reader = SqlAlchemyTransactionEconomicsReader(session)
+    await reader.establish_performance_read_snapshot()
+    assert str(session.execute.await_args.args[0]) == (
+        "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+    )
+    session.commit.assert_not_awaited()
+    session.close.assert_not_awaited()
+
+
+async def test_late_performance_snapshot_refuses_without_second_database_statement():
+    session = AsyncMock(spec=AsyncSession)
+    session.in_transaction.return_value = True
+    reader = SqlAlchemyTransactionEconomicsReader(session)
+    with pytest.raises(RuntimeError, match="precede every database read"):
+        await reader.establish_performance_read_snapshot()
+    session.execute.assert_not_awaited()
+
+
+async def test_failed_performance_snapshot_cannot_capture_a_source_cut():
+    session = AsyncMock(spec=AsyncSession)
+    session.in_transaction.return_value = False
+    session.execute.side_effect = RuntimeError("database snapshot failed")
+    reader = SqlAlchemyTransactionEconomicsReader(session)
+    with pytest.raises(RuntimeError, match="database snapshot failed"):
+        await reader.establish_performance_read_snapshot()
+    with pytest.raises(RuntimeError, match="initial repeatable snapshot"):
+        await reader.capture_performance_source_cut(
+            portfolio_id="P1",
+            tenant_id=TEST_TENANT_ID,
+            portfolio_base_currency="USD",
+            start_date=date(2026, 5, 1),
+            end_date=date(2026, 5, 10),
+            as_of_date=date(2026, 5, 10),
+            security_ids=None,
+            transaction_types=None,
+        )
+    assert session.execute.await_count == 1
+
+
+async def test_whole_window_cut_changes_for_outside_page_material_without_timestamp_change():
+    from dataclasses import replace
+
+    from src.services.query_control_plane_service.app.infrastructure.transaction_economics_sources import (  # noqa: E501
+        _booked_transaction_economics,
+    )
+
+    first = _booked_transaction_economics(_performance_economics_transaction("TX-A"), costs=())
+    last = replace(first, transaction_id="TX-Z")
+    scope = dict(
+        portfolio_id="P1",
+        tenant_id=TEST_TENANT_ID,
+        start_date=date(2026, 5, 1),
+        end_date=date(2026, 5, 10),
+        as_of_date=date(2026, 5, 10),
+        security_ids=None,
+        transaction_types=None,
+    )
+
+    async def capture(rows, base_currency="USD"):
+        session = AsyncMock(spec=AsyncSession)
+        session.in_transaction.return_value = False
+        reader = SqlAlchemyTransactionEconomicsReader(session)
+        await reader.establish_performance_read_snapshot()
+        page_reader = reader.list_performance_component_economics_evidence
+        window_reader = AsyncMock(return_value=rows)
+        reader.list_performance_component_economics_evidence = window_reader
+        cut = await reader.capture_performance_source_cut(
+            **scope,
+            portfolio_base_currency=base_currency,
+        )
+        window_reader.assert_awaited_once_with(**scope, after_key=(), limit=None)
+        reader.list_performance_component_economics_evidence = page_reader
+        page = await reader.list_performance_component_economics_evidence(**scope, limit=1)
+        continuation = await reader.list_performance_component_economics_evidence(
+            **scope,
+            after_key=(
+                first.security_id.strip(),
+                first.transaction_date.date().isoformat(),
+                "TX-A",
+            ),
+            limit=1,
+        )
+        assert page == [first]
+        assert continuation == [rows[1]]
+        assert session.execute.await_count == 1  # Snapshot only; cached pages do not rescan.
+        with pytest.raises(RuntimeError, match="scope differs"):
+            await reader.list_performance_component_economics_evidence(
+                **(scope | {"tenant_id": TenantId("foreign")}),
+                limit=1,
+            )
+        return cut
+
+    original_cut = await capture([first, last])
+    changed = replace(last, gross_transaction_amount=last.gross_transaction_amount + Decimal("1"))
+    assert changed.updated_at == last.updated_at
+    assert await capture([first, changed]) != original_cut
+    assert await capture([first, last], "EUR") != original_cut
+    assert await capture([first, last]) == original_cut
+
+
 @pytest.fixture
 def mock_db_session() -> AsyncMock:
     session = AsyncMock(spec=AsyncSession)

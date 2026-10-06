@@ -25,6 +25,73 @@ from tests.test_support.tenant import TEST_TENANT_CONTEXT
 pytestmark = pytest.mark.asyncio
 
 
+async def test_exact_record_foreign_portfolio_stops_after_snapshot_and_admission():
+    repo = AsyncMock(spec=TransactionRepository)
+    events = []
+    repo.establish_transaction_ledger_read_snapshot.side_effect = lambda: events.append("snapshot")
+
+    async def refuse(portfolio_id, *, tenant_id):
+        events.append("admission")
+        assert tenant_id == TEST_TENANT_CONTEXT.tenant_id
+        return False
+
+    repo.portfolio_exists.side_effect = refuse
+    service = TransactionService(AsyncMock(spec=AsyncSession))
+    service.repo = repo
+    with pytest.raises(LookupError):
+        await service.get_transaction_record(
+            portfolio_id="foreign",
+            transaction_id="secret",
+            tenant_context=TEST_TENANT_CONTEXT,
+            source_evidence_selection="revision",
+            source_revision_id="foreign-revision",
+        )
+    assert events == ["snapshot", "admission"]
+    repo.get_latest_business_date.assert_not_awaited()
+    repo.get_transactions.assert_not_awaited()
+    repo.get_transaction_ledger_input_evidence.assert_not_awaited()
+    repo.get_latest_fx_rate.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "selection,revision",
+    [("latest", None), ("revision", None), ("original", "r1"), ("current", "r1")],
+)
+async def test_exact_record_refuses_unsupported_or_unbound_selection_before_database(
+    selection, revision
+):
+    service = TransactionService(AsyncMock(spec=AsyncSession))
+    service.repo = AsyncMock(spec=TransactionRepository)
+    with pytest.raises(ValueError, match="source evidence selection"):
+        await service.get_transaction_record(
+            portfolio_id="P1",
+            transaction_id="T1",
+            tenant_context=TEST_TENANT_CONTEXT,
+            source_evidence_selection=selection,
+            source_revision_id=revision,
+        )
+    service.repo.establish_transaction_ledger_read_snapshot.assert_not_awaited()
+
+
+async def test_exact_record_missing_context_or_failed_snapshot_cannot_read_source():
+    service = TransactionService(AsyncMock(spec=AsyncSession))
+    service.repo = AsyncMock(spec=TransactionRepository)
+    with pytest.raises(ValueError, match="Admitted tenant context"):
+        await service.get_transaction_record(
+            portfolio_id="P1", transaction_id="T1", tenant_context=None
+        )
+    service.repo.establish_transaction_ledger_read_snapshot.assert_not_awaited()
+    service.repo.establish_transaction_ledger_read_snapshot.side_effect = RuntimeError(
+        "private snapshot detail"
+    )
+    with pytest.raises(TransactionRecordUnavailableError, match="temporarily unavailable"):
+        await service.get_transaction_record(
+            portfolio_id="P1", transaction_id="T1", tenant_context=TEST_TENANT_CONTEXT
+        )
+    service.repo.portfolio_exists.assert_not_awaited()
+    service.repo.get_transactions.assert_not_awaited()
+
+
 def _input_evidence(
     transaction_count: int,
     latest_evidence_timestamp: datetime | None = None,
@@ -37,6 +104,7 @@ def _input_evidence(
         transaction_cost_digest="cost-digest" if transaction_count else None,
         selected_cashflow_digest="cashflow-digest" if transaction_count else None,
         selected_fx_rate_digest=selected_fx_rate_digest,
+        source_cut_sha256="a" * 64,
     )
 
 
@@ -164,6 +232,7 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
         # ASSERT
         mock_transaction_repo.establish_transaction_ledger_read_snapshot.assert_awaited_once_with()
         expected_filters = TransactionLedgerFilters(
+            tenant_id=TEST_TENANT_CONTEXT.tenant_id,
             portfolio_id=params["portfolio_id"],
             instrument_id=params["instrument_id"],
             security_id=params["security_id"],
@@ -245,6 +314,7 @@ async def test_get_transaction_record_returns_one_portfolio_owned_record_with_pr
     ):
         service = TransactionService(AsyncMock(spec=AsyncSession))
         response = await service.get_transaction_record(
+            tenant_context=TEST_TENANT_CONTEXT,
             portfolio_id="P1",
             transaction_id="T1",
             as_of_date=date(2025, 1, 15),
@@ -252,6 +322,7 @@ async def test_get_transaction_record_returns_one_portfolio_owned_record_with_pr
         )
 
     filters = TransactionLedgerFilters(
+        tenant_id=TEST_TENANT_CONTEXT.tenant_id,
         portfolio_id="P1",
         transaction_id="T1",
         as_of_date=date(2025, 1, 15),
@@ -276,7 +347,9 @@ async def test_get_transaction_record_returns_one_portfolio_owned_record_with_pr
         skip=0,
         limit=2,
     )
-    mock_transaction_repo.portfolio_exists.assert_not_awaited()
+    mock_transaction_repo.portfolio_exists.assert_awaited_once_with(
+        "P1", tenant_id=TEST_TENANT_CONTEXT.tenant_id
+    )
 
 
 async def test_get_projected_transaction_record_binds_conversion_and_proof_to_trade_date(
@@ -306,6 +379,7 @@ async def test_get_projected_transaction_record_binds_conversion_and_proof_to_tr
     ):
         service = TransactionService(AsyncMock(spec=AsyncSession))
         response = await service.get_transaction_record(
+            tenant_context=TEST_TENANT_CONTEXT,
             portfolio_id="P1",
             transaction_id="T1",
             include_projected=True,
@@ -317,6 +391,7 @@ async def test_get_projected_transaction_record_binds_conversion_and_proof_to_tr
     assert response.transaction.gross_transaction_amount_reporting_currency == Decimal("1360.00")
     assert response.transaction.trade_fee_reporting_currency == Decimal("18.750")
     filters = TransactionLedgerFilters(
+        tenant_id=TEST_TENANT_CONTEXT.tenant_id,
         portfolio_id="P1",
         transaction_id="T1",
         as_of_date=None,
@@ -346,12 +421,14 @@ async def test_get_transaction_record_hides_absent_and_wrong_portfolio_identity(
             match="Transaction record not found for requested portfolio",
         ):
             await service.get_transaction_record(
+                tenant_context=TEST_TENANT_CONTEXT,
                 portfolio_id="OTHER-PORTFOLIO",
                 transaction_id="T1",
                 as_of_date=date(2025, 1, 15),
             )
 
     filters = TransactionLedgerFilters(
+        tenant_id=TEST_TENANT_CONTEXT.tenant_id,
         portfolio_id="OTHER-PORTFOLIO",
         transaction_id="T1",
         as_of_date=date(2025, 1, 15),
@@ -365,7 +442,10 @@ async def test_get_transaction_record_hides_absent_and_wrong_portfolio_identity(
         skip=0,
         limit=2,
     )
-    mock_transaction_repo.portfolio_exists.assert_not_awaited()
+    mock_transaction_repo.portfolio_exists.assert_awaited_once_with(
+        "OTHER-PORTFOLIO",
+        tenant_id=TEST_TENANT_CONTEXT.tenant_id,
+    )
 
 
 async def test_get_transaction_record_maps_database_failure_to_unavailable(
@@ -386,6 +466,7 @@ async def test_get_transaction_record_maps_database_failure_to_unavailable(
             match="temporarily unavailable",
         ):
             await service.get_transaction_record(
+                tenant_context=TEST_TENANT_CONTEXT,
                 portfolio_id="P1",
                 transaction_id="T1",
                 as_of_date=date(2025, 1, 15),
@@ -416,6 +497,7 @@ async def test_get_transaction_record_maps_fx_source_failure_to_unavailable(
             match="temporarily unavailable",
         ):
             await service.get_transaction_record(
+                tenant_context=TEST_TENANT_CONTEXT,
                 portfolio_id="P1",
                 transaction_id="T1",
                 as_of_date=date(2025, 1, 15),
@@ -449,6 +531,7 @@ async def test_get_transaction_record_maps_persisted_mapping_failure_to_unavaila
             match="temporarily unavailable",
         ):
             await service.get_transaction_record(
+                tenant_context=TEST_TENANT_CONTEXT,
                 portfolio_id="P1",
                 transaction_id="T1",
                 as_of_date=date(2025, 1, 15),
@@ -465,6 +548,7 @@ async def test_get_transaction_record_rejects_invalid_caller_currency_before_sou
         service = TransactionService(AsyncMock(spec=AsyncSession))
         with pytest.raises(ValueError):
             await service.get_transaction_record(
+                tenant_context=TEST_TENANT_CONTEXT,
                 portfolio_id="P1",
                 transaction_id="T1",
                 as_of_date=date(2025, 1, 15),
@@ -489,6 +573,7 @@ async def test_get_transaction_record_fails_closed_on_non_unique_evidence(
             match="inconsistent identity evidence",
         ):
             await service.get_transaction_record(
+                tenant_context=TEST_TENANT_CONTEXT,
                 portfolio_id="P1",
                 transaction_id="T1",
                 as_of_date=date(2025, 1, 15),
@@ -686,7 +771,9 @@ async def test_get_transactions_include_projected_skips_business_date_default(
         )
 
         mock_transaction_repo.get_latest_business_date.assert_not_awaited()
-        projected_filters = TransactionLedgerFilters(portfolio_id="P1")
+        projected_filters = TransactionLedgerFilters(
+            portfolio_id="P1", tenant_id=TEST_TENANT_CONTEXT.tenant_id
+        )
         mock_transaction_repo.get_transaction_ledger_input_evidence.assert_awaited_once_with(
             filters=projected_filters,
             reporting_currency=None,

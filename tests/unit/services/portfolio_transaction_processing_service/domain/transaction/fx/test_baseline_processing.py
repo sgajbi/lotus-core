@@ -122,3 +122,48 @@ def test_baseline_update_preserves_cost_engine_mapping_contract() -> None:
         "realized_fx_pnl_base": Decimal("19"),
         "realized_total_pnl_base": Decimal("37"),
     }
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    [
+        "realized_capital_pnl_local",
+        "realized_fx_pnl_local",
+        "realized_total_pnl_local",
+        "realized_capital_pnl_base",
+        "realized_fx_pnl_base",
+        "realized_total_pnl_base",
+    ],
+)
+def test_v2_receipt_distinguishes_absent_from_explicit_zero_before_defaulting(
+    field_name: str,
+) -> None:
+    absent = _fx_transaction(fx_realized_pnl_mode="UPSTREAM_PROVIDED")
+    explicit = replace(absent, **{field_name: Decimal("0")})
+    absent_output = build_fx_processed_transaction(absent)
+    explicit_output = build_fx_processed_transaction(explicit)
+
+    assert replace(absent_output, calculation_lineage=None) == replace(
+        explicit_output, calculation_lineage=None
+    )
+    assert absent_output.calculation_lineage is not None
+    assert explicit_output.calculation_lineage is not None
+    assert absent_output.calculation_lineage.algorithm_version == 2
+    assert (
+        absent_output.calculation_lineage.input_content_hash
+        != explicit_output.calculation_lineage.input_content_hash
+    )
+
+
+def test_v2_receipt_preserves_original_signed_values_even_when_none_mode_discards_them() -> None:
+    positive = build_fx_processed_transaction(_fx_transaction(realized_fx_pnl_local=Decimal("12")))
+    negative = build_fx_processed_transaction(_fx_transaction(realized_fx_pnl_local=Decimal("-12")))
+    assert replace(positive, calculation_lineage=None) == replace(
+        negative, calculation_lineage=None
+    )
+    assert positive.calculation_lineage is not None
+    assert negative.calculation_lineage is not None
+    assert (
+        positive.calculation_lineage.input_content_hash
+        != negative.calculation_lineage.input_content_hash
+    )

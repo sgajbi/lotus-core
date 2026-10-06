@@ -21,6 +21,27 @@
     "unknown_field_policy": "forbid"
   },
   "evidence_profiles": {
+    "transaction_source_confirmation": {
+      "producer_evidence": [
+        "tests/unit/services/ingestion_service/infrastructure/test_source_correction_job_creation.py",
+        "tests/integration/services/persistence_service/test_transaction_source_correction_postgresql.py"
+      ],
+      "consumer_evidence": [
+        "tests/unit/services/persistence_service/test_consumer_manager_source_correction.py",
+        "tests/unit/libs/portfolio-common/event_contracts/test_transaction_source_corrections.py",
+        "tests/integration/services/persistence_service/test_transaction_source_correction_postgresql.py"
+      ],
+      "header_and_lineage_evidence": [
+        "tests/unit/libs/portfolio-common/event_contracts/test_transaction_source_corrections.py",
+        "tests/unit/libs/portfolio-common/test_event_supportability.py",
+        "tests/unit/libs/portfolio-common/test_config.py"
+      ],
+      "dlq_replay_evidence": [
+        "tests/unit/services/persistence_service/test_consumer_manager_source_correction.py",
+        "tests/unit/libs/portfolio-common/test_kafka_consumer.py",
+        "tests/integration/tools/test_dlq_replayer.py"
+      ]
+    },
     "authoritative_price_correction": {
       "producer_evidence": [
         "tests/unit/services/ingestion_service/test_reference_data_ingestion_service.py",
@@ -126,6 +147,8 @@
     }
   },
   "event_families": [
+    {"event_type": "TransactionSourceCorrectionRequested", "topic": "transactions.source_correction.commands", "schema_model": "TransactionSourceCorrectionRequestedEvent", "evidence_profile": "transaction_source_confirmation", "partition_key_policy": "transaction_id"},
+    {"event_type": "TransactionSourceEvidenceChanged", "topic": "transactions.source_evidence.changed", "schema_model": "TransactionSourceEvidenceChangedEvent", "evidence_profile": "transaction_source_confirmation", "partition_key_policy": "transaction_id"},
     {"event_type": "PortfolioIngested", "topic": "portfolio.ingested", "schema_model": "PortfolioEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from portfolio id"},
     {"event_type": "TransactionIngested", "topic": "transaction.ingested", "schema_model": "TransactionEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from transaction or portfolio id"},
     {"event_type": "MarketPricePersisted", "topic": "market_prices.persisted", "schema_model": "MarketPricePersistedEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "security_id"},

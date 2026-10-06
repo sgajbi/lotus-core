@@ -40,13 +40,26 @@
       "rounding": "ROUND_HALF_EVEN",
       "lineage_binding": "required",
       "lineage_boundary_callsites": [
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/source_evidence_revision.py::_verify_v1_fx_source",
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/source_evidence_revision.py::_verify_v2_fx_source",
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/source_evidence_revision.py::source_confirmation_material",
         "src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/amortized_disposal.py::_apply_transaction_overlay",
         "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::CostBasisCalculator.calculate_transaction_costs",
         "src/services/portfolio_transaction_processing_service/app/domain/transaction/fx/baseline_processing.py::build_fx_processed_transaction",
-        "src/services/portfolio_transaction_processing_service/app/domain/transaction/redemption/economics.py::calculate_redemption_economics",
-        "src/services/query_control_plane_service/app/application/transaction_economics/evidence.py::_qualify_retained_fx_source"
+        "src/services/portfolio_transaction_processing_service/app/domain/transaction/redemption/economics.py::calculate_redemption_economics"
       ],
       "lineage_boundary_covered_callsites": {
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/source_evidence_revision.py::_verify_v1_fx_source": [
+          "src/libs/portfolio-common/portfolio_common/domain/transaction/source_evidence_revision.py::_retained_basis",
+          "src/libs/portfolio-common/portfolio_common/domain/transaction/source_evidence_revision.py::retained_fx_output_payload"
+        ],
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/source_evidence_revision.py::_verify_v2_fx_source": [
+          "src/libs/portfolio-common/portfolio_common/domain/transaction/source_evidence_revision.py::_retained_basis",
+          "src/libs/portfolio-common/portfolio_common/domain/transaction/source_evidence_revision.py::retained_fx_output_payload"
+        ],
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/source_evidence_revision.py::source_confirmation_material": [
+          "src/libs/portfolio-common/portfolio_common/domain/transaction/source_evidence_revision.py::retained_fx_output_payload"
+        ],
         "src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/amortized_disposal.py::_apply_transaction_overlay": [
           "src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/amortized_disposal.py::_adjust_realized_value"
         ],
@@ -75,10 +88,6 @@
           "src/services/portfolio_transaction_processing_service/app/domain/transaction/redemption/economics.py::_resolve_principal_proceeds",
           "src/services/portfolio_transaction_processing_service/app/domain/transaction/redemption/economics.py::_resolve_redeemed_quantity",
           "src/services/portfolio_transaction_processing_service/app/domain/transaction/redemption/economics.py::derive_redemption_principal_proceeds_local"
-        ],
-        "src/services/query_control_plane_service/app/application/transaction_economics/evidence.py::_qualify_retained_fx_source": [
-          "src/services/query_control_plane_service/app/application/transaction_economics/evidence.py::_qualified_source_amount",
-          "src/services/query_control_plane_service/app/application/transaction_economics/evidence.py::fx_receipt_output_payload"
         ]
       },
       "lineage_boundary_terminal_callsites": {
@@ -91,12 +100,25 @@
         }
       },
       "lineage_verification_boundaries": {
-        "src/services/query_control_plane_service/app/application/transaction_economics/evidence.py::_qualify_retained_fx_source": {
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/source_evidence_revision.py::_verify_v1_fx_source": {
           "receipt_parameter": "receipt_payload",
           "output_parameter": "ledger_output",
-          "output_canonicalizer": "src/services/query_control_plane_service/app/application/transaction_economics/evidence.py::fx_receipt_output_payload",
+          "output_canonicalizer": "src/libs/portfolio-common/portfolio_common/domain/transaction/source_evidence_revision.py::retained_fx_output_payload",
           "algorithm_id": "foreign-exchange-baseline-processing",
           "algorithm_version": 1
+        },
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/source_evidence_revision.py::_verify_v2_fx_source": {
+          "receipt_parameter": "receipt_payload",
+          "output_parameter": "ledger_output",
+          "output_canonicalizer": "src/libs/portfolio-common/portfolio_common/domain/transaction/source_evidence_revision.py::retained_fx_output_payload",
+          "algorithm_id": "foreign-exchange-baseline-processing",
+          "algorithm_version": 2,
+          "input_verification": {
+            "source_parameter": "raw_source",
+            "source_projector": "src/libs/portfolio-common/portfolio_common/domain/transaction/fx_source_presence.py::fx_original_pnl_values",
+            "input_builder": "src/libs/portfolio-common/portfolio_common/domain/transaction/fx_source_presence.py::fx_source_presence_input_payload",
+            "presence_policy": "fx-original-pnl-presence@2"
+          }
         }
       },
       "lineage_gap_callsites": []

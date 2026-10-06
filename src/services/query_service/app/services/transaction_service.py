@@ -1,9 +1,11 @@
 # services/query-service/app/services/transaction_service.py
 import logging
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 from typing import NoReturn, Optional, cast
 
+from portfolio_common.api_contract.transaction_source_evidence import SourceEvidenceSelection
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.logging_utils import operation_log_extra
@@ -149,6 +151,7 @@ class TransactionService:
             as_of_date=effective_as_of_date,
         )
 
+        ledger_filters = replace(ledger_filters, tenant_id=tenant_context.tenant_id)
         ledger_page = await read_transaction_ledger_page(
             repository=self.repo,
             ledger_filters=ledger_filters,
@@ -187,11 +190,25 @@ class TransactionService:
         *,
         portfolio_id: str,
         transaction_id: str,
+        tenant_context: TenantContext,
         as_of_date: date | None = None,
         include_projected: bool = False,
         reporting_currency: str | None = None,
+        source_evidence_selection: SourceEvidenceSelection = "current",
+        source_revision_id: str | None = None,
     ) -> TransactionRecordResponse:
         """Return one portfolio-owned transaction with complete ledger proof metadata."""
+
+        if not isinstance(tenant_context, TenantContext):
+            raise ValueError("Admitted tenant context is required")
+        if source_evidence_selection not in {"current", "original", "revision"} or (
+            (source_evidence_selection == "revision") != (source_revision_id is not None)
+        ):
+            raise ValueError("Invalid transaction source evidence selection")
+        if source_revision_id is not None and (
+            not source_revision_id.strip() or len(source_revision_id) > 128
+        ):
+            raise ValueError("Invalid transaction source evidence selection")
 
         resolved_reporting_currency = (
             normalize_currency_code(reporting_currency) if reporting_currency is not None else None
@@ -210,6 +227,11 @@ class TransactionService:
         )
         try:
             await self.repo.establish_transaction_ledger_read_snapshot()
+            await ensure_portfolio_exists(
+                repository=self.repo,
+                portfolio_id=portfolio_id,
+                tenant_id=tenant_context.tenant_id,
+            )
             effective_as_of_date = await transaction_ledger_effective_as_of_date(
                 repository=self.repo,
                 as_of_date=as_of_date,
@@ -233,14 +255,25 @@ class TransactionService:
             )
             ledger_page = await read_exact_transaction_ledger_record(
                 repository=self.repo,
-                ledger_filters=ledger_filters,
+                ledger_filters=replace(
+                    ledger_filters,
+                    tenant_id=tenant_context.tenant_id,
+                    source_evidence_selection=source_evidence_selection,
+                    source_revision_id=source_revision_id,
+                ),
                 reporting_currency=resolved_reporting_currency,
             )
-        except SQLAlchemyError as exc:
+        except (SQLAlchemyError, RuntimeError) as exc:
             _raise_transaction_record_unavailable(exc, reason_code="source_query_failed")
 
         if ledger_page.total_count == 0:
             raise LookupError("Transaction record not found for requested portfolio")
+        ledger_filters = replace(
+            ledger_filters,
+            tenant_id=tenant_context.tenant_id,
+            source_evidence_selection=source_evidence_selection,
+            source_revision_id=source_revision_id,
+        )
         if ledger_page.total_count != 1 or len(ledger_page.rows) != 1:
             raise TransactionRecordUnavailableError(
                 "Transaction record source returned inconsistent identity evidence"
@@ -266,6 +299,12 @@ class TransactionService:
             raise TransactionRecordUnavailableError(
                 "Transaction record source returned inconsistent mapped evidence"
             )
+        if source_evidence_selection == "revision" and (
+            records[0].transaction_source_evidence is None
+            or records[0].transaction_source_evidence.status != "CONFIRMED"
+            or records[0].transaction_source_evidence.revision_id != source_revision_id
+        ):
+            raise LookupError("Transaction record not found for requested portfolio")
         try:
             return exact_transaction_record_response(
                 portfolio_id=portfolio_id,

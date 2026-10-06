@@ -70,6 +70,8 @@ SUITES: dict[str, list[str]] = {
         "test_redemption_correction_clears_superseded_terms_and_interest_cash_link",
     ],
     "critical-db-coverage": [
+        "tests/integration/services/persistence_service/"
+        "test_transaction_source_correction_postgresql.py",
         "tests/integration/services/query_control_plane_service/"
         "test_historical_fx_evidence_postgresql.py",
         "tests/integration/services/portfolio_transaction_processing_service/"
@@ -147,6 +149,9 @@ SUITES: dict[str, list[str]] = {
     ],
     "critical-lifecycle-db": ["tests/integration"],
     "query-authority-db-contract": [
+        "tests/integration/services/persistence_service/"
+        "test_transaction_source_correction_postgresql.py::"
+        "test_actual_pg_source_confirmation_qcp_ledger_cut",
         "tests/integration/services/query_control_plane_service/"
         "test_historical_fx_evidence_postgresql.py",
         "tests/integration/services/query_control_plane_service/"
@@ -167,6 +172,9 @@ SUITES: dict[str, list[str]] = {
     "integration-lite": _discover_integration_lite(),
     "integration-all": ["tests/integration"],
     "ops-contract": [
+        "tests/unit/services/ingestion_service/routers/test_transaction_source_corrections.py",
+        "tests/unit/services/event_replay_service/infrastructure/"
+        "test_source_correction_operation_status.py",
         "tests/integration/services/ingestion_service/test_ingestion_main_app_contract.py",
         "tests/integration/services/query_control_plane_service/test_control_plane_app.py::"
         "test_openapi_fully_documents_performance_component_economics_schema_family",
@@ -262,6 +270,8 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/services/portfolio_transaction_processing_service/test_int_interest_negative_pre_fee_net.py",
     ],
     "transaction-fx-contract": [
+        "tests/integration/services/persistence_service/"
+        "test_transaction_source_correction_postgresql.py",
         "tests/integration/services/persistence_service/test_fx_source_admission_postgresql.py",
         "tests/unit/transaction_specs/test_fx_slice0_characterization.py",
         "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/fx/test_validation.py",

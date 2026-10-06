@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable
@@ -49,6 +50,7 @@ _PerformanceEconomicsCursor = tuple[str, str, str] | tuple[()]
 class PerformanceComponentEconomicsPageScope:
     request_fingerprint: str
     after_key: _PerformanceEconomicsCursor
+    source_cut_sha256: str | None = None
 
 
 def performance_component_economics_page_scope(
@@ -56,6 +58,7 @@ def performance_component_economics_page_scope(
     portfolio_id: str,
     request: PerformanceComponentEconomicsRequest,
     cursor: dict[str, Any],
+    source_cut_sha256: str | None = None,
 ) -> PerformanceComponentEconomicsPageScope:
     request_fingerprint = performance_component_economics_request_fingerprint(
         portfolio_id=portfolio_id, request=request
@@ -63,12 +66,27 @@ def performance_component_economics_page_scope(
     token_scope = cursor.get("scope_fingerprint")
     if token_scope and token_scope != request_fingerprint:
         raise ValueError("Performance component economics page token does not match request scope.")
-    last_row_key = tuple(cursor.get("last_row_key") or ())
-    if len(last_row_key) not in (0, 3):
+    raw_key = cursor.get("last_row_key") or ()
+    if not isinstance(raw_key, (list, tuple)):
         raise ValueError("Performance component economics page token has an invalid row key.")
+    last_row_key = tuple(raw_key)
+    if len(last_row_key) not in (0, 3) or any(
+        not isinstance(value, str) or not value for value in last_row_key
+    ):
+        raise ValueError("Performance component economics page token has an invalid row key.")
+    if cursor and (
+        not last_row_key
+        or token_scope != request_fingerprint
+        or source_cut_sha256 is None
+        or cursor.get("source_cut_sha256") != source_cut_sha256
+    ):
+        raise ValueError(
+            "Performance component economics page token source evidence changed or is unbound."
+        )
     return PerformanceComponentEconomicsPageScope(
         request_fingerprint=request_fingerprint,
         after_key=last_row_key,
+        source_cut_sha256=source_cut_sha256,
     )
 
 
@@ -80,9 +98,12 @@ def performance_component_economics_next_page_token_payload(
 ) -> dict[str, Any] | None:
     if not has_more or not rows:
         return None
+    if page_scope.source_cut_sha256 is None:
+        raise ValueError("Performance component economics continuation requires a source cut.")
     last_row = rows[-1]
     return {
         "scope_fingerprint": page_scope.request_fingerprint,
+        "source_cut_sha256": page_scope.source_cut_sha256,
         "last_row_key": [
             last_row.security_id,
             last_row.transaction_date.isoformat(),
@@ -118,6 +139,8 @@ async def resolve_performance_component_economics_response(
     encode_page_token: Callable[[dict[str, Any]], str],
     clock: Callable[[], datetime],
 ) -> PerformanceComponentEconomicsResponse:
+    # This must be the first database operation, including portfolio admission reads.
+    await repository.establish_performance_read_snapshot()
     if not await repository.portfolio_exists(portfolio_id, tenant_id=tenant_id):
         raise LookupError(f"Portfolio with id {portfolio_id} not found")
 
@@ -127,10 +150,28 @@ async def resolve_performance_component_economics_response(
     if portfolio_base_currency is None:
         raise LookupError(f"Portfolio with id {portfolio_id} not found")
     normalized_portfolio_base_currency = normalize_currency_code(portfolio_base_currency)
+    source_cut_sha256 = await repository.capture_performance_source_cut(
+        portfolio_id=portfolio_id,
+        tenant_id=tenant_id,
+        portfolio_base_currency=normalized_portfolio_base_currency,
+        start_date=request.window.start_date,
+        end_date=request.window.end_date,
+        as_of_date=request.as_of_date,
+        security_ids=request.security_ids,
+        transaction_types=request.transaction_types,
+    )
+    if not isinstance(source_cut_sha256, str) or not re.fullmatch(
+        "[0-9a-f]{64}", source_cut_sha256
+    ):
+        raise RuntimeError("Performance source snapshot did not produce a valid source cut")
+    cursor = decode_page_token(request.page.page_token)
+    if request.page.page_token and not cursor:
+        raise ValueError("Performance component economics page token source evidence is unbound.")
     page_scope = performance_component_economics_page_scope(
         portfolio_id=portfolio_id,
         request=request,
-        cursor=decode_page_token(request.page.page_token),
+        cursor=cursor,
+        source_cut_sha256=source_cut_sha256,
     )
     transactions = await repository.list_performance_component_economics_evidence(
         portfolio_id=portfolio_id,
@@ -159,6 +200,7 @@ async def resolve_performance_component_economics_response(
         transactions=page_transactions,
         portfolio_base_currency=normalized_portfolio_base_currency,
         request_scope_fingerprint=page_scope.request_fingerprint,
+        source_cut_sha256=source_cut_sha256,
         has_more=has_more,
         next_page_token=next_page_token,
         is_initial_page=not page_scope.after_key,

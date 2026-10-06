@@ -1,16 +1,16 @@
 """SQLAlchemy source adapter for transaction-economics evidence products."""
 
-from collections import defaultdict
+from dataclasses import asdict
 from datetime import UTC, date, datetime, time, timedelta
 from typing import cast
 
 from portfolio_common.database_models import (
     Cashflow,
-    OutboxEvent,
     Portfolio,
     Transaction,
     TransactionCost,
 )
+from portfolio_common.domain.calculation_lineage import canonical_content_hash
 from portfolio_common.domain.tenant import TenantId
 from portfolio_common.domain.transaction.fx_source_admission import FX_SOURCE_ADMISSION_TYPES
 from portfolio_common.identifiers import normalize_lookup_identifier
@@ -19,30 +19,19 @@ from portfolio_common.infrastructure.transaction_cost_snapshot import (
     transaction_cost_snapshot_lateral,
     transaction_cost_snapshots,
 )
-from sqlalchemy import and_, exists, func, or_, select, true
+from portfolio_common.infrastructure.transaction_source_evidence import (
+    SqlAlchemyTransactionSourceEvidence,
+)
+from sqlalchemy import and_, exists, func, or_, select, text, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, contains_eager
 
-from ..application.transaction_economics.evidence import qualify_fx_pnl_source_evidence
 from ..domain.transaction_economics import (
     BookedTransactionEconomics,
     FxPnlSourceEvidence,
     TransactionCashflowEvidence,
     TransactionCostComponentEvidence,
 )
-
-_FX_RECEIPT_TECHNICAL_FIELDS = frozenset(
-    {"id", "updated_at", "payload_fingerprint", "calculation_lineage"}
-)
-
-
-def _fx_receipt_ledger_output(transaction: Transaction, tenant_id: TenantId) -> dict[str, object]:
-    return {
-        column.name: getattr(transaction, column.name)
-        for column in Transaction.__table__.columns
-        if column.name not in _FX_RECEIPT_TECHNICAL_FIELDS
-    } | {"tenant_id": tenant_id.value}
-
 
 def _start_of_day(value: date) -> datetime:
     return datetime.combine(value, time.min, tzinfo=UTC)
@@ -179,6 +168,72 @@ class SqlAlchemyTransactionEconomicsReader:
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._performance_snapshot = False
+        self._performance_window: list[BookedTransactionEconomics] | None = None
+        self._performance_scope: tuple | None = None
+
+    async def establish_performance_read_snapshot(self) -> None:
+        if self._session.in_transaction():
+            raise RuntimeError("Performance snapshot must precede every database read")
+        await self._session.execute(
+            text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        )
+        self._performance_snapshot = True
+
+    async def capture_performance_source_cut(
+        self,
+        *,
+        portfolio_id: str,
+        tenant_id: TenantId,
+        portfolio_base_currency: str,
+        start_date: date,
+        end_date: date,
+        as_of_date: date,
+        security_ids: list[str] | None,
+        transaction_types: list[str] | None,
+    ) -> str:
+        if not self._performance_snapshot or self._performance_window is not None:
+            raise RuntimeError("Performance source cut requires an initial repeatable snapshot")
+        rows = await self.list_performance_component_economics_evidence(
+            portfolio_id=portfolio_id,
+            tenant_id=tenant_id,
+            start_date=start_date,
+            end_date=end_date,
+            as_of_date=as_of_date,
+            security_ids=security_ids,
+            transaction_types=transaction_types,
+            after_key=(),
+            limit=None,
+        )
+        self._performance_scope = (
+            portfolio_id,
+            tenant_id.value,
+            start_date,
+            end_date,
+            as_of_date,
+            tuple(sorted(security_ids or [])),
+            tuple(sorted(transaction_types or [])),
+        )
+        self._performance_window = rows
+        material = []
+        for row in rows:
+            payload = asdict(row)
+            evidence = row.fx_pnl_source_evidence
+            if evidence is not None and evidence.source_evidence is not None:
+                payload["fx_pnl_source_evidence"]["source_evidence"] = (
+                    evidence.source_evidence.model_dump(mode="python")
+                )
+            material.append(payload)
+        return cast(
+            str,
+            canonical_content_hash(
+                {
+                    "scope": self._performance_scope,
+                    "portfolio_base_currency": portfolio_base_currency,
+                    "matching_window": material,
+                }
+            ),
+        )
 
     async def _fx_source_evidence(
         self, transactions: list[Transaction], *, portfolio_id: str, tenant_id: TenantId
@@ -191,41 +246,24 @@ class SqlAlchemyTransactionEconomicsReader:
         ]
         if not fx_transactions:
             return {}
-        source_rows = await self._session.execute(
-            select(OutboxEvent.payload, Portfolio.tenant_id)
-            .join(Portfolio, Portfolio.portfolio_id == OutboxEvent.aggregate_id)
-            .where(
-                OutboxEvent.aggregate_type == "RawTransaction",
-                OutboxEvent.aggregate_id == portfolio_id,
-                OutboxEvent.event_type == "RawTransactionPersisted",
-                Portfolio.tenant_id == tenant_id.value,
-                OutboxEvent.payload["portfolio_id"].as_string() == Portfolio.portfolio_id,
-                OutboxEvent.payload["transaction_id"]
-                .as_string()
-                .in_([row.transaction_id for row in fx_transactions]),
-            )
+        proofs = await SqlAlchemyTransactionSourceEvidence(self._session).read(
+            tenant_id=tenant_id.value,
+            portfolio_id=portfolio_id,
+            transaction_ids=[row.transaction_id for row in fx_transactions],
+            consumer="core-qcp",
         )
-        sources: dict[str, list[tuple[object, str]]] = defaultdict(list)
-        for payload, source_tenant in source_rows.all():
-            sources[str(payload["transaction_id"])].append((payload, source_tenant))
         return {
-            row.transaction_id: qualify_fx_pnl_source_evidence(
-                raw_source=(
-                    sources[row.transaction_id][0][0]
-                    if len(sources[row.transaction_id]) == 1
-                    else None
-                ),
-                ledger_output=_fx_receipt_ledger_output(row, tenant_id),
-                stored_fingerprint=row.payload_fingerprint,
-                receipt_payload=row.calculation_lineage,
-                tenant_id=tenant_id.value,
-                source_portfolio_tenant_id=(
-                    sources[row.transaction_id][0][1]
-                    if len(sources[row.transaction_id]) == 1
-                    else None
-                ),
+            transaction_id: FxPnlSourceEvidence(
+                proof.realized_fx_pnl_local,
+                proof.realized_fx_pnl_base,
+                "FX_SOURCE_AUTHORITY_UNAVAILABLE"
+                if proof.status == "UNAVAILABLE"
+                else "FX_SOURCE_INCOMPLETE"
+                if proof.status == "INCOMPLETE"
+                else "FX_SOURCE_QUALIFIED",
+                proof,
             )
-            for row in fx_transactions
+            for transaction_id, proof in proofs.items()
         }
 
     async def portfolio_exists(self, portfolio_id: str, *, tenant_id: TenantId) -> bool:
@@ -470,6 +508,30 @@ class SqlAlchemyTransactionEconomicsReader:
         after_key: tuple[str, str, str] | tuple[()] = (),
         limit: int | None = None,
     ) -> list[BookedTransactionEconomics]:
+        if self._performance_window is not None:
+            scope = (
+                portfolio_id,
+                tenant_id.value,
+                start_date,
+                end_date,
+                as_of_date,
+                tuple(sorted(security_ids or [])),
+                tuple(sorted(transaction_types or [])),
+            )
+            if scope != self._performance_scope:
+                raise RuntimeError("Performance page scope differs from captured source cut")
+            rows = [
+                row
+                for row in self._performance_window
+                if not after_key
+                or (
+                    row.security_id.strip(),
+                    row.transaction_date.date().isoformat(),
+                    row.transaction_id,
+                )
+                > after_key
+            ]
+            return rows if limit is None else rows[:limit]
         security_order = func.trim(Transaction.security_id).asc()
         transaction_date_order = func.date(Transaction.transaction_date).asc()
         transaction_id_order = Transaction.transaction_id.asc()

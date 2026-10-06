@@ -27,6 +27,68 @@ from tests.test_support.tenant import TEST_TENANT_CONTEXT, TEST_TENANT_HEADERS
 pytestmark = pytest.mark.asyncio
 
 
+async def test_exact_record_actual_middleware_refuses_missing_tenant_before_service():
+    service = MagicMock()
+    service.get_transaction_record = AsyncMock()
+    app.dependency_overrides[get_transaction_service] = lambda: service
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.get("/portfolios/P1/transactions/T1")
+        assert response.status_code == 401
+        service.get_transaction_record.assert_not_awaited()
+    finally:
+        app.dependency_overrides.pop(get_transaction_service, None)
+
+
+async def test_exact_record_actual_route_and_service_hide_foreign_owner_before_source_reads():
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from src.services.query_service.app.repositories.transaction_repository import (
+        TransactionRepository,
+    )
+    from src.services.query_service.app.services.transaction_service import TransactionService
+
+    service = TransactionService(AsyncMock(spec=AsyncSession))
+    repository = AsyncMock(spec=TransactionRepository)
+    service.repo = repository
+    events = []
+    repository.establish_transaction_ledger_read_snapshot.side_effect = lambda: events.append(
+        "snapshot"
+    )
+
+    async def refuse(portfolio_id, *, tenant_id):
+        events.append("admission")
+        assert tenant_id.value == "foreign-tenant"
+        return False
+
+    repository.portfolio_exists.side_effect = refuse
+    app.dependency_overrides[get_transaction_service] = lambda: service
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://test",
+            headers={"X-Tenant-Id": "foreign-tenant"},
+        ) as client:
+            response = await client.get(
+                "/portfolios/P1/transactions/T1",
+                params={
+                    "source_evidence_selection": "revision",
+                    "source_revision_id": "foreign-or-unknown",
+                },
+            )
+        assert response.status_code == 404
+        assert "foreign-or-unknown" not in response.text
+        assert events == ["snapshot", "admission"]
+        repository.get_latest_business_date.assert_not_awaited()
+        repository.get_transactions.assert_not_awaited()
+        repository.get_transaction_ledger_input_evidence.assert_not_awaited()
+        repository.get_latest_fx_rate.assert_not_awaited()
+    finally:
+        app.dependency_overrides.pop(get_transaction_service, None)
+
+
 @pytest_asyncio.fixture
 async def async_test_client():
     mock_transaction_service = MagicMock()
@@ -199,12 +261,17 @@ async def test_get_transaction_record_returns_exact_source_product(async_test_cl
     assert payload["transaction"]["transaction_id"] == "T1"
     assert payload["reason_codes"] == ["TRANSACTION_LEDGER_READY"]
     mock_service.get_transaction_record.assert_awaited_once_with(
+        tenant_context=ANY,
+        source_evidence_selection="current",
+        source_revision_id=None,
         portfolio_id="P1",
         transaction_id="T1",
         as_of_date=date(2025, 8, 1),
         include_projected=True,
         reporting_currency="SGD",
     )
+    forwarded = mock_service.get_transaction_record.await_args.kwargs["tenant_context"]
+    assert forwarded.tenant_id == TEST_TENANT_CONTEXT.tenant_id
     mock_service.get_transactions.assert_not_awaited()
 
 

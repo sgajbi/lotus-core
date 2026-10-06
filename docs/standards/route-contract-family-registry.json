@@ -29,6 +29,7 @@
         "GET /ingestion/jobs/{job_id}/evidence",
         "GET /ingestion/jobs/{job_id}/failures",
         "GET /ingestion/jobs/{job_id}/records",
+        "GET /ingestion/jobs/{job_id}/source-correction",
         "GET /ingestion/ops/control",
         "POST /ingestion/dlq/consumer-events/{event_id}/replay",
         "POST /ingestion/jobs/{job_id}/bookkeeping/repair",
@@ -48,6 +49,7 @@
     },
     "ingestion_service": {
       "Write Ingress": [
+        "POST /ingest/transactions/{transaction_id}/source-evidence",
         "POST /ingest/authoritative-market-price-source-facts",
         "POST /ingest/benchmark-assignments",
         "POST /ingest/benchmark-compositions",
