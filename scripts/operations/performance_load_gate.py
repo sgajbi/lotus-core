@@ -16,10 +16,12 @@ import os
 import sys
 import time
 import zlib
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, TypedDict
+from urllib.parse import urlsplit
 
 import requests  # type: ignore[import-untyped]
 from portfolio_common.db import create_sync_database_engine
@@ -52,7 +54,7 @@ from scripts.operations.transaction_processing_load_support import (  # noqa: E4
     seed_load_context as _seed_load_context,
 )
 from scripts.operations.transaction_processing_load_support import (  # noqa: E402
-    transaction_processing_operation_count as _transaction_processing_operation_count,
+    transaction_processing_operation_observation as _transaction_processing_operation_observation,
 )
 from scripts.operations.transaction_processing_load_support import (  # noqa: E402
     wait_for_transaction_processing as _wait_for_transaction_processing,
@@ -210,6 +212,7 @@ def _trigger_replay_storm(
     transaction_ids: list[str],
     bursts: int,
     burst_size: int,
+    on_acknowledgement: Callable[[dict[str, Any]], None] | None = None,
 ) -> int:
     if not transaction_ids:
         return 0
@@ -219,31 +222,58 @@ def _trigger_replay_storm(
         selected = transaction_ids[start : start + burst_size]
         if not selected:
             selected = transaction_ids[:burst_size]
-        response = requests.post(
-            f"{ingestion_base_url}/reprocess/transactions",
-            json={"transaction_ids": selected},
-            headers=LOAD_TENANT_HEADERS,
-            timeout=30,
+        evidence: dict[str, Any] = {
+            "submitted_ids": selected,
+            "submitted_count": len(selected),
+            "http_status": None,
+            "accepted_ids": "MISSING",
+            "durable_completion_receipts": "MISSING",
+            "accepted_count": None,
+            "acceptance_status": "submitted",
+            "acknowledgement": {},
+        }
+        if on_acknowledgement:
+            on_acknowledgement(evidence)
+        try:
+            response = requests.post(
+                f"{ingestion_base_url}/reprocess/transactions",
+                json={"transaction_ids": selected},
+                headers=LOAD_TENANT_HEADERS,
+                timeout=30,
+            )
+        except requests.RequestException as exc:
+            evidence.update(acceptance_status="transport_failure", reason=type(exc).__name__)
+            raise RuntimeError("Replay request transport failed") from None
+        evidence.update(accepted_batch_evidence(selected, response))
+        evidence["http_status"] = response.status_code
+        try:
+            accepted_count = response.json().get("accepted_count")
+        except (ValueError, AttributeError, TypeError):
+            accepted_count = None
+        valid_count = type(accepted_count) is int and 0 <= accepted_count <= len(selected)
+        evidence["accepted_count"] = (
+            accepted_count if valid_count and response.status_code == 202 else None
+        )
+        evidence["acceptance_status"] = (
+            "observed_count_only"
+            if valid_count and response.status_code == 202
+            else "conflict"
+            if response.status_code == 409
+            else "refused_or_invalid"
         )
         if response.status_code not in {202, 409}:
-            raise RuntimeError(
-                f"Replay request failed with status={response.status_code}: {response.text[:300]}"
-            )
+            raise RuntimeError(f"Replay request failed with status={response.status_code}")
         if response.status_code == 409:
             continue
-        accepted_count = response.json().get("accepted_count")
-        if not isinstance(accepted_count, int) or not 0 <= accepted_count <= len(selected):
-            raise RuntimeError(
-                "Replay request returned an invalid accepted_count: "
-                f"accepted_count={accepted_count!r}, requested={len(selected)}"
-            )
+        if not valid_count:
+            raise RuntimeError("Replay request returned an invalid accepted_count")
         submitted += accepted_count
     return submitted
 
 
-def _repair_replay_completion_count(*, transaction_processing_base_url: str) -> int:
+def _repair_replay_completion_count(*, transaction_processing_base_url: str) -> dict[str, Any]:
     """Return completed canonical repairs, which finish as processed transactions."""
-    return _transaction_processing_operation_count(
+    return _transaction_processing_operation_observation(
         transaction_processing_base_url=transaction_processing_base_url,
         stage="transaction",
         outcome="processed",
@@ -255,6 +285,8 @@ def _wait_for_repair_replay_completion(
     transaction_processing_base_url: str,
     expected_minimum: int,
     timeout_seconds: int,
+    baseline: dict[str, Any],
+    on_observation: Callable[[dict[str, Any]], None],
 ) -> float | None:
     """Wait until canonical repair deliveries complete the unified processing flow."""
     return _wait_for_operation_count(
@@ -263,6 +295,8 @@ def _wait_for_repair_replay_completion(
         outcome="processed",
         expected_minimum=expected_minimum,
         timeout_seconds=timeout_seconds,
+        baseline=baseline,
+        on_observation=on_observation,
     )
 
 
@@ -491,6 +525,7 @@ class _LoadEvidenceReport:
     timeouts: list[dict[str, Any]] = field(default_factory=list)
     deadline_counts: dict[str, Any] = field(default_factory=dict)
     replay_storm_status: str = "not_run"
+    replay_completion: dict[str, Any] = field(default_factory=dict)
 
     def __enter__(self) -> "_LoadEvidenceReport":
         return self
@@ -501,7 +536,21 @@ class _LoadEvidenceReport:
     def timed_out(self, counts: Any) -> None:
         self.deadline_counts = asdict(counts)
 
-    def source_timeout(self, prefix: str, claim_minimum: int) -> None:
+    def replay_acknowledged(self, evidence: dict[str, Any]) -> None:
+        self.batches.setdefault(self.stage, []).append(evidence)
+
+    def replay_observed(self, observation: dict[str, Any]) -> None:
+        self.replay_completion["final"] = observation
+
+    def replay_timeout(self) -> None:
+        if "diagnostics" not in self.replay_completion:
+            self.source_timeout("replay_deliveries", None)
+            self.replay_completion["diagnostics"] = self.timeouts.pop()
+            self.replay_completion["diagnostics"]["claims_scope"] = (
+                "preexisting_rows_not_replay_receipts"
+            )
+
+    def source_timeout(self, prefix: str, claim_minimum: int | None) -> None:
         batches = self.batches.get(self.stage, [])
         ids = [item for batch in batches for item in batch["submitted_ids"]]
         scope = {
@@ -521,6 +570,8 @@ class _LoadEvidenceReport:
             "runtime": self.runtime.runtime.endpoints.compose_project_name
             if self.runtime
             else None,
+            "compose_file": self.runtime.compose_file if self.runtime else None,
+            "metrics_port": urlsplit(self.args.transaction_processing_base_url).port,
         }
         try:
             result = collect_load_completion_diagnostics(
@@ -539,7 +590,15 @@ class _LoadEvidenceReport:
                 ),
             )
         except Exception as exc:
-            result = {"status": "unavailable", "reason": type(exc).__name__, "scope": scope}
+            result = {
+                "status": "unavailable",
+                "reason": type(exc).__name__,
+                "scope": {
+                    key: value
+                    for key, value in scope.items()
+                    if key not in {"submitted_ids", "ingestion_job_ids", "compose_file"}
+                },
+            }
         result["drain_deadline_counts"] = self.deadline_counts
         result["claims_scope"] = "portfolio_aggregate_not_exact_prefix"
         self.timeouts.append(result)
@@ -553,6 +612,7 @@ class _LoadEvidenceReport:
             "submitted_batches": self.batches,
             "source_timeouts": self.timeouts,
             "replay_storm_status": self.replay_storm_status,
+            "replay_completion": self.replay_completion,
             "profiles_not_run": [
                 name
                 for name in ("steady_state", "burst", "replay_storm")
@@ -895,19 +955,39 @@ def main(
         replay_completion_baseline = _repair_replay_completion_count(
             transaction_processing_base_url=args.transaction_processing_base_url,
         )
+        report.replay_completion = {
+            "baseline": replay_completion_baseline,
+            "final": "MISSING",
+            "accepted_ids": "MISSING",
+            "exact_await": "MISSING",
+        }
         report.replay_storm_status = "started"
         replay_request_count = _trigger_replay_storm(
             ingestion_base_url=args.ingestion_base_url,
             transaction_ids=replay_ids,
             bursts=replay_bursts,
             burst_size=replay_burst_size,
+            on_acknowledgement=report.replay_acknowledged,
+        )
+        observed_baseline = replay_completion_baseline["status"] == "observed"
+        replay_target = (
+            replay_completion_baseline["count"] + replay_request_count
+            if observed_baseline
+            else None
+        )
+        report.replay_completion.update(
+            accepted_count_sum=replay_request_count, target=replay_target
         )
         replay_drain_seconds = _wait_for_repair_replay_completion(
             transaction_processing_base_url=args.transaction_processing_base_url,
-            expected_minimum=replay_completion_baseline + replay_request_count,
+            expected_minimum=replay_target if replay_target is not None else replay_request_count,
             timeout_seconds=args.drain_timeout_seconds,
+            baseline=replay_completion_baseline,
+            on_observation=report.replay_observed,
         )
         replay_ended = time.time()
+        if replay_drain_seconds is None:
+            report.replay_timeout()
         replay_health = _get_health_snapshot(
             event_replay_base_url=args.event_replay_base_url,
             ops_token=args.ops_token,

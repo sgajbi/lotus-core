@@ -386,7 +386,44 @@ the private diagnostic child; inherited URL/security validation is retained. The
 and engine are closed/disposed on success and failure. It validates governed tenant ownership
 and returns at most20 rows per probe. It captures exact submitted-ID outcomes, ingestion-job and
 outbox lifecycle counts/oldest ages, supported DLQ/failure reason codes, and isolated-runtime
-wait/blocker identities. It excludes SQL text, payloads, credentials and unrelated business rows.
+wait/blocker identities. It excludes raw SQL text, payloads, credentials and unrelated business
+rows. Only whitelisted SQL grammar/schema structure is exported; literals, parameters, unknown
+identifiers and numbers are redacted. Comments, dollar quotes, escapes, ambiguous quotes and
+truncated statements are refused rather than parsed heuristically.
+
+### Replay Completion Evidence
+
+`completion_evidence.replay_completion` retains the baseline scrape, accepted-count sum,
+derived target and final polling observation. Scrapes include timestamp, status, the existing
+processed-transaction metric and bounded stage/outcome labels. A missing sample is not measured
+zero. Invalid, ambiguous or oversized samples cannot satisfy completion; an observed counter
+decrease or changed counter/process-birth identity prevents later larger counts from hiding a reset.
+The same scrape must expose a single finite `process_start_time_seconds` birth observation;
+missing or changed producer birth prevents successful continuity, even with unchanged labels and
+larger counts. The worker runtime serves metrics and consumer tasks in the same Python process;
+this binds observations to that endpoint's producer, not a guessed database or container PID.
+Completion scrape input has an independent streamed 1MiB bound for the combined HTTP/DB/Kafka
+histogram exposition, distinct from the collector's 32KiB projected-output limit. Synthetic
+larger-than-32KiB valid exposition is unit-tested; actual deployment exposition size remains
+a runtime validation requirement. Exhaustion is unavailable evidence, not completion.
+Missing counter-creation metadata remains `MISSING`, not a verified worker lifetime. The existing
+240-second observation deadline and independent full-profile 180-second SLO remain unchanged.
+
+Ordered replay submissions and supported job/correlation/request/trace acknowledgements are
+retained per request. Partial `accepted_count` is count-only evidence: accepted IDs and per-ID
+durable completion receipts remain `MISSING`. Repeated submitted IDs retain their submission
+order; a conflict is not an accepted batch. Transport or malformed acknowledgement refusal keeps
+the attempted submission without exporting private response or error text.
+
+On replay timeout, the existing bounded collector runs once after the completion measurement;
+diagnostics cannot improve the failed verdict or add time to the measured completion. Portfolio
+rows, fences and outbox records may predate this replay and are not its durable receipts. PostgreSQL
+wait/lock observations bind PID to `backend_start` and retain database/relation OIDs, including
+NULL relation for transaction-ID locks; NULL is not a causal table attribution. The collector
+observes the exact managed service container ID, creation/start timestamps and container-init
+PID, with project/service label verification. Container-init PID is not an observed application
+worker PID. Application-worker PID and exact Python await remain `MISSING` unless independently
+measured. This snapshot alone cannot establish a restart history or the cause of a load failure.
 
 The existing PTP metrics interface provides bounded runtime inflight/backlog/cached-lag samples;
 these are not prefix-level completion. Broker reads sample at most10 partitions per raw/persisted

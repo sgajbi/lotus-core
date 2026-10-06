@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import math
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import requests  # type: ignore[import-untyped]
@@ -13,6 +14,9 @@ from prometheus_client.parser import text_string_to_metric_families
 from sqlalchemy import Engine, text
 
 _TRANSACTION_PROCESSING_OPERATION_METRIC = "lotus_core_transaction_processing_operations_total"
+# Completion exposition includes HTTP/DB/Kafka histograms, unlike the projected diagnostics.
+# Bound streamed input independently; do not reuse the collector's smaller JSON-output cap.
+COMPLETION_METRICS_MAX_BYTES = 1024 * 1024
 _TRANSACTION_PROCESSING_DURATION_METRIC = (
     "lotus_core_transaction_processing_operation_duration_seconds"
 )
@@ -438,20 +442,83 @@ def transaction_processing_operation_count(
     stage: str,
     outcome: str,
 ) -> int:
-    response = requests.get(
-        f"{transaction_processing_base_url}/metrics",
-        timeout=10,
+    observation = transaction_processing_operation_observation(
+        transaction_processing_base_url=transaction_processing_base_url,
+        stage=stage,
+        outcome=outcome,
     )
-    response.raise_for_status()
-    for family in text_string_to_metric_families(response.text):
-        for sample in family.samples:
-            if (
-                sample.name == _TRANSACTION_PROCESSING_OPERATION_METRIC
-                and sample.labels.get("stage") == stage
-                and sample.labels.get("outcome") == outcome
-            ):
-                return int(sample.value)
-    return 0
+    if observation["status"] != "observed":
+        raise RuntimeError("Processing counter is not observed")
+    return observation["count"]
+
+
+def transaction_processing_operation_observation(
+    *, transaction_processing_base_url: str, stage: str, outcome: str
+) -> dict[str, Any]:
+    """One bounded scrape; missing, invalid and ambiguous counters never become zero."""
+    observation: dict[str, Any] = {
+        "scraped_at": datetime.now(UTC).isoformat(),
+        "metric": _TRANSACTION_PROCESSING_OPERATION_METRIC,
+        "status": "missing",
+        "count": None,
+        "labels": None,
+        "counter_created_at": "MISSING",
+        "producer_birth": "MISSING",
+    }
+    try:
+        deadline = time.monotonic() + 10
+        with requests.get(
+            f"{transaction_processing_base_url}/metrics", timeout=10, stream=True
+        ) as response:
+            response.raise_for_status()
+            content = bytearray()
+            for chunk in response.iter_content(chunk_size=4096):
+                if time.monotonic() >= deadline:
+                    return {**observation, "status": "unavailable", "reason": "scrape_budget"}
+                content.extend(chunk)
+                if len(content) > COMPLETION_METRICS_MAX_BYTES:
+                    return {**observation, "status": "unavailable", "reason": "byte_budget"}
+        samples = [
+            sample
+            for family in text_string_to_metric_families(content.decode("utf-8"))
+            for sample in family.samples
+        ]
+        matches = [
+            sample
+            for sample in samples
+            if sample.name == _TRANSACTION_PROCESSING_OPERATION_METRIC
+            and sample.labels.get("stage") == stage
+            and sample.labels.get("outcome") == outcome
+        ]
+        if len(matches) != 1:
+            return {**observation, "reason": "absent" if not matches else "ambiguous"}
+        sample = matches[0]
+        if not math.isfinite(sample.value) or sample.value < 0 or not sample.value.is_integer():
+            return {**observation, "status": "invalid", "reason": "counter_value"}
+        if set(sample.labels) != {"stage", "outcome"}:
+            return {**observation, "status": "invalid", "reason": "counter_labels"}
+        created = [
+            s.value
+            for s in samples
+            if s.name
+            == _TRANSACTION_PROCESSING_OPERATION_METRIC.removesuffix("_total") + "_created"
+            and s.labels == sample.labels
+        ]
+        if len(created) == 1 and math.isfinite(created[0]) and created[0] > 0:
+            observation["counter_created_at"] = created[0]
+        births = [
+            s.value for s in samples if s.name == "process_start_time_seconds" and not s.labels
+        ]
+        if len(births) == 1 and math.isfinite(births[0]) and births[0] > 0:
+            observation["producer_birth"] = births[0]
+        return {
+            **observation,
+            "status": "observed",
+            "count": int(sample.value),
+            "labels": {"stage": stage, "outcome": outcome},
+        }
+    except (requests.RequestException, ValueError, UnicodeError) as exc:
+        return {**observation, "status": "unavailable", "reason": type(exc).__name__}
 
 
 def transaction_processing_operation_evidence(
@@ -658,19 +725,45 @@ def wait_for_transaction_processing_operation_count(
     outcome: str,
     expected_minimum: int,
     timeout_seconds: int,
+    baseline: dict[str, Any] | None = None,
+    on_observation: Callable[[dict[str, Any]], None] | None = None,
 ) -> float | None:
     started = time.time()
     deadline = started + timeout_seconds
+    previous = baseline
+    discontinuity = (
+        baseline is None
+        or baseline["status"] != "observed"
+        or baseline.get("producer_birth", "MISSING") == "MISSING"
+    )
     while time.time() < deadline:
+        observation = transaction_processing_operation_observation(
+            transaction_processing_base_url=transaction_processing_base_url,
+            stage=stage,
+            outcome=outcome,
+        )
+        if observation["status"] == "observed" and previous and previous["status"] == "observed":
+            if (
+                observation["count"] < previous["count"]
+                or observation["labels"] != previous["labels"]
+                or observation.get("counter_created_at") != previous.get("counter_created_at")
+            ):
+                discontinuity = True
+        if observation.get("producer_birth", "MISSING") == "MISSING" or (
+            baseline and observation.get("producer_birth") != baseline.get("producer_birth")
+        ):
+            discontinuity = True
+        observation["continuity"] = "reset_or_missing_baseline" if discontinuity else "observed"
+        if on_observation:
+            on_observation(observation)
         if (
-            transaction_processing_operation_count(
-                transaction_processing_base_url=transaction_processing_base_url,
-                stage=stage,
-                outcome=outcome,
-            )
-            >= expected_minimum
+            observation["status"] == "observed"
+            and not discontinuity
+            and observation["count"] >= expected_minimum
         ):
             return round(time.time() - started, 3)
+        if observation["status"] == "observed":
+            previous = observation
         time.sleep(1)
     return None
 

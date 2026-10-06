@@ -1,5 +1,23 @@
 # Operations Runbook
 
+## Replay Load Diagnostic Evidence
+
+For a failed replay profile, inspect the retained `completion_evidence.replay_completion` and
+ordered replay submissions in the load report. Baseline/target/final scrape states distinguish
+missing samples from measured zero and refuse observed counter resets or missing/changed
+same-scrape process birth; accepted counts do not
+identify accepted delivery IDs or prove durable financial completion. The timeout collector runs
+once within its existing six-second/32KiB/20-row limits, after completion measurement, without
+relaxing the full-profile 180-second SLO.
+
+Birth-qualified PostgreSQL PID/lock OIDs and the verified managed container identity are bounded
+observations, not a causal verdict. Container-init PID is not an application-worker PID; exact
+worker PID/await remain `MISSING` unless measured. Only whitelisted SQL structure is exported,
+never raw queries, literals or credentials. Follow the
+[load evidence contract](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/bank-day-load-scenario.md#replay-completion-evidence)
+for missing/reset states, partial acknowledgements, cleanup and attribution limits. A diagnostic
+report is not SLO qualification or enterprise acceptance.
+
 ## Interpret capacity results
 
 Report throughput together with its workload and completion boundary. Ingestion rate, processing
