@@ -4,6 +4,7 @@ import json
 import os
 import uuid
 import warnings
+from collections.abc import AsyncIterator
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,6 +12,14 @@ import pytest_asyncio  # <-- IMPORT PYTEST-ASYNCIO
 from confluent_kafka.admin import AdminClient, NewTopic
 from portfolio_common.kafka_utils import KafkaProducer
 
+from tests.test_support.native_consumer_boundary import (
+    broker_outage,
+    committed_offset,
+    initialize_offset,
+    publish,
+    read_record,
+    unique_topics,
+)
 from tools.dlq_replayer import DLQReplayConsumer
 
 pytestmark = pytest.mark.asyncio
@@ -32,7 +41,7 @@ def mock_kafka_producer() -> MagicMock:
 
 # FIX: Use the correct decorator for an async fixture
 @pytest_asyncio.fixture
-async def unique_dlq_topic(docker_services) -> str:
+async def unique_dlq_topic(docker_services) -> AsyncIterator[str]:
     """
     Creates a unique, temporary Kafka topic for the test and yields its name.
     Deletes the topic after the test is complete.
@@ -242,3 +251,117 @@ async def test_dlq_replayer_does_not_commit_when_replay_flush_times_out(
 
     mock_kafka_producer.publish_message.assert_called_once()
     assert any(call.kwargs == {"timeout": 5} for call in mock_kafka_producer.flush.call_args_list)
+
+
+def _real_replay_envelope(output_topic):
+    key = f"native-replay-{uuid.uuid4().hex}"
+    payload = {"transaction_id": key, "amount": "255.00"}
+    return (
+        key,
+        payload,
+        {
+            "original_topic": output_topic,
+            "original_key": key,
+            "original_value": json.dumps(payload),
+            "error_reason": "native boundary proof",
+            "correlation_id": key,
+            "traceparent": TRACEPARENT,
+        },
+    )
+
+
+class _RealPublishedReplayBarrier(DLQReplayConsumer):
+    """Hold only after real publication/flush and before the unchanged native acknowledgement."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.published = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def process_message(self, message):
+        await super().process_message(message)
+        self.published.set()
+        await self.release.wait()
+
+
+async def test_real_replay_output_and_exact_committed_input_offset(docker_services):
+    """Both observations come from Kafka, without a patched output producer."""
+    with unique_topics() as (input_topic, output_topic):
+        group = f"native-replay-group-{uuid.uuid4().hex}"
+        initialize_offset(group, input_topic)
+        key, payload, envelope = _real_replay_envelope(output_topic)
+        offset = publish(input_topic, envelope, key)
+        consumer = _RealPublishedReplayBarrier(
+            bootstrap_servers=_kafka_bootstrap_host(),
+            topic=input_topic,
+            group_id=group,
+            limit=1,
+        )
+        task = asyncio.create_task(consumer.run())
+        try:
+            await asyncio.wait_for(consumer.published.wait(), 60)
+            output = await asyncio.to_thread(read_record, output_topic)
+            assert output.key() == key.encode()
+            assert json.loads(output.value()) == payload
+            assert ("correlation_id", key.encode()) in output.headers()
+            assert ("traceparent", TRACEPARENT.encode()) in output.headers()
+            assert committed_offset(group, input_topic) == offset
+            consumer.release.set()
+            await asyncio.wait_for(task, 120)
+            assert committed_offset(group, input_topic) == offset + 1
+            assert consumer._shutdown_finalized
+        finally:
+            consumer.release.set()
+            consumer.shutdown()
+            await asyncio.wait_for(asyncio.shield(task), 120)
+
+
+class _RealOutageReplayConsumer(DLQReplayConsumer):
+    """Fault the owned real broker only after a real input has been admitted."""
+
+    async def process_message(self, message):
+        self.refusal = None
+        self.outage = broker_outage()
+        await asyncio.to_thread(self.outage.__enter__)
+        try:
+            await super().process_message(message)
+        except Exception as error:
+            self.refusal = error
+            raise
+        finally:
+            await asyncio.to_thread(self.outage.restore)
+
+
+async def test_real_publication_refusal_preserves_input_offset_and_same_group_redelivery(
+    docker_services,
+):
+    with unique_topics() as (input_topic, output_topic):
+        group = f"native-replay-refusal-{uuid.uuid4().hex}"
+        initialize_offset(group, input_topic)
+        key, payload, envelope = _real_replay_envelope(output_topic)
+        offset = publish(input_topic, envelope, key)
+        failed = _RealOutageReplayConsumer(
+            bootstrap_servers=_kafka_bootstrap_host(),
+            topic=input_topic,
+            group_id=group,
+            limit=1,
+        )
+        await asyncio.wait_for(failed.run(), 120)
+        assert failed.refusal is not None, "No genuine native publication refusal observed"
+        assert isinstance(failed.refusal.__cause__, RuntimeError)
+        assert "confirmation timed out" in str(failed.refusal.__cause__)
+        assert failed.outage.recovery_evidence is not None
+        assert committed_offset(group, input_topic) == offset
+        retry = DLQReplayConsumer(
+            bootstrap_servers=_kafka_bootstrap_host(),
+            topic=input_topic,
+            group_id=group,
+            limit=1,
+        )
+        await asyncio.wait_for(retry.run(), 120)
+        output = await asyncio.to_thread(read_record, output_topic)
+        assert output.key() == key.encode() and json.loads(output.value()) == payload
+        assert retry._processed_count == 1 and retry._shutdown_finalized
+        assert committed_offset(group, input_topic) == offset + 1
+        # The failed owner's buffered publication may also arrive after recovery.
+        # At-least-once output is expected; no atomic cross-topic claim is made.

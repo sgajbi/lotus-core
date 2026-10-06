@@ -1,22 +1,48 @@
 # tests/e2e/test_failure_scenarios.py
+import json
 import os
+import subprocess
 import time
 import uuid
 from collections.abc import Callable
+from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 import requests
 from confluent_kafka import Consumer
-from portfolio_common.config import KAFKA_BOOTSTRAP_SERVERS, KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC
+from portfolio_common.config import (
+    KAFKA_BOOTSTRAP_SERVERS,
+    KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
+    KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
+)
 from sqlalchemy import exc, text
+from sqlalchemy.orm import Session
 
 from scripts.quality.ci_service_sets import (
     E2E_RECOVERY_HEALTH_PORT_ENV,
     E2E_RECOVERY_SERVICES,
 )
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis.processing_state_repository import (  # noqa: E501
+    cost_basis_processing_lock_key,
+)
+from tests.test_support.docker_stack import resolve_compose_file
+from tests.test_support.native_consumer_boundary import (
+    assert_financial_oracle,
+    committed_offset,
+    financial_snapshot,
+    publish,
+    wait_for_value,
+)
 from tests.test_support.output_control import emit_test_output
 from tests.test_support.runtime.compose_fault_recovery import (
     ComposeFaultRecoveryBoundary,
+)
+from tests.test_support.transaction_processing import (
+    booked_transaction_event,
+    canonical_transaction_record,
+    instrument_record,
+    portfolio_record,
 )
 
 from .api_client import E2EApiClient
@@ -27,6 +53,266 @@ def _core_service_health_urls() -> list[str]:
         f"http://localhost:{os.environ[E2E_RECOVERY_HEALTH_PORT_ENV[service]]}/health/ready"
         for service in E2E_RECOVERY_SERVICES
     ]
+
+
+def _native_compose(*args):
+    return subprocess.run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            resolve_compose_file(str(Path(__file__).resolve().parents[2])),
+            "-p",
+            os.environ["COMPOSE_PROJECT_NAME"],
+            *args,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    ).stdout
+
+
+def _native_worker_logs():
+    return _native_compose(
+        "logs", "--no-color", "--timestamps", "portfolio_transaction_processing_service"
+    )
+
+
+def _native_worker_identity():
+    root = Path(__file__).resolve().parents[2]
+    directory = root / "output/runtime-image-set"
+    verified = (directory / "verified-source-sha").read_text().strip()
+    manifest = json.loads((directory / "manifest.json").read_text())
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    ).stdout.strip()
+    assert verified == manifest["source_commit_sha"] == head
+    service = "portfolio_transaction_processing_service"
+    container = _native_compose("ps", "--quiet", service).strip()
+    inspection = json.loads(
+        subprocess.run(
+            ["docker", "inspect", container],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        ).stdout
+    )[0]
+    record = next(row for row in manifest["services"] if row["service"] == service)
+    assert inspection["Image"] == record["image_id"]
+    image = json.loads(
+        subprocess.run(
+            ["docker", "image", "inspect", inspection["Image"]],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        ).stdout
+    )[0]
+    assert image["Config"]["Labels"]["org.opencontainers.image.revision"] == head
+    assert (
+        inspection["Config"]["Labels"]["com.docker.compose.project"]
+        == os.environ["COMPOSE_PROJECT_NAME"]
+    )
+    return {
+        "source": head,
+        "image_id": inspection["Image"],
+        "container": container,
+        "command": inspection["Config"]["Cmd"],
+        "ips": [
+            network["IPAddress"] for network in inspection["NetworkSettings"]["Networks"].values()
+        ],
+        "manifest_hash": manifest["content_hash"],
+    }
+
+
+def _deployed_native_boundary(db_engine, *, forced):
+    service = "portfolio_transaction_processing_service"
+    health_url = (
+        f"http://localhost:{os.environ['LOTUS_TRANSACTION_PROCESSING_HOST_PORT']}/health/ready"
+    )
+    recovery = ComposeFaultRecoveryBoundary(
+        project_name=os.environ["COMPOSE_PROJECT_NAME"],
+        faulted_service=service,
+        recovery_services=(),
+        faulted_service_ready=lambda: wait_for_service_ready(health_url),
+        recovery_services_ready=lambda: None,
+        compose_file=resolve_compose_file(str(Path(__file__).resolve().parents[2])),
+    )
+    primary_error = None
+    try:
+        _exercise_deployed_native_boundary(db_engine, recovery, forced=forced)
+    except BaseException as error:
+        primary_error = error
+        raise
+    finally:
+        try:
+            recovery.restore()
+        except BaseException as restoration_error:
+            if primary_error is None:
+                raise
+            primary_error.add_note(f"Worker restoration also failed: {restoration_error!r}")
+
+
+def _exercise_deployed_native_boundary(db_engine, recovery, *, forced):
+    """Use real admission/SQL/offset/lifecycle observations, not exit alone."""
+    service = "portfolio_transaction_processing_service"
+    group = "portfolio_transaction_processing_group"
+    topic = KAFKA_TRANSACTIONS_PERSISTED_TOPIC
+    identity = _native_worker_identity()
+    suffix = uuid.uuid4().hex[:12]
+    portfolio, security = f"DEP-NB-{suffix}", f"DEP-EQ-{suffix}"
+    event = booked_transaction_event(
+        transaction_id=f"DEP-BUY-{suffix}",
+        portfolio_id=portfolio,
+        security_id=security,
+        transaction_date=datetime(2026, 1, 10, 10, tzinfo=UTC),
+        transaction_type="BUY",
+        quantity="10",
+        price="25.50",
+        gross_amount="255",
+        trade_currency="SGD",
+    )
+    with Session(db_engine) as session:
+        session.add_all(
+            [
+                portfolio_record(portfolio, base_currency="SGD"),
+                instrument_record(
+                    security, name="Deployed native equity", isin="SG0000000001", currency="SGD"
+                ),
+                canonical_transaction_record(event),
+            ]
+        )
+        session.commit()
+    prior_logs = _native_worker_logs()
+    lock = cost_basis_processing_lock_key(portfolio, security)
+    baseline = committed_offset(group, topic)
+    with db_engine.connect() as holder:
+        holder.execute(text("SELECT pg_advisory_lock(:key)"), {"key": lock})
+        holder_pid = holder.scalar(text("SELECT pg_backend_pid()"))
+        try:
+            first = publish(topic, event.model_dump(mode="json"), portfolio)
+            later = publish(topic, event.model_dump(mode="json"), portfolio)
+            assert later == first + 1
+
+            def admission():
+                with db_engine.connect() as observer:
+                    return observer.execute(
+                        text(
+                            "SELECT a.pid, a.client_addr::text, a.query FROM pg_stat_activity a "
+                            "WHERE :holder = ANY(pg_blocking_pids(a.pid)) "
+                            "AND a.wait_event_type = 'Lock' AND a.wait_event = 'advisory'"
+                        ),
+                        {"holder": holder_pid},
+                    ).all()
+
+            admitted = wait_for_value(admission, bool)
+            # Only production workers run in this live-worker invocation. The
+            # exact production lock key and real backend wait establish admission.
+            assert all(
+                row[1] in identity["ips"] and "pg_advisory_xact_lock" in row[2] for row in admitted
+            )
+            ids = (f"{topic}-0-{first}",)
+            before = financial_snapshot(db_engine, portfolio, security, event_ids=ids)
+            assert all(
+                not before[name]
+                for name in ("lots", "cash", "positions", "receipts", "outbox", "checkpoint")
+            )
+            assert before["cost"] == [(event.transaction_id, None, None)]
+            assert committed_offset(group, topic) == baseline
+            _native_compose("kill", "--signal", "SIGKILL" if forced else "SIGTERM", service)
+            if not forced:
+
+                def shutdown_started():
+                    delta = _native_worker_logs()[len(prior_logs) :]
+                    return any(
+                        "kafka.consumer.shutdown_started" in line and group in line
+                        for line in delta.splitlines()
+                    )
+
+                wait_for_value(shutdown_started, bool)
+            else:
+                container = _native_compose("ps", "--all", "--quiet", service).strip()
+                state = subprocess.run(
+                    ["docker", "inspect", "--format", "{{.State.Running}}", container],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                ).stdout.strip()
+                assert state == "false"
+                assert committed_offset(group, topic) == baseline
+                assert financial_snapshot(db_engine, portfolio, security, event_ids=ids) == before
+        finally:
+            holder.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": lock})
+            holder.commit()
+            if forced:
+                recovery.restore()
+
+    try:
+        expected_ack = later + 1 if forced else first + 1
+        wait_for_value(lambda: committed_offset(group, topic), lambda value: value == expected_ack)
+        snapshot = financial_snapshot(db_engine, portfolio, security, event_ids=ids)
+        assert_financial_oracle(snapshot, event.transaction_id)
+        assert snapshot["receipts"][0][0] == f"{topic}-0-{first}"
+        if not forced:
+
+            def closed():
+                delta = _native_worker_logs()[len(prior_logs) :]
+                return [
+                    line
+                    for line in delta.splitlines()
+                    if "kafka.consumer.shutdown_completed" in line and group in line
+                ]
+
+            completed = wait_for_value(closed, bool)
+            assert all("succeeded" in line for line in completed)
+            assert committed_offset(group, topic) == first + 1
+            recovery.restore()
+            wait_for_value(lambda: committed_offset(group, topic), lambda value: value == later + 1)
+            assert financial_snapshot(db_engine, portfolio, security, event_ids=ids) == snapshot
+        emit_test_output(
+            json.dumps(
+                {
+                    "native_boundary": "forced-redelivery" if forced else "graceful-drain",
+                    "group": group,
+                    "topic": topic,
+                    "partition": 0,
+                    "first_offset": first,
+                    "later_offset": later,
+                    "final_offset": later + 1,
+                    "lock_key": lock,
+                    "admitted_backends": [tuple(row) for row in admitted],
+                    "financial": snapshot,
+                    "identity": identity,
+                },
+                default=str,
+            )
+        )
+    finally:
+        recovery.restore()
+
+
+def test_deployed_graceful_stop_drains_admitted_financial_work(
+    docker_services,
+    db_engine,
+    clean_db_module,
+):
+    _deployed_native_boundary(db_engine, forced=False)
+
+
+def test_deployed_forced_interruption_redelivers_without_duplicate_financial_effects(
+    docker_services,
+    db_engine,
+    clean_db_module,
+):
+    _deployed_native_boundary(db_engine, forced=True)
 
 
 def _wait_for_core_services_ready() -> None:
@@ -95,7 +381,7 @@ def wait_for_service_ready(service_url: str, timeout: int = 60):
     def _is_ready() -> bool:
         try:
             response = requests.get(service_url, timeout=2)
-            return response.status_code == 200
+            return bool(response.status_code == 200)
         except requests.ConnectionError:
             return False
 
