@@ -268,6 +268,19 @@ them.
 
 ## Ordinary Settlement Cash
 
+Generated settlement cash calculation receipts use `generated-settlement-cash` version 2.
+Before the receipt is created, the rate is validated against the unchanged exact transaction
+persistence bounds and represented at the governed ledger scale. Its numeric value, FX origin
+and original source/input hash remain unchanged; no global hash normalization or silent rounding
+is introduced. The receipt must bind the actual returned and reloaded cash-leg output.
+
+Version 1 receipts remain readable and unchanged. A retained receipt that binds its actual
+persisted output can still qualify; an unscaled-rate receipt that does not bind cannot be
+declared valid merely because the numeric rate is equal. Preserve original receipt/raw evidence
+before separately authorized source-based repair. This fix adds no historical backfill, migration,
+new repair command or retrospective receipt re-hash. [#1228](https://github.com/sgajbi/lotus-core/issues/1228)
+tracks the persisted representation defect; full #452 and main qualification remain separate.
+
 One transaction-domain policy resolves fee precedence, signed cash amount, and ledger direction:
 
 | Transaction | Signed settlement cash |

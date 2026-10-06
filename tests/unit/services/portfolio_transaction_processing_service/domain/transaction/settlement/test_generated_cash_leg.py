@@ -2,9 +2,21 @@
 
 from dataclasses import replace
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, localcontext
 
 import pytest
+from portfolio_common.domain.calculation_lineage import (
+    build_calculation_lineage,
+    calculation_lineage_binds_output,
+    canonical_content_hash,
+)
+from portfolio_common.domain.financial.precision import (
+    DecimalPrecisionError,
+    DecimalPrecisionViolation,
+)
+from portfolio_common.domain.transaction.numeric_policy import (
+    TRANSACTION_COST_LEDGER_OUTPUT_V1,
+)
 
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     BookedTransaction,
@@ -12,6 +24,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
     SettlementCashRejectionReasonCode,
     SettlementCashValidationError,
     build_generated_settlement_cash_leg,
+    settlement,
     should_generate_settlement_cash_leg,
 )
 
@@ -45,6 +58,100 @@ def test_generation_requires_explicit_cash_entry_mode_and_settlement_account() -
     assert not should_generate_settlement_cash_leg(
         replace(_dividend_transaction(), settlement_cash_account_id=None)
     )
+
+
+@pytest.mark.parametrize(
+    "rate", ["1", "1.0000000000", "1.2345", "1.2345000000", "99999999.9999999999"]
+)
+def test_generated_cash_receipt_binds_exact_persisted_rate_without_changing_source(
+    rate: str,
+) -> None:
+    source = replace(
+        _dividend_transaction(),
+        gross_transaction_amount=Decimal("1.0000000000"),
+        trade_fee=Decimal("0.0000000000"),
+        transaction_fx_rate=Decimal(rate),
+        transaction_fx_rate_origin="REFERENCE_DERIVED",
+    )
+    with localcontext() as context:
+        context.prec = 6
+        generated = build_generated_settlement_cash_leg(source)
+    assert generated.transaction_fx_rate == source.transaction_fx_rate
+    assert generated.transaction_fx_rate.as_tuple().exponent == -10
+    assert generated.transaction_fx_rate_origin == source.transaction_fx_rate_origin
+    assert str(source.transaction_fx_rate) == rate
+    lineage = generated.calculation_lineage
+    assert lineage is not None and lineage.algorithm_version == 2
+    assert source.settlement_date is not None
+    original_input = settlement.generated_cash_leg._generated_cash_lineage_input(
+        transaction=source,
+        transaction_type="DIVIDEND",
+        settlement_at=source.settlement_date.isoformat(),
+        signed_settlement_amount=Decimal("1.0000000000"),
+    )
+    assert lineage.input_content_hash == canonical_content_hash(original_input)
+    reloaded = replace(
+        generated, transaction_fx_rate=Decimal(format(generated.transaction_fx_rate, ".10f"))
+    )
+    assert calculation_lineage_binds_output(
+        lineage,
+        output_payload=settlement.generated_cash_leg._generated_cash_lineage_output(reloaded),
+    )
+
+
+@pytest.mark.parametrize(
+    ("rate", "violation"),
+    [
+        ("1.00000000001", DecimalPrecisionViolation.EXCESS_SCALE),
+        ("NaN", DecimalPrecisionViolation.NON_FINITE),
+        ("Infinity", DecimalPrecisionViolation.NON_FINITE),
+        ("-Infinity", DecimalPrecisionViolation.NON_FINITE),
+        ("100000000", DecimalPrecisionViolation.MAGNITUDE_OVERFLOW),
+    ],
+)
+def test_generated_cash_refuses_unpersistable_rate_before_receipt(
+    rate: str, violation: DecimalPrecisionViolation
+) -> None:
+    source = replace(_dividend_transaction(), transaction_fx_rate=Decimal(rate))
+    with pytest.raises(DecimalPrecisionError) as raised:
+        build_generated_settlement_cash_leg(source)
+    assert raised.value.field_name == "transaction_fx_rate"
+    assert raised.value.violation is violation
+    assert str(source.transaction_fx_rate) == rate
+
+
+def test_generated_cash_preserves_absent_rate_and_null_costs() -> None:
+    generated = build_generated_settlement_cash_leg(_dividend_transaction())
+    assert generated.transaction_fx_rate is None
+    assert generated.gross_cost is None and generated.net_cost is None
+    assert generated.calculation_lineage is not None
+    assert calculation_lineage_binds_output(
+        generated.calculation_lineage,
+        output_payload=settlement.generated_cash_leg._generated_cash_lineage_output(generated),
+    )
+
+
+def test_historical_unscaled_rate_receipt_is_not_revalidated_or_rehashed() -> None:
+    source = replace(_dividend_transaction(), transaction_fx_rate=Decimal(1))
+    generated = build_generated_settlement_cash_leg(source)
+    old_output = settlement.generated_cash_leg._generated_cash_lineage_output(
+        replace(generated, transaction_fx_rate=Decimal(1))
+    )
+    old_receipt = build_calculation_lineage(
+        algorithm_id="generated-settlement-cash",
+        algorithm_version=1,
+        intermediate_precision=64,
+        input_payload={"retained_original_input": "unchanged"},
+        output_payload=old_output,
+        numeric_output_policy=TRANSACTION_COST_LEDGER_OUTPUT_V1.lineage_identity(),
+    )
+    old_hashes = old_receipt.lineage_payload()
+    assert calculation_lineage_binds_output(old_receipt, output_payload=old_output)
+    assert not calculation_lineage_binds_output(
+        old_receipt,
+        output_payload=settlement.generated_cash_leg._generated_cash_lineage_output(generated),
+    )
+    assert old_receipt.algorithm_version == 1 and old_receipt.lineage_payload() == old_hashes
 
 
 @pytest.mark.parametrize(

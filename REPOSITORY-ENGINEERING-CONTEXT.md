@@ -187,6 +187,18 @@ server-resolved cash security remains derived context and never rewrites source 
 
 ## Business And Domain Responsibility
 
+Generated settlement cash receipts use algorithm `generated-settlement-cash` version 2 to
+bind the exact transaction-ledger FX-rate representation before persistence. The local
+builder validates finite/exact `TRANSACTION_PERSISTENCE_PRECISION_V1` bounds first, then
+represents the admitted rate at that policy's scale under local working precision. It does
+not round source rates, rewrite original input hashes, change FX provenance, or normalize
+global lineage. Version 1 receipt bytes and decoders remain unchanged; a historical receipt
+qualifies only when it binds its actual persisted output. Unscaled-rate version 1 receipts
+that fail binding remain unqualified. Preserve their receipt/raw evidence before separately
+authorized source-based repair; this change provides no retrospective re-hash, automatic
+backfill, migration or new repair command. See #1228 and the FX Slice 6 generated-cash
+representation note; returned-value unit proof and actual PostgreSQL reload proof are distinct.
+
 Fresh applicable canonical FX `UPSTREAM_PROVIDED` ingestion requires both local/base FX P&L;
 explicit zero is source evidence and totals cannot replace missing FX. Shared domain admission
 governs HTTP and raw persistence; `FX_CONTRACT_OPEN`/`NONE` are exempt. HTTP resubmission is

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from decimal import Decimal
+from decimal import Decimal, localcontext
 
 from portfolio_common.domain.calculation_lineage import build_calculation_lineage
 from portfolio_common.domain.transaction.fee_components import TRANSACTION_FEE_COMPONENT_FIELDS
 from portfolio_common.domain.transaction.numeric_policy import (
     TRANSACTION_COST_LEDGER_OUTPUT_V1,
+    TRANSACTION_PERSISTENCE_PRECISION_V1,
 )
 from portfolio_common.domain.transaction.type_registry import (
     production_transaction_types_for_generated_cash_legs,
@@ -61,6 +62,7 @@ def build_generated_settlement_cash_leg(
     """Build the equal-and-linked cash movement for a supported product transaction."""
 
     _require_generated_cash_leg(transaction)
+    persisted_fx_rate = _generated_cash_persisted_rate(transaction.transaction_fx_rate)
     cash_instrument_id = _resolve_cash_instrument_id(transaction)
     settlement_cash = calculate_settlement_cash_movement(transaction)
     transaction_type = normalize_transaction_control_code(transaction.transaction_type)
@@ -96,7 +98,7 @@ def build_generated_settlement_cash_leg(
         gross_transaction_amount=settlement_cash.amount,
         trade_currency=transaction.trade_currency,
         currency=transaction.currency,
-        transaction_fx_rate=transaction.transaction_fx_rate,
+        transaction_fx_rate=persisted_fx_rate,
         transaction_fx_rate_origin=transaction.transaction_fx_rate_origin,
         trade_fee=Decimal(0),
         gross_cost=net_cost,
@@ -119,7 +121,7 @@ def build_generated_settlement_cash_leg(
     )
     lineage = build_calculation_lineage(
         algorithm_id="generated-settlement-cash",
-        algorithm_version=1,
+        algorithm_version=2,
         intermediate_precision=TRANSACTION_COST_LEDGER_OUTPUT_V1.working_precision,
         input_payload=_generated_cash_lineage_input(
             transaction=transaction,
@@ -131,6 +133,21 @@ def build_generated_settlement_cash_leg(
         numeric_output_policy=TRANSACTION_COST_LEDGER_OUTPUT_V1.lineage_identity(),
     )
     return replace(cash_leg, calculation_lineage=lineage)
+
+
+def _generated_cash_persisted_rate(rate: Decimal | None) -> Decimal | None:
+    """Represent an exact admitted rate as the ledger will, before receipt creation."""
+
+    if rate is None:
+        return None
+    policy = TRANSACTION_PERSISTENCE_PRECISION_V1
+    policy.require_exact(rate, field_name="transaction_fx_rate")
+    if policy.scale is None or policy.precision is None:
+        raise RuntimeError("Generated cash requires a bounded transaction persistence policy")
+    with localcontext() as context:
+        context.prec = max(policy.precision, TRANSACTION_COST_LEDGER_OUTPUT_V1.working_precision)
+        quantum = Decimal(1).scaleb(-policy.scale)
+        return rate.quantize(quantum)
 
 
 def _generated_cash_lineage_input(
