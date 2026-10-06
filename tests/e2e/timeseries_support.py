@@ -107,6 +107,14 @@ def seed_two_day_timeseries_scenario(
             ]
         },
     )
+    e2e_api_client.wait_for_admitted_portfolio(portfolio_id)
+    for security_id in (stock_security_id, cash_security_id):
+        e2e_api_client.poll_for_data(
+            f"/instruments?security_id={security_id}",
+            lambda data, expected=security_id: any(
+                row.get("security_id") == expected for row in data.get("instruments", [])
+            ),
+        )
     e2e_api_client.ingest(
         "/ingest/fx-rates",
         {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from unittest.mock import MagicMock
 
@@ -11,6 +12,7 @@ from tests.test_support.runtime.compose_fault_recovery import (
     CommandRunner,
     ComposeFaultRecoveryBoundary,
     ReadinessProbe,
+    wait_for_owned_container_exit,
 )
 
 
@@ -20,6 +22,195 @@ def _successful_run(command: list[str], **_kwargs: object) -> subprocess.Complet
 
 def _ready() -> None:
     pass
+
+
+def test_original_container_exit_precedes_restore_and_restore_remains_idempotent(monkeypatch):
+    from tests.test_support import native_consumer_boundary
+
+    commands = []
+    states = iter([("running", True), ("stopping", True), ("exited", False)])
+    observed = []
+
+    def inspect_runner(command, **kwargs):
+        commands.append(command)
+        assert command == ["docker", "inspect", "original"]
+        assert kwargs["check"] is True
+        status, running = next(states)
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            json.dumps(
+                [
+                    {
+                        "Id": "original",
+                        "Config": {
+                            "Labels": {
+                                "com.docker.compose.project": "lotus-e2e",
+                                "com.docker.compose.service": "postgres",
+                            }
+                        },
+                        "State": {"Status": status, "Running": running},
+                    }
+                ]
+            ),
+            "",
+        )
+
+    def poll(observe, accept):
+        for _ in range(3):
+            state = observe()
+            observed.append(state["Status"])
+            if accept(state):
+                return state
+        pytest.fail("Exit was never observed")
+
+    monkeypatch.setattr(native_consumer_boundary, "wait_for_value", poll)
+    wait_for_owned_container_exit(
+        "original",
+        project_name="lotus-e2e",
+        service_name="postgres",
+        runner=inspect_runner,
+    )
+    boundary = _boundary(
+        runner=lambda command, **kwargs: commands.append(command) or _successful_run(command)
+    )
+    boundary.restore()
+    boundary.restore()
+    assert observed == ["running", "stopping", "exited"]
+    assert all(command == ["docker", "inspect", "original"] for command in commands[:3])
+    assert commands[3][4] == "up"
+    assert sum("up" in command for command in commands) == 1
+    assert sum("restart" in command for command in commands) == 1
+
+
+@pytest.mark.parametrize("wrong_label", ["project", "service"])
+def test_exit_observation_refuses_foreign_container(monkeypatch, wrong_label):
+    from tests.test_support import native_consumer_boundary
+
+    monkeypatch.setattr(
+        native_consumer_boundary, "wait_for_value", lambda observe, accept: observe()
+    )
+    labels = {"com.docker.compose.project": "lotus-e2e", "com.docker.compose.service": "postgres"}
+    labels[f"com.docker.compose.{wrong_label}"] = "foreign"
+    runner = MagicMock(
+        return_value=subprocess.CompletedProcess(
+            [],
+            0,
+            json.dumps(
+                [
+                    {
+                        "Id": "original",
+                        "Config": {"Labels": labels},
+                        "State": {"Status": "exited", "Running": False},
+                    }
+                ]
+            ),
+            "",
+        )
+    )
+    with pytest.raises(ValueError, match="outside the owned service"):
+        wait_for_owned_container_exit(
+            "original",
+            project_name="lotus-e2e",
+            service_name="postgres",
+            runner=runner,
+        )
+    runner.assert_called_once()
+
+
+def test_exit_observation_does_not_accept_running_state(monkeypatch):
+    from tests.test_support import native_consumer_boundary
+
+    def poll(observe, accept):
+        assert not accept(observe())
+        raise TimeoutError("still running")
+
+    monkeypatch.setattr(native_consumer_boundary, "wait_for_value", poll)
+    runner = MagicMock(
+        return_value=subprocess.CompletedProcess(
+            [],
+            0,
+            json.dumps(
+                [
+                    {
+                        "Id": "original",
+                        "Config": {
+                            "Labels": {
+                                "com.docker.compose.project": "lotus-e2e",
+                                "com.docker.compose.service": "postgres",
+                            }
+                        },
+                        "State": {"Status": "running", "Running": True},
+                    }
+                ]
+            ),
+            "",
+        )
+    )
+    with pytest.raises(TimeoutError, match="still running"):
+        wait_for_owned_container_exit(
+            "original",
+            project_name="lotus-e2e",
+            service_name="postgres",
+            runner=runner,
+        )
+
+
+@pytest.mark.parametrize("payload", ["not-json", "[]", "[{}]"])
+def test_exit_observation_refuses_malformed_inspection(monkeypatch, payload):
+    from tests.test_support import native_consumer_boundary
+
+    monkeypatch.setattr(
+        native_consumer_boundary, "wait_for_value", lambda observe, accept: observe()
+    )
+    runner = MagicMock(return_value=subprocess.CompletedProcess([], 0, payload, ""))
+    with pytest.raises((ValueError, KeyError)):
+        wait_for_owned_container_exit(
+            "original",
+            project_name="lotus-e2e",
+            service_name="postgres",
+            runner=runner,
+        )
+
+
+@pytest.mark.parametrize(
+    "container_id,state,expected_error",
+    [
+        ("foreign", {"Status": "exited", "Running": False}, "original identity"),
+        ("original", {"Status": "exited", "Running": "false"}, "malformed exit state"),
+    ],
+)
+def test_exit_observation_refuses_mismatched_identity_or_malformed_state(
+    monkeypatch,
+    container_id,
+    state,
+    expected_error,
+):
+    from tests.test_support import native_consumer_boundary
+
+    monkeypatch.setattr(
+        native_consumer_boundary, "wait_for_value", lambda observe, accept: observe()
+    )
+    payload = [
+        {
+            "Id": container_id,
+            "Config": {
+                "Labels": {
+                    "com.docker.compose.project": "lotus-e2e",
+                    "com.docker.compose.service": "postgres",
+                }
+            },
+            "State": state,
+        }
+    ]
+    runner = MagicMock(return_value=subprocess.CompletedProcess([], 0, json.dumps(payload), ""))
+    with pytest.raises(ValueError, match=expected_error):
+        wait_for_owned_container_exit(
+            "original",
+            project_name="lotus-e2e",
+            service_name="postgres",
+            runner=runner,
+        )
 
 
 def _boundary(
