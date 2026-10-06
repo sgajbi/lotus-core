@@ -10,6 +10,16 @@ identify accepted delivery IDs or prove durable financial completion. The timeou
 once within its existing six-second/32KiB/20-row limits, after completion measurement, without
 relaxing the full-profile 180-second SLO.
 
+The diagnostic metrics scrape accepts at most 1MiB of input independently of the unchanged
+32KiB response limit. It exports only known consumer metrics and public scope labels; malformed,
+private-label or nonfinite observations are unavailable, never measured zero. Kafka offset
+sampling is read-only and nonjoining, round-robin across raw, persisted and replay-request
+topic/group pairs within 20 rows; group failures and omitted partitions remain explicit.
+Lock sampling prioritizes blocker heads and waiting edges over unrelated lower-PID locks,
+requires matching backend births and reports truncation. A truncated graph is not complete;
+stale or missing birth observations cannot establish an edge. Application task/backend mapping
+remains `MISSING`. Static and mocked checks do not certify native PostgreSQL execution.
+
 Birth-qualified PostgreSQL PID/lock OIDs and the verified managed container identity are bounded
 observations, not a causal verdict. Plain Docker label-filtered lookup avoids a Compose plugin
 child; inspect still verifies project, service and published metrics port. Container-init PID is not
