@@ -80,7 +80,7 @@ def test_partition_migration_contract_proves_historical_crc32_remapping() -> Non
     migration = contract["partition_migrations"]["eight_to_twelve_v1"]
     topics = {topic["topic"]: topic for topic in contract["topics"]}
 
-    assert contract["contract_version"] == "1.3.0"
+    assert contract["contract_version"] == "1.4.0"
     assert migration["status"] == "implemented_pending_final_runtime_revalidation"
     assert migration["source_partition_count"] == 8
     assert migration["target_partition_count"] == 12

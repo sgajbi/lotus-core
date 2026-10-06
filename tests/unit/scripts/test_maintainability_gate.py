@@ -9,6 +9,16 @@ import pytest
 from scripts.quality import maintainability_gate as gate
 
 
+def _below_zero_floor_source() -> str:
+    # Purpose-built complexity fixture: production refactoring must not change
+    # whether this regression exercises Radon's clamped zero floor.
+    branches = "".join(
+        f"    if value == {index}:\n        value += {index} * (value - {index + 1})\n"
+        for index in range(300)
+    )
+    return f"def complex_fixture(value):\n{branches}    return value\n"
+
+
 def _valid_baseline_payload() -> dict[str, object]:
     return {
         "schema_version": "lotus.core.maintainability-baseline.v1",
@@ -181,9 +191,7 @@ def test_radon_scan_preserves_unclamped_metric_at_zero_floor(
 ) -> None:
     source_root = tmp_path / "src"
     source_root.mkdir()
-    source = Path("src/libs/portfolio-common/portfolio_common/enterprise_readiness.py").read_text(
-        encoding="utf-8"
-    )
+    source = _below_zero_floor_source()
     (source_root / "tracked.py").write_text(source, encoding="utf-8")
     subprocess.run(["git", "init", "--quiet"], cwd=tmp_path, check=True)
     subprocess.run(["git", "add", "src/tracked.py"], cwd=tmp_path, check=True)
@@ -198,9 +206,7 @@ def test_radon_scan_preserves_unclamped_metric_at_zero_floor(
 
 
 def test_unclamped_metric_preserves_values_below_radon_floor() -> None:
-    source = Path("src/libs/portfolio-common/portfolio_common/enterprise_readiness.py").read_text(
-        encoding="utf-8"
-    )
+    source = _below_zero_floor_source()
 
     assert gate.unclamped_maintainability_index(source) < 0.0
     assert gate.unclamped_maintainability_index("") == 100.0

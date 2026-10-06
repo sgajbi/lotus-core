@@ -59,6 +59,7 @@ def test_registry_covers_every_job_creating_endpoint_family() -> None:
         "/ingest/market-prices",
         "/ingest/fx-rates",
         "/ingest/transactions",
+        "/ingest/transactions/{transaction_id}/source-evidence",
         "/ingest/business-dates",
         "/ingest/portfolio-bundle",
         "/reprocess/transactions",
@@ -74,6 +75,7 @@ def test_registry_covers_every_job_creating_endpoint_family() -> None:
 def test_sensitive_payload_families_are_fingerprint_only() -> None:
     for endpoint in (
         "/ingest/transactions",
+        "/ingest/transactions/{transaction_id}/source-evidence",
         "/ingest/portfolios",
         "/ingest/portfolio-bundle",
         "/reprocess/transactions",
