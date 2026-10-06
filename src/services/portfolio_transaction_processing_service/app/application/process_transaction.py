@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import TypedDict
 
 from portfolio_common.domain.transaction_control_codes import (
     normalize_transaction_control_code,
@@ -20,6 +21,8 @@ from ..domain.transaction import (
     SettlementCashValidationError,
     calculate_settlement_cash_movement,
 )
+from ..domain.transaction.fx import FX_BUSINESS_TRANSACTION_TYPES
+from ..domain.transaction.fx.persisted_return import FxBookingContext, FxPersistenceWitness
 from ..ports import (
     PositionProcessingResult,
     TransactionIdempotencyOutcome,
@@ -32,11 +35,44 @@ from ..ports import (
     TransactionProcessingUnitOfWorkFactory,
 )
 from ..ports.position_history import AdmittedPositionCorrectionGroup
-from ..ports.transaction_processing import FirstPublicationSourceAuthority
+from ..ports.transaction_processing import FirstPublicationSourceAuthority, FxSourceAdmission
 from .commands import ProcessTransactionCommand, TransactionProcessingIntent
 from .errors import TransactionProcessingRejected
 from .results import ProcessTransactionResult, TransactionProcessingStatus
 from .settlement_cash_rejection import build_settlement_cash_rejection
+
+
+class _FxBookingArguments(TypedDict, total=False):
+    fx_booking_context: FxBookingContext
+
+
+def _fx_booking_arguments(
+    command: ProcessTransactionCommand,
+    *,
+    idempotency_outcome: TransactionIdempotencyOutcome,
+    correction_claimed: bool,
+    repair_delivery_claimed: bool,
+    retention_witness: FxPersistenceWitness | None = None,
+) -> _FxBookingArguments:
+    transaction = command.transaction
+    if (
+        normalize_transaction_control_code(transaction.transaction_type)
+        not in FX_BUSINESS_TRANSACTION_TYPES
+    ):
+        return {}
+    return {
+        "fx_booking_context": FxBookingContext(
+            initial_publication=(
+                idempotency_outcome is TransactionIdempotencyOutcome.CLAIMED
+                and command.metadata.processing_intent is TransactionProcessingIntent.STANDARD
+                and transaction.epoch is None
+                and not correction_claimed
+                and not repair_delivery_claimed
+            ),
+            admitted_epoch=transaction.epoch,
+            retention_witness=retention_witness,
+        )
+    }
 
 
 def _admitted_position_group(
@@ -68,7 +104,7 @@ async def _qualify_first_publication_source(
     idempotency_outcome: TransactionIdempotencyOutcome,
     correction_claimed: bool,
     repair_delivery_claimed: bool,
-) -> FirstPublicationSourceAuthority | None:
+) -> FirstPublicationSourceAuthority | FxSourceAdmission | None:
     """Retain optional canonical authority only for ordinary first publication."""
     transaction = command.transaction
     if (
@@ -79,6 +115,12 @@ async def _qualify_first_publication_source(
         and not repair_delivery_claimed
     ):
         source = await unit_of_work.cost.load_first_publication_source(transaction)
+        if isinstance(source, FxSourceAdmission):
+            authority = source.authority
+            return FxSourceAdmission(
+                authority if authority is not None and authority.matches(transaction) else None,
+                source.retention_witness,
+            )
         if isinstance(source, FirstPublicationSourceAuthority) and source.matches(transaction):
             return source
     return None
@@ -402,8 +444,9 @@ class ProcessTransactionUseCase:
                 correction_claimed=correction_claimed,
                 repair_delivery_claimed=repair_delivery_claimed,
             )
+            fx_witness = None
             if canonical_unversioned_repair:
-                await unit_of_work.cost.validate_unversioned_repair_source(transaction)
+                fx_witness = await unit_of_work.cost.validate_unversioned_repair_source(transaction)
             first_publication_source = await _qualify_first_publication_source(
                 command,
                 unit_of_work,
@@ -411,12 +454,22 @@ class ProcessTransactionUseCase:
                 correction_claimed=correction_claimed,
                 repair_delivery_claimed=repair_delivery_claimed,
             )
+            if isinstance(first_publication_source, FxSourceAdmission):
+                fx_witness = first_publication_source.retention_witness
+                first_publication_source = first_publication_source.authority
             with self._observer.observe(TransactionProcessingOperation.COST):
                 cost_result = await unit_of_work.cost.process(
                     transaction,
                     correlation_id=metadata.correlation_id,
                     traceparent=metadata.traceparent,
                     reconcile_superseded_derived=correction_claimed,
+                    **_fx_booking_arguments(
+                        command,
+                        idempotency_outcome=idempotency_outcome,
+                        correction_claimed=correction_claimed,
+                        repair_delivery_claimed=repair_delivery_claimed,
+                        retention_witness=fx_witness,
+                    ),
                 )
             admitted_correction = _admitted_position_group(
                 command,

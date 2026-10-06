@@ -19,6 +19,15 @@ transaction domain; valuation, timeseries, and downstream analytics remain separ
 
 ## Processing Flow
 
+The #452 R2 candidate qualifies FX persistence returns using detached pre-write facts in the
+same financial UOW. `NONE` retains the raw-absent route; `UPSTREAM_PROVIDED` qualifies original
+raw facts and distinguishes initial publication from processed receipt replay. Only an omitted
+source system matching the witnessed durable value may be retained on the first return. Original
+six P&L Decimal/null values survive rebinding; the second row and receipt must match exactly.
+The implementation reuses already loaded facts and adds no portfolio-wide serialization or
+economic correction authority. Local units do not establish native PG rollback/concurrency or
+merged-main acceptance. See [FX P&L semantics](../docs/rfc-transaction-specs/transactions/FX/FX-SLICE-6-PNL-SEMANTICS.md).
+
 Before processing, fresh applicable FX `UPSTREAM_PROVIDED` sources require local/base FX P&L;
 zero and signed amounts are valid. HTTP rejects incomplete sources before publication. Raw
 persistence handles exact duplicates first, then admission in the existing UOW; fresh refusal

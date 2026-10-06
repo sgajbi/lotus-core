@@ -31,6 +31,14 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
     build_generated_settlement_cash_leg,
     build_transaction_semantic_identity,
 )
+from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
+    build_fx_processed_transaction,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx.persisted_return import (  # noqa: E501
+    FxBookingContext,
+    qualify_final_fx_return,
+    qualify_first_fx_return,
+)
 from src.services.portfolio_transaction_processing_service.app.ports import (
     CashflowProcessingResult,
     CostProcessingResult,
@@ -67,6 +75,77 @@ class _RecordingObservation:
         if exc_type is not None and self.outcome is TransactionProcessingOutcome.SUCCEEDED:
             self.outcome = TransactionProcessingOutcome.FAILED
         self.records.append((self.operation, self.outcome))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "intent,epoch,initial",
+    [
+        (TransactionProcessingIntent.STANDARD, None, True),
+        (TransactionProcessingIntent.STANDARD, 0, False),
+        (TransactionProcessingIntent.REPAIR, None, False),
+        (TransactionProcessingIntent.REPAIR, 3, False),
+    ],
+)
+async def test_fx_context_comes_from_actual_application_claim_and_intent(intent, epoch, initial):
+    calls = []
+    uow = _UnitOfWork(calls=calls)
+    received = []
+
+    async def process(transaction, **kwargs):
+        received.append(kwargs["fx_booking_context"])
+        raise RuntimeError("stop after admission")
+
+    uow.cost.process = process
+    command = replace(
+        _command(), transaction=replace(_transaction(), transaction_type="FX_SPOT", epoch=epoch)
+    )
+    command = replace(command, metadata=replace(command.metadata, processing_intent=intent))
+    with pytest.raises(RuntimeError, match="stop after admission"):
+        await ProcessTransactionUseCase(
+            unit_of_work_factory=lambda: uow, observer=_RecordingObserver()
+        ).execute(command)
+    assert received == [FxBookingContext(initial, epoch)]
+    assert uow.rolled_back and not uow.committed
+    assert not uow.cashflow.transactions and not uow.readiness.transactions
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("return_number", [1, 2])
+async def test_fx_return_refusal_rolls_back_application_before_other_financial_effects(
+    return_number,
+):
+    calls = []
+    uow = _UnitOfWork(calls=calls)
+
+    async def process(transaction, **kwargs):
+        assert kwargs["fx_booking_context"] == FxBookingContext(True, None)
+        submitted = build_fx_processed_transaction(transaction)
+        changed = build_fx_processed_transaction(
+            replace(submitted, gross_transaction_amount=Decimal("256"))
+        )
+        calls.append("staged-fx-write")
+        if return_number == 1:
+            qualify_first_fx_return(submitted, changed, None)
+        else:
+            calls.append("staged-rebind-write")
+            qualify_final_fx_return(submitted, changed)
+        pytest.fail("changed durable return must refuse")
+
+    uow.cost.process = process
+    command = replace(
+        _command(),
+        transaction=replace(
+            _transaction(), transaction_type="FX_SPOT", fx_realized_pnl_mode="NONE"
+        ),
+    )
+    with pytest.raises((ValueError, RuntimeError)):
+        await ProcessTransactionUseCase(
+            unit_of_work_factory=lambda: uow, observer=_RecordingObserver()
+        ).execute(command)
+    assert uow.rolled_back and not uow.committed
+    assert calls[-1] == "rollback"
+    assert not uow.cashflow.transactions and not uow.readiness.transactions
 
 
 class _RecordingObserver:

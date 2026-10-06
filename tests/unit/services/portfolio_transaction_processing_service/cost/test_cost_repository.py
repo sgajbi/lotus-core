@@ -60,6 +60,143 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
 pytestmark = pytest.mark.asyncio
 
 
+@pytest.mark.parametrize(
+    "mode,preheld", [("NONE", False), ("NONE", True), ("UPSTREAM_PROVIDED", True)]
+)
+async def test_fx_witness_reuses_loaded_facts_or_reads_only_target_row(mode, preheld, monkeypatch):
+    from sqlalchemy.dialects import postgresql
+
+    row = DBTransaction(
+        transaction_id="FX-RETENTION",
+        portfolio_id="P1",
+        instrument_id="S1",
+        security_id="S1",
+        transaction_type="FX_SPOT",
+        transaction_date=datetime(2026, 1, 1, tzinfo=UTC),
+        quantity=Decimal(0),
+        price=Decimal(0),
+        gross_transaction_amount=Decimal("100"),
+        trade_currency="USD",
+        currency="USD",
+        source_system="ORIGINAL",
+        fx_realized_pnl_mode=mode,
+    )
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = row
+    session = AsyncMock()
+    session.execute.return_value = result
+    repository = SqlAlchemyCostBasisTransactionRepository(session)
+    incoming = BookedTransaction(
+        transaction_id=row.transaction_id,
+        portfolio_id="P1",
+        instrument_id="S1",
+        security_id="S1",
+        tenant_id="tenant-test",
+        transaction_type="FX_SPOT",
+        transaction_date=row.transaction_date,
+        quantity=Decimal(0),
+        price=Decimal(0),
+        gross_transaction_amount=Decimal("100"),
+        trade_currency="USD",
+        currency="USD",
+        fx_realized_pnl_mode=mode,
+    )
+    if preheld:
+        from portfolio_common.reprocessing_replay import ReprocessingReplayError
+
+        from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx.persisted_return import (  # noqa: E501
+            fx_source_material,
+        )
+        from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (  # noqa: E501
+            transaction_repository as module,
+        )
+
+        before = module._to_persisted_booked_transaction(row, tenant_id="tenant-test")
+        raw_payload = fx_source_material(before)
+        row.payload_fingerprint = transaction_payload_fingerprint(raw_payload)
+        raw = (
+            [{"id": 17, "aggregate_id": "P1", "payload": raw_payload}]
+            if mode == "UPSTREAM_PROVIDED"
+            else []
+        )
+        owner = MagicMock()
+        owner.scalar_one_or_none.return_value = "tenant-test"
+        result.unique.return_value.scalars.return_value.first.return_value = row
+        session.execute.side_effect = [owner, result]
+        load_facts = AsyncMock(return_value=([], raw, []))
+        fee_qualification = AsyncMock(
+            side_effect=ReprocessingReplayError(
+                "not canonical source authority", [row.transaction_id]
+            )
+        )
+        monkeypatch.setattr(module, "load_transaction_fee_facts", load_facts)
+        monkeypatch.setattr(module, "load_qualified_transaction_fee_sources", fee_qualification)
+        loaded = await repository.load_booked_transaction_with_fx_witness(incoming)
+        assert loaded.transaction is None
+        witness = loaded.retention_witness
+        load_facts.assert_awaited_once()
+        assert fee_qualification.await_args.kwargs["source_facts"] == ([], raw)
+        assert session.execute.await_count == 2
+        assert vars(repository) == {"db": session}
+        if mode == "UPSTREAM_PROVIDED":
+            assert witness.raw_source.raw_event_id == 17
+        return
+    witness = await repository.load_fx_retention_witness(incoming)
+    assert witness.durable_before.source_system == "ORIGINAL"
+    assert witness.raw_source is None and witness.original_pnl is None
+    session.execute.assert_awaited_once()
+    sql = str(
+        session.execute.await_args.args[0].compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
+    assert "FOR UPDATE OF transactions" in sql
+    assert "portfolios.tenant_id = 'tenant-test'" in sql
+    assert "transactions.security_id = 'S1'" in sql
+    assert "outbox_events" not in sql
+
+
+@pytest.mark.parametrize("mode", ["NONE", "UPSTREAM_PROVIDED"])
+async def test_fx_handoff_detaches_preloaded_source_without_repository_state(mode):
+    before = BookedTransaction(
+        transaction_id="FX-RETENTION",
+        portfolio_id="P1",
+        instrument_id="S1",
+        security_id="S1",
+        tenant_id="tenant-test",
+        transaction_type="FX_SPOT",
+        transaction_date=datetime(2026, 1, 1, tzinfo=UTC),
+        quantity=Decimal(0),
+        price=Decimal(0),
+        gross_transaction_amount=Decimal("100"),
+        trade_currency="USD",
+        currency="USD",
+        source_system="ORIGINAL",
+        fx_realized_pnl_mode=mode,
+    )
+    session = AsyncMock()
+    repository = SqlAlchemyCostBasisTransactionRepository(session)
+    from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx.persisted_return import (  # noqa: E501
+        fx_source_material,
+    )
+
+    material = fx_source_material(before)
+    sources = (
+        [{"id": 17, "aggregate_id": "P1", "payload": material}]
+        if mode == "UPSTREAM_PROVIDED"
+        else []
+    )
+    witness = repository._qualify_fx_witness(
+        before, transaction_payload_fingerprint(material), sources
+    )
+    assert witness.durable_before == before
+    if mode == "UPSTREAM_PROVIDED":
+        assert witness.raw_source.raw_event_id == 17
+        assert witness.original_pnl == (None,) * 6
+    assert vars(repository) == {"db": session}
+    session.execute.assert_not_awaited()
+
+
 @pytest.mark.parametrize("aggregate", [None, Decimal("0"), Decimal("99")])
 @pytest.mark.parametrize("upstream_ids", [False, True])
 async def test_derived_projection_preserves_source_and_actual_sell_method(aggregate, upstream_ids):

@@ -548,3 +548,37 @@ async def test_first_publication_source_requires_locked_exact_original_input(dam
         assert proof.matches(transaction)
         assert not proof.matches(replace(transaction, quantity=Decimal("26")))
     processor.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_failed_fx_admission_then_retry_returns_only_fresh_explicit_facts():
+    from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx.persisted_return import (  # noqa: E501
+        FxCanonicalSourceLoad,
+        FxPersistenceWitness,
+    )
+    from src.services.portfolio_transaction_processing_service.app.ports.transaction_processing import (  # noqa: E501
+        FxSourceAdmission,
+    )
+
+    transaction = replace(
+        _cash_account_booking("BUY"),
+        tenant_id=TEST_TENANT_ID,
+        transaction_type="FX_SPOT",
+        source_system=None,
+    )
+    before = replace(transaction, source_system="ORIGINAL", fx_realized_pnl_mode="NONE")
+    witness = FxPersistenceWitness(before, None, None)
+    processor = AsyncMock(spec=PreparedCostProcessingUseCase)
+    adapter = _cash_account_adapter(processor=processor, instrument=None)
+    adapter._repository.load_booked_transaction_with_fx_witness.side_effect = [
+        TransactionProcessingRejected(
+            reason_code="repair_original_source_unavailable", detail={}, retryable=False
+        ),
+        FxCanonicalSourceLoad(before, witness),
+    ]
+    assert await adapter.load_first_publication_source(transaction) is None
+    retry = await adapter.load_first_publication_source(transaction)
+    assert retry == FxSourceAdmission(None, witness)
+    adapter._repository.get_booked_transaction.assert_not_awaited()
+    assert adapter._repository.load_booked_transaction_with_fx_witness.await_count == 2
+    processor.execute.assert_not_awaited()

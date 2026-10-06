@@ -5,13 +5,14 @@ from dataclasses import fields, replace
 from decimal import Decimal
 from typing import Any
 
-from portfolio_common.database_models import Portfolio, TransactionCost
+from portfolio_common.database_models import OutboxEvent, Portfolio, TransactionCost
 from portfolio_common.database_models import (
     Transaction as DBTransaction,
 )
 from portfolio_common.domain.calculation_lineage import (
     CalculationLineage,
     calculation_lineage_from_payload,
+    canonical_content_hash,
 )
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.domain.transaction import (
@@ -29,6 +30,7 @@ from portfolio_common.infrastructure.persistence.transaction_identity_guard impo
     transaction_identity_update_allowed,
 )
 from portfolio_common.reprocessing_replay import ReprocessingReplayError
+from portfolio_common.reprocessing_repository import load_transaction_fee_facts
 from portfolio_common.utils import async_timed
 from sqlalchemy import delete, func, select, true, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -38,6 +40,12 @@ from sqlalchemy.orm import aliased, joinedload
 from ...application.errors import TransactionProcessingRejected
 from ...domain.cost_basis import CostBasisTransaction
 from ...domain.transaction import BookedTransaction, enrich_booking_metadata
+from ...domain.transaction.fx import FX_BUSINESS_TRANSACTION_TYPES
+from ...domain.transaction.fx.persisted_return import (
+    FxCanonicalSourceLoad,
+    FxPersistenceWitness,
+    qualify_fx_raw_source,
+)
 from ...domain.transaction.redemption import (
     REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS,
     REDEMPTION_TRANSACTION_TYPES,
@@ -380,6 +388,77 @@ class SqlAlchemyCostBasisTransactionRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    async def load_fx_retention_witness(
+        self, transaction: BookedTransaction
+    ) -> FxPersistenceWitness | None:
+        """Reuse locked source facts, otherwise take only the target upsert's row lock."""
+        row = (
+            await self.db.execute(
+                select(DBTransaction)
+                .join(Portfolio, Portfolio.portfolio_id == DBTransaction.portfolio_id)
+                .where(
+                    DBTransaction.transaction_id == transaction.transaction_id,
+                    DBTransaction.portfolio_id == transaction.portfolio_id,
+                    DBTransaction.security_id == transaction.security_id,
+                    Portfolio.tenant_id == transaction.tenant_id,
+                )
+                .with_for_update(of=DBTransaction)
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            return None
+        before = _to_persisted_booked_transaction(row, tenant_id=transaction.tenant_id)
+        sources = []
+        if (
+            normalize_transaction_control_code(transaction.fx_realized_pnl_mode)
+            == "UPSTREAM_PROVIDED"
+        ):
+            sources = [
+                dict(source)
+                for source in (
+                    await self.db.execute(
+                        select(OutboxEvent.id, OutboxEvent.aggregate_id, OutboxEvent.payload)
+                        .where(
+                            OutboxEvent.aggregate_type == "RawTransaction",
+                            OutboxEvent.event_type == "RawTransactionPersisted",
+                            OutboxEvent.aggregate_id == transaction.portfolio_id,
+                            OutboxEvent.payload["portfolio_id"].as_string()
+                            == transaction.portfolio_id,
+                            OutboxEvent.payload["transaction_id"].as_string()
+                            == transaction.transaction_id,
+                        )
+                        .order_by(OutboxEvent.id)
+                    )
+                )
+                .mappings()
+                .all()
+            ]
+        return self._qualify_fx_witness(
+            before, str(row.payload_fingerprint or ""), sources, transaction.epoch
+        )
+
+    @staticmethod
+    def _qualify_fx_witness(
+        before: BookedTransaction,
+        fingerprint: str,
+        sources: Sequence[Mapping[str, Any]],
+        admitted_epoch: int | None = None,
+    ) -> FxPersistenceWitness:
+        if normalize_transaction_control_code(before.fx_realized_pnl_mode) != "UPSTREAM_PROVIDED":
+            return FxPersistenceWitness(before, None, None, admitted_epoch)
+        if len(sources) != 1 or sources[0]["aggregate_id"] != before.portfolio_id:
+            raise ValueError("FX original raw source cut is unavailable or ambiguous")
+        source = sources[0]
+        raw = qualify_fx_raw_source(
+            raw=source["payload"],
+            transaction=before,
+            stored_fingerprint=fingerprint,
+            raw_event_id=int(source["id"]),
+            raw_payload_hash=canonical_content_hash(source["payload"]),
+        )
+        return FxPersistenceWitness(before, raw.original_pnl, raw, admitted_epoch)
+
     @async_timed(repository="CostBasisTransactionRepository", method="get_transaction_history")
     async def get_transaction_history(
         self, portfolio_id: str, security_id: str, exclude_id: str | None = None
@@ -543,6 +622,41 @@ class SqlAlchemyCostBasisTransactionRepository:
         repair_tenant_id: str | None = None,
         repair_security_id: str | None = None,
     ) -> BookedTransaction | None:
+        result = await self._get_booked_transaction(
+            transaction_id,
+            portfolio_id=portfolio_id,
+            repair_tenant_id=repair_tenant_id,
+            repair_security_id=repair_security_id,
+        )
+        assert not isinstance(result, FxCanonicalSourceLoad)
+        return result
+
+    async def load_booked_transaction_with_fx_witness(
+        self,
+        transaction: BookedTransaction,
+    ) -> FxCanonicalSourceLoad:
+        result = await self._get_booked_transaction(
+            transaction.transaction_id,
+            portfolio_id=transaction.portfolio_id,
+            repair_tenant_id=transaction.tenant_id or "",
+            repair_security_id=transaction.security_id,
+            include_fx_witness=True,
+        )
+        return (
+            result
+            if isinstance(result, FxCanonicalSourceLoad)
+            else FxCanonicalSourceLoad(result, None)
+        )
+
+    async def _get_booked_transaction(
+        self,
+        transaction_id: str,
+        *,
+        portfolio_id: str | None = None,
+        repair_tenant_id: str | None = None,
+        repair_security_id: str | None = None,
+        include_fx_witness: bool = False,
+    ) -> BookedTransaction | FxCanonicalSourceLoad | None:
         """Load one persisted transaction as an immutable domain transaction."""
 
         repair_source = repair_tenant_id is not None
@@ -592,7 +706,25 @@ class SqlAlchemyCostBasisTransactionRepository:
             source_payload = to_transaction_event(
                 source, correlation_id=None, traceparent=None
             ).model_dump(mode="python")
+            witness = None
             try:
+                source_facts = None
+                if (
+                    normalize_transaction_control_code(source.transaction_type)
+                    in FX_BUSINESS_TRANSACTION_TYPES
+                ):
+                    costs, raw, _ = await load_transaction_fee_facts(
+                        self.db,
+                        [source_payload | {"payload_fingerprint": transaction.payload_fingerprint}],
+                        lock_sources=True,
+                    )
+                    source_facts = (costs, raw)
+                    if include_fx_witness:
+                        witness = self._qualify_fx_witness(
+                            source,
+                            str(transaction.payload_fingerprint),
+                            raw,
+                        )
                 fee_sources = await load_qualified_transaction_fee_sources(
                     self.db,
                     [
@@ -602,8 +734,11 @@ class SqlAlchemyCostBasisTransactionRepository:
                         }
                     ],
                     lock_sources=True,
+                    source_facts=source_facts,
                 )
             except ReprocessingReplayError as exc:
+                if include_fx_witness:
+                    return FxCanonicalSourceLoad(None, witness)
                 raise TransactionProcessingRejected(
                     reason_code="repair_original_source_unavailable",
                     detail={"portfolio_id": portfolio_id, "transaction_id": transaction_id},
@@ -621,12 +756,14 @@ class SqlAlchemyCostBasisTransactionRepository:
             )
             source_payload.update(fee_sources[source.transaction_id])
             if transaction.payload_fingerprint != transaction_payload_fingerprint(source_payload):
+                if include_fx_witness:
+                    return FxCanonicalSourceLoad(None, witness)
                 raise TransactionProcessingRejected(
                     reason_code="repair_original_source_unavailable",
                     detail={"portfolio_id": portfolio_id, "transaction_id": transaction_id},
                     retryable=False,
                 )
-            return source
+            return FxCanonicalSourceLoad(source, witness) if include_fx_witness else source
         return _to_persisted_booked_transaction(transaction)
 
     @async_timed(repository="CostBasisTransactionRepository", method="upsert_booked_transaction")

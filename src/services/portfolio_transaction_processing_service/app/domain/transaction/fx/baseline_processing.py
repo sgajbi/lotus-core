@@ -62,10 +62,16 @@ class FxBaselineProcessingUpdate(TypedDict):
     realized_total_pnl_base: Decimal
 
 
-def build_fx_processed_transaction(transaction: BookedTransaction) -> BookedTransaction:
+def build_fx_processed_transaction(
+    transaction: BookedTransaction, *, original_pnl: Mapping[str, object] | None = None
+) -> BookedTransaction:
     """Apply explicit baseline cost and realized-P&L semantics to an FX component."""
 
-    original_pnl = {name: getattr(transaction, name) for name in FX_ORIGINAL_PNL_FIELDS}
+    source_pnl = (
+        dict(original_pnl)
+        if original_pnl is not None
+        else {name: getattr(transaction, name) for name in FX_ORIGINAL_PNL_FIELDS}
+    )
     update = build_fx_baseline_processing_update(transaction)
     processed_transaction = replace(transaction, **update, calculation_lineage=None)
     output = fx_booked_transaction_output_payload(processed_transaction)
@@ -74,7 +80,7 @@ def build_fx_processed_transaction(transaction: BookedTransaction) -> BookedTran
         algorithm_version=FX_BASELINE_CALCULATION_ALGORITHM_VERSION,
         intermediate_precision=TRANSACTION_COST_LEDGER_OUTPUT_V1.working_precision,
         input_payload=fx_source_presence_input_payload(
-            source_values=original_pnl, booked_output=output
+            source_values=source_pnl, booked_output=output
         ),
         output_payload=output,
         numeric_output_policy=TRANSACTION_COST_LEDGER_OUTPUT_V1.lineage_identity(),
@@ -88,7 +94,15 @@ def fx_booked_transaction_output_payload(
     """Return the complete persistence-shaped FX transaction output for lineage."""
 
     return {
-        field.name: _canonical_fx_lineage_value(value, field_path=field.name)
+        name: _canonical_fx_lineage_value(value, field_path=name)
+        for name, value in fx_persisted_transaction_material(transaction).items()
+    }
+
+
+def fx_persisted_transaction_material(transaction: BookedTransaction) -> dict[str, object]:
+    """Project persisted fields without rounding or reconstructing source presence."""
+    return {
+        field.name: value
         for field in fields(transaction)
         if field.name not in _NON_PERSISTED_BOOKED_TRANSACTION_FIELDS
         and (value := getattr(transaction, field.name)) is not None

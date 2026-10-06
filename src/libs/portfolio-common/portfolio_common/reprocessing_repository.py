@@ -143,7 +143,7 @@ async def load_transaction_fee_facts(
         .order_by(TransactionCost.transaction_id, TransactionCost.id)
     )
     raw_stmt = (
-        select(OutboxEvent.aggregate_id, OutboxEvent.payload)
+        select(OutboxEvent.id, OutboxEvent.aggregate_id, OutboxEvent.payload)
         .where(
             OutboxEvent.aggregate_type == "RawTransaction",
             OutboxEvent.event_type == "RawTransactionPersisted",

@@ -518,11 +518,15 @@ async def load_qualified_transaction_fee_sources(
     lock_sources: bool = False,
     allow_retained_receipt: bool = False,
     derived_financial: bool = False,
+    source_facts: tuple[Sequence[Mapping[str, Any]], Sequence[Mapping[str, Any]]] | None = None,
 ) -> dict[str, dict[str, Decimal | None]]:
     """Examine all original facts before requesting authority for unresolved rows."""
-    costs, raw, _ = await load_transaction_fee_facts(
-        session, canonical_rows, lock_sources=lock_sources
-    )
+    if source_facts is None:
+        costs, raw, _ = await load_transaction_fee_facts(
+            session, canonical_rows, lock_sources=lock_sources
+        )
+    else:
+        costs, raw = source_facts
     costs_by_id: dict[str, list[Mapping[str, Any]]] = {}
     raw_by_id: dict[str, list[Mapping[str, Any]]] = {}
     for cost in costs:
