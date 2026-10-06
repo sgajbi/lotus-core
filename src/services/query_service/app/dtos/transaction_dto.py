@@ -3,6 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Literal, Optional
 
+from portfolio_common.api_contract.transaction_source_evidence import TransactionSourceEvidence
 from portfolio_common.source_data_product_metadata import (
     SourceDataProductRuntimeMetadata,
     product_name_field,
@@ -26,9 +27,15 @@ class TransactionCostRecord(BaseModel):
 
 
 class TransactionRecord(BaseModel):
-    """
-    Represents a single, detailed transaction record for API responses.
-    """
+    """Represents a single detailed source-owned transaction record."""
+
+    transaction_source_evidence: TransactionSourceEvidence | None = Field(
+        None,
+        description=(
+            "Bounded original/current/selected immutable FX source proof. Confirmation "
+            "time is not the transaction financial as-of date; raw/auth payloads are excluded."
+        ),
+    )
 
     transaction_id: str = Field(
         ..., description="Transaction identifier.", examples=["TXN-2026-0001"]
@@ -602,6 +609,11 @@ class PaginatedTransactionResponse(SourceDataProductRuntimeMetadata):
 
     product_name: Literal["TransactionLedgerWindow"] = product_name_field("TransactionLedgerWindow")
     product_version: Literal["v1"] = product_version_field()
+    source_cut_sha256: str | None = Field(
+        None,
+        pattern="^[0-9a-f]{64}$",
+        description="Material source cut for the entire matching ledger scope.",
+    )
     portfolio_id: str = Field(..., description="The ID of the portfolio.")
     reporting_currency: Optional[str] = Field(
         None,
@@ -645,6 +657,11 @@ class TransactionRecordResponse(SourceDataProductRuntimeMetadata):
 
     product_name: Literal["TransactionLedgerWindow"] = product_name_field("TransactionLedgerWindow")
     product_version: Literal["v1"] = product_version_field()
+    source_cut_sha256: str | None = Field(
+        None,
+        pattern="^[0-9a-f]{64}$",
+        description="Material source cut for this admitted exact record and source selection.",
+    )
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PORT-TXN-001"])
     reporting_currency: Optional[str] = Field(
         None,

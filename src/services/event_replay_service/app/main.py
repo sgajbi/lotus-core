@@ -10,7 +10,7 @@ from portfolio_common.health import create_health_router
 from portfolio_common.http_app_bootstrap import configure_standard_http_app, include_routers
 from portfolio_common.logging_utils import generate_correlation_id, setup_logging
 
-from .routers import ingestion_operations
+from .routers import ingestion_operations, source_correction_operations
 
 SERVICE_PREFIX = "ERP"
 SERVICE_NAME = "event_replay_service"
@@ -55,4 +55,6 @@ health_router = create_health_router(
     service_name=SERVICE_NAME,
     app_version=app.version,
 )
-include_routers(app, health_router, ingestion_operations.router)
+include_routers(
+    app, health_router, ingestion_operations.router, source_correction_operations.router
+)

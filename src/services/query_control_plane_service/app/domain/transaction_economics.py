@@ -5,6 +5,8 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
+from portfolio_common.api_contract.transaction_source_evidence import TransactionSourceEvidence
+
 FxPnlEvidenceReason = Literal[
     "FX_SOURCE_NOT_APPLICABLE",
     "FX_SOURCE_QUALIFIED",
@@ -43,6 +45,7 @@ class FxPnlSourceEvidence:
     local: Decimal | None
     base: Decimal | None
     reason: FxPnlEvidenceReason
+    source_evidence: TransactionSourceEvidence | None = None
 
 
 @dataclass(frozen=True, slots=True)

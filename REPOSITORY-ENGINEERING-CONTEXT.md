@@ -207,7 +207,38 @@ NONE/non-realizing and non-FX semantics remain supported. Reads do not backfill 
 fences. Owning reader proof runs in `query-authority-db-contract` and `critical-db-coverage`; actual
 downstream consumer and exact-main release qualification remain distinct acceptance boundaries.
 
+Evidence-only source confirmation is a separate signed command, not financial correction.
+The source-owned append-only revision binds tenant, retained raw/output/receipt, initial head,
+purpose-bound grant, CAS and original source presence. Persistence commits the revision and
+notice atomically; retries and status independently verify committed authority. The baseline
+v2 producer preserves all six original P&L presence/value pairs before unchanged normalization.
+QCP and operational ledger readers share qualified current/original/explicit-revision evidence
+and bind the material snapshot/source cut; missing authority stays unavailable. Original raw,
+receipts, signed companions, capital/total values and cash/cost/replay effects remain immutable.
+The implementation contract is `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-6-PNL-SEMANTICS.md`;
+native consumer/database, exact protected promotion/release, deployed enrollment, live Kafka and
+downstream analytics qualification are distinct proof boundaries. Broader economic corrections
+remain separately owned by #452.
+
 ### Retained-verification delivery practice
+
+Typed retained-source proof additionally requires an exact original-six P&L presence/value
+projection for a registered algorithm version greater than one. Its finite immutable basis,
+receipt input/output binding, shadowing, mutation and helper reachability are structurally
+qualified; explicit zero is not absence. The projection helper inspects AST only. Independent
+fixed owner fixtures exercise valid and refused grammar without reading live producer source.
+This static capability does not activate a production v2 boundary, qualify PostgreSQL or
+confirm downstream consumers; those remain separately owned integration requirements.
+
+Presence-owner module bindings use a closed inert-declaration grammar: only the supported
+standard-library imports, literal module bindings/defaults, approved type annotations and
+undecorated functions are admitted. Evaluated calls in definition headers are refused even
+on unrelated functions. Unrelated function bodies are not a general purity proof; selected
+projector and builder bodies still require their separate exact structural templates.
+Every function declaration in a registered retained-owner module also requires inert defaults,
+resolved supported type annotations and no decorators, including unrelated functions and class
+methods. Typed immutable evidence and literal type aliases retain their separate structural
+qualification. This header check is not a general import or function-body purity proof.
 
 Calculated-output declaration, usage and caller-graph scans share the same authored-source
 selection below `src/`. Directory components named `build` are generated packaging inputs,

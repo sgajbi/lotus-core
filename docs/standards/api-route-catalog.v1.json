@@ -1245,6 +1245,67 @@
     {
       "service_app": "event_replay_service",
       "method": "GET",
+      "path": "/ingestion/jobs/{job_id}/source-correction",
+      "route_key": "GET /ingestion/jobs/{job_id}/source-correction",
+      "operation_id": "read_source_correction_operation_ingestion_jobs__job_id__source_correction_get",
+      "summary": "Read committed source-confirmation status",
+      "tags": [
+        "Ingestion Operations"
+      ],
+      "route_family": "Control-Plane And Policy",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "event_replay_service",
+      "auth_requirement": "governed-enterprise-readiness",
+      "audit_requirement": "audit-required",
+      "request_schema": null,
+      "response_schemas": [
+        {
+          "status_code": "200",
+          "schema": "AsyncCommandStatus",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "403",
+          "schema": "none",
+          "description": "Verified dedicated correction authority absent."
+        },
+        {
+          "status_code": "404",
+          "schema": "none",
+          "description": "Tenant-owned correction operation was not found."
+        },
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        },
+        {
+          "status_code": "503",
+          "schema": "none",
+          "description": "Owning evidence store was unavailable."
+        }
+      ],
+      "pagination": [],
+      "filtering": [],
+      "sorting": [],
+      "idempotency_behavior": "safe-read",
+      "downstream_consumers": [
+        "lotus-gateway",
+        "lotus-workbench",
+        "operations"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "event_replay_service",
+      "method": "GET",
       "path": "/ingestion/ops/control",
       "route_key": "GET /ingestion/ops/control",
       "operation_id": "get_ingestion_ops_control_ingestion_ops_control_get",
@@ -4168,6 +4229,81 @@
           "status_code": "503",
           "schema": "none",
           "description": "Ingestion is unavailable because operating mode blocks writes or Kafka publish failed."
+        }
+      ],
+      "pagination": [],
+      "filtering": [],
+      "sorting": [],
+      "idempotency_behavior": "ingestion-job-idempotency-supported-where-header-present",
+      "downstream_consumers": [
+        "source-adapters",
+        "operations"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "ingestion_service",
+      "method": "POST",
+      "path": "/ingest/transactions/{transaction_id}/source-evidence",
+      "route_key": "POST /ingest/transactions/{transaction_id}/source-evidence",
+      "operation_id": "submit_source_correction_ingest_transactions__transaction_id__source_evidence_post",
+      "summary": "Confirm missing transaction FX source evidence",
+      "tags": [
+        "Transactions"
+      ],
+      "route_family": "Write Ingress",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "ingestion_service",
+      "auth_requirement": "governed-enterprise-readiness",
+      "audit_requirement": "audit-required",
+      "request_schema": "TransactionSourceCorrectionRequest",
+      "response_schemas": [
+        {
+          "status_code": "202",
+          "schema": "AsyncCommandAccepted",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "400",
+          "schema": "none",
+          "description": "Closed input or required idempotency key was invalid."
+        },
+        {
+          "status_code": "403",
+          "schema": "none",
+          "description": "Verified dedicated correction authority was absent."
+        },
+        {
+          "status_code": "404",
+          "schema": "none",
+          "description": "Tenant-owned original source was unavailable."
+        },
+        {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency conflict or previous failed operation."
+        },
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        },
+        {
+          "status_code": "429",
+          "schema": "none",
+          "description": "Native ingestion write rate protection refused the command."
+        },
+        {
+          "status_code": "503",
+          "schema": "none",
+          "description": "Native operating mode or operation store was unavailable."
         }
       ],
       "pagination": [],

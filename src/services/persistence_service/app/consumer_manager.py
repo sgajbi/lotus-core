@@ -13,6 +13,7 @@ from portfolio_common.config import (
     KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
     KAFKA_PORTFOLIOS_RAW_RECEIVED_TOPIC,
     KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC,
+    KAFKA_TRANSACTIONS_SOURCE_CORRECTION_COMMANDS_TOPIC,
 )
 from portfolio_common.health_server import health_probe_bind_host
 from portfolio_common.kafka_admin import ensure_topics_exist
@@ -30,6 +31,7 @@ from .consumers.instrument_consumer import InstrumentConsumer
 from .consumers.market_price_consumer import MarketPriceConsumer
 from .consumers.portfolio_consumer import PortfolioConsumer
 from .consumers.transaction_consumer import TransactionPersistenceConsumer
+from .consumers.transaction_source_correction_consumer import TransactionSourceCorrectionConsumer
 from .monitoring import setup_metrics
 from .web import WORKER_READINESS_SERVICE_NAME
 from .web import app as web_app
@@ -70,6 +72,16 @@ class ConsumerManager:
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
                 topic=KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC,
                 group_id="persistence_group_transactions",
+                dlq_topic=dlq_topic,
+                service_prefix=service_prefix,
+                metrics=custom_metrics,
+            )
+        )
+        self.consumers.append(
+            TransactionSourceCorrectionConsumer(
+                bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+                topic=KAFKA_TRANSACTIONS_SOURCE_CORRECTION_COMMANDS_TOPIC,
+                group_id="persistence_group_source_corrections",
                 dlq_topic=dlq_topic,
                 service_prefix=service_prefix,
                 metrics=custom_metrics,

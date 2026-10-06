@@ -1,6 +1,11 @@
 import portfolio_common.event_supportability as event_supportability
 import pytest
 from portfolio_common import event_contracts, events
+from portfolio_common.api_contract.async_commands import SourceEvidenceConfirmationInput
+from portfolio_common.command_authorization import (
+    CommandAuthorizationClaims,
+    SignedCommandAuthorization,
+)
 from portfolio_common.event_supportability import (
     CONTROL_EXECUTION,
     CONTROL_PLANE_AND_POLICY,
@@ -184,8 +189,59 @@ def test_cataloged_event_models_accept_governed_outbox_envelope_metadata() -> No
             authority_payload,
         ),
     }
+    body = SourceEvidenceConfirmationInput.model_validate(
+        {
+            "expected_head_id": "7",
+            "expected_head_sha256": "a" * 64,
+            "reason": "Qualified absent source confirmation",
+            "realized_pnl_local": "0",
+        }
+    )
+    claims = CommandAuthorizationClaims(
+        issuer="schema-only",
+        key_id="schema-only",
+        principal="schema-only",
+        actor_id="actor",
+        tenant_id="tenant",
+        command_id="command",
+        operation_id="operation",
+        target_transaction_id="T1",
+        root_raw_id="7",
+        root_raw_sha256="a" * 64,
+        expected_head_id="7",
+        expected_head_sha256="a" * 64,
+        canonical_request_sha256=body.canonical_request_sha256(target_transaction_id="T1"),
+        issued_at=1,
+        expires_at=101,
+        nonce="nonce",
+        correlation_id="corr-123",
+        trace_id="trace",
+    )
+    sample_payloads_by_schema_model["TransactionSourceCorrectionRequestedEvent"] = {
+        "authorization": SignedCommandAuthorization(claims=claims, signature="0" * 64),
+        "body": body,
+        "tenant_id": "tenant",
+        "portfolio_id": "P1",
+        "trace_id": "trace",
+        "idempotency_key": "command",
+        "source_system": "ingestion_service",
+    }
+    sample_payloads_by_schema_model["TransactionSourceEvidenceChangedEvent"] = {
+        "revision_id": "revision",
+        "revision_sha256": "b" * 64,
+        "transaction_id": "T1",
+        "portfolio_id": "P1",
+        "tenant_id": "tenant",
+        "operation_id": "operation",
+        "root_raw_event_id": 7,
+        "trace_id": "trace",
+        "idempotency_key": "revision",
+        "source_system": "persistence_service",
+    }
     for definition in EVENT_FAMILY_DEFINITIONS:
-        model_cls = getattr(events, definition.schema_model)
+        model_cls = getattr(events, definition.schema_model, None) or getattr(
+            event_contracts, definition.schema_model
+        )
         payload = {
             **sample_payloads_by_schema_model[definition.schema_model],
             "event_type": definition.event_type,
@@ -235,6 +291,7 @@ def test_reconciliation_events_bind_to_reconciliation_evidence() -> None:
         "FinancialReconciliationRequested",
         "FinancialReconciliationCompleted",
         "PortfolioDayControlsEvaluated",
+        "TransactionSourceCorrectionRequested",
     }
     for definition in reconciliation_events:
         assert RECONCILIATION_EVIDENCE_BUNDLE in definition.supportability_evidence

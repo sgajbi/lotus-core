@@ -24,8 +24,14 @@ from .fixed_income_book_cost import (
     FixedIncomeBookCostReplayEligibilityReason,
     PolicyAssignmentAuthorityContract,
 )
+from .transaction_source_corrections import (
+    TransactionSourceCorrectionRequestedEvent,
+    TransactionSourceEvidenceChangedEvent,
+)
 
 __all__ = [
+    "TransactionSourceCorrectionRequestedEvent",
+    "TransactionSourceEvidenceChangedEvent",
     "CORPORATE_ACTION_MANIFEST_RECEIVED_EVENT_TYPE",
     "CORPORATE_ACTION_MANIFEST_RECEIVED_SCHEMA_VERSION",
     "FIXED_INCOME_BOOK_COST_AUTHORITY_EVENT_TYPE",

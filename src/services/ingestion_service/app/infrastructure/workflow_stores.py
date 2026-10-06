@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
+
+from portfolio_common.database_models import IngestionJob
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..ports.ingestion_workflow_stores import ReplayAuditRecord
 from ..services.ingestion_job_lifecycle import (
@@ -24,11 +27,13 @@ class SqlAlchemyIngestionJobStore:
         fingerprint_key_id: str,
         fingerprint_hmac_secret: str,
         fingerprint_previous_keys: Mapping[str, str],
+        on_created: Callable[[AsyncSession, IngestionJob], Awaitable[None]] | None = None,
     ):
         self._session_factory = session_factory
         self._fingerprint_key_id = fingerprint_key_id
         self._fingerprint_hmac_secret = fingerprint_hmac_secret
         self._fingerprint_previous_keys = dict(fingerprint_previous_keys)
+        self._on_created = on_created
 
     async def create_or_get_job(
         self,
@@ -59,6 +64,7 @@ class SqlAlchemyIngestionJobStore:
             fingerprint_hmac_secret=self._fingerprint_hmac_secret,
             fingerprint_previous_keys=self._fingerprint_previous_keys,
             session_factory=self._session_factory,
+            on_created=self._on_created,
         )
 
 

@@ -19,7 +19,10 @@
       "exampleIds": [
         "ingestion-validation-error",
         "ingestion-idempotency-conflict",
-        "ingestion-dependency-timeout"
+        "ingestion-dependency-timeout",
+        "source-confirmation-missing-idempotency",
+        "source-confirmation-idempotency-conflict",
+        "source-confirmation-queued"
       ]
     },
     {
@@ -47,6 +50,46 @@
     }
   ],
   "examples": [
+    {
+      "id": "source-confirmation-idempotency-conflict",
+      "category": "conflict_idempotency",
+      "service": "ingestion_service",
+      "family": "Write Ingress",
+      "method": "POST",
+      "path": "/ingest/transactions/{transaction_id}/source-evidence",
+      "sourceTests": ["tests/unit/services/ingestion_service/routers/test_transaction_source_corrections.py"],
+      "request": {"headers": {"X-Correlation-Id": "qualified-correlation", "X-Idempotency-Key": "source-confirmation-unit-key"}, "path": {"transaction_id": "FX-CLOSE"}, "authorityBoundary": "Owning ASGI test supplies verified synthetic service headers and an explicit application conflict substitute. It is transport proof, not a database conflict campaign."},
+      "response": {"status": 409, "body": {"code": "SOURCE_COMMAND_IDEMPOTENCY_CONFLICT", "message": "The idempotency key conflicts with a prior request.", "correlation_id": "qualified-correlation", "idempotency_key": "source-confirmation-unit-key", "details": {"idempotency_scope": "tenant-and-resource:transaction-source-evidence", "conflict_reason": "payload_fingerprint_mismatch"}}},
+      "sensitivity": {"syntheticOnly": true, "redactionPolicy": "Only the admitted request key is echoed; exception/store key and payload are not exposed."}
+    },
+    {
+      "id": "source-confirmation-queued",
+      "category": "success",
+      "service": "ingestion_service",
+      "family": "Write Ingress",
+      "method": "POST",
+      "path": "/ingest/transactions/{transaction_id}/source-evidence",
+      "sourceTests": ["tests/unit/services/ingestion_service/routers/test_transaction_source_corrections.py"],
+      "request": {"headers": {"X-Correlation-Id": "qualified-correlation", "X-Idempotency-Key": "source-confirmation-unit-key"}, "path": {"transaction_id": "FX-CLOSE"}, "authorityBoundary": "Verified synthetic headers with explicit application substitute; 202 means queued intent, not committed revision or qualified consumer success."},
+      "response": {"status": 202, "body": {"correlation_id": "qualified-correlation", "operation_id": "qualified-operation", "status": "QUEUED", "status_url": "/ingestion/jobs/qualified-operation/source-correction", "retry_after_seconds": 2, "idempotency": {"key": "opaque-purpose-reference", "scope": "tenant-and-resource:transaction-source-evidence"}}},
+      "sensitivity": {"syntheticOnly": true, "redactionPolicy": "Synthetic identifiers and purpose-bound reference only; signing material omitted."}
+    },
+    {
+      "id": "source-confirmation-missing-idempotency",
+      "category": "validation_error",
+      "service": "ingestion_service",
+      "family": "Write Ingress",
+      "method": "POST",
+      "path": "/ingest/transactions/{transaction_id}/source-evidence",
+      "sourceTests": ["tests/unit/services/ingestion_service/routers/test_transaction_source_corrections.py"],
+      "request": {
+        "path": {"transaction_id": "FX-CLOSE"},
+        "body": {"expected_head_id": "7", "expected_head_sha256": "1111111111111111111111111111111111111111111111111111111111111111", "reason": "Qualified missing-source confirmation", "realized_pnl_local": "0"},
+        "authorityBoundary": "Owning test supplies verified synthetic signed capability headers but deliberately omits X-Idempotency-Key; no secret/signature is published."
+      },
+      "response": {"status": 400, "body": {"code": "SOURCE_CORRECTION_IDEMPOTENCY_REQUIRED", "message": "X-Idempotency-Key is required.", "correlation_id": "qualified-correlation", "details": {}}},
+      "sensitivity": {"syntheticOnly": true, "redactionPolicy": "Synthetic identifiers only; verified-context signing material omitted."}
+    },
     {
       "id": "operational-read-success",
       "category": "success",

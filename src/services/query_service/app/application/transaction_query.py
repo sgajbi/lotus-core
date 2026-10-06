@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime
 
+from portfolio_common.api_contract.transaction_source_evidence import SourceEvidenceSelection
+from portfolio_common.domain.tenant import TenantId
+
 from .transaction_sorting import normalize_transaction_sort
 
 
@@ -13,6 +16,9 @@ class TransactionRecordUnavailableError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class TransactionLedgerFilters:
     portfolio_id: str
+    tenant_id: TenantId | None = None
+    source_evidence_selection: SourceEvidenceSelection = "current"
+    source_revision_id: str | None = None
     transaction_id: str | None = None
     instrument_id: str | None = None
     security_id: str | None = None
@@ -38,6 +44,7 @@ class TransactionLedgerInputEvidence:
     transaction_cost_digest: str | None
     selected_cashflow_digest: str | None
     selected_fx_rate_digest: str | None
+    source_cut_sha256: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

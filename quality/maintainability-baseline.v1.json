@@ -7,8 +7,7 @@
     {
       "path": "src/libs/portfolio-common/portfolio_common/enterprise_readiness.py",
       "rank": "C",
-      "mi": 0.0,
-      "raw_mi": -1.325408777352027,
+      "mi": 2.670010903178993,
       "owner": "lotus-core maintainers",
       "rationale": "Existing enterprise-readiness hotspot; new or changed debt is forbidden.",
       "issue": "#462"

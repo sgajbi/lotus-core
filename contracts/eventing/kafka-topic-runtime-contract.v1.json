@@ -1,6 +1,6 @@
 {
   "schema_version": "lotus-core.kafka-topic-runtime-contract.v1",
-  "contract_version": "1.3.0",
+  "contract_version": "1.4.0",
   "ordering_contract": "Kafka ordering is guaranteed only within a partition. Dates and epochs must not be key components for backdated corrections or restatements.",
   "keyed_partitioner": "consistent_random_crc32",
   "tenant_identity_status": "not_source_owned_in_current_event_family",
@@ -34,6 +34,30 @@
     }
   },
   "topics": [
+    {
+      "topic": "transactions.source_correction.commands",
+      "partitions": 12,
+      "producer_services": ["ingestion_service"],
+      "current_key": "transaction_id",
+      "ordering_scope": "canonical_transaction",
+      "consumer_groups": ["persistence_group_source_corrections"],
+      "consumer_max_in_flight": 12,
+      "state_owner": "persistence_service.transaction_source_revisions",
+      "duplicate_policy": "known_key_authentication_before_tenant_command_idempotency_then_locked_expected_head_CAS",
+      "replay_contract": "only_exact_authenticated_committed_command_returns_original_revision; never_financial_transaction_replay"
+    },
+    {
+      "topic": "transactions.source_evidence.changed",
+      "partitions": 12,
+      "producer_services": ["persistence_service"],
+      "current_key": "transaction_id",
+      "ordering_scope": "canonical_transaction",
+      "consumer_groups": [],
+      "consumer_max_in_flight": 0,
+      "state_owner": "persistence_service.transaction_source_revisions",
+      "duplicate_policy": "one_notice_per_immutable_revision_in_same_CoreDB_UOW",
+      "replay_contract": "no_registered_consumer; future_consumers_must_reload_and_verify_fact_and_source_authority; notice_is_not_qualification"
+    },
     {
       "topic": "portfolios.raw.received",
       "partitions": 4,

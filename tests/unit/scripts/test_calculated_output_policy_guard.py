@@ -768,6 +768,72 @@ def test_retained_verification_registration_is_not_an_allowlist(tmp_path, mutati
         )
     assert evaluate(tmp_path, contract)
 
+@pytest.mark.parametrize(
+    "suffix",
+    [
+        "\ndef harmless(value: Mapping[str, Decimal | None], *, ready: bool = True) -> tuple[Decimal | None, ...]:\n    return ()\n",
+        "\nfrom decimal import Decimal as Amount\ndef harmless(value: Amount | None = None) -> FxSourceEvidenceConfirmation:\n    return None\n",
+        "\nimport decimal as amounts\ndef harmless(value: amounts.Decimal | None = None) -> tuple[FxCurrencyBasis, ...]:\n    return ()\n",
+    ],
+)
+def test_retained_owner_accepts_supported_resolved_inert_headers(tmp_path, suffix):
+    retained, _, contract = _typed_original_presence_fixture(tmp_path)
+    retained.write_text(retained.read_text(encoding="utf-8") + suffix, encoding="utf-8")
+    assert evaluate(tmp_path, contract) == ()
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        "def unrelated(default=EFFECT):\n    pass\n",
+        "def unrelated(*, default=EFFECT):\n    pass\n",
+        "def unrelated(value: EFFECT):\n    pass\n",
+        "def unrelated() -> EFFECT:\n    pass\n",
+        "@(EFFECT or (lambda fn: fn))\ndef unrelated():\n    pass\n",
+        "def unrelated(*values: EFFECT):\n    pass\n",
+        "def unrelated(**values: EFFECT):\n    pass\n",
+    ],
+)
+def test_retained_owner_refuses_executed_unrelated_header_rebinding(tmp_path, header):
+    retained, _, contract = _typed_original_presence_fixture(tmp_path)
+    assert evaluate(tmp_path, contract) == ()
+    effect = "globals().__setitem__('retained_fx_output_payload', lambda output: {})"
+    header = header.replace("EFFECT", effect)
+    namespace = {"retained_fx_output_payload": lambda output: dict(output)}
+    assert namespace["retained_fx_output_payload"]({"amount": Decimal("42")})
+    exec(compile(header, "<retained-header-effect-control>", "exec", dont_inherit=True), namespace)
+    assert namespace["retained_fx_output_payload"]({"amount": Decimal("42")}) == {}
+    retained.write_text(retained.read_text(encoding="utf-8") + "\n" + header, encoding="utf-8")
+    assert evaluate(tmp_path, contract)
+
+
+@pytest.mark.parametrize(
+    "suffix",
+    [
+        "\ndict = 'not-a-type'\ndef unrelated(value: dict):\n    pass\n",
+        "\nMapping = 'not-a-type'\ndef unrelated(value: Mapping[str, object]):\n    pass\n",
+        "\nfrom pathlib import Path\ndef unrelated(value: Path):\n    pass\n",
+        "\ndef unrelated(value: (lambda: object)()):\n    pass\n",
+    ],
+)
+def test_retained_owner_refuses_unproven_type_bindings(tmp_path, suffix):
+    retained, _, contract = _typed_original_presence_fixture(tmp_path)
+    retained.write_text(retained.read_text(encoding="utf-8") + suffix, encoding="utf-8")
+    assert evaluate(tmp_path, contract)
+
+
+def test_retained_owner_refuses_header_effect_in_module_control_block(tmp_path):
+    retained, _, contract = _typed_original_presence_fixture(tmp_path)
+    source = retained.read_text(encoding="utf-8")
+    source += (
+        "\nif True:\n"
+        "    def unrelated(default=globals().__setitem__('retained_fx_output_payload', "
+        "lambda output: {})):\n"
+        "        pass\n"
+    )
+    retained.write_text(source, encoding="utf-8")
+    assert evaluate(tmp_path, contract)
+
 
 @pytest.mark.parametrize(
     ("source_path", "module"),
@@ -2427,3 +2493,437 @@ def test_main_reports_success_and_findings(
     contract.write_text(json.dumps(contract_payload), encoding="utf-8")
     assert main() == 1
     assert "TEST_LEDGER_OUTPUT_V1.scale" in capsys.readouterr().err
+
+
+# Fixed reviewed source fixtures: independent of live producer/guard files.
+_TYPED_RETAINED_OWNER_FIXTURE = 'from collections.abc import Mapping\nfrom dataclasses import dataclass, replace\nfrom decimal import Decimal, InvalidOperation\nfrom typing import Literal, cast\nfrom portfolio_common.domain.calculation_lineage import build_calculation_lineage, calculation_lineage_binds_output, calculation_lineage_from_payload, canonical_content_hash\nfrom .fx_source_admission import FX_SOURCE_ADMISSION_TYPES\nfrom .fx_source_presence import fx_original_pnl_values, fx_source_presence_input_payload\nfrom .numeric_policy import TRANSACTION_COST_LEDGER_OUTPUT_V1\nfrom .payload_identity import transaction_payload_fingerprint, transaction_payload_pre_upstream_fingerprint\nFxCurrencyBasis = Literal[\'local\', \'base\']\n\nclass SourceEvidenceConfirmationRejected(ValueError):\n    """Bounded reason without input values or financial identifiers."""\n\n@dataclass(frozen=True, slots=True)\nclass FxPnlBasisEvidence:\n    source: Decimal | None\n    capital: Decimal\n    fx: Decimal\n    total: Decimal\n\n    def __post_init__(self) -> None:\n        for field_name in (\'source\', \'capital\', \'fx\', \'total\'):\n            value = getattr(self, field_name)\n            if value is None and field_name == \'source\':\n                continue\n            if not isinstance(value, Decimal):\n                raise TypeError(\'FX evidence values must be Decimal\')\n            if not value.is_finite():\n                raise ValueError(\'FX evidence values must be finite\')\n\n@dataclass(frozen=True, slots=True)\nclass FxSourceEvidenceConfirmation:\n    local: FxPnlBasisEvidence\n    base: FxPnlBasisEvidence\n    confirmed_bases: tuple[FxCurrencyBasis, ...] = ()\n\n    def __post_init__(self) -> None:\n        if not isinstance(self.local, FxPnlBasisEvidence) or not isinstance(self.base, FxPnlBasisEvidence):\n            raise TypeError(\'FX confirmation requires typed currency-basis evidence\')\n\ndef retained_fx_output_payload(ledger_output: Mapping[str, object]) -> dict[str, object]:\n    """Complete persisted FX output projection; never manufacture an old receipt."""\n    policy = TRANSACTION_COST_LEDGER_OUTPUT_V1\n    quantum = Decimal(1).scaleb(-policy.scale)\n    output: dict[str, object] = {}\n    for name, value in ledger_output.items():\n        if value is None:\n            continue\n        if isinstance(value, Decimal):\n            with policy.arithmetic_context():\n                value = policy.normalize(value, field_name=name).quantize(quantum, rounding=policy.rounding)\n        output[name] = value\n    return output\n\ndef _verify_v1_fx_source(*, raw_source: Mapping[str, object], ledger_output: Mapping[str, object], receipt_payload: object) -> FxSourceEvidenceConfirmation:\n    receipt = calculation_lineage_from_payload(receipt_payload)\n    policy = TRANSACTION_COST_LEDGER_OUTPUT_V1\n    if receipt is None or receipt.algorithm_id != \'foreign-exchange-baseline-processing\' or receipt.algorithm_version != 1 or (receipt.intermediate_precision != policy.working_precision) or (receipt.numeric_output_policy != policy.lineage_identity()) or (not calculation_lineage_binds_output(receipt, output_payload=retained_fx_output_payload(ledger_output))):\n        raise SourceEvidenceConfirmationRejected(\'FX_SOURCE_RECEIPT_UNAVAILABLE\')\n    return FxSourceEvidenceConfirmation(local=_retained_basis(raw_source, ledger_output, \'local\'), base=_retained_basis(raw_source, ledger_output, \'base\'))\n\ndef _verify_v2_fx_source(*, raw_source: Mapping[str, object], ledger_output: Mapping[str, object], receipt_payload: object) -> FxSourceEvidenceConfirmation:\n    receipt = calculation_lineage_from_payload(receipt_payload)\n    policy = TRANSACTION_COST_LEDGER_OUTPUT_V1\n    if receipt is None or receipt.algorithm_id != \'foreign-exchange-baseline-processing\' or receipt.algorithm_version != 2 or (receipt.intermediate_precision != policy.working_precision) or (receipt.numeric_output_policy != policy.lineage_identity()) or (not calculation_lineage_binds_output(receipt, output_payload=retained_fx_output_payload(ledger_output))):\n        raise SourceEvidenceConfirmationRejected(\'FX_SOURCE_RECEIPT_UNAVAILABLE\')\n    if receipt.input_content_hash != canonical_content_hash(fx_source_presence_input_payload(source_values=fx_original_pnl_values(raw_source), booked_output=retained_fx_output_payload(ledger_output))):\n        raise SourceEvidenceConfirmationRejected(\'FX_SOURCE_INPUT_UNAVAILABLE\')\n    return FxSourceEvidenceConfirmation(local=_retained_basis(raw_source, ledger_output, \'local\'), base=_retained_basis(raw_source, ledger_output, \'base\'))\n\ndef _retained_basis(raw: Mapping[str, object], output: Mapping[str, object], basis: str) -> FxPnlBasisEvidence:\n    source = raw.get(f\'realized_fx_pnl_{basis}\')\n    if source is not None:\n        if not isinstance(source, (str, Decimal)):\n            raise SourceEvidenceConfirmationRejected(\'FX_SOURCE_AMOUNT_INVALID\')\n        try:\n            source = TRANSACTION_COST_LEDGER_OUTPUT_V1.normalize(Decimal(source), field_name=\'fx_source\')\n        except (InvalidOperation, ValueError, ArithmeticError):\n            raise SourceEvidenceConfirmationRejected(\'FX_SOURCE_AMOUNT_INVALID\') from None\n        if source != output.get(f\'realized_fx_pnl_{basis}\'):\n            raise SourceEvidenceConfirmationRejected(\'FX_SOURCE_OUTPUT_MISMATCH\')\n    try:\n        return FxPnlBasisEvidence(source=cast(Decimal | None, source), capital=cast(Decimal, output[f\'realized_capital_pnl_{basis}\']), fx=cast(Decimal, output[f\'realized_fx_pnl_{basis}\']), total=cast(Decimal, output[f\'realized_total_pnl_{basis}\']))\n    except (KeyError, TypeError, ValueError):\n        raise SourceEvidenceConfirmationRejected(\'FX_SOURCE_OUTPUT_UNAVAILABLE\') from None'
+_TYPED_PRESENCE_FIXTURE = '"""Bind original FX P/L presence separately from normalized booked economics."""\n\nfrom collections.abc import Mapping\nfrom decimal import Decimal, InvalidOperation\n\nFX_ORIGINAL_PNL_PRESENCE_POLICY = "fx-original-pnl-presence@2"\nFX_ORIGINAL_PNL_FIELDS = (\n    "realized_capital_pnl_local",\n    "realized_fx_pnl_local",\n    "realized_total_pnl_local",\n    "realized_capital_pnl_base",\n    "realized_fx_pnl_base",\n    "realized_total_pnl_base",\n)\n\n\ndef fx_original_pnl_values(raw_source: Mapping[str, object]) -> dict[str, object]:\n    """Recover six exact retained source values, never persisted defaulted amounts."""\n    values: dict[str, object] = {}\n    for name in FX_ORIGINAL_PNL_FIELDS:\n        value = raw_source.get(name)\n        if value is not None:\n            if not isinstance(value, (str, Decimal)):\n                raise ValueError("Original FX source amount is not exact decimal text")\n            try:\n                value = Decimal(value)\n            except InvalidOperation:\n                raise ValueError("Original FX source amount is invalid") from None\n            if not value.is_finite():\n                raise ValueError("Original FX source amount must be finite")\n        values[name] = value\n    return values\n\n\ndef fx_source_presence_input_payload(\n    *, source_values: Mapping[str, object], booked_output: Mapping[str, object]\n) -> dict[str, object]:\n    """Produce the v2 input projection independently of service calculation code.\n\n    A null original amount is not an explicit zero. Original finite Decimal values\n    remain unrounded; booked economics have their existing governed output scale.\n    The complete booked projection binds all unchanged inputs and derived outputs.\n    This receipt does not itself confirm an absent source or revise financial values.\n    """\n    original: dict[str, object] = {}\n    for name in FX_ORIGINAL_PNL_FIELDS:\n        if name not in source_values:\n            raise ValueError(f"Original FX source projection is missing {name}")\n        value = source_values[name]\n        if value is not None and (not isinstance(value, Decimal) or not value.is_finite()):\n            raise ValueError(f"Original FX source {name} must be a finite Decimal or null")\n        original[name] = {"present": value is not None, "value": value}\n    return {\n        "source_presence_policy": FX_ORIGINAL_PNL_PRESENCE_POLICY,\n        "original_pnl": original,\n        "booked_economics": dict(booked_output),\n    }\n'
+
+def _typed_original_presence_fixture(root: Path, version: int = 2) -> tuple[Path, Path, Path]:
+    """Exercise the actual structural grammar, independent of shipping callable names."""
+    _write_policy(root)
+    module = ast.parse(_TYPED_RETAINED_OWNER_FIXTURE)
+    retained = root / "src/owner/retained.py"
+    chosen = {"retained_fx_output_payload", "_retained_basis", f"_verify_v{version}_fx_source"}
+    classes = {
+        "SourceEvidenceConfirmationRejected",
+        "FxPnlBasisEvidence",
+        "FxSourceEvidenceConfirmation",
+    }
+    nodes = [
+        node
+        for node in module.body
+        if (
+            isinstance(node, ast.ImportFrom)
+            or isinstance(node, ast.FunctionDef)
+            and node.name in chosen
+            or isinstance(node, ast.ClassDef)
+            and node.name in classes
+            or isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == "FxCurrencyBasis"
+                for target in node.targets
+            )
+        )
+    ]
+
+    class FixtureImports(ast.NodeTransformer):
+        def visit_ImportFrom(self, node):
+            if node.module == "numeric_policy":
+                node.module, node.level = "owner.numeric_policy", 0
+                node.names = [ast.alias(name="TEST_LEDGER_OUTPUT_V1")]
+            elif node.module == "fx_source_presence":
+                node.module, node.level = "owner.presence", 0
+            return node
+
+        def visit_Name(self, node):
+            if node.id == "TRANSACTION_COST_LEDGER_OUTPUT_V1":
+                node.id = "TEST_LEDGER_OUTPUT_V1"
+            return node
+
+    authored = FixtureImports().visit(ast.Module(body=nodes, type_ignores=[]))
+    retained.write_text(ast.unparse(authored) + "\n", encoding="utf-8")
+    presence = root / "src/owner/presence.py"
+    presence.write_text(
+        _TYPED_PRESENCE_FIXTURE, encoding="utf-8"
+    )
+    boundary = f"src/owner/retained.py::_verify_v{version}_fx_source"
+    spec = {
+        "receipt_parameter": "receipt_payload",
+        "output_parameter": "ledger_output",
+        "output_canonicalizer": "src/owner/retained.py::retained_fx_output_payload",
+        "algorithm_id": "foreign-exchange-baseline-processing",
+        "algorithm_version": version,
+    }
+    if version == 2:
+        spec["input_verification"] = {
+            "source_parameter": "raw_source",
+            "source_projector": "src/owner/presence.py::fx_original_pnl_values",
+            "input_builder": "src/owner/presence.py::fx_source_presence_input_payload",
+            "presence_policy": "fx-original-pnl-presence@2",
+        }
+    contract = _contract(
+        root,
+        lineage_boundary_callsites=[boundary],
+        lineage_boundary_covered_callsites={
+            boundary: [
+                "src/owner/retained.py::_retained_basis",
+                "src/owner/retained.py::retained_fx_output_payload",
+            ]
+        },
+        lineage_verification_boundaries={boundary: spec},
+    )
+    return retained, presence, contract
+
+
+@pytest.mark.parametrize("version", [1, 2])
+def test_typed_finite_original_source_basis_boundary_is_proved(tmp_path, version):
+    _, _, contract = _typed_original_presence_fixture(tmp_path, version)
+    assert evaluate(tmp_path, contract) == ()
+
+
+def test_original_presence_proof_accepts_alpha_renamed_classes_helpers_and_locals(tmp_path):
+    retained, presence, contract = _typed_original_presence_fixture(tmp_path)
+    renames = {
+        "FxPnlBasisEvidence": "FiniteBasis",
+        "FxSourceEvidenceConfirmation": "FinitePair",
+        "_retained_basis": "project_basis",
+        "fx_original_pnl_values": "extract_presence",
+        "fx_source_presence_input_payload": "bind_presence",
+        "FX_ORIGINAL_PNL_FIELDS": "ORIGINAL_FIELDS",
+    }
+    for path in (retained, presence, contract):
+        source = path.read_text(encoding="utf-8")
+        for before, after in renames.items():
+            source = source.replace(before, after)
+        if path != contract:
+
+            class RenameLocal(ast.NodeTransformer):
+                def visit_Name(self, node):
+                    if node.id == "field_name":
+                        node.id = "column_name"
+                    return node
+
+            source = ast.unparse(RenameLocal().visit(ast.parse(source)))
+        path.write_text(source, encoding="utf-8")
+    assert evaluate(tmp_path, contract) == ()
+
+
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        ("receipt.input_content_hash !=", "receipt.output_content_hash !="),
+        ("receipt.input_content_hash !=", "receipt.input_content_hash =="),
+        ("fx_original_pnl_values(raw_source)", "fx_original_pnl_values({})"),
+        ("booked_output=retained_fx_output_payload(ledger_output)", "booked_output={}"),
+        ("receipt.algorithm_version != 2", "receipt.algorithm_version != 1"),
+        (
+            "receipt.algorithm_id != 'foreign-exchange-baseline-processing'",
+            "receipt.algorithm_id != 'foreign-algorithm'",
+        ),
+        (
+            "receipt.intermediate_precision != policy.working_precision",
+            "receipt.intermediate_precision != 18",
+        ),
+        ("receipt.numeric_output_policy != policy.lineage_identity()", "False"),
+        (
+            "not calculation_lineage_binds_output(receipt, "
+            "output_payload=retained_fx_output_payload(ledger_output))",
+            "False",
+        ),
+        ("@dataclass(frozen=True, slots=True)", "@dataclass(frozen=False, slots=True)"),
+        ("if not value.is_finite():", "if False:"),
+        (
+            "capital=cast(Decimal, output[f'realized_capital_pnl_{basis}'])",
+            "capital=cast(Decimal, output[f'realized_fx_pnl_{basis}'])",
+        ),
+        (
+            "local=_retained_basis(raw_source, ledger_output, 'local')",
+            "local=_retained_basis(raw_source, ledger_output, 'base')",
+        ),
+        ("output[name] = value", "output['constant'] = value"),
+    ],
+)
+def test_v2_typed_receipt_rejects_bound_input_output_and_basis_drift(tmp_path, before, after):
+    retained, _, contract = _typed_original_presence_fixture(tmp_path)
+    original = retained.read_text(encoding="utf-8")
+    assert before in original
+    retained.write_text(original.replace(before, after), encoding="utf-8")
+    assert evaluate(tmp_path, contract)
+
+
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        ('"realized_total_pnl_base",', ""),
+        ('"present": value is not None', '"present": True'),
+        ('"value": value', '"value": Decimal("0")'),
+        ("dict(booked_output)", "{}"),
+        ("raw_source.get(name)", 'raw_source.get(name) or "0"'),
+        ("if value is not None:", "if False:"),
+        ("not value.is_finite()", "False"),
+        ("fx-original-pnl-presence@2", "foreign-presence-policy"),
+    ],
+)
+def test_v2_presence_projection_rejects_omission_defaults_and_unbound_output(
+    tmp_path, before, after
+):
+    _, presence, contract = _typed_original_presence_fixture(tmp_path)
+    original = presence.read_text(encoding="utf-8")
+    assert before in original
+    presence.write_text(original.replace(before, after), encoding="utf-8")
+    assert evaluate(tmp_path, contract)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "missing_descriptor",
+        "missing_rejection",
+        "mutable_return",
+        "shadow_hash",
+        "shadow_builtin",
+        "source_alias",
+        "opaque_helper",
+    ],
+)
+def test_v2_registration_cannot_allow_bypass_shadowing_or_opaque_results(tmp_path, mutation):
+    retained, presence, contract = _typed_original_presence_fixture(tmp_path)
+    text = retained.read_text(encoding="utf-8")
+    if mutation == "missing_descriptor":
+        payload = json.loads(contract.read_text(encoding="utf-8"))
+        spec = next(
+            iter(
+                payload["policies"]["TEST_LEDGER_OUTPUT_V1"][
+                    "lineage_verification_boundaries"
+                ].values()
+            )
+        )
+        del spec["input_verification"]
+        contract.write_text(json.dumps(payload), encoding="utf-8")
+    elif mutation == "missing_rejection":
+        text = text.replace(
+            "if receipt.input_content_hash !=", "if False and receipt.input_content_hash !="
+        )
+    elif mutation == "mutable_return":
+        start = text.index("    return FxSourceEvidenceConfirmation(")
+        end = text.index("\ndef _retained_basis", start)
+        text = text[:start] + "    return [ledger_output]\n" + text[end:]
+    elif mutation == "shadow_hash":
+        text += "\ncanonical_content_hash = lambda value: '0' * 64\n"
+    elif mutation == "shadow_builtin":
+        presence.write_text(
+            presence.read_text(encoding="utf-8") + "\ndict = lambda value: {}\n", encoding="utf-8"
+        )
+    elif mutation == "source_alias":
+        text = text.replace(
+            "    receipt = calculation_lineage_from_payload(receipt_payload)",
+            "    raw_source = {}\n    receipt = calculation_lineage_from_payload(receipt_payload)",
+        )
+    else:
+        text = text.replace(
+            "source = raw.get(f'realized_fx_pnl_{basis}')", "source = mutate(output)"
+        )
+        text += "\ndef mutate(output):\n    output.clear()\n    return None\n"
+    retained.write_text(text, encoding="utf-8")
+    assert evaluate(tmp_path, contract)
+
+
+def _execute_typed_presence_fixture(retained: Path, presence: Path):
+    from collections.abc import Mapping
+    from dataclasses import dataclass
+    from decimal import InvalidOperation
+    from typing import Literal, cast
+
+    from portfolio_common.domain.calculation_lineage import (
+        build_calculation_lineage,
+        calculation_lineage_binds_output,
+        calculation_lineage_from_payload,
+        canonical_content_hash,
+    )
+    from portfolio_common.domain.transaction.numeric_policy import TRANSACTION_COST_LEDGER_OUTPUT_V1
+
+    namespace = dict(
+        __name__="typed_source_guard_fixture",
+        Mapping=Mapping,
+        dataclass=dataclass,
+        Decimal=Decimal,
+        InvalidOperation=InvalidOperation,
+        Literal=Literal,
+        cast=cast,
+        TEST_LEDGER_OUTPUT_V1=TRANSACTION_COST_LEDGER_OUTPUT_V1,
+        calculation_lineage_binds_output=calculation_lineage_binds_output,
+        calculation_lineage_from_payload=calculation_lineage_from_payload,
+        canonical_content_hash=canonical_content_hash,
+    )
+    for path in (presence, retained):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        tree.body = [
+            node for node in tree.body if not isinstance(node, (ast.Import, ast.ImportFrom))
+        ]
+        exec(compile(tree, "<typed-source-proof-fixture>", "exec", dont_inherit=True), namespace)
+    raw = {
+        f"realized_{component}_pnl_{basis}": "0"
+        for basis in ("local", "base")
+        for component in ("capital", "fx", "total")
+    }
+    output = {name: Decimal(value) for name, value in raw.items()}
+    payload = namespace["fx_source_presence_input_payload"](
+        source_values=namespace["fx_original_pnl_values"](raw),
+        booked_output=namespace["retained_fx_output_payload"](output),
+    )
+    receipt = build_calculation_lineage(
+        algorithm_id="foreign-exchange-baseline-processing",
+        algorithm_version=2,
+        intermediate_precision=64,
+        input_payload=payload,
+        output_payload=namespace["retained_fx_output_payload"](output),
+        numeric_output_policy=TRANSACTION_COST_LEDGER_OUTPUT_V1.lineage_identity(),
+    ).lineage_payload()
+    return namespace["_verify_v2_fx_source"], raw, output, receipt
+
+
+def test_v2_actual_receipt_rejects_changed_presence_before_deriving_amounts(tmp_path):
+    retained, presence, contract = _typed_original_presence_fixture(tmp_path)
+    verify, raw, output, receipt = _execute_typed_presence_fixture(retained, presence)
+    assert verify(raw_source=raw, ledger_output=output, receipt_payload=receipt).local.source == 0
+    raw["realized_fx_pnl_local"] = None
+    with pytest.raises(ValueError, match="INPUT_UNAVAILABLE"):
+        verify(raw_source=raw, ledger_output=output, receipt_payload=receipt)
+    assert evaluate(tmp_path, contract) == ()
+
+
+def test_v2_guard_rejects_executed_post_receipt_mutation_in_typed_helper(tmp_path):
+    retained, presence, contract = _typed_original_presence_fixture(tmp_path)
+    original = retained.read_text(encoding="utf-8")
+    mutated = original.replace(
+        "source = raw.get(f'realized_fx_pnl_{basis}')",
+        "output[f'realized_fx_pnl_{basis}'] = Decimal('99')\n"
+        "    output[f'realized_total_pnl_{basis}'] = Decimal('99')\n"
+        "    source = Decimal('99')",
+    )
+    assert mutated != original
+    retained.write_text(mutated, encoding="utf-8")
+    verify, raw, output, receipt = _execute_typed_presence_fixture(retained, presence)
+    assert verify(raw_source=raw, ledger_output=output, receipt_payload=receipt).local.source == 99
+    assert output["realized_fx_pnl_local"] == 99
+    assert evaluate(tmp_path, contract)
+
+
+@pytest.mark.parametrize("version", ["2", None, True, 0, [], {}])
+def test_typed_verification_malformed_version_is_a_finding_not_a_crash(tmp_path, version):
+    _, _, contract = _typed_original_presence_fixture(tmp_path)
+    payload = json.loads(contract.read_text(encoding="utf-8"))
+    specifications = payload["policies"]["TEST_LEDGER_OUTPUT_V1"]["lineage_verification_boundaries"]
+    next(iter(specifications.values()))["algorithm_version"] = version
+    contract.write_text(json.dumps(payload), encoding="utf-8")
+    assert evaluate(tmp_path, contract)
+
+
+@pytest.mark.parametrize(
+    "extra", ["MUTATION = dict.clear({})", "Decimal = str", "from decimal import Decimal as dict"]
+)
+def test_v2_source_module_refuses_effectful_assignments_or_shadowed_bindings(tmp_path, extra):
+    _, presence, contract = _typed_original_presence_fixture(tmp_path)
+    presence.write_text(
+        presence.read_text(encoding="utf-8") + "\n" + extra + "\n", encoding="utf-8"
+    )
+    assert evaluate(tmp_path, contract)
+
+
+@pytest.mark.parametrize("shape", ["empty", "missing_loop", "non_loop", "unnamed_target"])
+def test_v2_projection_malformed_shape_is_refused_without_crashing(tmp_path, shape):
+    _, presence, contract = _typed_original_presence_fixture(tmp_path)
+    module = ast.parse(presence.read_text(encoding="utf-8"))
+    projector = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef) and node.name == "fx_original_pnl_values"
+    )
+    if shape == "empty":
+        projector.body = [ast.Pass()]
+    elif shape == "missing_loop":
+        projector.body = projector.body[:1]
+    else:
+        loop = next(node for node in projector.body if isinstance(node, ast.For))
+        if shape == "non_loop":
+            projector.body[projector.body.index(loop)] = ast.Pass()
+        else:
+            loop.target = ast.Tuple(elts=[ast.Name(id="field", ctx=ast.Store())], ctx=ast.Store())
+    presence.write_text(ast.unparse(ast.fix_missing_locations(module)), encoding="utf-8")
+    assert evaluate(tmp_path, contract)
+
+@pytest.mark.parametrize(
+    "suffix",
+    [
+        "def harmless(raw: Mapping[str, object], limit: int = 1, *, absent: object = None) -> dict[str, object]:\n    return {}\n",
+        "def harmless(raw: 'Mapping[str, object]') -> 'dict[str, object]':\n    return {}\n",
+    ],
+)
+def test_v2_presence_owner_keeps_supported_inert_headers(tmp_path, suffix):
+    _, presence, contract = _typed_original_presence_fixture(tmp_path)
+    presence.write_text(presence.read_text(encoding="utf-8") + "\n" + suffix, encoding="utf-8")
+    assert evaluate(tmp_path, contract) == ()
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        "def unrelated(default=EFFECT):\n    pass\n",
+        "def unrelated(*, default=EFFECT):\n    pass\n",
+        "def unrelated(value: EFFECT):\n    pass\n",
+        "def unrelated() -> EFFECT:\n    pass\n",
+        "@(EFFECT or (lambda fn: fn))\ndef unrelated():\n    pass\n",
+    ],
+)
+def test_v2_presence_owner_refuses_import_time_rebinding(tmp_path, header):
+    _, presence, contract = _typed_original_presence_fixture(tmp_path)
+    effect = (
+        "globals().__setitem__('fx_original_pnl_values', "
+        "lambda raw: {name: None for name in FX_ORIGINAL_PNL_FIELDS})"
+    )
+    source = presence.read_text(encoding="utf-8") + "\n" + header.replace("EFFECT", effect)
+    presence.write_text(source, encoding="utf-8")
+    namespace = {}
+    exec(
+        compile(source, "<external-import-effect-control>", "exec", dont_inherit=True),
+        namespace,
+    )
+    assert namespace["fx_original_pnl_values"]({"realized_fx_pnl_local": "0"})[
+        "realized_fx_pnl_local"
+    ] is None
+    assert evaluate(tmp_path, contract)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "selected-argument-annotation",
+        "selected-return-annotation",
+        "selected-default",
+        "selected-decorator",
+        "unapproved-import",
+        "shadowed-annotation-type",
+        "module-class",
+    ],
+)
+def test_v2_presence_owner_refuses_unsupported_definition_grammar(tmp_path, change):
+    _, presence, contract = _typed_original_presence_fixture(tmp_path)
+    source = presence.read_text(encoding="utf-8")
+    effect = "globals().__setitem__('fx_original_pnl_values', lambda raw: {})"
+    if change == "selected-argument-annotation":
+        source = source.replace("raw_source: Mapping[str, object]", "raw_source: " + effect)
+    elif change == "selected-return-annotation":
+        source = source.replace(") -> dict[str, object]:", ") -> " + effect + ":", 1)
+    elif change == "selected-default":
+        source = source.replace("raw_source: Mapping[str, object]", "raw_source: Mapping[str, object] = " + effect)
+    elif change == "selected-decorator":
+        source = source.replace("def fx_original_pnl_values", "@(lambda fn: fn)\ndef fx_original_pnl_values")
+    elif change == "unapproved-import":
+        source += "\nfrom unapproved_owner import register\n"
+    elif change == "shadowed-annotation-type":
+        source += "\nstr = 'not-a-type'\ndef unrelated(value: str):\n    pass\n"
+    else:
+        source += "\nclass Unadmitted:\n    pass\n"
+    presence.write_text(source, encoding="utf-8")
+    assert evaluate(tmp_path, contract)

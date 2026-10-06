@@ -4,9 +4,52 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import CheckConstraint, Index, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 
 from .database_text_contract import PYTHON_STRIP_BOUNDARY_SQL
+
+
+class IngestionJobColumns:
+    job_id = Column(String, unique=True, index=True, nullable=False)
+    endpoint = Column(String, index=True, nullable=False)
+    entity_type = Column(String, index=True, nullable=False)
+    status = Column(String, index=True, nullable=False, server_default="accepted")
+    accepted_count = Column(Integer, nullable=False)
+    idempotency_key = Column(String, nullable=True, index=True)
+    correlation_id = Column(String, nullable=False)
+    request_id = Column(String, nullable=False)
+    trace_id = Column(String, nullable=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    failure_reason = Column(Text, nullable=True)
+    failure_status_code = Column(Integer, nullable=True)
+    failure_code = Column(String, nullable=True)
+    failure_detail = Column(JSON(none_as_null=True), nullable=True)
+    failure_headers = Column(JSON(none_as_null=True), nullable=True)
+    # Fingerprint-only policy records require a database NULL, not JSON ``null``.
+    # Keep this on the mapped type so every ingestion workflow receives the same
+    # persistence semantics without adapter-specific coercion.
+    request_payload = Column(JSON(none_as_null=True), nullable=True)
+    request_payload_fingerprint = Column(String, nullable=True)
+    request_payload_policy_version = Column(String(64), nullable=False)
+    request_payload_classification = Column(String(32), nullable=False)
+    request_payload_representation = Column(String(32), nullable=False)
+    request_payload_replay_eligible = Column(Boolean, nullable=False)
+    request_payload_partial_replay_eligible = Column(Boolean, nullable=False)
+    request_payload_replay_expires_at = Column(DateTime(timezone=True), nullable=True)
+    request_payload_retention_authority = Column(String(128), nullable=False)
+    retry_count = Column(Integer, nullable=False, default=0, server_default="0")
+    last_retried_at = Column(DateTime(timezone=True), nullable=True)
 
 
 def ingestion_job_table_args(*, submitted_at: Any, row_id: Any) -> tuple[Any, ...]:

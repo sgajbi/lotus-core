@@ -1,3 +1,4 @@
+from decimal import Decimal
 from enum import StrEnum
 
 from sqlalchemy import (
@@ -49,8 +50,12 @@ from .financial_reconciliation_schema import (
     financial_reconciliation_finding_table_args,
     financial_reconciliation_run_table_args,
 )
-from .ingestion_job_schema import ingestion_job_table_args
+from .ingestion_job_schema import IngestionJobColumns, ingestion_job_table_args
 from .processed_event_schema import processed_event_table_args
+from .transaction_source_revision_schema import (
+    TransactionSourceRevisionColumns,
+    transaction_source_revision_table_args,
+)
 
 _REPLAY_CONTROL_PATTERN = r"U&'[\0001-\001F\007F-\009F]'"
 
@@ -2049,6 +2054,9 @@ class Transaction(Base):
         CheckConstraint(
             "payload_fingerprint ~ '^sha256:[0-9a-f]{64}$'",
             name="ck_transactions_payload_fingerprint",
+        ),
+        UniqueConstraint(
+            "transaction_id", "portfolio_id", name="uq_transaction_source_revision_owner"
         ),
         CheckConstraint(
             "CAST(quantity AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity')",
@@ -4453,6 +4461,24 @@ def _default_outbox_partition_key(context) -> str:
     return str(context.get_current_parameters()["aggregate_id"])
 
 
+class TransactionSourceRevision(TransactionSourceRevisionColumns, Base):
+    """Append-only source qualification in the existing transaction owner UOW."""
+
+    __tablename__ = "transaction_source_revisions"
+    revision_id = Column(String(128), primary_key=True)
+    tenant_id = Column(String(128), nullable=False)
+    portfolio_id = Column(String, nullable=False)
+    transaction_id = Column(String, nullable=False)
+    root_raw_event_id = Column(Integer, ForeignKey("outbox_events.id"), nullable=False)
+    source_local: Column[Decimal] = Column(ExactNumeric(18, 10), nullable=False)
+    source_base: Column[Decimal] = Column(ExactNumeric(18, 10), nullable=False)
+    __table_args__ = (
+        *transaction_source_revision_table_args(),
+        _finite_numeric_check_constraint("ck_source_revision_local_finite", "source_local"),
+        _finite_numeric_check_constraint("ck_source_revision_base_finite", "source_base"),
+    )
+
+
 class OutboxEvent(Base):
     __tablename__ = "outbox_events"
 
@@ -4724,42 +4750,11 @@ class PortfolioValuationJob(Base):
     )
 
 
-class IngestionJob(Base):
+class IngestionJob(IngestionJobColumns, Base):
     __tablename__ = "ingestion_jobs"
-
     id = Column(Integer, primary_key=True, autoincrement=True)
-    job_id = Column(String, unique=True, index=True, nullable=False)
     tenant_id = Column(String(128), nullable=False)
-    endpoint = Column(String, index=True, nullable=False)
-    entity_type = Column(String, index=True, nullable=False)
-    status = Column(String, index=True, nullable=False, server_default="accepted")
-    accepted_count = Column(Integer, nullable=False)
-    idempotency_key = Column(String, nullable=True, index=True)
-    correlation_id = Column(String, nullable=False)
-    request_id = Column(String, nullable=False)
-    trace_id = Column(String, nullable=False)
     submitted_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    completed_at = Column(DateTime(timezone=True), nullable=True)
-    failure_reason = Column(Text, nullable=True)
-    failure_status_code = Column(Integer, nullable=True)
-    failure_code = Column(String, nullable=True)
-    failure_detail = Column(JSON(none_as_null=True), nullable=True)
-    failure_headers = Column(JSON(none_as_null=True), nullable=True)
-    # Fingerprint-only policy records require a database NULL, not JSON ``null``.
-    # Keep this on the mapped type so every ingestion workflow receives the same
-    # persistence semantics without adapter-specific coercion.
-    request_payload = Column(JSON(none_as_null=True), nullable=True)
-    request_payload_fingerprint = Column(String, nullable=True)
-    request_payload_policy_version = Column(String(64), nullable=False)
-    request_payload_classification = Column(String(32), nullable=False)
-    request_payload_representation = Column(String(32), nullable=False)
-    request_payload_replay_eligible = Column(Boolean, nullable=False)
-    request_payload_partial_replay_eligible = Column(Boolean, nullable=False)
-    request_payload_replay_expires_at = Column(DateTime(timezone=True), nullable=True)
-    request_payload_retention_authority = Column(String(128), nullable=False)
-    retry_count = Column(Integer, nullable=False, default=0, server_default="0")
-    last_retried_at = Column(DateTime(timezone=True), nullable=True)
-
     __table_args__ = ingestion_job_table_args(submitted_at=submitted_at, row_id=id)
 
 

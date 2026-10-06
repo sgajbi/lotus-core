@@ -24,6 +24,9 @@ INGESTION_WRITE_CAPABILITY_RULES: dict[str, str] = {
     "POST /ingest/portfolios": "ingestion.portfolios.write",
     "POST /ingest/transaction": "ingestion.transactions.write",
     "POST /ingest/transactions": "ingestion.transactions.write",
+    "POST /ingest/transactions/{transaction_id}/source-evidence": (
+        "ingestion.transactions.source_evidence.correct"
+    ),
     "POST /ingest/instruments": "ingestion.instruments.write",
     "POST /ingest/market-prices": "ingestion.market_prices.write",
     "POST /ingest/authoritative-market-price-source-facts": (

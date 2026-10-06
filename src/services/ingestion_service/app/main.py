@@ -28,6 +28,7 @@ from .routers import (
     portfolios,
     reference_data,
     reprocessing,
+    transaction_source_corrections,
     transactions,
     uploads,
 )
@@ -142,6 +143,7 @@ include_routers(
     health_router,
     portfolios.router,
     transactions.router,
+    transaction_source_corrections.router,
     instruments.router,
     market_prices.router,
     fx_rates.router,

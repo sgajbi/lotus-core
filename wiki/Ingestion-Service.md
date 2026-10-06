@@ -19,6 +19,15 @@ the canonical ingestion job, failure, replay-audit, retained-payload, and consum
 Source-batch identity is nullable and appears only when retained payload evidence proves one
 unambiguous upstream batch.
 
+## Reader Map
+
+| Reader | Use this page for | Evidence path |
+| --- | --- | --- |
+| Operations and support | Decide which ingestion surface to use and where job lifecycle evidence should appear. | Route docs, idempotency diagnostics, operations runbooks, and ingestion job tests. |
+| Engineers | Keep routers thin and put lifecycle orchestration behind application command handlers. | `IngestionPublishCommandHandler`, `ReferenceDataIngestionCommandHandler`, `BusinessDateIngestionCommandHandler`, and router-boundary tests. |
+| API reviewers | Check supported route families and expected failure-mapping posture. | OpenAPI route metadata, ingestion endpoint contract gate, and API surface wiki. |
+| Business/demo readers | Understand what Core can currently onboard without treating ingestion as downstream analytics support. | Supported features, source-data methodology docs, and contract-family evidence. |
+
 ## Durable request and failure evidence
 
 Ingestion jobs do not retain every request body. Core applies a versioned endpoint-family policy:
@@ -54,14 +63,43 @@ field receives the documented `accepted` default. Legacy `source_vendor` and `so
 request aliases remain accepted where documented, but new query records publish canonical names
 and never synthesize missing source authority.
 
-## Reader Map
+## Evidence-Only Transaction Source Confirmation
 
-| Reader | Use this page for | Evidence path |
-| --- | --- | --- |
-| Operations and support | Decide which ingestion surface to use and where job lifecycle evidence should appear. | Route docs, idempotency diagnostics, operations runbooks, and ingestion job tests. |
-| Engineers | Keep routers thin and put lifecycle orchestration behind application command handlers. | `IngestionPublishCommandHandler`, `ReferenceDataIngestionCommandHandler`, `BusinessDateIngestionCommandHandler`, and router-boundary tests. |
-| API reviewers | Check supported route families and expected failure-mapping posture. | OpenAPI route metadata, ingestion endpoint contract gate, and API surface wiki. |
-| Business/demo readers | Understand what Core can currently onboard without treating ingestion as downstream analytics support. | Supported features, source-data methodology docs, and contract-family evidence. |
+The dedicated `POST /ingest/transactions/{transaction_id}/source-evidence` command confirms missing
+historical FX source presence without replacing the economic transaction or rewriting original
+raw payloads and receipts. Missing source confirms only as explicit exact zero; an existing signed
+companion must remain unchanged. Dedicated verified capability and purpose-bound enrollment are
+required; unconfigured signing and consumption deny.
+
+An HTTP 202 acknowledgement is `QUEUED`. Follow its status URL through the existing event-replay
+owner at `GET /ingestion/jobs/{job_id}/source-correction`; only an independently verified committed
+revision is `SUCCEEDED`. Persistence owns the single database transaction containing the immutable
+revision and notice. This does not imply live Kafka, downstream analytics qualification or general
+economic correction support.
+
+See the [FX semantics and source-confirmation contract](https://github.com/sgajbi/lotus-core/blob/main/docs/rfc-transaction-specs/transactions/FX/FX-SLICE-6-PNL-SEMANTICS.md)
+for request fields, default-deny authority, replay integrity, lock order, migration refusal and
+the owning PostgreSQL evidence boundary. Operator completion and consumer qualification are
+different decisions; issues #452, #1176 and #531 retain their wider acceptance scope.
+
+QCP and the operational ledger consume one bounded source-evidence proof. Current selection may
+qualify an absent source as zero after committed confirmation; original selection keeps immutable
+raw/output/receipt authority and excludes correction metadata. The existing exact ledger route
+supports `source_evidence_selection=current|original|revision`, with `source_revision_id` required
+only for a tenant-owned explicit revision. Unknown/foreign revisions do not disclose another
+tenant's evidence. No raw source or authorization payload is returned.
+
+Consumers establish their repeatable snapshot first and bind the entire matching-window material
+`source_cut_sha256`, not merely the page or latest timestamp. A correction outside the page
+invalidates QCP continuation; stale/unbound tokens refuse. Confirmation time is knowledge recorded
+by Core, not a new financial business date. Unqualified FX and dependent totals stay null; original
+financial transactions, signed companions and receipts remain unchanged.
+
+Producer v2 binds six original P&L presence/value pairs before unchanged financial normalization.
+Original v1 history needs independent retained raw evidence, never inferred presence from storage
+zero. Consumer-native PostgreSQL proof, protected promotion/mainline release and live runtime
+qualification are separate stages. Registration/unit proof does not establish deployed producer
+enrollment, live Kafka or external analytics support.
 
 ## What it handles
 

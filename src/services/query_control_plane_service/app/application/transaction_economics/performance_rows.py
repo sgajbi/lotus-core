@@ -83,6 +83,11 @@ def _performance_component_economics_row(
             _decimal_or_zero(transaction.realized_total_pnl_base) if fx_base is not None else None
         ),
         fx_pnl_evidence_reason=fx_reason,
+        transaction_source_evidence=(
+            transaction.fx_pnl_source_evidence.source_evidence
+            if transaction.fx_pnl_source_evidence is not None
+            else None
+        ),
         transaction_fx_rate=transaction.transaction_fx_rate,
         fx_contract_id=transaction.fx_contract_id,
         source_lineage=performance_component_economics_source_lineage(),

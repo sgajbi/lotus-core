@@ -18,6 +18,22 @@
     "metrics_access_policy",
     "safe_unhandled_error_response"
   ],
+  "dedicated_source_confirmation_controls": {
+    "owning_issues": ["sgajbi/lotus-core#452", "sgajbi/lotus-core#1176", "sgajbi/lotus-core#531"],
+    "capability": "ingestion.transactions.source_evidence.correct",
+    "routes": [
+      "POST /ingest/transactions/{transaction_id}/source-evidence",
+      "GET /ingestion/jobs/{job_id}/source-correction"
+    ],
+    "authority": "verified signed tenant/actor capability required even when local enterprise enforcement is disabled; enrolled purpose-bound producer command authority verified before idempotency",
+    "public_scope": "closed request; resource ownership resolved by server; no caller tenant/portfolio/authorization override or raw/auth response payload",
+    "evidence": [
+      "tests/unit/services/ingestion_service/routers/test_transaction_source_corrections.py",
+      "tests/unit/services/event_replay_service/infrastructure/test_source_correction_operation_status.py",
+      "tests/integration/services/persistence_service/test_transaction_source_correction_postgresql.py"
+    ],
+    "non_claim": "Source/native local proof is not deployed IAM enrollment, live Kafka, penetration testing or production certification."
+  },
   "apps": [
     {
       "service_name": "event_replay_service",

@@ -644,6 +644,17 @@ def _verified_service_principal(
     )
 
 
+def verify_service_principal(
+    headers: dict[str, str], settings: EnterpriseSettings
+) -> VerifiedServicePrincipal | str:
+    """Expose the canonical verifier for capabilities that always require crypto.
+
+    Local middleware bypass settings never create a verified principal. This
+    boundary shares the existing protocol, key policy and bounded refusal codes.
+    """
+    return _verified_service_principal(_normalize_headers(headers), settings)
+
+
 def _unsupported_authorization_reason(authorization: str) -> str:
     parts = authorization.split(maxsplit=1)
     if len(parts) != 2 or parts[0].lower() != "bearer" or not parts[1].strip():

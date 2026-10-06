@@ -11,6 +11,8 @@ from decimal import ROUND_HALF_EVEN
 from pathlib import Path
 from typing import Any, cast
 
+from scripts.quality.retained_source_projection import RetainedSourceProjection
+
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONTRACT = Path("docs/standards/financial-calculated-output-policies.v1.json")
 POLICY_KEYS = {
@@ -44,6 +46,17 @@ EXECUTION_METHODS = {
 CALCULATION_LINEAGE_MODULE = "portfolio_common.domain.calculation_lineage"
 CALCULATION_LINEAGE_BUILDER = "build_calculation_lineage"
 
+RETAINED_PROTECTED_SYMBOLS = frozenset(
+    {
+        "@output",
+        "@decoded",
+        "@receipt_input",
+        "@canonical_output",
+        "@expected_policy",
+        "@source_input",
+    }
+)
+
 
 class _RetainedVerificationProof:
     """Fail-closed proof for straight-line retained-receipt rejection boundaries.
@@ -60,6 +73,7 @@ class _RetainedVerificationProof:
         declaration: PolicyDeclaration,
         specification: dict[str, Any],
         covered: set[str],
+        repo_root: Path | None = None,
     ) -> None:
         self.path, self.constant, self.specification = path, constant, specification
         self.policy = f"{_source_module(declaration.declaration_path)}.{constant}"
@@ -67,89 +81,114 @@ class _RetainedVerificationProof:
         self.aliases: dict[str, str | None] = {}
         self.facts: set[str] = set()
         self.covered_parameters: dict[str, tuple[list[str], str]] = {}
+        self.immutable_basis_helpers: set[str] = set()
+        self.repo_root = repo_root
+        self.input_projection: dict[str, str] = {}
+
+    def _projection_proof(self) -> RetainedSourceProjection:
+        return RetainedSourceProjection(
+            path=self.path,
+            policy=self.policy,
+            aliases=self.aliases,
+            specification=self.specification,
+            repo_root=self.repo_root,
+            module_name=_source_module,
+            symbol=self.symbol,
+            lineage_module=CALCULATION_LINEAGE_MODULE,
+            immutable_basis_helpers=self.immutable_basis_helpers,
+            input_projection=self.input_projection,
+        )
+
+    def prove_original_input_projection(self) -> bool:
+        projection = self._projection_proof()
+        if not projection.prove_original_input_projection():
+            return False
+        self.input_projection = projection.input_projection
+        return True
+
+    @staticmethod
+    def _parameters(function: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
+        """Share the same positional/keyword-only binding order across every proof."""
+        return [
+            argument.arg
+            for argument in (
+                *function.args.posonlyargs,
+                *function.args.args,
+                *function.args.kwonlyargs,
+            )
+        ]
 
     def symbol(self, node: ast.expr) -> str | None:
-        if isinstance(node, ast.Name):
-            return self.aliases.get(node.id)
-        if isinstance(node, ast.Attribute):
-            root = self.symbol(node.value)
-            return f"{root}.{node.attr}" if root is not None else None
-        if not isinstance(node, ast.Call):
-            return None
-        function = self.symbol(node.func)
-        if (
-            function == f"{CALCULATION_LINEAGE_MODULE}.calculation_lineage_from_payload"
-            and len(node.args) == 1
-            and not node.keywords
-            and self.symbol(node.args[0]) == "@receipt_input"
-        ):
-            return "@decoded"
-        if (
-            function == self.specification["output_canonicalizer"]
-            and len(node.args) == 1
-            and not node.keywords
-            and self.symbol(node.args[0]) == "@output"
-        ):
-            return "@canonical_output"
-        if function == f"{self.policy}.lineage_identity" and not node.args and not node.keywords:
-            return "@expected_policy"
-        return None
+        match node:
+            case ast.Name(id=name):
+                return self.aliases.get(name)
+            case ast.Attribute(value=value, attr=attribute):
+                root = self.symbol(value)
+                return f"{root}.{attribute}" if root is not None else None
+            case ast.Call(func=function, args=[argument], keywords=[]):
+                bindings: dict[tuple[str | None, str | None], str] = {
+                    (
+                        f"{CALCULATION_LINEAGE_MODULE}.calculation_lineage_from_payload",
+                        "@receipt_input",
+                    ): "@decoded",
+                    (self.specification["output_canonicalizer"], "@output"): "@canonical_output",
+                }
+                return bindings.get((self.symbol(function), self.symbol(argument)))
+            case ast.Call(func=function, args=[], keywords=[]):
+                return (
+                    "@expected_policy"
+                    if self.symbol(function) == f"{self.policy}.lineage_identity"
+                    else None
+                )
+            case _:
+                return None
 
     def rejection_facts(self, node: ast.expr) -> set[str]:
-        if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.Or):
-            return set().union(*(self.rejection_facts(value) for value in node.values))
-        if isinstance(node, ast.Compare) and len(node.ops) == len(node.comparators) == 1:
-            left, right, operator = self.symbol(node.left), node.comparators[0], node.ops[0]
-            if (
-                left == "@decoded"
-                and isinstance(operator, ast.Is)
-                and isinstance(right, ast.Constant)
-                and right.value is None
+        if self._projection_proof().original_input_rejection(node):
+            return {"input_bound"}
+        match node:
+            case ast.BoolOp(op=ast.Or(), values=values):
+                return set().union(*(self.rejection_facts(value) for value in values))
+            case ast.Compare(left=left, ops=[ast.Is()], comparators=[ast.Constant(value=None)]):
+                return {"present"} if self.symbol(left) == "@decoded" else set()
+            case ast.Compare(left=left, ops=[ast.NotEq()], comparators=[right]):
+                symbol = self.symbol(left)
+                expected = {
+                    "@decoded.algorithm_id": self.specification["algorithm_id"],
+                    "@decoded.algorithm_version": self.specification["algorithm_version"],
+                }
+                if symbol in expected and isinstance(right, ast.Constant):
+                    value = expected[symbol]
+                    if type(right.value) is type(value) and right.value == value:
+                        return {cast(str, symbol)}
+                comparisons: dict[tuple[str | None, str | None], str] = {
+                    (
+                        "@decoded.intermediate_precision",
+                        f"{self.policy}.working_precision",
+                    ): "precision",
+                    ("@decoded.numeric_output_policy", "@expected_policy"): "policy",
+                }
+                fact = comparisons.get((symbol, self.symbol(right)))
+                return {fact} if fact else set()
+            case ast.UnaryOp(
+                op=ast.Not(),
+                operand=ast.Call(
+                    func=constructor,
+                    args=[receipt],
+                    keywords=[ast.keyword(arg="output_payload", value=output)],
+                ),
             ):
-                return {"present"}
-            if not isinstance(operator, ast.NotEq):
-                return set()
-            expected = {
-                "@decoded.algorithm_id": self.specification["algorithm_id"],
-                "@decoded.algorithm_version": self.specification["algorithm_version"],
-            }
-            if (
-                left in expected
-                and isinstance(right, ast.Constant)
-                and type(right.value) is type(expected[left])
-                and right.value == expected[left]
-            ):
-                return {cast(str, left)}
-            if (
-                left == "@decoded.intermediate_precision"
-                and self.symbol(right) == f"{self.policy}.working_precision"
-            ):
-                return {"precision"}
-            if (
-                left == "@decoded.numeric_output_policy"
-                and self.symbol(right) == "@expected_policy"
-            ):
-                return {"policy"}
-        if (
-            isinstance(node, ast.UnaryOp)
-            and isinstance(node.op, ast.Not)
-            and isinstance(node.operand, ast.Call)
-        ):
-            call = node.operand
-            if (
-                self.symbol(call.func)
-                == f"{CALCULATION_LINEAGE_MODULE}.calculation_lineage_binds_output"
-                and len(call.args) == 1
-                and self.symbol(call.args[0]) == "@decoded"
-                and len(call.keywords) == 1
-                and call.keywords[0].arg == "output_payload"
-                and self.symbol(call.keywords[0].value) == "@canonical_output"
-            ):
-                return {"bound_output"}
+                if (
+                    self.symbol(constructor)
+                    == f"{CALCULATION_LINEAGE_MODULE}.calculation_lineage_binds_output"
+                    and self.symbol(receipt) == "@decoded"
+                    and self.symbol(output) == "@canonical_output"
+                ):
+                    return {"bound_output"}
         return set()
 
     def complete(self) -> bool:
-        return self.facts == {
+        required = {
             "present",
             "@decoded.algorithm_id",
             "@decoded.algorithm_version",
@@ -157,6 +196,9 @@ class _RetainedVerificationProof:
             "policy",
             "bound_output",
         }
+        if self.specification["algorithm_version"] > 1:
+            required.add("input_bound")
+        return self.facts == required
 
     def canonicalizer_projects_input(
         self, function: ast.FunctionDef | ast.AsyncFunctionDef, parameter: str
@@ -168,12 +210,7 @@ class _RetainedVerificationProof:
         Decimal normalization/quantization. Other shapes require separate proof.
         """
         saved_aliases = self.aliases.copy()
-        for argument in (
-            *function.args.posonlyargs,
-            *function.args.args,
-            *function.args.kwonlyargs,
-        ):
-            self.aliases[argument.arg] = None
+        self.aliases.update(dict.fromkeys(self._parameters(function)))
         self.aliases[parameter] = "@output"
         body = [
             statement
@@ -191,27 +228,24 @@ class _RetainedVerificationProof:
                     return False
                 keys: set[str] = set()
                 for key, value in zip(projection.keys, projection.values):
+                    match key, value:
+                        case ast.Constant(value=str() as name), ast.Call(
+                            func=normalizer,
+                            args=[ast.Subscript(value=source, slice=source_key)],
+                            keywords=[ast.keyword(arg="field_name", value=field_key)],
+                        ):
+                            if not name or name in keys:
+                                return False
+                        case _:
+                            return False
                     if (
-                        not isinstance(key, ast.Constant)
-                        or not isinstance(key.value, str)
-                        or not key.value
-                        or key.value in keys
-                        or not isinstance(value, ast.Call)
-                        or self.symbol(value.func) != f"{self.policy}.normalize"
-                        or len(value.args) != 1
-                        or len(value.keywords) != 1
-                        or value.keywords[0].arg != "field_name"
-                        or ast.dump(value.keywords[0].value) != ast.dump(key)
+                        self.symbol(normalizer) != f"{self.policy}.normalize"
+                        or self.symbol(source) != "@output"
+                        or ast.dump(source_key) != ast.dump(key)
+                        or ast.dump(field_key) != ast.dump(key)
                     ):
                         return False
-                    source = value.args[0]
-                    if (
-                        not isinstance(source, ast.Subscript)
-                        or self.symbol(source.value) != "@output"
-                        or ast.dump(source.slice) != ast.dump(key)
-                    ):
-                        return False
-                    keys.add(key.value)
+                    keys.add(name)
                 return True
             return self.complete_mapping_projection(body, parameter)
         finally:
@@ -219,37 +253,29 @@ class _RetainedVerificationProof:
 
     def complete_mapping_projection(self, body: list[ast.stmt], parameter: str) -> bool:
         """Fail closed outside the immutable policy-scaled complete-mapping grammar."""
-        if len(body) != 5:
-            return False
-        policy_assignment, quantum_assignment, output_assignment, loop, result = body
-        if (
-            not isinstance(policy_assignment, ast.Assign)
-            or len(policy_assignment.targets) != 1
-            or not isinstance(policy_assignment.targets[0], ast.Name)
-            or self.symbol(policy_assignment.value) != self.policy
-            or not isinstance(quantum_assignment, ast.Assign)
-            or len(quantum_assignment.targets) != 1
-            or not isinstance(quantum_assignment.targets[0], ast.Name)
-            or not isinstance(loop, ast.For)
-            or not isinstance(loop.target, ast.Tuple)
-            or len(loop.target.elts) != 2
-            or not all(isinstance(item, ast.Name) for item in loop.target.elts)
-        ):
-            return False
+        match body:
+            case [
+                ast.Assign(targets=[ast.Name(id=policy_name)]) as policy_assignment,
+                ast.Assign(targets=[ast.Name(id=quantum_name)]) as quantum_assignment,
+                output_assignment,
+                ast.For(
+                    target=ast.Tuple(elts=[ast.Name(id=key_name), ast.Name(id=value_name)])
+                ) as loop,
+                result,
+            ]:
+                if self.symbol(policy_assignment.value) != self.policy:
+                    return False
+            case _:
+                return False
         if isinstance(output_assignment, ast.AnnAssign) and output_assignment.value is not None:
             output_assignment = ast.Assign(
                 targets=[output_assignment.target], value=output_assignment.value
             )
-        if (
-            not isinstance(output_assignment, ast.Assign)
-            or len(output_assignment.targets) != 1
-            or not isinstance(output_assignment.targets[0], ast.Name)
-        ):
-            return False
-        policy_name = policy_assignment.targets[0].id
-        quantum_name = quantum_assignment.targets[0].id
-        output_name = output_assignment.targets[0].id
-        key_name, value_name = [cast(ast.Name, item).id for item in loop.target.elts]
+        match output_assignment:
+            case ast.Assign(targets=[ast.Name(id=output_name)]):
+                pass
+            case _:
+                return False
         if len({parameter, policy_name, quantum_name, output_name, key_name, value_name}) != 6:
             return False
         decimal_types = [
@@ -295,22 +321,15 @@ class _RetainedVerificationProof:
         """Prove read-only helpers return normalized Decimal/None, not hidden aliases."""
         saved_aliases = self.aliases.copy()
         scalar_names: set[str] = set()
-        for argument in (
-            *function.args.posonlyargs,
-            *function.args.args,
-            *function.args.kwonlyargs,
-        ):
-            self.aliases[argument.arg] = None
+        self.aliases.update(dict.fromkeys(self._parameters(function)))
         self.aliases[parameter] = "@output"
 
         def normalized(node: ast.AST | None) -> bool:
-            return (
-                isinstance(node, ast.Call)
-                and self.symbol(node.func) == f"{self.policy}.normalize"
-                and len(node.args) == 1
-                and len(node.keywords) == 1
-                and node.keywords[0].arg == "field_name"
-            )
+            match node:
+                case ast.Call(func=constructor, args=[_], keywords=[ast.keyword(arg="field_name")]):
+                    return self.symbol(constructor) == f"{self.policy}.normalize"
+                case _:
+                    return False
 
         def readonly(node: ast.AST) -> bool:
             for child in ast.walk(node):
@@ -342,16 +361,15 @@ class _RetainedVerificationProof:
             return True
 
         def immutable(node: ast.AST | None) -> bool:
-            return (
-                isinstance(node, ast.Constant)
-                and node.value is None
-                or isinstance(node, ast.Name)
-                and node.id in scalar_names
-                or normalized(node)
-                or isinstance(node, ast.IfExp)
-                and immutable(node.body)
-                and immutable(node.orelse)
-            )
+            match node:
+                case ast.Constant(value=None):
+                    return True
+                case ast.Name(id=name):
+                    return name in scalar_names
+                case ast.IfExp(body=body, orelse=otherwise):
+                    return immutable(body) and immutable(otherwise)
+                case _:
+                    return normalized(node)
 
         try:
             for index, statement in enumerate(function.body):
@@ -395,7 +413,23 @@ class _RetainedVerificationProof:
         finally:
             self.aliases = saved_aliases
 
+    def _safe_original_input_rejection(self, statement: ast.AST) -> bool | None:
+        match statement:
+            case ast.If(test=test, body=[ast.Raise(exc=rejection)], orelse=[]):
+                if not self._projection_proof().original_input_rejection(test):
+                    return None
+                match rejection:
+                    case ast.Call(func=constructor, args=[ast.Constant(value=str())], keywords=[]):
+                        return self.symbol(constructor) == "@rejection"
+                    case _:
+                        return False
+            case _:
+                return None
+
     def calls_use_bound_output(self, statement: ast.AST) -> bool:
+        rejection = self._safe_original_input_rejection(statement)
+        if rejection is not None:
+            return rejection
         for node in ast.walk(statement):
             if isinstance(node, (ast.NamedExpr, ast.Await, ast.Yield, ast.YieldFrom)):
                 return False
@@ -407,33 +441,22 @@ class _RetainedVerificationProof:
                 for argument in [*node.args, *(item.value for item in node.keywords)]
                 for value in ast.walk(argument)
                 if isinstance(value, ast.expr)
-            } & {
-                "@output",
-                "@decoded",
-                "@receipt_input",
-                "@canonical_output",
-                "@expected_policy",
-                self.policy,
-            }
+            } & (RETAINED_PROTECTED_SYMBOLS | {self.policy})
             trusted = {
                 f"{CALCULATION_LINEAGE_MODULE}.calculation_lineage_from_payload",
                 f"{CALCULATION_LINEAGE_MODULE}.calculation_lineage_binds_output",
                 f"{self.policy}.lineage_identity",
                 *self.covered,
             }
+            if self._projection_proof().immutable_confirmation_return(node):
+                trusted.add("@confirmation_type")
             if protected_arguments and function not in trusted:
                 return False
             if function in self.covered:
                 parameters, output_parameter = self.covered_parameters[function]
-                if len(node.args) > len(parameters) or any(
-                    isinstance(value, ast.Starred) for value in node.args
-                ):
+                arguments = self._bind_call_arguments(node, parameters)
+                if arguments is None:
                     return False
-                arguments = dict(zip(parameters, node.args))
-                for item in node.keywords:
-                    if item.arg not in parameters or item.arg in arguments:
-                        return False
-                    arguments[item.arg] = item.value
                 if (
                     output_parameter not in arguments
                     or self.symbol(arguments[output_parameter]) != "@output"
@@ -464,9 +487,56 @@ class _RetainedVerificationProof:
                 return False
         return True
 
-    def prove(self, module: ast.Module, function: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-        if function.decorator_list or isinstance(function, ast.AsyncFunctionDef):
-            return False
+    @staticmethod
+    def _bind_call_arguments(node: ast.Call, parameters: list[str]) -> dict[str, ast.expr] | None:
+        """One exact positional/keyword binder shared by inference and call rejection."""
+        if len(node.args) > len(parameters) or any(
+            isinstance(value, ast.Starred) for value in node.args
+        ):
+            return None
+        arguments = dict(zip(parameters, node.args))
+        for keyword in node.keywords:
+            if keyword.arg not in parameters or keyword.arg in arguments:
+                return None
+            arguments[keyword.arg] = keyword.value
+        return arguments
+
+    def _covered_output_parameter(
+        self,
+        statement: ast.FunctionDef,
+        function: ast.FunctionDef,
+        parameters: list[str],
+    ) -> str | None:
+        output = self.specification["output_parameter"]
+        if isinstance(output, str) and output in parameters:
+            return output
+        if len(parameters) == 1:
+            return parameters[0]
+        bindings = set()
+        for call in ast.walk(function):
+            match call:
+                case ast.Call(func=ast.Name(id=name)) if name == statement.name:
+                    pass
+                case _:
+                    continue
+            arguments = self._bind_call_arguments(call, parameters)
+            if arguments is None:
+                return None
+            positions = [
+                name
+                for name, argument in arguments.items()
+                if isinstance(argument, ast.Name) and argument.id == output
+            ]
+            if len(positions) != 1:
+                return None
+            bindings.update(positions)
+        return next(iter(bindings)) if len(bindings) == 1 else None
+
+    def _declare_boundary_module(
+        self,
+        module: ast.Module,
+        function: ast.FunctionDef,
+    ) -> tuple | None:
         canonicalizer = None
         amount_helpers: dict[str, ast.FunctionDef] = {}
         for statement in module.body:
@@ -475,41 +545,53 @@ class _RetainedVerificationProof:
                     self.aliases[alias.asname or alias.name.split(".")[0]] = (
                         alias.name if alias.asname else alias.name.split(".")[0]
                     )
-            elif isinstance(statement, ast.ImportFrom) and statement.level == 0:
+            elif isinstance(statement, ast.ImportFrom):
+                package = _source_module(self.path).split(".")[:-1]
+                module_name = statement.module or ""
+                if statement.level:
+                    module_name = ".".join(
+                        package[: len(package) - statement.level + 1] + module_name.split(".")
+                    )
                 for alias in statement.names:
                     if alias.name == "*":
-                        return False
-                    self.aliases[alias.asname or alias.name] = f"{statement.module}.{alias.name}"
+                        return None
+                    self.aliases[alias.asname or alias.name] = f"{module_name}.{alias.name}"
             elif isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                self.aliases[statement.name] = f"{self.path}::{statement.name}"
+                if any(
+                    not self._projection_proof().inert_retained_function_header(node)
+                    for node in ast.walk(statement)
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                ):
+                    return None
                 callsite = f"{self.path}::{statement.name}"
+                self.aliases[statement.name] = callsite
                 if callsite in self.covered:
-                    parameters = [
-                        argument.arg
-                        for argument in (
-                            *statement.args.posonlyargs,
-                            *statement.args.args,
-                            *statement.args.kwonlyargs,
-                        )
-                    ]
-                    output_parameter = self.specification["output_parameter"]
-                    if output_parameter not in parameters and len(parameters) == 1:
-                        output_parameter = parameters[0]
+                    if isinstance(statement, ast.AsyncFunctionDef):
+                        return None
+                    parameters = self._parameters(statement)
+                    output_parameter = self._covered_output_parameter(
+                        statement, function, parameters
+                    )
                     if (
                         output_parameter not in parameters
                         or statement.args.vararg
                         or statement.args.kwarg
                         or statement.decorator_list
-                        or isinstance(statement, ast.AsyncFunctionDef)
                         or callsite in self.covered_parameters
                     ):
-                        return False
+                        return None
                     self.covered_parameters[callsite] = (parameters, output_parameter)
                     if callsite == self.specification["output_canonicalizer"]:
                         canonicalizer = statement
                     else:
                         amount_helpers[callsite] = statement
             else:
+                if any(
+                    not self._projection_proof().inert_retained_function_header(node)
+                    for node in ast.walk(statement)
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                ):
+                    return None
                 # Later module assignments/classes/control flow may shadow imports.
                 for node in ast.walk(statement):
                     if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
@@ -518,26 +600,65 @@ class _RetainedVerificationProof:
                         for alias in node.names:
                             self.aliases[alias.asname or alias.name.split(".")[0]] = None
                 if isinstance(statement, ast.ClassDef):
-                    self.aliases[statement.name] = None
+                    self.aliases[statement.name] = (
+                        self._projection_proof().immutable_projection_class(statement)
+                    )
+                    if self._is_literal_rejection_class(statement):
+                        self.aliases[statement.name] = "@rejection"
+                elif (
+                    isinstance(statement, ast.Assign)
+                    and len(statement.targets) == 1
+                    and isinstance(statement.targets[0], ast.Name)
+                    and isinstance(statement.value, ast.Subscript)
+                    and self.symbol(statement.value.value) == "typing.Literal"
+                    and self._projection_proof().inert_retained_annotation(statement.value)
+                ):
+                    self.aliases[statement.targets[0].id] = "@literal_type"
+        return canonicalizer, amount_helpers
+
+    def _is_literal_rejection_class(self, statement: ast.ClassDef) -> bool:
+        """Only a plain built-in ValueError subclass can be a safe exception constructor."""
+        if "ValueError" in self.aliases:
+            return False
+        match statement:
+            case ast.ClassDef(
+                bases=[ast.Name(id="ValueError")], keywords=[], decorator_list=[], body=body
+            ):
+                for item in body:
+                    match item:
+                        case ast.Pass() | ast.Expr(value=ast.Constant(value=str())):
+                            continue
+                        case _:
+                            return False
+                return True
+            case _:
+                return False
+
+    def prove(self, module: ast.Module, function: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+        if function.decorator_list or isinstance(function, ast.AsyncFunctionDef):
+            return False
+        declaration = self._declare_boundary_module(module, function)
+        if declaration is None:
+            return False
+        canonicalizer, amount_helpers = declaration
         if self.covered != set(self.covered_parameters):
             return False
         if canonicalizer is None or not self.canonicalizer_projects_input(
             canonicalizer, self.covered_parameters[self.specification["output_canonicalizer"]][1]
         ):
             return False
-        if not all(
-            self.helper_returns_immutable_amount(helper, self.covered_parameters[callsite][1])
-            for callsite, helper in amount_helpers.items()
+        for callsite, helper in amount_helpers.items():
+            if self.helper_returns_immutable_amount(helper, self.covered_parameters[callsite][1]):
+                continue
+            if not self._projection_proof().helper_returns_immutable_basis(helper):
+                return False
+            self.immutable_basis_helpers.add(callsite)
+        if (
+            self.specification["algorithm_version"] > 1
+            and not self.prove_original_input_projection()
         ):
             return False
-        boundary_parameters = {
-            argument.arg
-            for argument in (
-                *function.args.posonlyargs,
-                *function.args.args,
-                *function.args.kwonlyargs,
-            )
-        }
+        boundary_parameters = set(self._parameters(function))
         boundary_parameters.update(
             argument.arg for argument in (function.args.vararg, function.args.kwarg) if argument
         )
@@ -550,66 +671,57 @@ class _RetainedVerificationProof:
             self.aliases[name] = None
         self.aliases[self.specification["receipt_parameter"]] = "@receipt_input"
         self.aliases[self.specification["output_parameter"]] = "@output"
+        if self.input_projection:
+            parameter = self.input_projection["source_parameter"]
+            if parameter not in boundary_parameters:
+                return False
+            self.aliases[parameter] = "@source_input"
+        return self._prove_boundary_statements(function)
+
+    def _bind_boundary_assignment(self, name: str, value: ast.expr) -> bool:
+        symbol = self.symbol(value)
+        protected_roots = RETAINED_PROTECTED_SYMBOLS | {self.policy}
+        contains_protected_alias = any(
+            self.symbol(node) in protected_roots
+            for node in ast.walk(value)
+            if isinstance(node, ast.expr)
+        )
+        if (
+            contains_protected_alias
+            and symbol is None
+            and not (isinstance(value, ast.Call) and self.symbol(value.func) in self.covered)
+        ):
+            # Containers/closures/computed wrappers can hide a mutable alias.
+            return False
+        if self.aliases.get(name) in protected_roots or (
+            isinstance(value, ast.Call) and symbol == "@decoded"
+        ):
+            self.facts.clear()
+        self.aliases[name] = symbol
+        return True
+
+    def _prove_boundary_statements(self, function: ast.FunctionDef) -> bool:
+        """Only inert docs, one-name bindings, raising rejections and a final return are legal."""
         for index, statement in enumerate(function.body):
             if not self.calls_use_bound_output(statement):
                 return False
-            if (
-                isinstance(statement, ast.Expr)
-                and isinstance(statement.value, ast.Constant)
-                and isinstance(statement.value.value, str)
-            ):
-                continue
-            if (
-                isinstance(statement, ast.Assign)
-                and len(statement.targets) == 1
-                and isinstance(statement.targets[0], ast.Name)
-            ):
-                name = statement.targets[0].id
-                symbol = self.symbol(statement.value)
-                protected_roots = {
-                    "@output",
-                    "@decoded",
-                    "@receipt_input",
-                    "@canonical_output",
-                    "@expected_policy",
-                    self.policy,
-                }
-                contains_protected_alias = any(
-                    self.symbol(node) in protected_roots
-                    for node in ast.walk(statement.value)
-                    if isinstance(node, ast.expr)
-                )
-                if (
-                    contains_protected_alias
-                    and symbol is None
-                    and not (
-                        isinstance(statement.value, ast.Call)
-                        and self.symbol(statement.value.func) in self.covered
+            match statement:
+                case ast.Expr(value=ast.Constant(value=str())):
+                    continue
+                case ast.Assign(targets=[ast.Name(id=name)], value=value):
+                    if not self._bind_boundary_assignment(name, value):
+                        return False
+                case ast.If(test=test, body=[ast.Raise()], orelse=[]):
+                    self.facts.update(self.rejection_facts(test))
+                case ast.Return(value=value):
+                    immutable = (
+                        self._projection_proof().immutable_confirmation_return(value)
+                        if self.immutable_basis_helpers or self.input_projection
+                        else True
                     )
-                ):
-                    # Containers/closures/computed wrappers can hide a mutable alias.
+                    return index == len(function.body) - 1 and self.complete() and immutable
+                case _:
                     return False
-                if self.aliases.get(name) in {
-                    "@decoded",
-                    "@output",
-                    "@receipt_input",
-                    "@canonical_output",
-                    "@expected_policy",
-                    self.policy,
-                } or (isinstance(statement.value, ast.Call) and symbol == "@decoded"):
-                    self.facts.clear()
-                self.aliases[name] = symbol
-            elif (
-                isinstance(statement, ast.If)
-                and not statement.orelse
-                and len(statement.body) == 1
-                and isinstance(statement.body[0], ast.Raise)
-            ):
-                self.facts.update(self.rejection_facts(statement.test))
-            elif isinstance(statement, ast.Return):
-                return index == len(function.body) - 1 and self.complete()
-            else:
-                return False
         return False
 
 
@@ -629,7 +741,7 @@ def _verified_retained_boundary(
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name
     ]
     return len(functions) == 1 and _RetainedVerificationProof(
-        path, constant, declaration, specification, covered
+        path, constant, declaration, specification, covered, repo_root
     ).prove(module, functions[0])
 
 
@@ -659,7 +771,14 @@ def _retained_boundaries(
             boundary in policy.get("lineage_boundary_callsites", [])
             and boundary in call_graph
             and isinstance(specification, dict)
-            and set(specification) == required_keys
+            and type(specification.get("algorithm_version")) is int
+            and specification["algorithm_version"] > 0
+            and set(specification)
+            == (
+                required_keys | {"input_verification"}
+                if specification.get("algorithm_version", 1) > 1
+                else required_keys
+            )
             and all(
                 isinstance(specification[name], str) and specification[name].isidentifier()
                 for name in ("receipt_parameter", "output_parameter")
@@ -667,8 +786,6 @@ def _retained_boundaries(
             and specification["receipt_parameter"] != specification["output_parameter"]
             and isinstance(specification["algorithm_id"], str)
             and bool(specification["algorithm_id"].strip())
-            and type(specification["algorithm_version"]) is int
-            and specification["algorithm_version"] > 0
             and isinstance(specification["output_canonicalizer"], str)
             and specification["output_canonicalizer"] in covered & computed_gaps
             and boundary not in policy.get("lineage_boundary_terminal_callsites", {})

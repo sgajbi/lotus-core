@@ -54,6 +54,14 @@ async def transaction_records_from_rows(
 
 def transaction_record_from_row(row: Any) -> TransactionRecord:
     record = TransactionRecord.model_validate(row)
+    proof = record.transaction_source_evidence
+    if proof is not None:
+        record.realized_fx_pnl_local = proof.realized_fx_pnl_local
+        record.realized_fx_pnl_base = proof.realized_fx_pnl_base
+        if proof.realized_fx_pnl_local is None:
+            record.realized_total_pnl_local = None
+        if proof.realized_fx_pnl_base is None:
+            record.realized_total_pnl_base = None
     record.costs = [cost for cost in row.costs or []]
     if row.cashflow:
         record.cashflow = row.cashflow
@@ -173,6 +181,8 @@ def _transaction_ledger_proof_fields(
             ),
             latest_evidence_timestamp=latest_evidence_timestamp,
             snapshot_id=reconstruction_evidence.scope_id,
+            source_evidence_current=input_evidence.source_cut_sha256 is not None,
+            freshness_status="CURRENT" if input_evidence.source_cut_sha256 else "UNAVAILABLE",
             policy_version=TRANSACTION_LEDGER_POLICY_VERSION,
             source_refs=[source_ref],
             lineage={
@@ -182,6 +192,7 @@ def _transaction_ledger_proof_fields(
                 **reconstruction_evidence.lineage(),
             },
         ),
+        "source_cut_sha256": input_evidence.source_cut_sha256,
         "reason_codes": ledger_reason_codes(
             total_count=total_count,
             returned_count=returned_count,
@@ -233,6 +244,7 @@ def transaction_ledger_reconstruction_evidence(
                 ("transaction_cost_digest", input_evidence.transaction_cost_digest),
                 ("selected_cashflow_digest", input_evidence.selected_cashflow_digest),
                 ("selected_fx_rate_digest", input_evidence.selected_fx_rate_digest),
+                ("source_cut_sha256", input_evidence.source_cut_sha256),
             ),
         )
     )
@@ -262,5 +274,14 @@ def _transaction_ledger_qualifiers(
         ("reporting_currency", reporting_currency),
     )
     if ledger_filters.transaction_id is None:
-        return legacy_ledger_qualifiers
-    return (("transaction_id", ledger_filters.transaction_id), *legacy_ledger_qualifiers)
+        qualifiers = legacy_ledger_qualifiers
+    else:
+        qualifiers = (("transaction_id", ledger_filters.transaction_id), *legacy_ledger_qualifiers)
+    if ledger_filters.tenant_id is None:
+        return qualifiers
+    return (
+        ("tenant_id", ledger_filters.tenant_id.value),
+        ("source_evidence_selection", ledger_filters.source_evidence_selection),
+        ("source_revision_id", ledger_filters.source_revision_id),
+        *qualifiers,
+    )

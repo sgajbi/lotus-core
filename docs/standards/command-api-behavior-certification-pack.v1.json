@@ -19,6 +19,26 @@
   ],
   "scenarios": [
     {
+      "id": "source_confirmation_queued_is_not_committed_success",
+      "status": "implemented_with_gaps",
+      "command_family": "transaction-source-evidence-confirmation",
+      "owning_issues": ["sgajbi/lotus-core#452", "sgajbi/lotus-core#1176", "sgajbi/lotus-core#531"],
+      "evidence": [
+        "tests/unit/services/ingestion_service/routers/test_transaction_source_corrections.py",
+        "tests/unit/services/event_replay_service/infrastructure/test_source_correction_operation_status.py",
+        "tests/integration/services/persistence_service/test_transaction_source_correction_postgresql.py"
+      ],
+      "route_surface_evidence": [
+        "test_registered_route_queued_response_and_trusted_resource_scope",
+        "test_local_auth_disabled_never_admits_unverified_or_ordinary_correction",
+        "test_idempotency_is_mandatory_before_submission",
+        "test_injected_status_router_retains_safe_shapes_and_authority_order",
+        "test_public_status_independent_committed_fact_and_refusal"
+      ],
+      "response_assertions": ["http_status", "response_schema", "correlation_or_operation_identity", "idempotency_or_duplicate_semantics", "operator_reason_code"],
+      "remaining_scope": "Actual controlled HTTP/native PostgreSQL and signed-command proof does not certify live Kafka, production authority enrollment, protected promotion or enterprise readiness."
+    },
+    {
       "id": "valid_command_returns_stable_accepted_response",
       "status": "implemented",
       "command_family": "ingestion,reconciliation",

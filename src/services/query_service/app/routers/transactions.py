@@ -3,6 +3,7 @@ from datetime import date
 from typing import Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
+from portfolio_common.api_contract.transaction_source_evidence import SourceEvidenceSelection
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from ..application.transaction_query import TransactionRecordUnavailableError
@@ -233,6 +234,7 @@ async def get_transactions(
     openapi_extra=source_data_product_openapi_extra("TransactionLedgerWindow"),
 )
 async def get_transaction_record(
+    http_request: Request,
     portfolio_id: str = Path(
         ...,
         min_length=1,
@@ -268,12 +270,30 @@ async def get_transaction_record(
         ),
         examples=["SGD"],
     ),
+    source_evidence_selection: SourceEvidenceSelection = Query(
+        "current",
+        description=(
+            "Closed FX source proof selection: current, original or an explicit owned revision."
+        ),
+    ),
+    source_revision_id: str | None = Query(
+        None,
+        min_length=1,
+        max_length=128,
+        description=(
+            "Required only for revision selection; foreign and unknown revisions "
+            "are indistinguishable from absence."
+        ),
+    ),
     service: TransactionService = Depends(get_transaction_service),
 ):
     try:
         return await service.get_transaction_record(
             portfolio_id=portfolio_id,
             transaction_id=transaction_id,
+            tenant_context=http_request.state.tenant_context,
+            source_evidence_selection=source_evidence_selection,
+            source_revision_id=source_revision_id,
             as_of_date=as_of_date,
             include_projected=include_projected,
             reporting_currency=reporting_currency,

@@ -305,6 +305,7 @@ def test_performance_component_economics_response_reports_coverage_and_lineage()
         transactions=[transaction],
         portfolio_base_currency="USD",
         generated_at=datetime(2026, 5, 10, 15, tzinfo=UTC),
+        source_cut_sha256="a" * 64,
         is_initial_page=True,
     )
     regenerated_response = build_performance_component_economics_response(
@@ -314,6 +315,7 @@ def test_performance_component_economics_response_reports_coverage_and_lineage()
         transactions=[transaction],
         portfolio_base_currency="USD",
         generated_at=datetime(2026, 5, 10, 16, tzinfo=UTC),
+        source_cut_sha256="a" * 64,
         is_initial_page=True,
     )
 
@@ -598,6 +600,7 @@ def test_performance_component_economics_empty_response_is_authoritative_no_acti
         transactions=[],
         portfolio_base_currency="USD",
         generated_at=datetime(2026, 5, 10, 15, tzinfo=UTC),
+        source_cut_sha256="a" * 64,
         is_initial_page=True,
     )
 
@@ -621,6 +624,13 @@ async def test_resolve_performance_component_economics_response_orchestrates_rep
         calls: list[tuple[str, dict[str, object]]] = []
 
         class Repository:
+            async def establish_performance_read_snapshot(self) -> None:
+                calls.append(("snapshot", {}))
+
+            async def capture_performance_source_cut(self, **kwargs: object) -> str:
+                calls.append(("source_cut", kwargs))
+                return "a" * 64
+
             async def portfolio_exists(self, portfolio_id: str, *, tenant_id: TenantId) -> bool:
                 calls.append(
                     ("portfolio_exists", {"portfolio_id": portfolio_id, "tenant_id": tenant_id})
@@ -679,18 +689,21 @@ async def test_resolve_performance_component_economics_response_orchestrates_rep
     assert response.supportability.reason == "PERFORMANCE_COMPONENT_ECONOMICS_PAGE_PARTIAL"
     assert response.data_quality_status == "PARTIAL"
     assert [call[0] for call in calls] == [
+        "snapshot",
         "portfolio_exists",
         "get_portfolio_base_currency",
+        "source_cut",
         "performance_component_economics",
     ]
-    assert calls[2][1]["transaction_types"] == ["DIVIDEND"]
-    assert calls[2][1]["security_ids"] == ["EQ_US_AAPL"]
-    assert calls[2][1]["tenant_id"] == TenantId("tenant-sg")
-    assert calls[2][1]["after_key"] == ()
-    assert calls[2][1]["limit"] == 2
+    assert calls[3][1]["transaction_types"] == ["DIVIDEND"]
+    assert calls[3][1]["security_ids"] == ["EQ_US_AAPL"]
+    assert calls[3][1]["tenant_id"] == TenantId("tenant-sg")
+    assert calls[4][1]["after_key"] == ()
+    assert calls[4][1]["limit"] == 2
     assert encoded_payloads == [
         {
             "scope_fingerprint": response.page.request_scope_fingerprint,
+            "source_cut_sha256": "a" * 64,
             "last_row_key": ["EQ_US_AAPL", "2026-05-10", "TXN-DIV-001"],
         }
     ]
@@ -702,6 +715,12 @@ async def test_resolve_performance_component_economics_filtered_empty_is_ready()
     events: list[str] = []
 
     class Repository:
+        async def establish_performance_read_snapshot(self) -> None:
+            events.append("snapshot_established")
+
+        async def capture_performance_source_cut(self, **kwargs: object) -> str:
+            return "a" * 64
+
         async def portfolio_exists(self, portfolio_id: str, *, tenant_id: TenantId) -> bool:
             return True
 
@@ -747,12 +766,22 @@ async def test_resolve_performance_component_economics_filtered_empty_is_ready()
     assert response.latest_evidence_timestamp is None
     assert response.source_evidence_current is True
     assert response.freshness_status == "CURRENT"
-    assert events == ["evidence_query_completed", "completion_timestamp_captured"]
+    assert events == [
+        "snapshot_established",
+        "evidence_query_completed",
+        "completion_timestamp_captured",
+    ]
 
 
 @pytest.mark.asyncio
 async def test_resolve_performance_component_economics_empty_continuation_is_unavailable() -> None:
     class Repository:
+        async def establish_performance_read_snapshot(self) -> None:
+            pass
+
+        async def capture_performance_source_cut(self, **kwargs: object) -> str:
+            return "a" * 64
+
         async def portfolio_exists(self, portfolio_id: str, *, tenant_id: TenantId) -> bool:
             return True
 
@@ -781,7 +810,16 @@ async def test_resolve_performance_component_economics_empty_continuation_is_una
             page={"page_token": "signed-continuation"},
         ),
         decode_page_token=lambda token: {
-            "last_row_key": ["EQ_US_AAPL", "2026-04-05", "TXN-PREVIOUS-PAGE"]
+            "last_row_key": ["EQ_US_AAPL", "2026-04-05", "TXN-PREVIOUS-PAGE"],
+            "scope_fingerprint": performance_component_economics_page_scope(
+                portfolio_id="PB_SG_GLOBAL_BAL_001",
+                request=PerformanceComponentEconomicsRequest(
+                    as_of_date=date(2026, 4, 10),
+                    window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 10)},
+                ),
+                cursor={},
+            ).request_fingerprint,
+            "source_cut_sha256": "a" * 64,
         },
         encode_page_token=lambda _: "unexpected-token",
         clock=lambda: datetime(2026, 4, 10, 15, tzinfo=UTC),
@@ -819,6 +857,12 @@ async def test_resolve_performance_component_economics_empty_continuation_is_una
 @pytest.mark.asyncio
 async def test_component_economics_query_failure_does_not_become_ready_empty() -> None:
     class Repository:
+        async def establish_performance_read_snapshot(self) -> None:
+            pass
+
+        async def capture_performance_source_cut(self, **kwargs: object) -> str:
+            return "a" * 64
+
         async def portfolio_exists(self, portfolio_id: str, *, tenant_id: TenantId) -> bool:
             return True
 
@@ -913,6 +957,7 @@ def test_performance_component_economics_page_token_uses_last_row_key() -> None:
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
         cursor={},
+        source_cut_sha256="a" * 64,
     )
     rows = build_performance_component_economics_rows(
         [
@@ -927,6 +972,7 @@ def test_performance_component_economics_page_token_uses_last_row_key() -> None:
         has_more=True,
     ) == {
         "scope_fingerprint": page_scope.request_fingerprint,
+        "source_cut_sha256": "a" * 64,
         "last_row_key": ["EQ_US_MSFT", "2026-05-10", "TXN-DIV-002"],
     }
     encoded_payloads: list[dict[str, object]] = []
@@ -949,3 +995,89 @@ def test_performance_component_economics_page_token_uses_last_row_key() -> None:
         )
         is None
     )
+
+
+@pytest.mark.parametrize("token_cut", [None, "b" * 64, "", 123])
+def test_performance_continuation_rejects_stale_or_legacy_unbound_cut(token_cut) -> None:
+    request = PerformanceComponentEconomicsRequest(
+        as_of_date=date(2026, 5, 10),
+        window={"start_date": date(2026, 5, 1), "end_date": date(2026, 5, 10)},
+    )
+    first = performance_component_economics_page_scope(
+        portfolio_id="P1",
+        request=request,
+        cursor={},
+        source_cut_sha256="a" * 64,
+    )
+    cursor = {
+        "scope_fingerprint": first.request_fingerprint,
+        "last_row_key": ["SEC", "2026-05-01", "TX1"],
+        "source_cut_sha256": token_cut,
+    }
+    with pytest.raises(ValueError, match="source evidence changed or is unbound"):
+        performance_component_economics_page_scope(
+            portfolio_id="P1",
+            request=request,
+            cursor=cursor,
+            source_cut_sha256="a" * 64,
+        )
+    cursor["source_cut_sha256"] = "a" * 64
+    accepted = performance_component_economics_page_scope(
+        portfolio_id="P1",
+        request=request,
+        cursor=cursor,
+        source_cut_sha256="a" * 64,
+    )
+    assert accepted.after_key == ("SEC", "2026-05-01", "TX1")
+
+
+@pytest.mark.asyncio
+async def test_failed_snapshot_stops_before_every_portfolio_read() -> None:
+    from unittest.mock import AsyncMock
+
+    repository = AsyncMock()
+    repository.establish_performance_read_snapshot.side_effect = RuntimeError("snapshot failed")
+    request = PerformanceComponentEconomicsRequest(
+        as_of_date=date(2026, 5, 10),
+        window={"start_date": date(2026, 5, 1), "end_date": date(2026, 5, 10)},
+    )
+    with pytest.raises(RuntimeError, match="snapshot failed"):
+        await resolve_performance_component_economics_response(
+            repository=repository,
+            portfolio_id="P1",
+            tenant_id=TenantId("tenant-sg"),
+            request=request,
+            decode_page_token=lambda _: {},
+            encode_page_token=lambda _: "token",
+            clock=lambda: datetime(2026, 5, 10, tzinfo=UTC),
+        )
+    repository.portfolio_exists.assert_not_awaited()
+    repository.get_portfolio_base_currency.assert_not_awaited()
+    repository.capture_performance_source_cut.assert_not_awaited()
+
+
+def test_whole_window_cut_changes_content_hash_without_page_or_timestamp_change() -> None:
+    request = PerformanceComponentEconomicsRequest(
+        as_of_date=date(2026, 5, 10),
+        window={"start_date": date(2026, 5, 1), "end_date": date(2026, 5, 10)},
+    )
+    transaction = _transaction(transaction_id="TX-CUT")
+    arguments = dict(
+        portfolio_id="P1",
+        request=request,
+        rows=build_performance_component_economics_rows([transaction]),
+        transactions=[transaction],
+        portfolio_base_currency="USD",
+        generated_at=datetime(2026, 5, 10, tzinfo=UTC),
+        is_initial_page=True,
+    )
+    first = build_performance_component_economics_response(**arguments, source_cut_sha256="a" * 64)
+    changed = build_performance_component_economics_response(
+        **arguments, source_cut_sha256="b" * 64
+    )
+    unproved = build_performance_component_economics_response(**arguments)
+    assert first.rows == changed.rows
+    assert first.latest_evidence_timestamp == changed.latest_evidence_timestamp
+    assert first.content_hash != changed.content_hash
+    assert unproved.source_evidence_current is False
+    assert unproved.freshness_status == "UNAVAILABLE"

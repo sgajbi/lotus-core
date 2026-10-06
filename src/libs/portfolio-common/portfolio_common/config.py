@@ -94,6 +94,12 @@ KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC = os.getenv(
 KAFKA_TRANSACTIONS_PERSISTED_TOPIC = os.getenv(
     "KAFKA_TRANSACTIONS_PERSISTED_TOPIC", "transactions.persisted"
 )
+KAFKA_TRANSACTIONS_SOURCE_CORRECTION_COMMANDS_TOPIC = os.getenv(
+    "KAFKA_TRANSACTIONS_SOURCE_CORRECTION_COMMANDS_TOPIC", "transactions.source_correction.commands"
+)
+KAFKA_TRANSACTIONS_SOURCE_EVIDENCE_CHANGED_TOPIC = os.getenv(
+    "KAFKA_TRANSACTIONS_SOURCE_EVIDENCE_CHANGED_TOPIC", "transactions.source_evidence.changed"
+)
 KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC = os.getenv(
     "KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC", "transactions.cost.processed"
 )
@@ -250,6 +256,22 @@ KAFKA_TOPIC_DEFINITIONS = (
     KafkaTopicDefinition(
         canonical_name="transactions.persisted",
         runtime_name=KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="fact",
+        scope="transaction",
+        partition_count=12,
+    ),
+    KafkaTopicDefinition(
+        canonical_name="transactions.source_correction.commands",
+        runtime_name=KAFKA_TRANSACTIONS_SOURCE_CORRECTION_COMMANDS_TOPIC,
+        lifecycle_status="active",
+        semantic_type="command",
+        scope="transaction",
+        partition_count=12,
+    ),
+    KafkaTopicDefinition(
+        canonical_name="transactions.source_evidence.changed",
+        runtime_name=KAFKA_TRANSACTIONS_SOURCE_EVIDENCE_CHANGED_TOPIC,
         lifecycle_status="active",
         semantic_type="fact",
         scope="transaction",

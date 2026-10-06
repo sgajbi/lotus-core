@@ -6,6 +6,7 @@ from decimal import Decimal
 from types import MappingProxyType
 from typing import Any, List, Mapping, Optional, cast
 
+from portfolio_common.api_contract.transaction_source_evidence import TransactionSourceEvidence
 from portfolio_common.business_calendar_sql import business_calendar_code_matches
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.database_models import (
@@ -16,12 +17,17 @@ from portfolio_common.database_models import (
     Portfolio,
     Transaction,
 )
+from portfolio_common.domain.calculation_lineage import canonical_content_hash
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.domain.tenant import TenantId
+from portfolio_common.domain.transaction.fx_source_admission import FX_SOURCE_ADMISSION_TYPES
 from portfolio_common.infrastructure.transaction_cost_snapshot import (
     TransactionCostSnapshot,
     transaction_cost_snapshot_lateral,
     transaction_cost_snapshots,
+)
+from portfolio_common.infrastructure.transaction_source_evidence import (
+    SqlAlchemyTransactionSourceEvidence,
 )
 from portfolio_common.logging_utils import operation_log_extra
 from portfolio_common.utils import async_timed
@@ -63,6 +69,7 @@ class TransactionLedgerRow:
     _values: Mapping[str, Any]
     costs: tuple[TransactionCostSnapshot, ...]
     cashflow: TransactionCashflowSnapshot | None
+    transaction_source_evidence: TransactionSourceEvidence | None = None
 
     def __getattr__(self, name: str) -> Any:
         try:
@@ -91,6 +98,7 @@ def _transaction_ledger_row(
     *,
     transaction: Transaction,
     costs: tuple[TransactionCostSnapshot, ...],
+    source_evidence: TransactionSourceEvidence | None = None,
 ) -> TransactionLedgerRow:
     return TransactionLedgerRow(
         _values=MappingProxyType(
@@ -101,6 +109,7 @@ def _transaction_ledger_row(
         ),
         costs=costs,
         cashflow=_transaction_cashflow_snapshot(transaction.cashflow),
+        transaction_source_evidence=source_evidence,
     )
 
 
@@ -159,6 +168,37 @@ class TransactionRepository:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+        self._source_proofs: dict[
+            TransactionLedgerFilters, dict[str, TransactionSourceEvidence]
+        ] = {}
+
+    async def _source_evidence_for_scope(
+        self,
+        filters: TransactionLedgerFilters,
+    ) -> dict[str, TransactionSourceEvidence]:
+        if filters in self._source_proofs:
+            return self._source_proofs[filters]
+        if filters.tenant_id is None:
+            return {}
+        statement = (
+            self._apply_filters(select(Transaction.transaction_id), filters=filters)
+            .where(
+                Transaction.transaction_type.in_(FX_SOURCE_ADMISSION_TYPES),
+                Transaction.fx_realized_pnl_mode == "UPSTREAM_PROVIDED",
+            )
+            .order_by(Transaction.transaction_id.asc())
+        )
+        transaction_ids = (await self.db.execute(statement)).scalars().all()
+        proofs = await SqlAlchemyTransactionSourceEvidence(self.db).read(
+            tenant_id=filters.tenant_id.value,
+            portfolio_id=filters.portfolio_id,
+            transaction_ids=transaction_ids,
+            consumer="core-ledger",
+            selection=filters.source_evidence_selection,
+            revision_id=filters.source_revision_id,
+        )
+        self._source_proofs[filters] = proofs
+        return proofs
 
     async def establish_transaction_ledger_read_snapshot(self) -> None:
         """Make every material ledger read in this request share one database snapshot."""
@@ -259,6 +299,12 @@ class TransactionRepository:
         *,
         filters: TransactionLedgerFilters,
     ):
+        if filters.transaction_id is not None and filters.tenant_id is None:
+            raise ValueError("Exact transaction filters require admitted tenant authority")
+        if filters.tenant_id is not None:
+            stmt = stmt.join(Portfolio, Portfolio.portfolio_id == Transaction.portfolio_id).where(
+                Portfolio.tenant_id == filters.tenant_id.value
+            )
         for field_name, value in _ledger_identity_filters(filters).items():
             stmt = stmt.where(getattr(Transaction, field_name) == value)
         stmt = _apply_security_filter(stmt, filters.security_id)
@@ -321,9 +367,11 @@ class TransactionRepository:
         )
 
         results = await self.db.execute(stmt)
+        proofs = await self._source_evidence_for_scope(filters)
         transactions = [
             _transaction_ledger_row(
                 transaction=transaction,
+                source_evidence=proofs.get(transaction.transaction_id),
                 costs=transaction_cost_snapshots(
                     fee_types=fee_types,
                     amounts=amounts,
@@ -393,6 +441,7 @@ class TransactionRepository:
             as_of_date=as_of_date,
         )
         row = (await self.db.execute(statement)).one()
+        proofs = await self._source_evidence_for_scope(filters)
         evidence_timestamps = (
             row.transaction_latest_at,
             row.transaction_cost_latest_at,
@@ -410,6 +459,26 @@ class TransactionRepository:
             transaction_cost_digest=row.transaction_cost_digest,
             selected_cashflow_digest=row.selected_cashflow_digest,
             selected_fx_rate_digest=row.selected_fx_rate_digest,
+            source_cut_sha256=cast(
+                str,
+                canonical_content_hash(
+                    {
+                        "tenant_id": filters.tenant_id.value if filters.tenant_id else None,
+                        "portfolio_id": filters.portfolio_id,
+                        "selection": filters.source_evidence_selection,
+                        "revision_id": filters.source_revision_id,
+                        "transaction_digest": row.transaction_digest,
+                        "transaction_cost_digest": row.transaction_cost_digest,
+                        "selected_cashflow_digest": row.selected_cashflow_digest,
+                        "selected_fx_rate_digest": row.selected_fx_rate_digest,
+                        "qualified_sources": [
+                            proof.model_dump(mode="python") for _, proof in sorted(proofs.items())
+                        ],
+                    }
+                ),
+            )
+            if filters.tenant_id is not None
+            else None,
         )
 
     async def list_realized_tax_evidence_transactions(

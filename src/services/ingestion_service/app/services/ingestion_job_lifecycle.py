@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -14,6 +14,7 @@ from portfolio_common.monitoring import (
     INGESTION_JOBS_RETRIED_TOTAL,
 )
 from sqlalchemy import and_, desc, func, null, select, text, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..application.ingestion_failure_evidence import project_ingestion_failure_evidence
 from ..domain.ingestion_job_lifecycle_policy import (
@@ -144,6 +145,7 @@ async def create_or_get_job_result(
     fingerprint_hmac_secret: str,
     fingerprint_previous_keys: Mapping[str, str],
     session_factory,
+    on_created: Callable[[AsyncSession, DBIngestionJob], Awaitable[None]] | None = None,
 ) -> IngestionJobCreateResult:
     if request_payload is None:
         raise ValueError("Ingestion jobs require request payload evidence.")
@@ -227,6 +229,10 @@ async def create_or_get_job_result(
             )
             db.add(row)
             await db.flush()
+            if on_created is not None:
+                # Capability-specific durable intent shares this existing job UOW.
+                # Exact idempotent returns above never repeat the creation effect.
+                await on_created(db, row)
             INGESTION_JOBS_CREATED_TOTAL.labels(endpoint=endpoint, entity_type=entity_type).inc()
             return IngestionJobCreateResult(
                 job=to_job_response(
