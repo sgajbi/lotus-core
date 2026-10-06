@@ -302,3 +302,11 @@ source-confirmation command and version-2 original-presence producer are describ
 economics, original raw/receipt, replay fences or cash/cost effects. The notification has no
 registered external subscriber; Kafka enrollment, downstream qualification, mainline release,
 publication and broad issue certification remain separate authority.
+
+Source-confirmation qualification uses detached immutable facts across the application/storage
+boundary. Its native adapter carries every ledger column except the four technical fields `id`,
+`updated_at`, `payload_fingerprint` and `calculation_lineage`; fingerprint and complete original
+receipt are retained separately. Revision material requires every mapped revision column, and
+nested evidence cannot change through an ORM or caller alias after projection. This preserves
+the same retained-input validation, financial output binding and retry qualification; it is an
+internal ownership boundary, not additional consumer or database acceptance evidence.

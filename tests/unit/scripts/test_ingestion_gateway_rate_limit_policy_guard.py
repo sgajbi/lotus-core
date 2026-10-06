@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from scripts.quality import ingestion_gateway_rate_limit_policy_guard as guard
 
 
@@ -7,13 +9,17 @@ def test_gateway_rate_limit_policy_guard_accepts_current_truth() -> None:
     assert guard.evaluate_gateway_rate_limit_policy() == []
 
 
-def test_gateway_rate_limit_policy_guard_rejects_missing_endpoint() -> None:
+@pytest.mark.parametrize(
+    "missing_endpoint",
+    ["/ingest/transactions", "/ingest/transactions/{transaction_id}/source-evidence"],
+)
+def test_gateway_rate_limit_policy_guard_rejects_missing_endpoint(missing_endpoint: str) -> None:
     policy = guard._load_policy()
     router_endpoints = set(policy["required_endpoint_templates"])
     policy["required_endpoint_templates"] = [
         endpoint
         for endpoint in policy["required_endpoint_templates"]
-        if endpoint != "/ingest/transactions"
+        if endpoint != missing_endpoint
     ]
 
     findings = guard.evaluate_gateway_rate_limit_policy(
@@ -23,7 +29,7 @@ def test_gateway_rate_limit_policy_guard_rejects_missing_endpoint() -> None:
     )
 
     assert findings == [
-        {"endpoints": ["policy missing router endpoint templates: ['/ingest/transactions']"]}
+        {"endpoints": [f"policy missing router endpoint templates: ['{missing_endpoint}']"]}
     ]
 
 

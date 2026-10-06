@@ -136,14 +136,19 @@ def case(local=None, base=Decimal("12"), *, changes=None, source_capital=Decimal
     repo = MagicMock()
     repo.committed_command = AsyncMock(return_value=None)
     repo.lock_admitted_operation = AsyncMock(
-        return_value=OutboxEvent(payload=command.model_dump(mode="json", exclude_unset=True))
+        return_value=storage.SourceOperationIntent(
+            command.model_dump(mode="json", exclude_unset=True)
+        )
     )
     repo.lock_retained_source = AsyncMock(
-        return_value=storage.RetainedSourceRows(
-            ledger,
-            OutboxEvent(id=7, payload=raw),
-            None,
+        side_effect=lambda **kwargs: storage.retained_source_facts(
+            ledger, OutboxEvent(id=7, payload=raw), None
         )
+    )
+    repo.normalize_command = storage.TransactionSourceRevisionRepository.normalize_command
+    repo.decode_admitted_intent = storage.TransactionSourceRevisionRepository.decode_admitted_intent
+    repo.validate_retained_input = (
+        storage.TransactionSourceRevisionRepository.validate_retained_input
     )
     repo.read_committed_source = AsyncMock()
     repo.stage_revision_and_notification = AsyncMock()
@@ -198,10 +203,11 @@ async def test_invalid_retained_authority_or_stale_head_never_stages_revision(fa
     elif fault == "owner":
         ledger.portfolio_id = "foreign"
     elif fault == "head":
-        repo.lock_retained_source.return_value = storage.RetainedSourceRows(
-            ledger,
-            OutboxEvent(id=7, payload=raw),
-            TransactionSourceRevision(revision_id="new", revision_sha256="9" * 64),
+        retained = storage.retained_source_facts(ledger, OutboxEvent(id=7, payload=raw), None)
+        head = use_case._revision(command, retained, attestation_hash="9" * 64)
+        repo.lock_retained_source.side_effect = None
+        repo.lock_retained_source.return_value = replace(
+            retained, head=replace(head, revision_id="new", revision_sha256="9" * 64)
         )
     else:
         ledger.realized_total_pnl_local = Decimal("999")
@@ -240,11 +246,11 @@ async def test_exact_committed_replay_and_concurrent_reread_do_not_create_effect
     )
     existing = use_case._revision(
         command,
-        storage.RetainedSourceRows(ledger, OutboxEvent(id=7, payload=raw), None),
+        storage.retained_source_facts(ledger, OutboxEvent(id=7, payload=raw), None),
         attestation_hash=authenticated.attestation_sha256,
     )
-    repo.read_committed_source.return_value = storage.RetainedSourceRows(
-        ledger, OutboxEvent(id=7, payload=raw), existing
+    repo.read_committed_source.return_value = replace(
+        storage.retained_source_facts(ledger, OutboxEvent(id=7, payload=raw), None), head=existing
     )
     repo.committed_command.side_effect = [None, existing] if after_wait else [existing]
     if not after_wait:
@@ -275,12 +281,14 @@ async def test_exact_committed_replay_and_concurrent_reread_do_not_create_effect
 )
 async def test_expired_retry_requires_qualified_complete_fact_even_after_rehash(fault):
     use_case, repo, command, ledger, raw, _ = case()
-    existing = await use_case.execute(command)
+    existing_fact = await use_case.execute(command)
+    existing = TransactionSourceRevision(**existing_fact.material())
     repo.stage_revision_and_notification.reset_mock()
     repo.committed_command.side_effect = None
-    repo.committed_command.return_value = existing
-    source = storage.RetainedSourceRows(ledger, OutboxEvent(id=7, payload=raw), existing)
-    repo.read_committed_source.return_value = source
+    repo.committed_command.side_effect = lambda **kwargs: storage.source_revision_fact(existing)
+    repo.read_committed_source.side_effect = lambda revision: storage.retained_source_facts(
+        ledger, OutboxEvent(id=7, payload=raw), existing
+    )
     use_case._clock = lambda: datetime.fromtimestamp(NOW.timestamp() + 200, UTC)
     if fault == "partial":
         existing.qualification_receipt = None
@@ -303,7 +311,7 @@ async def test_expired_retry_requires_qualified_complete_fact_even_after_rehash(
             "actor_id": "foreign"
         }
     elif fault == "raw":
-        source.raw_event.payload = dict(raw) | {"realized_fx_pnl_base": "999"}
+        raw["realized_fx_pnl_base"] = "999"
     elif fault == "output":
         ledger.realized_total_pnl_base = Decimal("999")
     elif fault == "retained-receipt":
@@ -311,8 +319,8 @@ async def test_expired_retry_requires_qualified_complete_fact_even_after_rehash(
             "output_content_hash": "0" * 64
         }
     else:
-        repo.read_committed_source.return_value = storage.RetainedSourceRows(
-            ledger, source.raw_event, None
+        repo.read_committed_source.side_effect = lambda revision: storage.retained_source_facts(
+            ledger, OutboxEvent(id=7, payload=raw), None
         )
     if fault != "hash":
         existing.revision_sha256 = canonical_content_hash(

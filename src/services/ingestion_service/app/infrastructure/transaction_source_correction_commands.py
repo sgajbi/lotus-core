@@ -14,6 +14,7 @@ from portfolio_common.command_authorization import (
 from portfolio_common.config import KAFKA_TRANSACTIONS_SOURCE_CORRECTION_COMMANDS_TOPIC
 from portfolio_common.database_models import IngestionJob, OutboxEvent, Portfolio, Transaction
 from portfolio_common.domain.calculation_lineage import canonical_content_hash
+from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.event_contracts import TransactionSourceCorrectionRequestedEvent
 from portfolio_common.ingestion_lineage import ingestion_job_scope
 from portfolio_common.outbox_repository import OutboxRepository
@@ -24,6 +25,53 @@ from ..application.transaction_source_corrections import (
     SourceCorrectionSubmission,
     SourceCorrectionSubmissionRejected,
 )
+from ..ports.transaction_source_operations import SourceOperationCreation, SourceOperationJob
+from ..services.ingestion_job_service import IngestionJobService
+
+
+class NativeSourceCorrectionOperationOwner:
+    """Project the real native job owner without opening or committing another UOW."""
+
+    def __init__(self, service: IngestionJobService) -> None:
+        self._service = service
+
+    async def assert_ingestion_writable(self) -> None:
+        await self._service.assert_ingestion_writable()
+
+    async def create_or_get_job(
+        self,
+        *,
+        job_id: str,
+        endpoint: str,
+        entity_type: str,
+        accepted_count: int,
+        idempotency_key: str | None,
+        correlation_id: str,
+        request_id: str,
+        trace_id: str,
+        tenant_context: TenantContext,
+        request_payload: dict[str, object] | None,
+    ) -> SourceOperationCreation:
+        result = await self._service.create_or_get_job(
+            job_id=job_id,
+            endpoint=endpoint,
+            entity_type=entity_type,
+            accepted_count=accepted_count,
+            idempotency_key=idempotency_key,
+            correlation_id=correlation_id,
+            request_id=request_id,
+            trace_id=trace_id,
+            tenant_context=tenant_context,
+            request_payload=request_payload,
+        )
+        return SourceOperationCreation(
+            SourceOperationJob(
+                result.job.job_id,
+                result.job.status,
+                result.job.idempotency_key_reference,
+            ),
+            result.created,
+        )
 
 
 class SqlAlchemySourceCorrectionCommandStager:

@@ -59,6 +59,7 @@
     "/ingest/sustainability-preferences",
     "/ingest/transaction",
     "/ingest/transactions",
+    "/ingest/transactions/{transaction_id}/source-evidence",
     "/ingest/uploads/commit",
     "/reprocess/transactions"
   ],

@@ -11,8 +11,8 @@ from portfolio_common.api_contract.async_commands import (
 from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.enterprise_readiness import VerifiedServicePrincipal
 
+from ..ports.transaction_source_operations import SourceCorrectionOperationOwner
 from ..request_metadata import create_ingestion_job_id
-from ..services.ingestion_job_service import IngestionJobService
 
 SOURCE_CORRECTION_ENDPOINT = "/ingest/transactions/{transaction_id}/source-evidence"
 SOURCE_CORRECTION_ENTITY = "transaction_source_correction"
@@ -36,7 +36,8 @@ class SourceCorrectionSubmission:
 
 class SubmitTransactionSourceCorrection:
     def __init__(
-        self, service_factory: Callable[[SourceCorrectionSubmission], IngestionJobService]
+        self,
+        service_factory: Callable[[SourceCorrectionSubmission], SourceCorrectionOperationOwner],
     ) -> None:
         self._service_factory = service_factory
 

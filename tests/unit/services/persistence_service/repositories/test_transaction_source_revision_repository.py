@@ -1,5 +1,8 @@
 """Repository UOW/SQL-shape proof only; not PostgreSQL concurrency acceptance."""
 
+from dataclasses import FrozenInstanceError
+from decimal import Decimal
+from operator import setitem
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -21,6 +24,60 @@ SourceRevisionStorageRejected = storage.SourceRevisionStorageRejected
 TransactionSourceRevisionRepository = storage.TransactionSourceRevisionRepository
 
 
+def test_detached_source_snapshot_preserves_all_columns_receipt_lists_and_explicit_zero():
+    receipt = {"algorithm_id": "reviewed", "inputs": ["original", {"present": False}]}
+    raw_payload = {"transaction_id": "transaction", "nested": {"amount": "0"}}
+    transaction = Transaction(
+        transaction_id="transaction",
+        portfolio_id="portfolio",
+        realized_capital_pnl_local=Decimal("0"),
+        realized_total_pnl_base=Decimal("-12"),
+        payload_fingerprint="fingerprint",
+        calculation_lineage=receipt,
+    )
+    expected = {
+        column.name: getattr(transaction, column.name)
+        for column in Transaction.__table__.columns
+        if column.name not in {"id", "updated_at", "payload_fingerprint", "calculation_lineage"}
+    }
+    snapshot = storage.retained_source_facts(
+        transaction, OutboxEvent(id=7, payload=raw_payload), None
+    )
+    assert snapshot.transaction.output_material() == expected
+    assert snapshot.transaction.receipt_material() == receipt
+    assert snapshot.raw_event.payload_material() == raw_payload
+    transaction.realized_capital_pnl_local = Decimal("999")
+    raw_payload["nested"]["amount"] = "999"
+    receipt["inputs"].append("mutated ORM JSON")
+    assert snapshot.transaction.output_material() == expected
+    assert snapshot.raw_event.payload_material()["nested"]["amount"] == "0"
+    assert snapshot.transaction.receipt_material()["inputs"] == ["original", {"present": False}]
+    with pytest.raises(TypeError):
+        setitem(snapshot.transaction.ledger_output, "realized_capital_pnl_local", Decimal("1"))
+    with pytest.raises(FrozenInstanceError):
+        setattr(snapshot.transaction, "portfolio_id", "foreign")
+
+
+def test_revision_projection_preserves_every_column_and_rejects_unknown_schema_field():
+    row = TransactionSourceRevision(
+        revision_id="revision",
+        source_local=Decimal("0"),
+        source_base=Decimal("-12"),
+        qualification_receipt={"inputs": ["original"]},
+        authorization_claims={"tenant_id": "tenant"},
+    )
+    expected = {column.name: getattr(row, column.name) for column in row.__table__.columns}
+    fact = storage.source_revision_fact(row)
+    assert fact.material() == expected
+    assert set(fact.material()) == set(row.__table__.columns.keys())
+    row.source_local = Decimal("999")
+    row.qualification_receipt["inputs"].append("mutated ORM JSON")
+    assert fact.source_local == Decimal("0")
+    assert fact.material()["qualification_receipt"] == {"inputs": ["original"]}
+    with pytest.raises(ValueError, match="fact schema"):
+        storage.SourceRevisionFact.from_material(expected | {"new_financial_field": Decimal("0")})
+
+
 @pytest.mark.asyncio
 async def test_operation_share_fences_mutable_status_before_canonical_locks():
     db = session()
@@ -40,7 +97,8 @@ async def test_operation_share_fences_mutable_status_before_canonical_locks():
     statement = str(db.execute.await_args_list[0].args[0].compile(dialect=postgresql.dialect()))
     assert statement.endswith("FOR SHARE OF ingestion_jobs")
     assert "ingestion_jobs.tenant_id" in statement and "ingestion_jobs.job_id" in statement
-    assert result is intent and len(db.execute.await_args_list) == 2
+    assert result is not intent and result.payload_material() == intent.payload
+    assert len(db.execute.await_args_list) == 2
 
 
 @pytest.mark.asyncio
@@ -131,7 +189,12 @@ async def test_committed_source_cut_is_one_tenant_linked_snapshot_without_effect
             await repo.read_committed_source(revision)
     else:
         cut = await repo.read_committed_source(revision)
-        assert cut.transaction is transaction and cut.raw_event is raw and cut.head is revision
+        assert cut.transaction is not transaction and cut.raw_event is not raw
+        assert cut.head.material() == {
+            column.name: getattr(revision, column.name) for column in revision.__table__.columns
+        }
+        assert cut.transaction.portfolio_id == transaction.portfolio_id
+        assert cut.raw_event.id == raw.id
     compiled = db.execute.await_args.args[0].compile(dialect=postgresql.dialect())
     statement = str(compiled)
     assert "portfolios.tenant_id" in statement
@@ -228,9 +291,9 @@ async def test_owner_lock_and_head_query_use_chain_not_latest_timestamp():
     retained = await TransactionSourceRevisionRepository(db).lock_retained_source(
         tenant_id="tenant", transaction_id="transaction"
     )
-    assert (
-        retained.transaction is transaction and retained.raw_event is raw and retained.head is None
-    )
+    assert retained.transaction is not transaction and retained.raw_event is not raw
+    assert retained.transaction.portfolio_id == transaction.portfolio_id
+    assert retained.raw_event.id == raw.id and retained.head is None
     sql = [
         str(call.args[0].compile(dialect=postgresql.dialect()))
         for call in db.execute.await_args_list
@@ -293,10 +356,14 @@ async def test_staging_adds_only_revision_and_outbox_not_another_transaction():
         correlation_id="qualified-correlation",
         trace_id="qualified-trace",
     )
-    await TransactionSourceRevisionRepository(db).stage_revision_and_notification(revision)
+    fact = storage.source_revision_fact(revision)
+    await TransactionSourceRevisionRepository(db).stage_revision_and_notification(fact)
     staged = [call.args[0] for call in db.add.call_args_list]
     assert [type(row) for row in staged] == [TransactionSourceRevision, OutboxEvent]
-    assert staged[0] is revision
+    assert staged[0] is not fact
+    assert {
+        column.name: getattr(staged[0], column.name) for column in staged[0].__table__.columns
+    } == fact.material()
     assert staged[1].event_type == "TransactionSourceEvidenceChanged"
     assert staged[1].payload["operation_id"] == "operation"
     assert staged[1].payload["revision_sha256"] == "1" * 64

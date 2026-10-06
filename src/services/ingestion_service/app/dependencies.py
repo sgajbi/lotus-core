@@ -159,6 +159,7 @@ def get_transaction_source_correction_submitter():
 
     from .application.transaction_source_corrections import SubmitTransactionSourceCorrection
     from .infrastructure.transaction_source_correction_commands import (
+        NativeSourceCorrectionOperationOwner,
         SqlAlchemySourceCorrectionCommandStager,
     )
     from .infrastructure.workflow_stores import SqlAlchemyIngestionJobStore
@@ -175,6 +176,6 @@ def get_transaction_source_correction_submitter():
             fingerprint_previous_keys=evidence.previous_keys,
             on_created=stager.stage,
         )
-        return IngestionJobService(job_store=store)
+        return NativeSourceCorrectionOperationOwner(IngestionJobService(job_store=store))
 
     return SubmitTransactionSourceCorrection(service_factory)

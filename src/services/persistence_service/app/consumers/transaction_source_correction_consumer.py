@@ -5,12 +5,12 @@ from typing import cast
 from portfolio_common.command_authorization import (
     load_command_authorization_policy,
 )
-from portfolio_common.database_models import TransactionSourceRevision
 from portfolio_common.domain.transaction import TransactionPayloadIdentity
 from portfolio_common.event_contracts import TransactionSourceCorrectionRequestedEvent
 from pydantic import BaseModel
 
 from ..application.transaction_source_correction import TransactionSourceCorrectionApplication
+from ..ports.transaction_source_facts import SourceRevisionFact
 from ..repositories.transaction_source_revision_repository import (
     TransactionSourceRevisionRepository,
 )
@@ -47,7 +47,7 @@ class TransactionSourceCorrectionConsumer(GenericPersistenceConsumer):
             legacy_payload_fingerprint=digest,
         )
 
-    async def handle_persistence(self, db_session, event: BaseModel) -> TransactionSourceRevision:
+    async def handle_persistence(self, db_session, event: BaseModel) -> SourceRevisionFact:
         return await TransactionSourceCorrectionApplication(
             TransactionSourceRevisionRepository(db_session),
             policy=load_command_authorization_policy(),
