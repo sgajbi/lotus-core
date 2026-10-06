@@ -1,5 +1,6 @@
 """PostgreSQL proof for final-row foreign-exchange calculation lineage."""
 
+import asyncio
 import importlib
 import json
 import os
@@ -34,6 +35,7 @@ from portfolio_common.domain.transaction import (
 )
 from portfolio_common.event_mapping import transaction_event_v1_payload
 from portfolio_common.events import TransactionEvent
+from portfolio_common.idempotency_repository import IdempotencyRepository
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -156,6 +158,232 @@ def _fx_owned_runtime_identity():
             "image_reference": container["Config"]["Image"],
         },
     )
+
+
+@pytest.mark.parametrize("case", ["physical_duplicate", "semantic_duplicate", "faulting_winner"])
+async def test_fx_application_competing_delivery_uses_real_claim_wait_and_uow(
+    clean_db, async_db_session: AsyncSession, monkeypatch, case
+):
+    _fx_owned_runtime_identity()
+    incoming = replace(_fx_transaction(source_system="ORIGINAL"), fx_realized_pnl_mode="NONE")
+    event = TransactionEvent(
+        **{
+            field.name: getattr(incoming, field.name)
+            for field in fields(incoming)
+            if field.name in TransactionEvent.model_fields
+            and getattr(incoming, field.name) is not None
+        }
+    )
+    async_db_session.add(portfolio_record(incoming.portfolio_id))
+    await async_db_session.flush()
+    assert (
+        await TransactionDBRepository(async_db_session).create_or_update_transaction(event)
+    ).inserted
+    async_db_session.add(
+        OutboxEvent(
+            aggregate_type="RawTransaction",
+            aggregate_id=incoming.portfolio_id,
+            event_type="RawTransactionPersisted",
+            topic=KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
+            payload=transaction_event_v1_payload(event),
+        )
+    )
+    await async_db_session.commit()
+    winner_context = transaction_processing_test_context(async_db_session)
+    loser_context = transaction_processing_test_context(async_db_session)
+    before = await _fx_application_snapshot(winner_context.session_factory)
+    winner_written, loser_entered, loser_claimed = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    release_winner, release_loser = asyncio.Event(), asyncio.Event()
+    pids, writes = {}, {"fx-winner": 0, "fx-loser": 0}
+    original_claim = IdempotencyRepository.claim_semantic_event_processing
+    original_write = SqlAlchemyCostBasisTransactionRepository.upsert_booked_transaction
+
+    async def observe_claim(repository, **kwargs):
+        task = asyncio.current_task()
+        name = task.get_name() if task else "unknown"
+        if kwargs["service_name"] != "portfolio-transaction-processing" or name not in writes:
+            return await original_claim(repository, **kwargs)
+        pids[name] = await repository.db.scalar(select(func.pg_backend_pid()))
+        if name == "fx-loser":
+            loser_entered.set()
+        outcome = await original_claim(repository, **kwargs)
+        if name == "fx-loser" and case == "faulting_winner":
+            loser_claimed.set()
+            await release_loser.wait()
+        return outcome
+
+    async def observe_write(repository, transaction, **kwargs):
+        persisted = await original_write(repository, transaction, **kwargs)
+        task = asyncio.current_task()
+        name = task.get_name() if task else "unknown"
+        if transaction.transaction_id == incoming.transaction_id and name in writes:
+            writes[name] += 1
+            if name == "fx-winner" and writes[name] == 2:
+                winner_written.set()
+                await release_winner.wait()
+                if case == "faulting_winner":
+                    raise RuntimeError("injected-concurrent-second-fx-write")
+        return persisted
+
+    monkeypatch.setattr(IdempotencyRepository, "claim_semantic_event_processing", observe_claim)
+    monkeypatch.setattr(
+        SqlAlchemyCostBasisTransactionRepository, "upsert_booked_transaction", observe_write
+    )
+    event_id = "FX-CONCURRENT-WINNER"
+    loser_id = "FX-CONCURRENT-OTHER" if case == "semantic_duplicate" else event_id
+    tasks = []
+    try:
+        async with asyncio.timeout(20):
+            winner = asyncio.create_task(
+                process_booked_transaction(
+                    context=winner_context,
+                    event=event,
+                    event_id=event_id,
+                    correlation_id="WINNER",
+                ),
+                name="fx-winner",
+            )
+            tasks.append(winner)
+            await winner_written.wait()
+            loser = asyncio.create_task(
+                process_booked_transaction(
+                    context=loser_context,
+                    event=event,
+                    event_id=loser_id,
+                    correlation_id="LOSER",
+                ),
+                name="fx-loser",
+            )
+            tasks.append(loser)
+            await loser_entered.wait()
+            assert pids["fx-winner"] != pids["fx-loser"]
+            async with winner_context.session_factory() as observer:
+                while True:
+                    await observer.execute(text("SELECT pg_stat_clear_snapshot()"))
+                    wait = (
+                        (
+                            await observer.execute(
+                                text(
+                                    "SELECT pid,state,query,wait_event_type,wait_event,"
+                                    "pg_blocking_pids(pid) AS blockers FROM pg_stat_activity "
+                                    "WHERE pid=:pid"
+                                ),
+                                {"pid": pids["fx-loser"]},
+                            )
+                        )
+                        .mappings()
+                        .one()
+                    )
+                    if pids["fx-winner"] in wait["blockers"]:
+                        break
+                    await asyncio.sleep(0.01)
+                assert wait["wait_event_type"] == "Lock"
+                assert "processed_events" in wait["query"].lower()
+                assert "insert" in wait["query"].lower()
+                locks = (
+                    (
+                        await observer.execute(
+                            text(
+                                "SELECT pid,locktype,mode,granted,"
+                                "relation::regclass::text AS relation,transactionid,classid,objid "
+                                "FROM pg_locks WHERE pid IN (:winner,:loser)"
+                            ),
+                            {"winner": pids["fx-winner"], "loser": pids["fx-loser"]},
+                        )
+                    )
+                    .mappings()
+                    .all()
+                )
+                assert any(
+                    lock["pid"] == pids["fx-loser"] and not lock["granted"] for lock in locks
+                )
+                print(
+                    "FX_CONCURRENT_WAIT",
+                    {
+                        "case": case,
+                        "pids": pids,
+                        "wait": dict(wait),
+                        "locks": [dict(lock) for lock in locks],
+                    },
+                )
+            release_winner.set()
+            if case == "faulting_winner":
+                with pytest.raises(RuntimeError, match="injected-concurrent-second-fx-write"):
+                    await winner
+                await loser_claimed.wait()
+                assert writes["fx-winner"] == 2 and writes["fx-loser"] == 0
+                assert await _fx_application_snapshot(winner_context.session_factory) == before
+                print(
+                    "FX_CONCURRENT_ROLLBACK",
+                    "winner rolled back; loser owns uncommitted claim "
+                    "but has made no financial writes",
+                )
+                release_loser.set()
+                assert (await loser).status is TransactionProcessingStatus.PROCESSED
+            else:
+                assert (await winner).status is TransactionProcessingStatus.PROCESSED
+                assert (await loser).status is TransactionProcessingStatus.DUPLICATE
+                assert writes == {"fx-winner": 2, "fx-loser": 0}
+            after = await _fx_application_snapshot(winner_context.session_factory)
+            assert after != before
+            assert [
+                row for row in after["outbox_events"] if row["aggregate_type"] == "RawTransaction"
+            ] == before["outbox_events"]
+            assert len(after["transactions"]) == 1
+            assert len(after["position_history"]) == len(after["position_state"]) == 1
+            assert (
+                len(
+                    [
+                        row
+                        for row in after["processed_events"]
+                        if row["service_name"] == "portfolio-transaction-processing"
+                    ]
+                )
+                == 1
+            )
+            assert after["pipeline_stage_state"] and not after["cashflows"]
+            async with winner_context.session_factory() as verification:
+                row = (
+                    await verification.execute(
+                        select(DBTransaction).where(
+                            DBTransaction.transaction_id == incoming.transaction_id
+                        )
+                    )
+                ).scalar_one()
+                final = _to_persisted_booked_transaction(row, tenant_id=incoming.tenant_id)
+                assert calculation_lineage_binds_output(
+                    final.calculation_lineage,
+                    output_payload=fx_booked_transaction_output_payload(final),
+                )
+            for retry_id in (event_id, loser_id):
+                retry = await process_booked_transaction(
+                    context=winner_context, event=event, event_id=retry_id, correlation_id="RETRY"
+                )
+                assert retry.status is TransactionProcessingStatus.DUPLICATE
+                assert await _fx_application_snapshot(winner_context.session_factory) == after
+            async with winner_context.session_factory() as observer:
+                active = (
+                    (
+                        await observer.execute(
+                            text(
+                                "SELECT pid,state,query FROM pg_stat_activity "
+                                "WHERE datname=current_database() AND pid<>pg_backend_pid() "
+                                "AND backend_type='client backend' AND state<>'idle'"
+                            )
+                        )
+                    )
+                    .mappings()
+                    .all()
+                )
+                assert not active
+                print("FX_CONCURRENT_QUIESCENCE", list(active))
+    finally:
+        release_winner.set()
+        release_loser.set()
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 @pytest.mark.parametrize("mode", ["NONE", "UPSTREAM_PROVIDED"])
