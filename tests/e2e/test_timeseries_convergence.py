@@ -49,6 +49,13 @@ def test_cash_only_staged_external_flows_are_not_doubled(clean_db, e2e_api_clien
             ]
         },
     )
+    e2e_api_client.wait_for_admitted_portfolio(portfolio_id)
+    e2e_api_client.poll_for_data(
+        f"/instruments?security_id={cash_security_id}",
+        lambda data: any(
+            row.get("security_id") == cash_security_id for row in data.get("instruments", [])
+        ),
+    )
     e2e_api_client.ingest(
         "/ingest/business-dates",
         {

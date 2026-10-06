@@ -38,6 +38,7 @@ from tests.test_support.native_consumer_boundary import (
 from tests.test_support.output_control import emit_test_output
 from tests.test_support.runtime.compose_fault_recovery import (
     ComposeFaultRecoveryBoundary,
+    wait_for_owned_container_exit,
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
@@ -298,6 +299,11 @@ def _exercise_deployed_native_boundary(db_engine, recovery, *, forced):
             completed = wait_for_value(closed, bool)
             assert all("succeeded" in line for line in completed)
             assert committed_offset(group, topic) == first + 1
+            wait_for_owned_container_exit(
+                identity["container"],
+                project_name=identity["project"],
+                service_name=service,
+            )
             recovery.restore()
             wait_for_value(lambda: committed_offset(group, topic), lambda value: value == later + 1)
             assert financial_snapshot(db_engine, portfolio, security, event_ids=ids) == snapshot

@@ -79,7 +79,14 @@ class E2EApiClient:
         normalized_payload = self._normalize_payload_keys(payload)
         self._bind_portfolio_ownership(normalized_payload)
         response = self.session.post(url, json=normalized_payload, timeout=10)
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as error:
+            error.add_note(
+                f"E2E ingestion refusal: endpoint={endpoint}, status={response.status_code}, "
+                f"response_body={response.text[:2048]!r}"
+            )
+            raise
         return response
 
     def reprocess_transactions(self, transaction_ids: List[str]) -> requests.Response:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import time
 from collections.abc import Callable, Sequence
@@ -12,6 +13,44 @@ from typing import Literal
 
 CommandRunner = Callable[..., subprocess.CompletedProcess[str]]
 ReadinessProbe = Callable[[], None]
+
+
+def wait_for_owned_container_exit(
+    container_id: str,
+    *,
+    project_name: str,
+    service_name: str,
+    runner: CommandRunner = subprocess.run,
+) -> None:
+    """Observe the original owned container exited before reconciling its service."""
+    from tests.test_support.native_consumer_boundary import wait_for_value
+
+    if not container_id or not project_name or not service_name:
+        raise ValueError("Container, project and service identities must be nonblank")
+
+    def observe() -> dict:
+        result = runner(
+            ["docker", "inspect", container_id],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        (inspection,) = json.loads(result.stdout)
+        if inspection["Id"] != container_id:
+            raise ValueError("Container inspection does not match the original identity")
+        labels = inspection["Config"]["Labels"]
+        if (
+            labels.get("com.docker.compose.project") != project_name
+            or labels.get("com.docker.compose.service") != service_name
+        ):
+            raise ValueError("Refusing exit observation outside the owned service")
+        state = inspection["State"]
+        if not isinstance(state["Status"], str) or not isinstance(state["Running"], bool):
+            raise ValueError("Container inspection has malformed exit state")
+        return state
+
+    wait_for_value(observe, lambda state: state["Status"] == "exited" and state["Running"] is False)
 
 
 @dataclass(frozen=True, slots=True)

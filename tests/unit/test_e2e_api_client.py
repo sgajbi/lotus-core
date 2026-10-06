@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+import requests
 
 from tests.e2e.api_client import E2EApiClient
 
@@ -16,6 +17,46 @@ def _client() -> E2EApiClient:
         query_url="http://query",
         query_control_plane_url="http://control",
     )
+
+
+def test_admitted_portfolio_wait_observes_delayed_tenant_scoped_persistence(monkeypatch):
+    client = _client()
+    states = iter([{"portfolios": []}, {"portfolios": [{"portfolio_id": "P1"}]}])
+    client.query = Mock(
+        side_effect=lambda endpoint: SimpleNamespace(
+            status_code=200,
+            json=lambda: next(states),
+        )
+    )
+    monkeypatch.setattr("tests.e2e.api_client.time.sleep", lambda interval: None)
+    assert client.wait_for_admitted_portfolio("P1")["portfolios"] == [{"portfolio_id": "P1"}]
+    assert client.query.call_count == 2
+    assert client.session.headers["X-Tenant-Id"] == "tenant_e2e"
+
+
+def test_foreign_tenant_portfolio_is_not_admitted_by_supported_query(monkeypatch):
+    client = _client()
+    client.query = Mock(side_effect=requests.HTTPError("foreign portfolio absent"))
+    clock = iter([0, 0, 61])
+    monkeypatch.setattr("tests.e2e.api_client.time.time", lambda: next(clock))
+    monkeypatch.setattr("tests.e2e.api_client.time.sleep", lambda interval: None)
+    with pytest.raises(pytest.fail.Exception, match="Tenant-owned portfolio did not materialize"):
+        client.wait_for_admitted_portfolio("FOREIGN")
+    client.query.assert_called_once_with("/portfolios?portfolio_id=FOREIGN")
+
+
+def test_ingestion_refusal_retains_actual_bounded_body_without_retry():
+    client = _client()
+    error = requests.HTTPError("403")
+    response = SimpleNamespace(
+        status_code=403, text='{"code":"actual-refusal"}', raise_for_status=Mock(side_effect=error)
+    )
+    client.session.post = Mock(return_value=response)
+    with pytest.raises(requests.HTTPError) as caught:
+        client.ingest("/ingest/transactions", {"transactions": []})
+    assert caught.value is error
+    assert "actual-refusal" in error.__notes__[0]
+    client.session.post.assert_called_once()
 
 
 def test_e2e_client_binds_request_and_portfolio_to_one_tenant() -> None:
