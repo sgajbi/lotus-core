@@ -9,7 +9,7 @@ import pytest
 from fastapi import FastAPI
 from portfolio_common.api_contract.async_commands import AsyncCommandStatus
 from portfolio_common.command_authorization import CommandAuthorizationPolicy
-from portfolio_common.database_models import IngestionJob, OutboxEvent
+from portfolio_common.database_models import IngestionJob, OutboxEvent, TransactionSourceRevision
 from portfolio_common.domain.calculation_lineage import canonical_content_hash
 from portfolio_common.enterprise_readiness import VerifiedServicePrincipal
 from sqlalchemy.dialects import postgresql
@@ -28,7 +28,10 @@ from tests.unit.services.persistence_service.application.test_transaction_source
 
 async def _committed_case(companion=Decimal("12")):
     use_case, _, command, transaction, raw_payload, policy = case(base=companion)
-    revision = await use_case.execute(command)
+    fact = await use_case.execute(command)
+    # This SQL adapter verifies persisted rows; the application returns a detached,
+    # immutable fact. Reconstruct the complete synthetic ORM row only here.
+    revision = TransactionSourceRevision(**fact.material())
     raw = OutboxEvent(id=7, payload=raw_payload)
     intent = OutboxEvent(payload=command.model_dump(mode="json", exclude_unset=True))
     return revision, intent, raw, transaction, policy

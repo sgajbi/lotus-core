@@ -1,6 +1,7 @@
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
+import pytest
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.reconciliation_quality import PARTIAL
 from portfolio_common.source_data_product_metadata import (
@@ -98,7 +99,10 @@ def test_positions_contract_exposes_field_level_fallback_provenance() -> None:
     assert response.correlation_id == CORRELATION_ID
 
 
-def test_transactions_contract_reports_partial_page_and_missing_reference() -> None:
+@pytest.mark.parametrize("source_cut_sha256", [None, "a" * 64])
+def test_transactions_contract_reports_partial_page_and_missing_reference(
+    source_cut_sha256: str | None,
+) -> None:
     response = _with_correlation(
         lambda: paginated_transaction_ledger_response(
             portfolio_id="PB1",
@@ -121,6 +125,7 @@ def test_transactions_contract_reports_partial_page_and_missing_reference() -> N
                 transaction_cost_digest="cost-digest",
                 selected_cashflow_digest="cashflow-digest",
                 selected_fx_rate_digest="fx-digest",
+                source_cut_sha256=source_cut_sha256,
             ),
             missing_instrument_security_ids=["UNKNOWN_SEC"],
         )
@@ -131,7 +136,13 @@ def test_transactions_contract_reports_partial_page_and_missing_reference() -> N
     assert "TRANSACTION_LEDGER_PAGE_PARTIAL" in response.reason_codes
     assert "TRANSACTION_LEDGER_INSTRUMENT_REFERENCE_MISSING" in response.reason_codes
     assert response.missing_instrument_security_ids == ["UNKNOWN_SEC"]
-    assert response.freshness_status == "CURRENT"
+    # Page/reference degradation and source authority are independent: a recent
+    # timestamp alone cannot substitute the complete unpaginated source cut.
+    assert response.source_cut_sha256 == source_cut_sha256
+    assert response.source_evidence_current is (source_cut_sha256 is not None)
+    assert response.freshness_status == (
+        "CURRENT" if source_cut_sha256 is not None else "UNAVAILABLE"
+    )
     assert response.correlation_id == CORRELATION_ID
 
 
