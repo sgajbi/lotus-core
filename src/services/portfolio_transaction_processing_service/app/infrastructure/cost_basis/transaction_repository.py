@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping, Sequence
 from dataclasses import fields, replace
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -24,6 +25,7 @@ from portfolio_common.domain.transaction import (
     transaction_payload_fingerprint,
 )
 from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
+from portfolio_common.events import TransactionEvent
 from portfolio_common.identifiers import normalize_lookup_identifier
 from portfolio_common.infrastructure.persistence.transaction_identity_guard import (
     GeneratedTransactionIdentityCollisionError,
@@ -388,6 +390,13 @@ class SqlAlchemyCostBasisTransactionRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    async def load_fx_creation_timestamp(self) -> datetime:
+        """Use the same PostgreSQL transaction clock as the ledger's server default."""
+        timestamp = (await self.db.execute(select(func.transaction_timestamp()))).scalar_one()
+        if not isinstance(timestamp, datetime) or timestamp.utcoffset() is None:
+            raise ValueError("FX server creation timestamp must be an aware datetime")
+        return timestamp.astimezone(UTC)
+
     async def load_fx_retention_witness(
         self, transaction: BookedTransaction
     ) -> FxPersistenceWitness | None:
@@ -450,12 +459,19 @@ class SqlAlchemyCostBasisTransactionRepository:
         if len(sources) != 1 or sources[0]["aggregate_id"] != before.portfolio_id:
             raise ValueError("FX original raw source cut is unavailable or ambiguous")
         source = sources[0]
+        original = source["payload"]
+        event = TransactionEvent.model_validate(original)
+        identity_source = dict(original)
+        for name in ("transaction_date", "settlement_date"):
+            if name in identity_source:
+                identity_source[name] = getattr(event, name)
         raw = qualify_fx_raw_source(
-            raw=source["payload"],
+            raw=original,
             transaction=before,
             stored_fingerprint=fingerprint,
             raw_event_id=int(source["id"]),
-            raw_payload_hash=canonical_content_hash(source["payload"]),
+            raw_payload_hash=canonical_content_hash(original),
+            identity_source=identity_source,
         )
         return FxPersistenceWitness(before, raw.original_pnl, raw, admitted_epoch)
 

@@ -60,6 +60,31 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
 pytestmark = pytest.mark.asyncio
 
 
+@pytest.mark.parametrize("timestamp", [None, "2026-04-01T08:00:00Z", datetime(2026, 4, 1)])
+async def test_fx_server_timestamp_refuses_untyped_or_naive_database_value(timestamp):
+    session = AsyncMock()
+    session.execute.return_value = MagicMock()
+    session.execute.return_value.scalar_one.return_value = timestamp
+    repository = SqlAlchemyCostBasisTransactionRepository(session)
+    with pytest.raises(ValueError, match="aware datetime"):
+        await repository.load_fx_creation_timestamp()
+    session.commit.assert_not_awaited()
+
+
+async def test_fx_server_timestamp_uses_existing_session_transaction_clock():
+    timestamp = datetime(2026, 4, 1, 8, 0, tzinfo=UTC)
+    session = AsyncMock()
+    session.execute.return_value = MagicMock()
+    session.execute.return_value.scalar_one.return_value = timestamp
+    repository = SqlAlchemyCostBasisTransactionRepository(session)
+    assert await repository.load_fx_creation_timestamp() == timestamp
+    query = session.execute.await_args.args[0]
+    assert str(query.compile(dialect=postgresql.dialect())) == (
+        "SELECT transaction_timestamp() AS transaction_timestamp_1"
+    )
+    session.commit.assert_not_awaited()
+
+
 @pytest.mark.parametrize(
     "mode,preheld", [("NONE", False), ("NONE", True), ("UPSTREAM_PROVIDED", True)]
 )

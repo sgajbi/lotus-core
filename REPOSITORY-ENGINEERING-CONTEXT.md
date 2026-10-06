@@ -231,8 +231,16 @@ The #452 R2 persisted-return candidate carries a detached FX pre-write witness a
 first-publication/epoch context through cost processing. Reuse the canonical loader's existing
 raw facts and locks; fallback reads lock only the owning transaction row. `NONE` raw absence
 does not certify source evidence; `UPSTREAM_PROVIDED` requires original raw material and, for
-processed rows, a qualified retained receipt. Only witnessed omitted source-system retention is
-allowed on the first return; the rebound return is exact and preserves original six P&L values.
+processed rows, a qualified retained receipt. Only witnessed omitted source-system or creation
+timestamp retention is allowed on the first return. Fresh witnessless rows with absent chronology
+admit the same PostgreSQL transaction timestamp through the owning FX port before projection,
+without a new session, commit or lock. Existing witnesses and supplied timestamps need no extra
+query. Creation chronology remains bound in the output receipt; the rebound return is exact and
+preserves original six P&L values.
+When qualifying original JSON raw, reuse the supported event parser for typed date identity.
+Keep raw JSON/hash/event ID unchanged; verify the internal projection preserves aware instants,
+absent/null presence and all non-time facts. Never substitute enriched ledger defaults for raw
+source or rewrite the shared identity policy to make a retention witness pass.
 Do not weaken `FirstPublicationSourceAuthority.matches`, add broad portfolio serialization or
 claim native rollback/concurrency/main acceptance from local units. Native PG and promotion
 remain separately admitted boundaries in the FX Slice 6 contract.

@@ -53,6 +53,144 @@ def _retention_witness(before: BookedTransaction, raw_source: BookedTransaction 
     return FxPersistenceWitness(before, facts.original_pnl, facts)
 
 
+async def test_booking_rebinds_exact_prewrite_creation_timestamp_when_omitted() -> None:
+    timestamp = datetime(2026, 4, 1, 8, 0, tzinfo=UTC)
+    incoming = _foreign_exchange_transaction(fx_realized_pnl_mode="NONE", created_at=None)
+    before = replace(incoming, created_at=timestamp)
+    persistence = _transaction_persistence()
+    persistence.load_fx_retention_witness.return_value = _retention_witness(before)
+    persistence.upsert_booked_transaction.side_effect = lambda row: replace(
+        row, created_at=timestamp
+    )
+    result = await book_foreign_exchange_transaction(
+        transaction=incoming, transaction_persistence=persistence
+    )
+    assert persistence.upsert_booked_transaction.await_count == 2
+    persistence.load_fx_creation_timestamp.assert_not_awaited()
+    assert result.transaction.created_at == timestamp
+    assert calculation_lineage_binds_output(
+        result.transaction.calculation_lineage,
+        output_payload=fx_booked_transaction_output_payload(result.transaction),
+    )
+
+
+@pytest.mark.parametrize("witness_available", [False, True])
+async def test_booking_rejects_invented_creation_timestamp(witness_available: bool) -> None:
+    incoming = _foreign_exchange_transaction(fx_realized_pnl_mode="NONE", created_at=None)
+    persistence = _transaction_persistence()
+    if witness_available:
+        persistence.load_fx_retention_witness.return_value = _retention_witness(
+            replace(incoming, created_at=datetime(2026, 4, 1, 8, 0, tzinfo=UTC))
+        )
+    persistence.upsert_booked_transaction.side_effect = lambda row: replace(
+        row, created_at=datetime(2026, 4, 1, 9, 0, tzinfo=UTC)
+    )
+    with pytest.raises(
+        ValueError, match="invented retained creation timestamp|changed admitted material"
+    ):
+        await book_foreign_exchange_transaction(
+            transaction=incoming, transaction_persistence=persistence
+        )
+    assert persistence.upsert_booked_transaction.await_count == 1
+
+
+async def test_booking_rejects_changed_explicit_creation_timestamp() -> None:
+    incoming = _foreign_exchange_transaction(
+        fx_realized_pnl_mode="NONE", created_at=datetime(2026, 4, 1, 8, 0, tzinfo=UTC)
+    )
+    persistence = _transaction_persistence()
+    persistence.load_fx_retention_witness.return_value = _retention_witness(incoming)
+    persistence.upsert_booked_transaction.side_effect = lambda row: replace(
+        row, created_at=datetime(2026, 4, 1, 9, 0, tzinfo=UTC)
+    )
+    with pytest.raises(ValueError, match="changed admitted material"):
+        await book_foreign_exchange_transaction(
+            transaction=incoming, transaction_persistence=persistence
+        )
+    assert persistence.upsert_booked_transaction.await_count == 1
+    persistence.load_fx_creation_timestamp.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "timestamp",
+    [
+        None,
+        "2026-04-01T08:00:00Z",
+        datetime(2026, 4, 1, 8, 0),
+        datetime(2026, 4, 1, 8, 0, tzinfo=timezone(timedelta(hours=8))),
+    ],
+)
+async def test_booking_refuses_invalid_server_creation_timestamp(timestamp) -> None:
+    incoming = _foreign_exchange_transaction(fx_realized_pnl_mode="NONE", created_at=None)
+    persistence = _transaction_persistence()
+    persistence.load_fx_creation_timestamp.return_value = timestamp
+    with pytest.raises(ValueError, match="aware UTC datetime"):
+        await book_foreign_exchange_transaction(
+            transaction=incoming, transaction_persistence=persistence
+        )
+    persistence.upsert_booked_transaction.assert_not_awaited()
+
+
+async def test_booking_binds_fresh_server_creation_timestamp_without_retention_witness() -> None:
+    incoming = _foreign_exchange_transaction(fx_realized_pnl_mode="NONE", created_at=None)
+    persistence = _transaction_persistence()
+    result = await book_foreign_exchange_transaction(
+        transaction=incoming, transaction_persistence=persistence
+    )
+    persistence.load_fx_creation_timestamp.assert_awaited_once_with()
+    assert result.transaction.created_at == persistence.load_fx_creation_timestamp.return_value
+    assert calculation_lineage_binds_output(
+        result.transaction.calculation_lineage,
+        output_payload=fx_booked_transaction_output_payload(result.transaction),
+    )
+
+
+@pytest.mark.parametrize("field_name", ["transaction_date", "settlement_date"])
+@pytest.mark.parametrize(
+    "bad_value", [None, datetime(2026, 4, 1, 9, 0), datetime(2026, 4, 1, 10, 0, tzinfo=UTC)]
+)
+async def test_typed_raw_date_projection_cannot_substitute_original_instant(field_name, bad_value):
+    before = _foreign_exchange_transaction(tenant_id="tenant-fx")
+    identity = fx_source_material(before)
+    raw = dict(identity)
+    raw[field_name] = bad_value.isoformat() if isinstance(bad_value, datetime) else bad_value
+    with pytest.raises(ValueError, match="original presence or aware instant"):
+        qualify_fx_raw_source(
+            raw=raw,
+            identity_source=identity,
+            transaction=before,
+            stored_fingerprint=transaction_payload_fingerprint(identity),
+            raw_event_id=17,
+            raw_payload_hash=canonical_content_hash(raw),
+        )
+
+
+@pytest.mark.parametrize("failure", ["hash", "non_time", "absent", "null_to_value"])
+async def test_typed_raw_projection_preserves_integrity_and_non_time_facts(failure):
+    before = _foreign_exchange_transaction(tenant_id="tenant-fx", settlement_date=None)
+    raw = fx_source_material(before)
+    identity = dict(raw)
+    raw_hash = canonical_content_hash(raw)
+    if failure == "hash":
+        raw_hash = "wrong-raw-hash"
+    elif failure == "non_time":
+        identity["source_system"] = "SUBSTITUTED"
+    elif failure == "absent":
+        raw.pop("settlement_date")
+        raw_hash = canonical_content_hash(raw)
+    else:
+        identity["settlement_date"] = datetime(2026, 7, 1, tzinfo=UTC)
+    with pytest.raises(ValueError, match="provenance|non-time facts|presence or aware instant"):
+        qualify_fx_raw_source(
+            raw=raw,
+            identity_source=identity,
+            transaction=before,
+            stored_fingerprint=transaction_payload_fingerprint(identity),
+            raw_event_id=17,
+            raw_payload_hash=raw_hash,
+        )
+
+
 @pytest.mark.parametrize("mode", ["NONE", "UPSTREAM_PROVIDED"])
 @pytest.mark.parametrize("processed", [False, True])
 async def test_retention_preserves_original_missing_values_and_exact_source_rate(mode, processed):
@@ -223,6 +361,7 @@ async def test_explicit_handoff_is_not_reloaded_and_cannot_cross_admission(damag
 def _transaction_persistence() -> AsyncMock:
     persistence = AsyncMock(spec=ForeignExchangeTransactionPersistencePort)
     persistence.load_fx_retention_witness.return_value = None
+    persistence.load_fx_creation_timestamp.return_value = datetime(2026, 4, 1, 8, 0, tzinfo=UTC)
     persistence.upsert_booked_transaction.side_effect = lambda transaction: transaction
     return persistence
 
@@ -234,6 +373,7 @@ def _foreign_exchange_transaction(**updates: object) -> BookedTransaction:
         instrument_id="FXC-EURUSD-001",
         security_id="FXC-EURUSD-001",
         transaction_date=datetime(2026, 4, 1, 9, 0, tzinfo=UTC),
+        created_at=datetime(2026, 4, 1, 8, 0, tzinfo=UTC),
         settlement_date=datetime(2026, 7, 1, 9, 0, tzinfo=UTC),
         transaction_type="FX_FORWARD",
         component_type="FX_CONTRACT_OPEN",

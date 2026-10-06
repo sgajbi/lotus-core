@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, fields, replace
+from datetime import datetime
 from decimal import Decimal
 from typing import cast
 
@@ -93,11 +94,15 @@ def qualify_fx_raw_source(
     stored_fingerprint: str,
     raw_event_id: int,
     raw_payload_hash: str,
+    identity_source: Mapping[str, object] | None = None,
 ) -> FxRawSourceFacts:
     """Qualify original receipt when present; initial raw does not need an old receipt."""
     if raw_event_id <= 0 or raw_payload_hash != canonical_content_hash(raw):
         raise ValueError("FX original raw provenance is invalid")
-    fingerprint = transaction_payload_fingerprint(raw)
+    identity = raw if identity_source is None else identity_source
+    if identity_source is not None:
+        _qualify_fx_identity_projection(raw, identity_source)
+    fingerprint = transaction_payload_fingerprint(identity)
     if transaction.calculation_lineage is None and fingerprint != stored_fingerprint:
         raise ValueError("FX original raw fingerprint is unavailable")
     if raw.get("tenant_id") not in (None, transaction.tenant_id) or any(
@@ -117,7 +122,7 @@ def qualify_fx_raw_source(
         raise ValueError("FX original rate or origin is invalid")
     if transaction.calculation_lineage is not None:
         verify_retained_fx_source(
-            raw_source=raw,
+            raw_source=identity,
             ledger_output=fx_persisted_transaction_material(transaction),
             stored_fingerprint=stored_fingerprint,
             receipt_payload=transaction.calculation_lineage.lineage_payload(),
@@ -131,6 +136,34 @@ def qualify_fx_raw_source(
         transaction_fx_rate=rate,
         transaction_fx_rate_origin=cast(str | None, origin),
     )
+
+
+def _qualify_fx_identity_projection(
+    raw: Mapping[str, object], identity: Mapping[str, object]
+) -> None:
+    """Verify the internal parser handoff changes date representation, never its instant."""
+    date_fields = {"transaction_date", "settlement_date"}
+    if set(identity) != set(raw) or any(
+        identity[name] != raw[name] for name in raw if name not in date_fields
+    ):
+        raise ValueError("FX typed source projection changed original non-time facts")
+    for name in date_fields:
+        original, projected = raw.get(name), identity.get(name)
+        if original is None and projected is None:
+            continue
+        if isinstance(original, str):
+            try:
+                original = datetime.fromisoformat(original)
+            except ValueError:
+                raise ValueError("FX original source date is invalid") from None
+        if (
+            not isinstance(original, datetime)
+            or not isinstance(projected, datetime)
+            or original.utcoffset() is None
+            or projected.utcoffset() is None
+            or original != projected
+        ):
+            raise ValueError("FX typed source date changed original presence or aware instant")
 
 
 def qualify_fx_booking_source(
@@ -196,6 +229,10 @@ def qualify_first_fx_return(
         if witness is None or persisted.source_system != witness.durable_before.source_system:
             raise ValueError("FX return invented retained source provenance")
         expected = replace(submitted, source_system=persisted.source_system)
+    if submitted.created_at is None and persisted.created_at is not None:
+        if witness is None or persisted.created_at != witness.durable_before.created_at:
+            raise ValueError("FX return invented retained creation timestamp")
+        expected = replace(expected, created_at=persisted.created_at)
     if (
         persisted.calculation_lineage != submitted.calculation_lineage
         or fx_booked_transaction_output_payload(persisted)
