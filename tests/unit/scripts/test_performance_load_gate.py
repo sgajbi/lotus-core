@@ -86,6 +86,15 @@ class _MetricsResponse:
     def raise_for_status(self) -> None:
         return None
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def iter_content(self, chunk_size):
+        yield self.text.encode()
+
 
 def test_reference_seed_carries_governed_load_tenant(monkeypatch: pytest.MonkeyPatch) -> None:
     post = MagicMock(return_value=SimpleNamespace(status_code=202, text=""))
@@ -108,7 +117,7 @@ def test_transaction_processing_operation_count_reads_bounded_duplicate_metric(
 ) -> None:
     requested: list[tuple[str, int]] = []
 
-    def get(url: str, *, timeout: int) -> _MetricsResponse:
+    def get(url: str, *, timeout: int, stream: bool = False) -> _MetricsResponse:
         requested.append((url, timeout))
         return _MetricsResponse()
 
@@ -265,9 +274,9 @@ def test_repair_replay_completion_uses_processed_transaction_outcome(monkeypatch
     counted: list[tuple[str, str, str]] = []
     waited: list[tuple[str, str, str, int, int]] = []
 
-    def count(*, transaction_processing_base_url: str, stage: str, outcome: str) -> int:
+    def count(*, transaction_processing_base_url: str, stage: str, outcome: str) -> dict:
         counted.append((transaction_processing_base_url, stage, outcome))
-        return 41
+        return {"status": "observed", "count": 41, "labels": {"stage": stage, "outcome": outcome}}
 
     def wait(
         *,
@@ -276,6 +285,8 @@ def test_repair_replay_completion_uses_processed_transaction_outcome(monkeypatch
         outcome: str,
         expected_minimum: int,
         timeout_seconds: int,
+        baseline: dict,
+        on_observation,
     ) -> float:
         waited.append(
             (
@@ -288,7 +299,9 @@ def test_repair_replay_completion_uses_processed_transaction_outcome(monkeypatch
         )
         return 2.5
 
-    monkeypatch.setattr(performance_load_gate, "_transaction_processing_operation_count", count)
+    monkeypatch.setattr(
+        performance_load_gate, "_transaction_processing_operation_observation", count
+    )
     monkeypatch.setattr(performance_load_gate, "_wait_for_operation_count", wait)
 
     baseline = performance_load_gate._repair_replay_completion_count(
@@ -298,9 +311,11 @@ def test_repair_replay_completion_uses_processed_transaction_outcome(monkeypatch
         transaction_processing_base_url="http://localhost:8090",
         expected_minimum=45,
         timeout_seconds=180,
+        baseline=baseline,
+        on_observation=lambda observation: None,
     )
 
-    assert baseline == 41
+    assert baseline["count"] == 41
     assert drain_seconds == 2.5
     assert counted == [("http://localhost:8090", "transaction", "processed")]
     assert waited == [("http://localhost:8090", "transaction", "processed", 45, 180)]
@@ -853,7 +868,14 @@ def load_boundary(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     response.json.return_value = {"job_id": "load-job", "correlation_id": "load-correlation"}
     monkeypatch.setattr(performance_load_gate.requests, "post", lambda *args, **kwargs: response)
     monkeypatch.setattr(
-        performance_load_gate, "_repair_replay_completion_count", lambda **kwargs: 0
+        performance_load_gate,
+        "_repair_replay_completion_count",
+        lambda **kwargs: {
+            "status": "observed",
+            "count": 0,
+            "labels": {"stage": "transaction", "outcome": "processed"},
+            "producer_birth": 123,
+        },
     )
     replay = MagicMock(return_value=360)
     monkeypatch.setattr(performance_load_gate, "_trigger_replay_storm", replay)
@@ -1069,7 +1091,7 @@ def test_database_probes_are_exact_scoped_read_only_and_permission_failure_is_ho
     connection = MagicMock()
     cursor = connection.cursor.return_value.__enter__.return_value
     cursor.fetchmany.return_value = [{"transaction_count": 24, "portfolio_aggregate_claims": 9000}]
-    cursor.execute.side_effect = [None, PermissionError("denied"), None, None, None]
+    cursor.execute.side_effect = [None, PermissionError("denied"), None, None, None, None]
     scope = {
         "submitted_ids": ["TX_exact_1"],
         "ingestion_job_ids": ["job"],
@@ -1082,7 +1104,12 @@ def test_database_probes_are_exact_scoped_read_only_and_permission_failure_is_ho
     for call in cursor.execute.call_args_list:
         query, params = call.args
         assert query.lstrip().startswith("SELECT")
-        assert "query," not in query and "payload_excerpt" not in query
+        assert "payload_excerpt" not in query
+        if "AS private_statement" in query:
+            assert "left(query,2048) AS private_statement" in query
+            assert "private_statement" not in str(result["runtime_db_waits"])
+        else:
+            assert "query," not in query
         assert params
     exact = cursor.execute.call_args_list[0]
     assert "transaction_id=ANY(%s)" in exact.args[0]
@@ -1099,6 +1126,537 @@ def test_missing_acknowledgement_never_becomes_zero_rejects():
     result = load_completion_diagnostics._load_database_probes(connection, scope, object)
     assert result["consumer_rejections"]["status"] == "unavailable"
     assert result["ingestion_lifecycle"]["status"] == "unavailable"
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        None,
+        "",
+        "x" * 2048,
+        "SELECT $$secret$$",
+        "SELECT /*secret*/ 1",
+        "SELECT 'unclosed",
+        "CALL secret()",
+    ],
+)
+def test_statement_structure_refuses_ambiguous_or_missing_sql(query):
+    assert load_completion_diagnostics._statement_structure(query)["status"] == "unavailable"
+
+
+def test_statement_structure_retains_lock_shape_without_sensitive_values():
+    result = load_completion_diagnostics._statement_structure(
+        "SELECT portfolio_id FROM portfolios WHERE portfolio_id = 'private''account' "
+        "AND tenant_id = 123 FOR UPDATE"
+    )
+    assert result["operation"] == "select"
+    assert "from portfolios" in result["structure"]
+    assert "for update" in result["structure"]
+    assert "private" not in str(result) and "123" not in str(result)
+    unknown = load_completion_diagnostics._statement_structure(
+        "UPDATE \"secret_table\" SET secret_password = 'secret'"
+    )
+    assert "secret" not in str(unknown)
+
+
+def test_wait_rows_export_metadata_and_remove_private_statement():
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchmany.return_value = [
+        {
+            "private_statement": "UPDATE portfolios SET status='secret'",
+            "backend_xid": "42",
+            "query_id": None,
+            "query_age_seconds": 18,
+            "blocking_pids": [295],
+        }
+    ]
+    result = load_completion_diagnostics._load_database_probes(
+        connection, {"submitted_ids": ["tx"], "ingestion_job_ids": [], "portfolio_id": "p"}, object
+    )["runtime_db_waits"]
+    row = result["rows"][0]
+    assert row["backend_xid"] == "42" and row["query_id"] is None
+    assert row["blocking_pids"] == [295] and row["query_age_seconds"] == 18
+    assert "private_statement" not in row and "secret" not in str(row)
+
+
+@pytest.mark.parametrize(
+    "query,operation,relation",
+    [
+        (
+            'SELECT "portfolio_id" FROM "portfolios" WHERE portfolio_id=$1::VARCHAR FOR UPDATE',
+            "select",
+            "portfolios",
+        ),
+        (
+            "UPDATE transactions SET gross_cost=$2::NUMERIC WHERE transaction_id=$10::VARCHAR",
+            "update",
+            "transactions",
+        ),
+        (
+            "INSERT INTO cashflows (transaction_id,quantity) VALUES ($1::VARCHAR,$2::NUMERIC)",
+            "insert",
+            "cashflows",
+        ),
+    ],
+)
+def test_statement_structure_accepts_native_postgres_parameters(query, operation, relation):
+    result = load_completion_diagnostics._statement_structure(query)
+    assert result["status"] == "observed" and result["operation"] == operation
+    assert relation in result["structure"] and "varchar" in result["structure"]
+    assert "$" not in result["structure"] and "10" not in result["structure"]
+
+
+@pytest.mark.parametrize(
+    "query", ["SELECT $tag$secret$tag$", "SELECT $$secret$$", "SELECT $1secret"]
+)
+def test_statement_structure_does_not_confuse_dollar_quotes_with_parameters(query):
+    result = load_completion_diagnostics._statement_structure(query)
+    assert result["status"] == "unavailable" and "secret" not in str(result)
+
+
+@pytest.mark.parametrize(
+    "value,status",
+    [
+        ("0", "observed"),
+        ("17", "observed"),
+        ("-1", "invalid"),
+        ("1.5", "invalid"),
+        ("NaN", "invalid"),
+        ("Inf", "invalid"),
+        (None, "missing"),
+    ],
+)
+def test_counter_scrape_distinguishes_zero_missing_and_invalid(monkeypatch, value, status):
+    response = _MetricsResponse()
+    response.text = (
+        'lotus_core_transaction_processing_operations_total{stage="transaction",'
+        f'outcome="processed"}} {value}\n'
+        if value is not None
+        else "# no counter sample\n"
+    )
+    monkeypatch.setattr(
+        transaction_processing_load_support.requests, "get", lambda *a, **k: response
+    )
+    result = transaction_processing_load_support.transaction_processing_operation_observation(
+        transaction_processing_base_url="http://isolated", stage="transaction", outcome="processed"
+    )
+    assert result["status"] == status and result["scraped_at"]
+    assert result["count"] == (int(value) if status == "observed" else None)
+    if status != "observed":
+        with pytest.raises(RuntimeError, match="not observed"):
+            transaction_processing_load_support.transaction_processing_operation_count(
+                transaction_processing_base_url="http://isolated",
+                stage="transaction",
+                outcome="processed",
+            )
+
+
+@pytest.mark.parametrize(
+    "raw,reason",
+    [
+        (
+            'lotus_core_transaction_processing_operations_total{stage="transaction",'
+            'outcome="processed",secret="PRIVATE"} 2\n',
+            "counter_labels",
+        ),
+        (
+            (
+                'lotus_core_transaction_processing_operations_total{stage="transaction",'
+                'outcome="processed"} 2\n'
+            )
+            * 2,
+            "ambiguous",
+        ),
+        ("x" * (1024 * 1024 + 1), "byte_budget"),
+        ("not prometheus {{", "ValueError"),
+    ],
+    ids=["private-label", "duplicate", "oversize", "malformed"],
+)
+def test_counter_scrape_refuses_ambiguous_private_oversize_or_malformed(monkeypatch, raw, reason):
+    response = _MetricsResponse()
+    response.text = raw
+    monkeypatch.setattr(
+        transaction_processing_load_support.requests, "get", lambda *a, **k: response
+    )
+    result = transaction_processing_load_support.transaction_processing_operation_observation(
+        transaction_processing_base_url="http://isolated", stage="transaction", outcome="processed"
+    )
+    assert result["status"] != "observed" and result["reason"] == reason
+    assert "PRIVATE" not in str(result) and result["count"] is None
+
+
+@pytest.mark.parametrize(
+    "baseline,counts,passed",
+    [
+        (10, [11, 14, 14], True),
+        (10, [0, 14, 14], False),
+        (None, [14, 14, 14], False),
+        (10, [None, None, None], False),
+    ],
+)
+def test_counter_polling_keeps_reset_missing_failure_and_original_deadline(
+    monkeypatch, baseline, counts, passed
+):
+    support = transaction_processing_load_support
+
+    def observation(count):
+        return {
+            "status": "observed" if count is not None else "missing",
+            "count": count,
+            "labels": {"stage": "transaction", "outcome": "processed"},
+            "producer_birth": 123,
+        }
+
+    readings = iter(counts)
+    clock = iter([0, 0, 1, 2, 3, 4, 5])
+    monkeypatch.setattr(support.time, "time", lambda: next(clock))
+    monkeypatch.setattr(support.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(
+        support,
+        "transaction_processing_operation_observation",
+        lambda **k: observation(next(readings)),
+    )
+    retained = []
+    result = support.wait_for_transaction_processing_operation_count(
+        transaction_processing_base_url="http://isolated",
+        stage="transaction",
+        outcome="processed",
+        expected_minimum=14,
+        timeout_seconds=3,
+        baseline=observation(baseline),
+        on_observation=retained.append,
+    )
+    assert (result is not None) is passed
+    assert retained[-1]["count"] == counts[len(retained) - 1]
+    if baseline is None or counts[0] == 0:
+        assert retained[-1]["continuity"] == "reset_or_missing_baseline"
+
+
+@pytest.mark.parametrize(
+    "accepted,status",
+    [
+        (1, "observed_count_only"),
+        (True, "refused_or_invalid"),
+        (-1, "refused_or_invalid"),
+        (3, "refused_or_invalid"),
+        ("2", "refused_or_invalid"),
+    ],
+)
+def test_replay_receipts_keep_order_partial_ack_and_refuse_bad_counts(
+    monkeypatch, accepted, status
+):
+    response = SimpleNamespace(
+        status_code=202,
+        json=lambda: {
+            "accepted_count": accepted,
+            "job_id": "job-1",
+            "private_payload": "PRIVATE",
+            "accepted_ids": ["untrusted-other-id"],
+        },
+    )
+    monkeypatch.setattr(performance_load_gate.requests, "post", lambda *a, **k: response)
+    receipts = []
+    kwargs = dict(
+        ingestion_base_url="http://isolated",
+        transaction_ids=["TX-2", "TX-1"],
+        bursts=2,
+        burst_size=2,
+        on_acknowledgement=receipts.append,
+    )
+    if status == "refused_or_invalid":
+        with pytest.raises(RuntimeError, match="invalid accepted_count"):
+            performance_load_gate._trigger_replay_storm(**kwargs)
+    else:
+        assert performance_load_gate._trigger_replay_storm(**kwargs) == 2
+        assert [r["submitted_ids"] for r in receipts] == [["TX-2", "TX-1"]] * 2
+    assert receipts[0]["acceptance_status"] == status
+    assert receipts[0]["accepted_ids"] == "MISSING"
+    assert receipts[0]["durable_completion_receipts"] == "MISSING"
+    assert receipts[0]["acknowledgement"]["job_id"] == "job-1"
+    assert "PRIVATE" not in str(receipts) and "untrusted-other-id" not in str(receipts)
+
+
+def test_replay_transport_failure_retains_submission_without_private_error(monkeypatch):
+    monkeypatch.setattr(
+        performance_load_gate.requests,
+        "post",
+        MagicMock(side_effect=performance_load_gate.requests.ConnectionError("PRIVATE")),
+    )
+    receipts = []
+    with pytest.raises(RuntimeError, match="transport failed") as error:
+        performance_load_gate._trigger_replay_storm(
+            ingestion_base_url="http://isolated",
+            transaction_ids=["TX-1"],
+            bursts=1,
+            burst_size=1,
+            on_acknowledgement=receipts.append,
+        )
+    assert receipts[0]["submitted_ids"] == ["TX-1"]
+    assert receipts[0]["acceptance_status"] == "transport_failure"
+    assert "PRIVATE" not in str(receipts) + str(error.value)
+
+
+def test_main_replay_timeout_collects_once_preserves_failure_and_counter_record(
+    load_boundary, monkeypatch
+):
+    args, replay, tmp_path = load_boundary
+    monkeypatch.setattr(performance_load_gate, "_wait_for_transaction_processing", lambda **k: 1)
+
+    def wait(**kwargs):
+        assert kwargs["expected_minimum"] == 360 and kwargs["timeout_seconds"] == 240
+        kwargs["on_observation"]({"status": "missing", "count": None})
+        return None
+
+    monkeypatch.setattr(performance_load_gate, "_wait_for_repair_replay_completion", wait)
+    collector = MagicMock(return_value={"status": "budget_exhausted"})
+    monkeypatch.setattr(performance_load_gate, "collect_load_completion_diagnostics", collector)
+    assert performance_load_gate.main(args) == 1
+    collector.assert_called_once()
+    payload = _retained_report(tmp_path)
+    assert payload["overall_passed"] is False
+    record = payload["completion_evidence"]["replay_completion"]
+    assert record["baseline"]["count"] == 0 and record["target"] == 360
+    assert record["final"] == {"status": "missing", "count": None}
+    assert record["exact_await"] == "MISSING"
+    assert record["diagnostics"]["claims_scope"] == "preexisting_rows_not_replay_receipts"
+
+
+def test_managed_worker_observation_is_exact_birth_qualified_and_not_worker_pid(monkeypatch):
+    support = load_completion_diagnostics
+    identifier = "a" * 64
+    service = "portfolio_transaction_processing_service"
+    run = MagicMock(
+        side_effect=[
+            SimpleNamespace(stdout=identifier),
+            SimpleNamespace(
+                stdout=json.dumps(
+                    [
+                        identifier,
+                        "2026-10-07T01:00:00Z",
+                        "2026-10-07T01:01:00Z",
+                        123,
+                        "owned-load",
+                        service,
+                        [{"HostPort": "26090"}],
+                    ]
+                )
+            ),
+        ]
+    )
+    monkeypatch.setattr(support.subprocess, "run", run)
+    result = support._load_managed_worker_identity(
+        {"runtime": "owned-load", "compose_file": "compose.yml", "metrics_port": 26090}
+    )
+    assert result["status"] == "observed" and result["container_init_pid"] == 123
+    assert result["container_id"] == identifier and result["started_at"] == "2026-10-07T01:01:00Z"
+    assert result["worker_pid"] == result["exact_await"] == "MISSING"
+    assert run.call_args_list[0].args[0] == [
+        "docker",
+        "compose",
+        "-f",
+        "compose.yml",
+        "-p",
+        "owned-load",
+        "ps",
+        "-q",
+        service,
+    ]
+    assert all(
+        call.kwargs["timeout"] == 0.5 and call.kwargs["check"] for call in run.call_args_list
+    )
+    assert ".Config.Env" not in run.call_args.args[0][3]
+
+
+@pytest.mark.parametrize(
+    "returned",
+    [
+        [],
+        ["other", "created", "started", 123, "foreign", "other"],
+        [
+            "a" * 64,
+            "created",
+            "started",
+            0,
+            "owned-load",
+            "portfolio_transaction_processing_service",
+            [{"HostPort": "26090"}],
+        ],
+        [
+            "a" * 64,
+            "created",
+            "started",
+            123,
+            "owned-load",
+            "portfolio_transaction_processing_service",
+            [{"HostPort": "8090"}],
+        ],
+    ],
+)
+def test_managed_worker_refuses_foreign_missing_or_stopped_identity(monkeypatch, returned):
+    run = MagicMock(
+        side_effect=[SimpleNamespace(stdout="a" * 64), SimpleNamespace(stdout=json.dumps(returned))]
+    )
+    monkeypatch.setattr(load_completion_diagnostics.subprocess, "run", run)
+    result = load_completion_diagnostics._load_managed_worker_identity(
+        {"runtime": "owned-load", "compose_file": "compose.yml", "metrics_port": 26090}
+    )
+    assert result["status"] != "observed"
+    assert "foreign" not in str(result)
+
+
+def test_lock_probe_qualifies_pid_birth_and_keeps_null_relation_noncausal():
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchmany.return_value = [
+        {
+            "pid": 123,
+            "backend_start": "birth",
+            "database_oid": 9,
+            "relation_oid": None,
+            "locktype": "transactionid",
+            "granted": False,
+        }
+    ]
+    result = load_completion_diagnostics._load_database_probes(
+        connection,
+        {"submitted_ids": ["TX-1"], "ingestion_job_ids": [], "portfolio_id": "p"},
+        object,
+    )
+    lock = result["runtime_db_locks"]["rows"][0]
+    assert lock["relation_oid"] is None and lock["backend_start"] == "birth"
+    wait = result["runtime_db_waits"]["rows"][0]
+    assert wait["exact_await"] == "MISSING"
+    queries = [c.args[0] for c in cursor.execute.call_args_list]
+    assert any(
+        "JOIN pg_stat_activity a ON a.pid=l.pid" in q and "a.backend_start" in q for q in queries
+    )
+
+
+@pytest.mark.parametrize("birth,passed", [(123, True), (124, False), ("MISSING", False)])
+def test_same_counter_labels_and_increasing_counts_do_not_hide_worker_replacement(
+    monkeypatch, birth, passed
+):
+    support = transaction_processing_load_support
+    clock = iter([0, 0, 1, 2, 3, 4])
+    monkeypatch.setattr(support.time, "time", lambda: next(clock))
+    monkeypatch.setattr(support.time, "sleep", lambda seconds: None)
+    baseline = {
+        "status": "observed",
+        "count": 10,
+        "producer_birth": 123,
+        "labels": {"stage": "transaction", "outcome": "processed"},
+    }
+    monkeypatch.setattr(
+        support,
+        "transaction_processing_operation_observation",
+        lambda **k: {**baseline, "count": 99, "producer_birth": birth},
+    )
+    observations = []
+    result = support.wait_for_transaction_processing_operation_count(
+        transaction_processing_base_url="http://isolated",
+        stage="transaction",
+        outcome="processed",
+        expected_minimum=14,
+        timeout_seconds=3,
+        baseline=baseline,
+        on_observation=observations.append,
+    )
+    assert (result is not None) is passed
+    assert observations[-1]["continuity"] == ("observed" if passed else "reset_or_missing_baseline")
+
+
+def test_completion_scrape_separate_input_budget_and_same_exposition_process_birth(monkeypatch):
+    response = _MetricsResponse()
+    response.text = (
+        "# bounded histogram-family padding\n" * 3000
+        + "process_start_time_seconds 123\n"
+        + 'lotus_core_transaction_processing_operations_total{stage="transaction",'
+        'outcome="processed"} 17\n'
+    )
+    assert len(response.text) > 32768
+    monkeypatch.setattr(
+        transaction_processing_load_support.requests, "get", lambda *a, **k: response
+    )
+    result = transaction_processing_load_support.transaction_processing_operation_observation(
+        transaction_processing_base_url="http://isolated", stage="transaction", outcome="processed"
+    )
+    assert (
+        result["status"] == "observed" and result["producer_birth"] == 123 and result["count"] == 17
+    )
+
+
+@pytest.mark.parametrize("birth", ["MISSING", None])
+def test_missing_baseline_producer_identity_cannot_qualify_later_counter(monkeypatch, birth):
+    support = transaction_processing_load_support
+    baseline = {"status": "observed", "count": 10, "labels": {}, "producer_birth": birth}
+    current = {**baseline, "count": 99, "producer_birth": 123}
+    clock = iter([0, 0, 1, 2, 3, 4])
+    monkeypatch.setattr(support.time, "time", lambda: next(clock))
+    monkeypatch.setattr(support.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(
+        support, "transaction_processing_operation_observation", lambda **k: current
+    )
+    assert (
+        support.wait_for_transaction_processing_operation_count(
+            transaction_processing_base_url="http://isolated",
+            stage="transaction",
+            outcome="processed",
+            expected_minimum=14,
+            timeout_seconds=3,
+            baseline=baseline,
+        )
+        is None
+    )
+
+
+def test_counter_recreation_with_same_process_and_high_value_refuses_completion(monkeypatch):
+    support = transaction_processing_load_support
+    baseline = {
+        "status": "observed",
+        "count": 10,
+        "labels": {},
+        "producer_birth": 123,
+        "counter_created_at": 124,
+    }
+    current = {**baseline, "count": 99, "counter_created_at": 125}
+    clock = iter([0, 0, 1, 2, 3, 4])
+    monkeypatch.setattr(support.time, "time", lambda: next(clock))
+    monkeypatch.setattr(support.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(
+        support, "transaction_processing_operation_observation", lambda **k: current
+    )
+    assert (
+        support.wait_for_transaction_processing_operation_count(
+            transaction_processing_base_url="http://isolated",
+            stage="transaction",
+            outcome="processed",
+            expected_minimum=14,
+            timeout_seconds=3,
+            baseline=baseline,
+        )
+        is None
+    )
+
+
+def test_replay_diagnostic_once_even_if_collection_refuses_or_raises(load_boundary, monkeypatch):
+    args, _, _ = load_boundary
+    collector = MagicMock(side_effect=PermissionError("PRIVATE"))
+    monkeypatch.setattr(performance_load_gate, "collect_load_completion_diagnostics", collector)
+    report = performance_load_gate._LoadEvidenceReport(args, "run", MagicMock(), None)
+    report.stage = "replay_storm"
+    report.replay_timeout()
+    report.replay_timeout()
+    collector.assert_called_once()
+    assert report.replay_completion["diagnostics"]["reason"] == "PermissionError"
+    assert "PRIVATE" not in str(report.replay_completion)
+
+
+def test_identity_probe_missing_scope_does_not_invoke_docker(monkeypatch):
+    run = MagicMock()
+    monkeypatch.setattr(load_completion_diagnostics.subprocess, "run", run)
+    assert load_completion_diagnostics._load_managed_worker_identity({})["status"] == "missing"
+    run.assert_not_called()
 
 
 def _diagnostic_test_child(sender, database_url, metrics_url, broker, scope, *probes):

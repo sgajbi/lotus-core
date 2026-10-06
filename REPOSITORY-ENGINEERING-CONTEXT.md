@@ -765,6 +765,19 @@ schema, machine-readable contracts, or executable evidence.
 
 ## Performance-load diagnostic practice
 
+Replay completion reports retain baseline/target/final bounded scrape states and ordered request
+receipts; missing samples never become measured zero, and observed counter decreases or changed
+counter-creation or same-exposition process-birth identity fail completion closed. Missing producer
+birth cannot certify continuity. Completion scrape input is independently bounded to 1MiB; the
+collector's 32KiB projected-output budget is unchanged. Partial accepted counts do not manufacture
+accepted IDs or durable completion receipts. Replay timeout invokes the existing collector once
+after completion measurement, preserving the failed verdict and profile deadline/SLO.
+Database PID observations require backend birth identity and lock OIDs; NULL relation is not an
+inferred table. The exact managed container's birth/init-PID metadata is distinct from an actual
+application-worker PID or await, which remain MISSING unless measured. Raw SQL is never exported;
+the bounded collector retains only whitelisted structure with literal/unknown-token redaction and
+ambiguous-syntax refusal. This is diagnostic supportability, not a financial/runtime cause proof.
+
 `scripts/operations/performance_load_gate.py` owns partial-report publication at its original
 exception boundary. `transaction_processing_load_support.py` owns supported acknowledgement
 lineage and the shared completion/fixture probes. The existing performance package owns

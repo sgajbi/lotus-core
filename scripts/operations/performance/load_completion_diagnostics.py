@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import multiprocessing
 import os
+import re
+import subprocess
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -22,6 +24,52 @@ DIAGNOSTIC_MAX_BYTES = 32768
 DIAGNOSTIC_MAX_ROWS = 20
 DIAGNOSTIC_IO_SECONDS = 0.5
 
+# Export only known schema identifiers and grammar, never arbitrary SQL values/names.
+_STATEMENT_WORDS = frozenset(
+    "select update insert into delete from join where and or not null is set values returning "
+    "for share key no skip locked order by asc desc limit on conflict do nothing as "
+    "transactions portfolios instruments cashflows position_history outbox_events processed_events "
+    "portfolio_id transaction_id security_id tenant_id quantity gross_cost net_cost status "
+    "transaction_date cash_accounts instrument_id pg_advisory_xact_lock "
+    "varchar numeric integer bigint uuid timestamp timestamptz boolean".split()
+)
+
+
+def _statement_structure(query: Any) -> dict[str, Any]:
+    """Fail closed on ambiguous syntax; whitelist tokens cannot reveal SQL literals."""
+    if not isinstance(query, str) or not query or len(query) >= 2048:
+        return {"status": "unavailable", "reason": "missing_or_truncated_statement"}
+    # Dollar quotes, comments and escape strings need a parser; do not guess their extent.
+    parameterized = re.sub(r"\$[1-9]\d*(?![\w])", " ? ", query)
+    if any(marker in parameterized for marker in ("$", "--", "/*", "\\")):
+        return {"status": "unavailable", "reason": "unsupported_statement_syntax"}
+    scrubbed = re.sub(r"'(?:''|[^'])*'", " ? ", parameterized)
+    scrubbed = re.sub(
+        r'"(?:""|[^"])*"',
+        lambda match: (
+            match.group()[1:-1].lower()
+            if match.group()[1:-1].lower() in _STATEMENT_WORDS
+            else " ? "
+        ),
+        scrubbed,
+    )
+    if "'" in scrubbed or '"' in scrubbed:
+        return {"status": "unavailable", "reason": "unbalanced_statement_quotes"}
+    tokens = re.findall(r"[A-Za-z_][A-Za-z_0-9]*|\d+(?:\.\d+)?|[^\s]", scrubbed)
+    operation = tokens[0].lower() if tokens else ""
+    if operation not in {"select", "update", "insert", "delete"}:
+        return {"status": "unavailable", "reason": "unsupported_statement_operation"}
+    structure = " ".join(
+        token.lower() if token.lower() in _STATEMENT_WORDS or token in "(),.=<>:*" else "?"
+        for token in tokens
+    )
+    return {
+        "status": "observed",
+        "operation": operation,
+        "structure": structure[:1024],
+        "policy": "whitelisted_schema_and_grammar_all_other_tokens_redacted",
+    }
+
 
 def collect_load_completion_diagnostics(
     *,
@@ -37,7 +85,7 @@ def collect_load_completion_diagnostics(
     public_scope = {
         key: value
         for key, value in scope.items()
-        if key not in {"submitted_ids", "ingestion_job_ids"}
+        if key not in {"submitted_ids", "ingestion_job_ids", "compose_file"}
     }
     context = multiprocessing.get_context("spawn")
     receiver, sender = context.Pipe(duplex=False)
@@ -106,11 +154,11 @@ def _diagnostic_worker(
     kafka_bootstrap_servers: str,
     scope: dict[str, Any],
 ) -> None:
-    """No writes, replay, subscription, group join, SQL text or unrestricted business scans."""
+    """No writes/group join/business scans; export only whitelisted SQL structure."""
     public_scope = {
         key: value
         for key, value in scope.items()
-        if key not in {"submitted_ids", "ingestion_job_ids"}
+        if key not in {"submitted_ids", "ingestion_job_ids", "compose_file"}
     }
     evidence: dict[str, Any] = {
         "status": "observed",
@@ -120,6 +168,7 @@ def _diagnostic_worker(
     }
     deadline = time.monotonic() + DIAGNOSTIC_BUDGET_SECONDS - 1
     for name, probe in (
+        ("managed_worker", lambda: _load_managed_worker_identity(scope)),
         ("database", lambda: _load_database_diagnostics(database_url, scope)),
         ("ptp_metrics", lambda: _load_consumer_metrics(metrics_url)),
         ("consumer_offsets", lambda: _load_consumer_offsets(kafka_bootstrap_servers, deadline)),
@@ -243,13 +292,38 @@ def _load_database_probes(
             (LOAD_TENANT_ID, jobs),
         ),
         "runtime_db_waits": (
-            """SELECT pid, left(application_name,128) AS application_name,
+            """SELECT pid, backend_start, datid AS database_oid,
+            CASE WHEN application_name=ANY(%s) THEN application_name ELSE 'external_blocker' END
+              AS application_name,
             state, wait_event_type, wait_event,
             extract(epoch FROM (now()-xact_start)) AS transaction_age_seconds,
+            extract(epoch FROM (now()-query_start)) AS query_age_seconds,
+            backend_xid::text AS backend_xid,
+            to_jsonb(pg_stat_activity)->>'query_id' AS query_id,
+            left(query,2048) AS private_statement,
             (pg_blocking_pids(pid))[1:10] AS blocking_pids FROM pg_stat_activity
-            WHERE datname=current_database() AND application_name=ANY(%s)
+            WHERE datname=current_database() AND (application_name=ANY(%s) OR pid IN (
+              SELECT unnest(pg_blocking_pids(pid)) FROM pg_stat_activity
+              WHERE datname=current_database() AND application_name=ANY(%s)))
             ORDER BY xact_start NULLS LAST LIMIT 20""",
-            (["portfolio-transaction-processing", "persistence-service", "outbox-dispatcher"],),
+            tuple(
+                ["portfolio-transaction-processing", "persistence-service", "outbox-dispatcher"]
+                for _ in range(3)
+            ),
+        ),
+        "runtime_db_locks": (
+            """SELECT a.pid, a.backend_start, l.locktype, l.database AS database_oid,
+            l.relation AS relation_oid, l.mode, l.granted, l.transactionid::text AS transaction_id,
+            l.classid, l.objid, l.objsubid FROM pg_locks l
+            JOIN pg_stat_activity a ON a.pid=l.pid
+            WHERE a.datname=current_database() AND (a.application_name=ANY(%s) OR a.pid IN (
+              SELECT unnest(pg_blocking_pids(pid)) FROM pg_stat_activity
+              WHERE datname=current_database() AND application_name=ANY(%s)))
+            ORDER BY a.pid,l.granted,l.locktype LIMIT 20""",
+            tuple(
+                ["portfolio-transaction-processing", "persistence-service", "outbox-dispatcher"]
+                for _ in range(2)
+            ),
         ),
     }
     result: dict[str, Any] = {}
@@ -261,16 +335,86 @@ def _load_database_probes(
             with connection.cursor(cursor_factory=cursor_factory) as cursor:
                 cursor.execute(query, params)
                 rows = [dict(row) for row in cursor.fetchmany(DIAGNOSTIC_MAX_ROWS)]
+            if name == "runtime_db_waits":
+                for row in rows:
+                    row["statement"] = _statement_structure(row.pop("private_statement", None))
+                    row["exact_await"] = "MISSING"
+            if name.startswith("runtime_db_"):
+                for row in rows:
+                    row["backend_identity_status"] = (
+                        "observed" if row.get("pid") and row.get("backend_start") else "missing"
+                    )
             result[name] = {
                 "status": "observed",
                 "rows": rows,
                 "row_limit": DIAGNOSTIC_MAX_ROWS,
-                "scope": "isolated_runtime" if name == "runtime_db_waits" else "submitted_ids",
+                "scope": "isolated_runtime" if name.startswith("runtime_db_") else "submitted_ids",
             }
         except Exception as exc:
             connection.rollback()
             result[name] = {"status": "unavailable", "reason": type(exc).__name__}
     return result
+
+
+def _load_managed_worker_identity(scope: dict[str, Any]) -> dict[str, Any]:
+    """Observe only the exact managed service container, not an inferred Python/Kafka worker PID."""
+    project, compose_file = scope.get("runtime"), scope.get("compose_file")
+    port = scope.get("metrics_port")
+    if (
+        not isinstance(project, str)
+        or not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,127}", project)
+        or not compose_file
+        or type(port) is not int
+    ):
+        return {"status": "missing", "reason": "managed_identity_missing"}
+    service = "portfolio_transaction_processing_service"
+    command = ["docker", "compose", "-f", compose_file, "-p", project, "ps", "-q", service]
+    result = subprocess.run(
+        command, capture_output=True, text=True, check=True, timeout=DIAGNOSTIC_IO_SECONDS
+    )
+    identifiers = result.stdout.split()
+    if len(identifiers) != 1 or not re.fullmatch(r"[a-f0-9]{64}", identifiers[0]):
+        return {"status": "missing", "reason": "container_identity_ambiguous"}
+    template = (
+        "[{{json .Id}},{{json .Created}},{{json .State.StartedAt}},{{json .State.Pid}},"
+        '{{json (index .Config.Labels "com.docker.compose.project")}},'
+        '{{json (index .Config.Labels "com.docker.compose.service")}},'
+        '{{json (index .NetworkSettings.Ports "8085/tcp")}}]'
+    )
+    result = subprocess.run(
+        ["docker", "inspect", "--format", template, identifiers[0]],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=DIAGNOSTIC_IO_SECONDS,
+    )
+    if len(result.stdout) > 2048:
+        return {"status": "unavailable", "reason": "identity_byte_budget"}
+    values = json.loads(result.stdout)
+    if len(values) != 7 or values[4:6] != [project, service] or values[0] != identifiers[0]:
+        return {"status": "unavailable", "reason": "container_scope_mismatch"}
+    if not isinstance(values[6], list) or not any(
+        isinstance(binding, dict) and binding.get("HostPort") == str(port) for binding in values[6]
+    ):
+        return {"status": "unavailable", "reason": "metrics_port_mismatch"}
+    if (
+        type(values[3]) is not int
+        or values[3] <= 0
+        or not all(isinstance(value, str) and 0 < len(value) <= 64 for value in values[1:3])
+    ):
+        return {"status": "missing", "reason": "container_birth_identity_missing"}
+    return {
+        "status": "observed",
+        "observed_at": datetime.now(UTC).isoformat(),
+        "container_id": values[0],
+        "created_at": values[1],
+        "started_at": values[2],
+        "container_init_pid": values[3],
+        "service": service,
+        "metrics_port": port,
+        "worker_pid": "MISSING",
+        "exact_await": "MISSING",
+    }
 
 
 def _load_consumer_metrics(metrics_url: str) -> dict[str, Any]:
