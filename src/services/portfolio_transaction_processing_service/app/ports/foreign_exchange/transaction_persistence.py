@@ -3,6 +3,7 @@
 from typing import Protocol
 
 from ...domain.transaction import BookedTransaction
+from ...domain.transaction.fx.persisted_return import FxPersistenceWitness
 
 
 class ForeignExchangeTransactionPersistencePort(Protocol):
@@ -12,3 +13,6 @@ class ForeignExchangeTransactionPersistencePort(Protocol):
         self,
         transaction: BookedTransaction,
     ) -> BookedTransaction: ...
+    async def load_fx_retention_witness(
+        self, transaction: BookedTransaction
+    ) -> FxPersistenceWitness | None: ...

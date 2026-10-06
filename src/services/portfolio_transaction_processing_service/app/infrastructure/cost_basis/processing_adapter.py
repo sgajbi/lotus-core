@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
+
 from ...application import (
     TransactionProcessingError,
     TransactionProcessingRejected,
@@ -23,6 +25,12 @@ from ...domain.transaction import (
     SettlementCashValidationError,
     build_transaction_semantic_identity,
 )
+from ...domain.transaction.fx import FX_BUSINESS_TRANSACTION_TYPES
+from ...domain.transaction.fx.persisted_return import (
+    FxBookingContext,
+    FxCanonicalSourceLoad,
+    FxPersistenceWitness,
+)
 from ...domain.transaction.redemption import requires_linked_redemption_interest_history
 from ...ports import (
     AccruedIncomeOffsetStatePort,
@@ -40,7 +48,7 @@ from ...ports import (
     InitialOpeningCostStatePort,
     LotAmortizedCostProfilePort,
 )
-from ...ports.transaction_processing import FirstPublicationSourceAuthority
+from ...ports.transaction_processing import FirstPublicationSourceAuthority, FxSourceAdmission
 
 
 class PortfolioNotFoundError(Exception):
@@ -83,9 +91,15 @@ class CostBasisProcessingAdapter:
         self._reconciliation_repository = reconciliation_repository
         self._effect_stager = effect_stager
 
-    async def validate_unversioned_repair_source(self, transaction: BookedTransaction) -> None:
+    async def validate_unversioned_repair_source(
+        self, transaction: BookedTransaction
+    ) -> FxPersistenceWitness | None:
         """Match canonical material authority while retaining the owning write locks."""
         source = await self._load_locked_canonical_source(transaction)
+        witness = None
+        if isinstance(source, FxCanonicalSourceLoad):
+            witness = source.retention_witness
+            source = source.transaction
         if not self._matches_canonical_source(source, transaction):
             raise TransactionProcessingRejected(
                 reason_code="repair_source_authority_mismatch",
@@ -95,10 +109,11 @@ class CostBasisProcessingAdapter:
                 },
                 retryable=False,
             )
+        return witness
 
     async def load_first_publication_source(
         self, transaction: BookedTransaction
-    ) -> FirstPublicationSourceAuthority | None:
+    ) -> FirstPublicationSourceAuthority | FxSourceAdmission | None:
         """Retain optional exact source proof without admitting a repair route."""
         if transaction.epoch is not None or not transaction.tenant_id:
             return None
@@ -112,13 +127,19 @@ class CostBasisProcessingAdapter:
             }:
                 raise
             return None
+        witness = None
+        fx_load = False
+        if isinstance(source, FxCanonicalSourceLoad):
+            fx_load = True
+            witness = source.retention_witness
+            source = source.transaction
         if (
             source is None
             or source.epoch is not None
             or not self._matches_canonical_source(source, transaction)
         ):
-            return None
-        return FirstPublicationSourceAuthority(
+            return FxSourceAdmission(None, witness) if fx_load else None
+        authority = FirstPublicationSourceAuthority(
             tenant_id=transaction.tenant_id,
             portfolio_id=transaction.portfolio_id,
             security_id=transaction.security_id,
@@ -127,6 +148,7 @@ class CostBasisProcessingAdapter:
                 transaction
             ).payload_fingerprint,
         )
+        return FxSourceAdmission(authority, witness) if fx_load else authority
 
     @staticmethod
     def _matches_canonical_source(
@@ -148,7 +170,7 @@ class CostBasisProcessingAdapter:
 
     async def _load_locked_canonical_source(
         self, transaction: BookedTransaction
-    ) -> BookedTransaction | None:
+    ) -> BookedTransaction | FxCanonicalSourceLoad | None:
         await self._processing_state.acquire_cost_basis_processing_lock(
             transaction.portfolio_id, transaction.security_id
         )
@@ -157,6 +179,11 @@ class CostBasisProcessingAdapter:
                 transaction.portfolio_id, transaction.linked_transaction_group_id or ""
             )
 
+        if (
+            normalize_transaction_control_code(transaction.transaction_type)
+            in FX_BUSINESS_TRANSACTION_TYPES
+        ):
+            return await self._repository.load_booked_transaction_with_fx_witness(transaction)
         return await self._repository.get_booked_transaction(
             transaction.transaction_id,
             portfolio_id=transaction.portfolio_id,
@@ -176,6 +203,7 @@ class CostBasisProcessingAdapter:
         *,
         correlation_id: str,
         reconcile_superseded_derived: bool,
+        fx_booking_context: FxBookingContext | None = None,
     ) -> CostProcessingResult:
         reference_data = await self._reference_data.get_cost_basis_reference_data(
             portfolio_id=transaction.portfolio_id,
@@ -225,6 +253,7 @@ class CostBasisProcessingAdapter:
             effect_stager=self._effect_stager,
             correlation_id=correlation_id,
             reconcile_superseded_derived=reconcile_superseded_derived,
+            fx_booking_context=fx_booking_context,
         )
 
     async def process(
@@ -234,12 +263,14 @@ class CostBasisProcessingAdapter:
         correlation_id: str | None,
         traceparent: str | None,
         reconcile_superseded_derived: bool = False,
+        fx_booking_context: FxBookingContext | None = None,
     ) -> CostProcessingResult:
         try:
             return await self._process(
                 transaction,
                 correlation_id=correlation_id or "",
                 reconcile_superseded_derived=reconcile_superseded_derived,
+                fx_booking_context=fx_booking_context,
             )
         except SettlementCashValidationError as exc:
             raise build_settlement_cash_rejection(transaction, exc) from exc

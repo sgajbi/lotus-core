@@ -4,10 +4,16 @@ from typing import Protocol
 
 from ...domain.cost_basis import CostBasisTransaction
 from ...domain.transaction import BookedTransaction
+from ...domain.transaction.fx.persisted_return import FxCanonicalSourceLoad, FxPersistenceWitness
 
 
 class CostBasisTransactionStatePort(Protocol):
     """Persist calculated transaction economics and load canonical history."""
+
+    async def load_booked_transaction_with_fx_witness(
+        self,
+        transaction: BookedTransaction,
+    ) -> FxCanonicalSourceLoad: ...
 
     async def get_transaction_history(
         self,
@@ -56,3 +62,6 @@ class CostBasisTransactionStatePort(Protocol):
         *,
         fields_to_clear: frozenset[str] = frozenset(),
     ) -> BookedTransaction: ...
+    async def load_fx_retention_witness(
+        self, transaction: BookedTransaction
+    ) -> FxPersistenceWitness | None: ...

@@ -9,6 +9,7 @@ from typing import Protocol, Self
 
 from ..domain import BookedTransaction, build_transaction_semantic_identity
 from ..domain.cashflow import CashflowCalculationContext
+from ..domain.transaction.fx.persisted_return import FxBookingContext, FxPersistenceWitness
 from .position_history import AdmittedPositionCorrectionGroup, MaterializedPositionReceipt
 
 
@@ -37,6 +38,14 @@ class FirstPublicationSourceAuthority:
             transaction.transaction_id,
             build_transaction_semantic_identity(transaction).payload_fingerprint,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class FxSourceAdmission:
+    """Return retention facts separately from strict first-publication authority."""
+
+    authority: FirstPublicationSourceAuthority | None
+    retention_witness: FxPersistenceWitness | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,7 +111,7 @@ class TransactionIdempotencyPort(Protocol):
 class CostProcessingPort(Protocol):
     async def load_first_publication_source(
         self, transaction: BookedTransaction
-    ) -> FirstPublicationSourceAuthority | None:
+    ) -> FirstPublicationSourceAuthority | FxSourceAdmission | None:
         """Qualify optional ordinary source authority before any cost writes."""
         ...
 
@@ -110,7 +119,9 @@ class CostProcessingPort(Protocol):
         self, transaction: BookedTransaction
     ) -> BookedTransaction | None: ...
 
-    async def validate_unversioned_repair_source(self, transaction: BookedTransaction) -> None:
+    async def validate_unversioned_repair_source(
+        self, transaction: BookedTransaction
+    ) -> FxPersistenceWitness | None:
         """Retain canonical source authority in the caller's UOW before cost writes."""
         ...
 
@@ -121,6 +132,7 @@ class CostProcessingPort(Protocol):
         correlation_id: str | None,
         traceparent: str | None,
         reconcile_superseded_derived: bool = False,
+        fx_booking_context: FxBookingContext | None = None,
     ) -> CostProcessingResult: ...
 
 

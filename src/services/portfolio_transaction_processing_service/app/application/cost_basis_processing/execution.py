@@ -14,6 +14,7 @@ from ...domain.cost_basis import (
 )
 from ...domain.transaction import BookedTransaction
 from ...domain.transaction.fx import FxContractInstrument
+from ...domain.transaction.fx.persisted_return import FxBookingContext
 from ...domain.transaction.redemption import (
     assert_linked_redemption_interest_unambiguous,
     requires_linked_redemption_interest_history,
@@ -91,6 +92,7 @@ class PreparedCostProcessingUseCase:
         effect_stager: CostProcessingEffectStagingPort,
         correlation_id: str,
         reconcile_superseded_derived: bool = False,
+        fx_booking_context: FxBookingContext | None = None,
     ) -> CostProcessingResult:
         """Execute the selected route and coordinate its settlement and delivery effects."""
 
@@ -102,6 +104,7 @@ class PreparedCostProcessingUseCase:
             processed_transactions, instrument_updates = await self._book_foreign_exchange(
                 prepared=prepared,
                 transaction_state=transaction_state,
+                booking_context=fx_booking_context,
             )
         else:
             processed_transactions = await self._calculate_cost_basis(
@@ -150,10 +153,12 @@ class PreparedCostProcessingUseCase:
         *,
         prepared: PreparedCostTransaction,
         transaction_state: CostBasisTransactionStatePort,
+        booking_context: FxBookingContext | None = None,
     ) -> tuple[tuple[BookedTransaction, ...], tuple[FxContractInstrument, ...]]:
         booking = await book_foreign_exchange_transaction(
             transaction=prepared.transaction,
             transaction_persistence=transaction_state,
+            booking_context=booking_context,
         )
         instruments = (
             (booking.contract_instrument,) if booking.contract_instrument is not None else ()

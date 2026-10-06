@@ -227,6 +227,16 @@ native consumer/database, exact protected promotion/release, deployed enrollment
 downstream analytics qualification are distinct proof boundaries. Broader economic corrections
 remain separately owned by #452.
 
+The #452 R2 persisted-return candidate carries a detached FX pre-write witness and actual
+first-publication/epoch context through cost processing. Reuse the canonical loader's existing
+raw facts and locks; fallback reads lock only the owning transaction row. `NONE` raw absence
+does not certify source evidence; `UPSTREAM_PROVIDED` requires original raw material and, for
+processed rows, a qualified retained receipt. Only witnessed omitted source-system retention is
+allowed on the first return; the rebound return is exact and preserves original six P&L values.
+Do not weaken `FirstPublicationSourceAuthority.matches`, add broad portfolio serialization or
+claim native rollback/concurrency/main acceptance from local units. Native PG and promotion
+remain separately admitted boundaries in the FX Slice 6 contract.
+
 Source-confirmation applications consume framework-neutral operation ports and detached immutable
 source facts, not ORM rows or the legacy ingestion job service. The SQL adapter projects every
 transaction column except `id`, `updated_at`, `payload_fingerprint` and `calculation_lineage`;

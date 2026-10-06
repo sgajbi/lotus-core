@@ -19,6 +19,29 @@ This slice establishes deterministic baseline realized-P&L behavior for FX rows 
 2. Baseline implementation supports `NONE` and `UPSTREAM_PROVIDED` deterministically.
 3. `CASH_LOT_COST_METHOD` remains a later extension and is not simulated implicitly in this slice.
 
+## Persisted Return Qualification (#452 R2 candidate)
+
+FX booking carries a detached, owner-qualified pre-write witness inside the existing financial
+unit of work. When canonical loading has already acquired source locks and loaded original raw
+facts, the repository hands those facts to booking without a second raw query. Otherwise it locks
+only the target transaction row; it does not add portfolio or advisory serialization. The witness
+does not relax `FirstPublicationSourceAuthority.matches` or grant economic correction authority.
+
+`NONE` supports the existing raw-absent durable retention route without asserting raw authority.
+`UPSTREAM_PROVIDED` requires exactly one original raw source with matching owner and material
+identity. An unprocessed raw row requires the application's actual standard first-publication
+claim and absent epoch; a processed row additionally qualifies its retained receipt under the
+existing original-source policy. Original six Decimal/null values remain distinct from normalized
+zero/defaulted totals, and the admitted source FX rate and origin must match.
+
+The first persistence return may retain only an omitted `source_system` equal to the witnessed
+pre-write value. All other persistence-shaped material and the submitted receipt remain exact.
+Rebinding keeps the original six source values; a second return must equal the rebound row and
+receipt. Refusal escapes through the existing financial UOW rollback before downstream effects.
+Local unit proof is separate from native PostgreSQL write rollback, concurrent lock behavior,
+protected promotion and exact-main validation. Those acceptance boundaries and broader #452
+economic commands remain open; no schema, source-confirmation authority or policy floor changes.
+
 ## Fresh Source Admission
 
 Canonical production FX with an explicit `UPSTREAM_PROVIDED` claim must supply both

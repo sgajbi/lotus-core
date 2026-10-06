@@ -6,7 +6,12 @@ from decimal import Decimal
 from unittest.mock import AsyncMock
 
 import pytest
-from portfolio_common.domain.calculation_lineage import calculation_lineage_binds_output
+from portfolio_common.domain.calculation_lineage import (
+    calculation_lineage_binds_output,
+    canonical_content_hash,
+)
+from portfolio_common.domain.transaction import transaction_payload_fingerprint
+from portfolio_common.domain.transaction.fx_source_presence import FX_ORIGINAL_PNL_FIELDS
 
 from src.services.portfolio_transaction_processing_service.app.application import (
     foreign_exchange_processing,
@@ -16,7 +21,14 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
 )
 from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
     FX_BASELINE_CALCULATION_ALGORITHM_ID,
+    build_fx_processed_transaction,
     fx_booked_transaction_output_payload,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx.persisted_return import (  # noqa: E501
+    FxBookingContext,
+    FxPersistenceWitness,
+    fx_source_material,
+    qualify_fx_raw_source,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     ForeignExchangeTransactionPersistencePort,
@@ -27,8 +39,190 @@ pytestmark = pytest.mark.asyncio
 book_foreign_exchange_transaction = foreign_exchange_processing.book_foreign_exchange_transaction
 
 
+def _retention_witness(before: BookedTransaction, raw_source: BookedTransaction | None = None):
+    if before.fx_realized_pnl_mode == "NONE":
+        return FxPersistenceWitness(before, None, None)
+    material = fx_source_material(raw_source or before)
+    facts = qualify_fx_raw_source(
+        raw=material,
+        transaction=before,
+        stored_fingerprint=transaction_payload_fingerprint(material),
+        raw_event_id=17,
+        raw_payload_hash=canonical_content_hash(material),
+    )
+    return FxPersistenceWitness(before, facts.original_pnl, facts)
+
+
+@pytest.mark.parametrize("mode", ["NONE", "UPSTREAM_PROVIDED"])
+@pytest.mark.parametrize("processed", [False, True])
+async def test_retention_preserves_original_missing_values_and_exact_source_rate(mode, processed):
+    raw = _foreign_exchange_transaction(
+        tenant_id="tenant-fx",
+        source_system="ORIGINAL",
+        fx_realized_pnl_mode=mode,
+        realized_capital_pnl_local=None,
+        realized_total_pnl_local=None,
+        realized_capital_pnl_base=Decimal("0.000"),
+        realized_total_pnl_base=None,
+        transaction_fx_rate=Decimal("1.123456789"),
+        transaction_fx_rate_origin="SOURCE_BOOKED",
+    )
+    before = build_fx_processed_transaction(raw) if processed else raw
+    incoming = replace(before, source_system=None)
+    persistence = _transaction_persistence()
+    persistence.load_fx_retention_witness.return_value = _retention_witness(before, raw)
+    persistence.upsert_booked_transaction.side_effect = lambda row: replace(
+        row, source_system="ORIGINAL"
+    )
+    result = await book_foreign_exchange_transaction(
+        transaction=incoming,
+        transaction_persistence=persistence,
+        booking_context=FxBookingContext(initial_publication=not processed, admitted_epoch=None),
+    )
+    original = {
+        name: getattr(raw if mode == "UPSTREAM_PROVIDED" else incoming, name)
+        for name in FX_ORIGINAL_PNL_FIELDS
+    }
+    expected = build_fx_processed_transaction(
+        replace(incoming, source_system="ORIGINAL"), original_pnl=original
+    )
+    assert result.transaction == expected
+    assert persistence.upsert_booked_transaction.await_count == 2
+    assert result.transaction.transaction_fx_rate == raw.transaction_fx_rate
+    assert result.transaction.transaction_fx_rate_origin == "SOURCE_BOOKED"
+    if mode == "UPSTREAM_PROVIDED":
+        assert (
+            expected.calculation_lineage
+            != build_fx_processed_transaction(result.transaction).calculation_lineage
+        )
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        {"quantity": Decimal("1")},
+        {"gross_transaction_amount": Decimal("1095001")},
+        {"transaction_fx_rate": Decimal("1.2")},
+        {"transaction_fx_rate_origin": "REFERENCE"},
+        {"realized_fx_pnl_local": Decimal("1251")},
+        {"tenant_id": "foreign"},
+        {"source_system": "INVENTED"},
+    ],
+)
+async def test_first_return_rejects_mutation_even_with_a_fresh_valid_receipt(damage):
+    transaction = _foreign_exchange_transaction(tenant_id="tenant-fx", source_system="ORIGINAL")
+    persistence = _transaction_persistence()
+    persistence.load_fx_retention_witness.return_value = _retention_witness(transaction)
+    persistence.upsert_booked_transaction.side_effect = lambda row: build_fx_processed_transaction(
+        replace(row, **damage)
+    )
+    with pytest.raises(ValueError, match="changed admitted material"):
+        await book_foreign_exchange_transaction(
+            transaction=transaction,
+            transaction_persistence=persistence,
+            booking_context=FxBookingContext(True, None),
+        )
+    assert persistence.upsert_booked_transaction.await_count == 1
+
+
+@pytest.mark.parametrize(
+    "damage", [{"source_system": "OTHER"}, {"gross_transaction_amount": Decimal("1095001")}]
+)
+async def test_second_return_requires_exact_rebound_row_and_receipt(damage):
+    before = _foreign_exchange_transaction(source_system="ORIGINAL")
+    persistence = _transaction_persistence()
+    persistence.load_fx_retention_witness.return_value = _retention_witness(before)
+
+    def persist(row):
+        if persistence.upsert_booked_transaction.await_count == 1:
+            return replace(row, source_system="ORIGINAL")
+        return build_fx_processed_transaction(replace(row, **damage))
+
+    persistence.upsert_booked_transaction.side_effect = persist
+    with pytest.raises(RuntimeError, match="qualified final receipt"):
+        await book_foreign_exchange_transaction(
+            transaction=replace(before, source_system=None),
+            transaction_persistence=persistence,
+            booking_context=FxBookingContext(True, None),
+        )
+    assert persistence.upsert_booked_transaction.await_count == 2
+
+
+@pytest.mark.parametrize(
+    "context",
+    [None, FxBookingContext(False, None), FxBookingContext(True, 0), FxBookingContext(True, 3)],
+)
+async def test_unprocessed_upstream_raw_requires_actual_initial_admission(context):
+    transaction = _foreign_exchange_transaction()
+    persistence = _transaction_persistence()
+    persistence.load_fx_retention_witness.return_value = _retention_witness(transaction)
+    with pytest.raises(ValueError, match="admitted epoch|first-publication admission"):
+        await book_foreign_exchange_transaction(
+            transaction=transaction, transaction_persistence=persistence, booking_context=context
+        )
+    persistence.upsert_booked_transaction.assert_not_awaited()
+
+
+async def test_initial_upstream_missing_is_not_an_explicit_zero():
+    raw = _foreign_exchange_transaction(realized_capital_pnl_local=None)
+    persistence = _transaction_persistence()
+    persistence.load_fx_retention_witness.return_value = _retention_witness(raw)
+    with pytest.raises(ValueError, match="admitted P&L differs"):
+        await book_foreign_exchange_transaction(
+            transaction=replace(raw, realized_capital_pnl_local=Decimal(0)),
+            transaction_persistence=persistence,
+            booking_context=FxBookingContext(True, None),
+        )
+    persistence.upsert_booked_transaction.assert_not_awaited()
+
+
+async def test_upstream_without_raw_witness_refuses_before_write():
+    transaction = _foreign_exchange_transaction()
+    persistence = _transaction_persistence()
+    persistence.load_fx_retention_witness.return_value = FxPersistenceWitness(
+        transaction, None, None
+    )
+    with pytest.raises(ValueError, match="original upstream source"):
+        await book_foreign_exchange_transaction(
+            transaction=transaction,
+            transaction_persistence=persistence,
+            booking_context=FxBookingContext(True, None),
+        )
+    persistence.upsert_booked_transaction.assert_not_awaited()
+
+
+@pytest.mark.parametrize("damage", [None, "tenant", "epoch"])
+async def test_explicit_handoff_is_not_reloaded_and_cannot_cross_admission(damage):
+    transaction = _foreign_exchange_transaction(tenant_id="tenant-fx")
+    witness = _retention_witness(transaction)
+    if damage == "tenant":
+        witness = replace(witness, durable_before=replace(transaction, tenant_id="foreign"))
+    elif damage == "epoch":
+        witness = replace(witness, admitted_epoch=3)
+    persistence = _transaction_persistence()
+    context = FxBookingContext(True, None, witness)
+    if damage is None:
+        result = await book_foreign_exchange_transaction(
+            transaction=transaction,
+            transaction_persistence=persistence,
+            booking_context=context,
+        )
+        assert result.transaction.calculation_lineage is not None
+        persistence.upsert_booked_transaction.assert_awaited_once()
+    else:
+        with pytest.raises(ValueError, match="owner mismatch|different admitted epoch"):
+            await book_foreign_exchange_transaction(
+                transaction=transaction,
+                transaction_persistence=persistence,
+                booking_context=context,
+            )
+        persistence.upsert_booked_transaction.assert_not_awaited()
+    persistence.load_fx_retention_witness.assert_not_awaited()
+
+
 def _transaction_persistence() -> AsyncMock:
     persistence = AsyncMock(spec=ForeignExchangeTransactionPersistencePort)
+    persistence.load_fx_retention_witness.return_value = None
     persistence.upsert_booked_transaction.side_effect = lambda transaction: transaction
     return persistence
 
@@ -100,6 +294,20 @@ async def test_booking_persists_validated_fx_transaction_and_returns_contract_in
 
 async def test_booking_rebinds_lineage_when_conflict_retains_optional_durable_output() -> None:
     persistence = AsyncMock(spec=ForeignExchangeTransactionPersistencePort)
+    before = _foreign_exchange_transaction(source_system="EXISTING_BOOKING_LEDGER")
+    material = fx_source_material(before)
+    facts = qualify_fx_raw_source(
+        raw=material,
+        transaction=before,
+        stored_fingerprint=transaction_payload_fingerprint(material),
+        raw_event_id=1,
+        raw_payload_hash=canonical_content_hash(material),
+    )
+    persistence.load_fx_retention_witness.return_value = FxPersistenceWitness(
+        before,
+        facts.original_pnl,
+        facts,
+    )
 
     async def _persist(transaction: BookedTransaction) -> BookedTransaction:
         if persistence.upsert_booked_transaction.await_count == 1:
@@ -111,6 +319,7 @@ async def test_booking_rebinds_lineage_when_conflict_retains_optional_durable_ou
     result = await book_foreign_exchange_transaction(
         transaction=_foreign_exchange_transaction(source_system=None),
         transaction_persistence=persistence,
+        booking_context=FxBookingContext(initial_publication=True, admitted_epoch=None),
     )
 
     assert persistence.upsert_booked_transaction.await_count == 2
