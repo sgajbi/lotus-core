@@ -1,5 +1,6 @@
 """Persistence port for canonical cost-basis transaction state."""
 
+from datetime import datetime
 from typing import Protocol
 
 from ...domain.cost_basis import CostBasisTransaction
@@ -65,3 +66,7 @@ class CostBasisTransactionStatePort(Protocol):
     async def load_fx_retention_witness(
         self, transaction: BookedTransaction
     ) -> FxPersistenceWitness | None: ...
+
+    async def load_fx_creation_timestamp(self) -> datetime:
+        """Read server chronology through the existing financial unit of work."""
+        ...

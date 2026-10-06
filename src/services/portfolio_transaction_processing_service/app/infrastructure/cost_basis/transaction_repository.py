@@ -644,7 +644,8 @@ class SqlAlchemyCostBasisTransactionRepository:
             repair_tenant_id=repair_tenant_id,
             repair_security_id=repair_security_id,
         )
-        assert not isinstance(result, FxCanonicalSourceLoad)
+        if isinstance(result, FxCanonicalSourceLoad):
+            raise TypeError("Canonical transaction lookup returned an unexpected FX source load")
         return result
 
     async def load_booked_transaction_with_fx_witness(
