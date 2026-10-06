@@ -46,6 +46,9 @@ MIGRATION = (
     / "versions"
     / "c176b2c3d537_scope_dlq_replay_audit_tenant.py"
 )
+SOURCE_REVISION_MIGRATION = MIGRATION.with_name(
+    "c177b2c3d538_add_transaction_source_evidence_revisions.py"
+)
 
 
 class _PostgresDlqConsumer(BaseConsumer):
@@ -72,11 +75,61 @@ def _bind(migration, connection) -> None:
 
 def _restore_predecessor_schema(migration, connection) -> None:
     """The managed test stack starts at head; exercise c176 from its real predecessor."""
+    source_migration = runpy.run_path(str(SOURCE_REVISION_MIGRATION))
+    _bind(source_migration, connection)
+    # Descend through the real empty-history refusal before dropping its owner key.
+    source_migration["downgrade"]()
     _bind(migration, connection)
     migration["downgrade"]()
     assert "tenant_id" not in {
         column["name"] for column in inspect(connection).get_columns("consumer_dlq_events")
     }
+
+
+def _assert_restored_source_revision_integrity(connection) -> None:
+    owner = next(
+        foreign_key
+        for foreign_key in inspect(connection).get_foreign_keys(
+            "transaction_source_revisions", schema="public"
+        )
+        if foreign_key["name"] == "fk_source_revision_operation_owner"
+    )
+    assert owner["constrained_columns"] == ["tenant_id", "operation_id"]
+    assert owner["referred_table"] == "ingestion_jobs"
+    assert owner["referred_schema"] == "public"
+    assert owner["referred_columns"] == ["tenant_id", "job_id"]
+    assert owner["options"] == {}
+    assert (
+        connection.scalar(
+            text(
+                "SELECT convalidated FROM pg_constraint "
+                "WHERE conrelid = 'public.transaction_source_revisions'::regclass "
+                "AND conname = 'fk_source_revision_operation_owner' AND contype = 'f'"
+            )
+        )
+        is True
+    )
+    trigger = connection.execute(
+        text(
+            """
+            SELECT t.tgname, p.proname, pn.nspname, t.tgtype, t.tgenabled,
+                   t.tgconstraint
+            FROM pg_trigger t
+            JOIN pg_proc p ON p.oid = t.tgfoid
+            JOIN pg_namespace pn ON pn.oid = p.pronamespace
+            WHERE t.tgrelid = 'public.transaction_source_revisions'::regclass
+              AND NOT t.tgisinternal
+            """
+        )
+    ).one()
+    assert tuple(trigger) == (
+        "transaction_source_revision_immutable",
+        "reject_transaction_source_revision_mutation",
+        "public",
+        27,  # BEFORE UPDATE OR DELETE, FOR EACH ROW.
+        "O",
+        0,
+    )
 
 
 def _insert_job(connection, *, job_id: str, tenant_id: str) -> None:
@@ -282,6 +335,7 @@ def test_upgrade_backfills_and_enforces_tenant_scoped_identity(db_engine, clean_
         with pytest.raises(DBAPIError, match="block downgrade"), connection.begin_nested():
             migration["downgrade"]()
         head_schema.rollback()
+        _assert_restored_source_revision_integrity(connection)
 
 
 @pytest.mark.parametrize("orphan_kind", ["dlq", "audit", "audit_unknown_job"])
@@ -311,6 +365,7 @@ def test_upgrade_refuses_unattributable_legacy_rows(db_engine, clean_db, orphan_
         with pytest.raises(DBAPIError, match=expected_error):
             migration["upgrade"]()
         head_schema.rollback()
+        _assert_restored_source_revision_integrity(connection)
 
 
 def test_upgrade_refuses_conflicting_job_and_dlq_owners(db_engine, clean_db) -> None:
@@ -330,6 +385,7 @@ def test_upgrade_refuses_conflicting_job_and_dlq_owners(db_engine, clean_db) -> 
         with pytest.raises(DBAPIError, match="conflicting owner"):
             migration["upgrade"]()
         head_schema.rollback()
+        _assert_restored_source_revision_integrity(connection)
 
 
 def test_clean_upgrade_and_downgrade_remain_executable(db_engine, clean_db) -> None:
@@ -390,6 +446,7 @@ def test_clean_upgrade_and_downgrade_remain_executable(db_engine, clean_db) -> N
         )
         migration["upgrade"]()
         head_schema.rollback()
+        _assert_restored_source_revision_integrity(connection)
 
 
 @pytest.mark.asyncio

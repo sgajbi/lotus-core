@@ -36,6 +36,75 @@ MOVED_PORTFOLIO_ID = "CASHFLOW-CUT-PORTFOLIO-MOVED"
 CORRECTIVE_MIGRATION = MIGRATION.with_name(
     "c170b2c3d531_fix_streamline_cashflow_source_cut_refresh.py"
 )
+OWNED_CASHFLOW_TRIGGERS = {
+    (
+        "public",
+        table,
+        f"trg_{table}_refresh_portfolio_source_cut_{event}",
+        "public",
+        "refresh_portfolio_cashflow_source_cut_trigger",
+    )
+    for table in ("cashflows", "transactions")
+    for event in ("insert", "update", "delete")
+} | {
+    (
+        "public",
+        "portfolios",
+        "trg_portfolios_refresh_cashflow_source_cut",
+        "public",
+        "refresh_portfolio_cashflow_source_cut_portfolio_trigger",
+    )
+}
+
+
+def _trigger_identities(connection) -> list[tuple]:
+    """Keep OIDs separately from complete, schema-qualified trigger semantics."""
+    return [
+        tuple(row)
+        for row in connection.execute(
+            text(
+                """
+                SELECT t.oid, n.nspname, c.relname, t.tgname, pn.nspname, p.proname,
+                       pg_get_function_identity_arguments(p.oid), t.tgtype, t.tgenabled,
+                       t.tgdeferrable, t.tginitdeferred, pg_get_triggerdef(t.oid)
+                FROM pg_trigger t
+                JOIN pg_class c ON c.oid = t.tgrelid
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                JOIN pg_proc p ON p.oid = t.tgfoid
+                JOIN pg_namespace pn ON pn.oid = p.pronamespace
+                WHERE NOT t.tgisinternal
+                ORDER BY n.nspname, c.relname, t.tgname
+                """
+            )
+        )
+    ]
+
+
+def _owned_cashflow_trigger_identities(connection) -> list[tuple]:
+    rows = [row for row in _trigger_identities(connection) if row[1:6] in OWNED_CASHFLOW_TRIGGERS]
+    assert {row[1:6] for row in rows} == OWNED_CASHFLOW_TRIGGERS
+    return rows
+
+
+def _foreign_key_identities(connection) -> list[tuple]:
+    return [
+        tuple(row)
+        for row in connection.execute(
+            text(
+                """
+                SELECT n.nspname, c.relname, fk.conname, rn.nspname, rc.relname,
+                       pg_get_constraintdef(fk.oid), fk.convalidated
+                FROM pg_constraint fk
+                JOIN pg_class c ON c.oid = fk.conrelid
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                JOIN pg_class rc ON rc.oid = fk.confrelid
+                JOIN pg_namespace rn ON rn.oid = rc.relnamespace
+                WHERE fk.contype = 'f'
+                ORDER BY n.nspname, c.relname, fk.conname
+                """
+            )
+        )
+    ]
 
 
 @pytest.fixture(autouse=True)
@@ -89,9 +158,30 @@ def test_cashflow_refresh_corrective_migration_preserves_nonempty_cuts_and_rolls
         original_oid = connection.scalar(
             text("SELECT 'refresh_portfolio_cashflow_source_cut(text)'::regprocedure::oid")
         )
-        original_triggers = connection.execute(
-            text("SELECT oid, tgname, tgtype FROM pg_trigger WHERE NOT tgisinternal ORDER BY oid")
-        ).all()
+        original_triggers = _owned_cashflow_trigger_identities(connection)
+        original_head_triggers = [row[1:] for row in _trigger_identities(connection)]
+        original_head_foreign_keys = _foreign_key_identities(connection)
+        assert any(
+            row[:5]
+            == (
+                "public",
+                "transaction_source_revisions",
+                "transaction_source_revision_immutable",
+                "public",
+                "reject_transaction_source_revision_mutation",
+            )
+            and row[6] == 27
+            for row in original_head_triggers
+        )
+        assert (
+            "public",
+            "transaction_source_revisions",
+            "fk_source_revision_operation_owner",
+            "public",
+            "ingestion_jobs",
+            "FOREIGN KEY (tenant_id, operation_id) REFERENCES ingestion_jobs(tenant_id, job_id)",
+            True,
+        ) in original_head_foreign_keys
 
     corrective: dict[str, Any] = runpy.run_path(str(CORRECTIVE_MIGRATION))
     with db_engine.connect() as connection:
@@ -168,15 +258,7 @@ def test_cashflow_refresh_corrective_migration_preserves_nonempty_cuts_and_rolls
                         )
                         == original_oid
                     )
-                    assert (
-                        connection.execute(
-                            text(
-                                "SELECT oid, tgname, tgtype FROM pg_trigger "
-                                "WHERE NOT tgisinternal ORDER BY oid"
-                            )
-                        ).all()
-                        == original_triggers
-                    )
+                    assert _owned_cashflow_trigger_identities(connection) == original_triggers
                     definition = connection.scalar(
                         text(
                             "SELECT pg_get_functiondef("
@@ -206,6 +288,13 @@ def test_cashflow_refresh_corrective_migration_preserves_nonempty_cuts_and_rolls
         assert restored.returncode == 0, (
             f"Alembic head restoration to {repository_head} exited {restored.returncode}"
         )
+        with db_engine.connect() as connection:
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
+                repository_head
+            )
+            # Recreated c177 objects may get new OIDs, never different semantics.
+            assert [row[1:] for row in _trigger_identities(connection)] == original_head_triggers
+            assert _foreign_key_identities(connection) == original_head_foreign_keys
 
     # Historical backfill proof runs c169's function. Exercise the installed
     # corrective function's durable boundary and affected roots independently.

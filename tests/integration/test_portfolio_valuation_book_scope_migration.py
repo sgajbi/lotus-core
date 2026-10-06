@@ -93,6 +93,9 @@ DLQ_REPLAY_TENANT_MIGRATION = (
     / "versions"
     / "c176b2c3d537_scope_dlq_replay_audit_tenant.py"
 )
+SOURCE_REVISION_MIGRATION = DLQ_REPLAY_TENANT_MIGRATION.with_name(
+    "c177b2c3d538_add_transaction_source_evidence_revisions.py"
+)
 
 PORTFOLIO_INSERT = text(
     """
@@ -137,6 +140,12 @@ def _downgrade_dependent_schema(connection) -> list[dict[str, Any]]:
     """Downgrade later schema that deliberately references valuation-book scope."""
 
     dependent_migrations: list[dict[str, Any]] = []
+    if inspect(connection).has_table("transaction_source_revisions", schema="public"):
+        source_revision_migration: dict[str, Any] = runpy.run_path(str(SOURCE_REVISION_MIGRATION))
+        _bind_operations(source_revision_migration, connection)
+        source_revision_migration["downgrade"]()
+        # Newest first on descent, therefore last in the reversed upgrade below.
+        dependent_migrations.append(source_revision_migration)
     if "tenant_id" in {
         column["name"] for column in inspect(connection).get_columns("consumer_dlq_events")
     }:
@@ -266,6 +275,43 @@ def _downgrade_dependent_schema(connection) -> list[dict[str, Any]]:
     return dependent_migrations
 
 
+def _assert_source_revision_integrity(connection) -> None:
+    restored = connection.execute(
+        text(
+            """
+            SELECT fk.convalidated, fk.confupdtype, fk.confdeltype,
+                   fk.condeferrable, fk.condeferred, pg_get_constraintdef(fk.oid),
+                   t.tgname, pn.nspname, p.proname,
+                   pg_get_function_identity_arguments(p.oid),
+                   t.tgtype, t.tgenabled, t.tgconstraint
+            FROM pg_constraint fk
+            JOIN pg_trigger t ON t.tgrelid = fk.conrelid
+            JOIN pg_proc p ON p.oid = t.tgfoid
+            JOIN pg_namespace pn ON pn.oid = p.pronamespace
+            WHERE fk.conrelid = 'public.transaction_source_revisions'::regclass
+              AND fk.confrelid = 'public.ingestion_jobs'::regclass
+              AND fk.conname = 'fk_source_revision_operation_owner'
+              AND fk.contype = 'f' AND NOT t.tgisinternal
+            """
+        )
+    ).one()
+    assert tuple(restored) == (
+        True,
+        "a",
+        "a",
+        False,
+        False,
+        "FOREIGN KEY (tenant_id, operation_id) REFERENCES ingestion_jobs(tenant_id, job_id)",
+        "transaction_source_revision_immutable",
+        "public",
+        "reject_transaction_source_revision_mutation",
+        "",
+        27,  # BEFORE UPDATE OR DELETE, FOR EACH ROW.
+        "O",
+        0,
+    )
+
+
 def test_portfolio_valuation_book_scope_applies_rolls_back_and_enforces_authority(
     db_engine,
     clean_db,
@@ -346,6 +392,8 @@ def test_portfolio_valuation_book_scope_applies_rolls_back_and_enforces_authorit
         for dependent_migration in reversed(dependent_migrations):
             dependent_migration["upgrade"]()
         restore_selected_history_portfolio_foreign_keys(connection)
+        if any(migration["revision"] == "c177b2c3d538" for migration in dependent_migrations):
+            _assert_source_revision_integrity(connection)
         if dependent_migrations:
             inspector = inspect(connection)
             assert inspector.has_table("lot_amortized_cost_profiles")
