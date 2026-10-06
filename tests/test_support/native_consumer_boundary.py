@@ -6,11 +6,12 @@ import json
 import os
 import time
 import uuid
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from decimal import Decimal
+from ipaddress import ip_address
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from confluent_kafka import Consumer, ConsumerGroupState, Message, TopicPartition
 from confluent_kafka.admin import AdminClient, NewTopic
@@ -37,6 +38,50 @@ from tests.test_support.runtime.compose_fault_recovery import ComposeFaultRecove
 from tests.test_support.tenant import TEST_TENANT_ID
 
 T = TypeVar("T")
+
+
+def assert_worker_advisory_admission(
+    rows: Sequence[Mapping[str, Any]],
+    identity: Mapping[str, Any],
+    *,
+    holder_pid: int,
+    lock_key: int,
+) -> None:
+    """Require every observed waiter to be the exact deployed worker before a fault.
+
+    SQL supplies host(client_addr), raw inet text, actual blockers and wait state.
+    The caller acquires the production key on the real holder connection; unit
+    controls for this assertion do not replace that live SQL-backed key proof.
+    """
+    diagnostic = json.dumps(
+        {
+            "rows": [dict(row) for row in rows],
+            "worker": dict(identity),
+            "holder_pid": holder_pid,
+            "production_lock_key": lock_key,
+        },
+        sort_keys=True,
+        default=str,
+    )
+    try:
+        expected_ips = {ip_address(value) for value in identity["ips"]}
+        valid = (
+            bool(rows)
+            and bool(expected_ips)
+            and all(
+                row["pid"] > 0
+                and row["pid"] != holder_pid
+                and ip_address(row["client_host"]) in expected_ips
+                and holder_pid in row["blocking_pids"]
+                and row["wait_event_type"] == "Lock"
+                and row["wait_event"] == "advisory"
+                and "pg_advisory_xact_lock" in row["query"]
+                for row in rows
+            )
+        )
+    except (KeyError, TypeError, ValueError):
+        valid = False
+    assert valid, f"Deployed worker advisory admission refused: {diagnostic}"
 
 
 def wait_for_value(observe: Callable[[], T], accept: Callable[[T], bool], timeout: float = 60) -> T:

@@ -29,6 +29,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
 from tests.test_support.docker_stack import resolve_compose_file
 from tests.test_support.native_consumer_boundary import (
     assert_financial_oracle,
+    assert_worker_advisory_admission,
     committed_offset,
     financial_snapshot,
     publish,
@@ -125,8 +126,12 @@ def _native_worker_identity():
         "image_id": inspection["Image"],
         "container": container,
         "command": inspection["Config"]["Cmd"],
+        "project": inspection["Config"]["Labels"]["com.docker.compose.project"],
         "ips": [
-            network["IPAddress"] for network in inspection["NetworkSettings"]["Networks"].values()
+            address
+            for network in inspection["NetworkSettings"]["Networks"].values()
+            for address in (network["IPAddress"], network.get("GlobalIPv6Address"))
+            if address
         ],
         "manifest_hash": manifest["content_hash"],
     }
@@ -203,20 +208,36 @@ def _exercise_deployed_native_boundary(db_engine, recovery, *, forced):
 
             def admission():
                 with db_engine.connect() as observer:
-                    return observer.execute(
-                        text(
-                            "SELECT a.pid, a.client_addr::text, a.query FROM pg_stat_activity a "
-                            "WHERE :holder = ANY(pg_blocking_pids(a.pid)) "
-                            "AND a.wait_event_type = 'Lock' AND a.wait_event = 'advisory'"
-                        ),
-                        {"holder": holder_pid},
-                    ).all()
+                    return (
+                        observer.execute(
+                            text(
+                                "SELECT a.pid, a.client_addr::text AS client_addr_raw, "
+                                "host(a.client_addr) AS client_host, a.query, "
+                                "pg_blocking_pids(a.pid) AS blocking_pids, "
+                                "a.wait_event_type, a.wait_event FROM pg_stat_activity a "
+                                "WHERE :holder = ANY(pg_blocking_pids(a.pid)) "
+                                "AND a.wait_event_type = 'Lock' AND a.wait_event = 'advisory'"
+                            ),
+                            {"holder": holder_pid},
+                        )
+                        .mappings()
+                        .all()
+                    )
 
-            admitted = wait_for_value(admission, bool)
+            try:
+                admitted = wait_for_value(admission, bool)
+            except TimeoutError as error:
+                error.add_note(
+                    json.dumps(
+                        {"worker": identity, "holder_pid": holder_pid, "production_lock_key": lock},
+                        sort_keys=True,
+                    )
+                )
+                raise
             # Only production workers run in this live-worker invocation. The
             # exact production lock key and real backend wait establish admission.
-            assert all(
-                row[1] in identity["ips"] and "pg_advisory_xact_lock" in row[2] for row in admitted
+            assert_worker_advisory_admission(
+                admitted, identity, holder_pid=holder_pid, lock_key=lock
             )
             ids = (f"{topic}-0-{first}",)
             before = financial_snapshot(db_engine, portfolio, security, event_ids=ids)
