@@ -1,12 +1,13 @@
 """Independent source presence and existing-producer receipt compatibility controls."""
 
-from copy import deepcopy
 import importlib.util
+from copy import deepcopy
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 from portfolio_common.domain.calculation_lineage import (
     build_calculation_lineage,
@@ -22,28 +23,38 @@ from portfolio_common.domain.transaction.payload_identity import (
     transaction_payload_fingerprint,
     transaction_payload_pre_upstream_fingerprint,
 )
-from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx.baseline_processing import (
-    fx_booked_transaction_output_payload,
-)
 from portfolio_common.domain.transaction.source_evidence_revision import (
     retained_fx_output_payload,
 )
 from portfolio_common.infrastructure.transaction_source_evidence import (
     transaction_receipt_output,
 )
-from src.services.query_control_plane_service.app.application.transaction_economics.performance_policy import (
-    build_performance_component_economics_totals,
-    missing_performance_component_families,
-    observed_performance_component_families,
+
+from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
+    baseline_processing,
 )
-from src.services.query_control_plane_service.app.application.transaction_economics.performance_rows import (
-    build_performance_component_economics_rows,
+from src.services.query_control_plane_service.app.application.transaction_economics import (
+    performance_policy,
+    performance_rows,
 )
-from src.services.query_control_plane_service.app.infrastructure.transaction_economics_sources import (
-    SqlAlchemyTransactionEconomicsReader,
-    _booked_transaction_economics,
+from src.services.query_control_plane_service.app.infrastructure import (
+    transaction_economics_sources,
 )
 from tests.test_support.fx_source_evidence import TENANT, fx_source_fixture
+
+fx_booked_transaction_output_payload = baseline_processing.fx_booked_transaction_output_payload
+build_performance_component_economics_totals = (
+    performance_policy.build_performance_component_economics_totals
+)
+missing_performance_component_families = performance_policy.missing_performance_component_families
+observed_performance_component_families = performance_policy.observed_performance_component_families
+build_performance_component_economics_rows = (
+    performance_rows.build_performance_component_economics_rows
+)
+SqlAlchemyTransactionEconomicsReader = (
+    transaction_economics_sources.SqlAlchemyTransactionEconomicsReader
+)
+_booked_transaction_economics = transaction_economics_sources._booked_transaction_economics
 
 
 @pytest.fixture
@@ -52,7 +63,10 @@ def legacy_producer():
         Path(__file__).resolve().parents[5]
         / "fixtures/transaction_source_confirmation/fx_baseline_v1_325d.py"
     )
-    name = "src.services.portfolio_transaction_processing_service.app.domain.transaction.fx._legacy_unit_producer"
+    name = (
+        "src.services.portfolio_transaction_processing_service.app.domain"
+        ".transaction.fx._legacy_unit_producer"
+    )
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -88,9 +102,9 @@ async def test_live_qcp_preserves_missing_vs_explicit_zero_with_equal_booked_amo
     if version == 1:
         use_legacy_receipt(missing_raw, missing_processed, missing, legacy_producer)
         use_legacy_receipt(zero_raw, zero_processed, zero, legacy_producer)
-    assert transaction_receipt_output(
-        missing, TENANT.value
-    ) == transaction_receipt_output(zero, TENANT.value)
+    assert transaction_receipt_output(missing, TENANT.value) == transaction_receipt_output(
+        zero, TENANT.value
+    )
     absent = await qualify(missing_raw, missing)
     supplied = await qualify(zero_raw, zero)
     assert (absent.local, absent.base, absent.reason) == (
@@ -108,10 +122,7 @@ async def test_live_qcp_preserves_missing_vs_explicit_zero_with_equal_booked_amo
     assert not absent.source_evidence.original_base_present
     assert supplied.source_evidence.original_local_present
     assert supplied.source_evidence.original_base_present
-    assert (
-        absent.source_evidence.source_cut_sha256
-        != supplied.source_evidence.source_cut_sha256
-    )
+    assert absent.source_evidence.source_cut_sha256 != supplied.source_evidence.source_cut_sha256
 
 
 async def qualify(raw, ledger, *, tenant=TENANT):
@@ -151,9 +162,7 @@ async def test_existing_producer_output_and_independent_source_qualify_exact_fig
         amount,
         "FX_SOURCE_QUALIFIED",
     )
-    booked = _booked_transaction_economics(
-        ledger, costs=(), fx_pnl_source_evidence=evidence
-    )
+    booked = _booked_transaction_economics(ledger, costs=(), fx_pnl_source_evidence=evidence)
     row = build_performance_component_economics_rows([booked])[0]
     assert (row.realized_fx_pnl_local, row.realized_fx_pnl_base) == (amount, amount)
     assert "realized_fx_pnl" in observed_performance_component_families([row])
@@ -167,9 +176,7 @@ async def test_existing_producer_output_and_independent_source_qualify_exact_fig
     assert totals["realized_fx_pnl"].missing_evidence_count == 0
 
 
-@pytest.mark.parametrize(
-    "local,base", [(None, Decimal("12")), (Decimal("0"), None), (None, None)]
-)
+@pytest.mark.parametrize("local,base", [(None, Decimal("12")), (Decimal("0"), None), (None, None)])
 @pytest.mark.parametrize("version", [1, 2])
 @pytest.mark.asyncio
 async def test_legacy_normalized_receipt_cannot_recreate_original_missing_basis(
@@ -183,11 +190,7 @@ async def test_legacy_normalized_receipt_cannot_recreate_original_missing_basis(
     assert (evidence.local, evidence.base) == (local, base)
     assert evidence.reason == "FX_SOURCE_INCOMPLETE"
     row = build_performance_component_economics_rows(
-        [
-            _booked_transaction_economics(
-                ledger, costs=(), fx_pnl_source_evidence=evidence
-            )
-        ]
+        [_booked_transaction_economics(ledger, costs=(), fx_pnl_source_evidence=evidence)]
     )[0]
     if local is None:
         assert row.realized_total_pnl_local is None
@@ -264,33 +267,26 @@ async def test_mixed_total_retains_missing_evidence_instead_of_summing_unknown_a
         )
 
 
-@pytest.mark.parametrize(
-    "raw", [None, [], "not-source", {"transaction_id": "incomplete"}]
-)
+@pytest.mark.parametrize("raw", [None, [], "not-source", {"transaction_id": "incomplete"}])
 @pytest.mark.asyncio
 async def test_unusable_original_payload_never_becomes_zero(raw):
     _, _, ledger = fx_source_fixture(Decimal("0"), Decimal("0"))
     assert (await qualify(raw, ledger)).reason == "FX_SOURCE_AUTHORITY_UNAVAILABLE"
 
 
-@pytest.mark.parametrize(
-    "field", ["algorithm_id", "algorithm_version", "intermediate_precision"]
-)
+@pytest.mark.parametrize("field", ["algorithm_id", "algorithm_version", "intermediate_precision"])
 @pytest.mark.asyncio
 async def test_internally_valid_receipt_with_foreign_algorithm_policy_is_refused(field):
     raw, _, ledger = fx_source_fixture(Decimal("12"), Decimal("12"))
     receipt = ledger.calculation_lineage
     values = {
-        key: receipt[key]
-        for key in ("algorithm_id", "algorithm_version", "intermediate_precision")
+        key: receipt[key] for key in ("algorithm_id", "algorithm_version", "intermediate_precision")
     }
     values[field] = "foreign-algorithm" if field == "algorithm_id" else 2
     ledger.calculation_lineage = build_calculation_lineage(
         **values,
         input_payload={"synthetic": "foreign-policy"},
-        output_payload=retained_fx_output_payload(
-            transaction_receipt_output(ledger, TENANT.value)
-        ),
+        output_payload=retained_fx_output_payload(transaction_receipt_output(ledger, TENANT.value)),
         numeric_output_policy=TRANSACTION_COST_LEDGER_OUTPUT_V1.lineage_identity(),
     ).lineage_payload()
     assert (await qualify(raw, ledger)).reason == "FX_SOURCE_AUTHORITY_UNAVAILABLE"
@@ -309,15 +305,11 @@ async def test_internally_valid_receipt_with_foreign_algorithm_policy_is_refused
     ],
 )
 @pytest.mark.asyncio
-async def test_internally_valid_output_bound_receipt_requires_complete_numeric_policy(
-    field, value
-):
+async def test_internally_valid_output_bound_receipt_requires_complete_numeric_policy(field, value):
     raw, _, ledger = fx_source_fixture(Decimal("12"), Decimal("-12"))
     policy = TRANSACTION_COST_LEDGER_OUTPUT_V1.lineage_identity()
     wrong_policy = None if field is None else replace(policy, **{field: value})
-    output = retained_fx_output_payload(
-        transaction_receipt_output(ledger, TENANT.value)
-    )
+    output = retained_fx_output_payload(transaction_receipt_output(ledger, TENANT.value))
     ledger.calculation_lineage = build_calculation_lineage(
         algorithm_id="foreign-exchange-baseline-processing",
         algorithm_version=1,
@@ -327,9 +319,7 @@ async def test_internally_valid_output_bound_receipt_requires_complete_numeric_p
         numeric_output_policy=wrong_policy,
     ).lineage_payload()
     decoded = calculation_lineage_from_payload(ledger.calculation_lineage)
-    assert decoded is not None and calculation_lineage_binds_output(
-        decoded, output_payload=output
-    )
+    assert decoded is not None and calculation_lineage_binds_output(decoded, output_payload=output)
     evidence = await qualify(raw, ledger)
     assert (evidence.local, evidence.base, evidence.reason) == (
         None,
@@ -341,9 +331,7 @@ async def test_internally_valid_output_bound_receipt_requires_complete_numeric_p
 @pytest.mark.parametrize("failure", [TypeError, ValueError, ArithmeticError])
 @pytest.mark.parametrize("version", [1, 2])
 @pytest.mark.asyncio
-async def test_verification_exception_cannot_promote_source_amount(
-    monkeypatch, failure, version
-):
+async def test_verification_exception_cannot_promote_source_amount(monkeypatch, failure, version):
     from portfolio_common.infrastructure import transaction_source_evidence as evidence
 
     raw, _, ledger = fx_source_fixture(Decimal("12"), Decimal("-12"))
@@ -423,11 +411,7 @@ async def test_known_base_zero_survives_missing_local_in_page_totals():
     raw, _, ledger = fx_source_fixture(None, Decimal("0"))
     evidence = await qualify(raw, ledger)
     row = build_performance_component_economics_rows(
-        [
-            _booked_transaction_economics(
-                ledger, costs=(), fx_pnl_source_evidence=evidence
-            )
-        ]
+        [_booked_transaction_economics(ledger, costs=(), fx_pnl_source_evidence=evidence)]
     )[0]
     totals = {
         item.component_family: item
@@ -450,9 +434,7 @@ async def test_raw_amount_disagreement_with_receipted_output_refuses_shared_auth
         intermediate_precision=TRANSACTION_COST_LEDGER_OUTPUT_V1.working_precision,
         numeric_output_policy=TRANSACTION_COST_LEDGER_OUTPUT_V1.lineage_identity(),
         input_payload={"synthetic": "v1-output-only-unit-control"},
-        output_payload=retained_fx_output_payload(
-            transaction_receipt_output(ledger, TENANT.value)
-        ),
+        output_payload=retained_fx_output_payload(transaction_receipt_output(ledger, TENANT.value)),
     ).lineage_payload()
     raw["realized_fx_pnl_base"] = "-12"
     ledger.payload_fingerprint = transaction_payload_fingerprint(raw)
@@ -495,9 +477,7 @@ async def test_v2_rejects_changed_original_input_even_with_rewritten_raw_fingerp
     "mode,component",
     [("NONE", "FX_CONTRACT_CLOSE"), ("UPSTREAM_PROVIDED", "FX_CONTRACT_OPEN")],
 )
-def test_non_realizing_fx_projects_explicit_zero_without_upstream_authority(
-    mode, component
-):
+def test_non_realizing_fx_projects_explicit_zero_without_upstream_authority(mode, component):
     _, _, ledger = fx_source_fixture(Decimal("12"), Decimal("-12"))
     booked = replace(
         _booked_transaction_economics(ledger, costs=()),

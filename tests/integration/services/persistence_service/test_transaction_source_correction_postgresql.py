@@ -108,9 +108,7 @@ def source_migration_schema(db_engine, clean_db, source_owned_pg_runtime):
     from tests import conftest as native_harness
 
     # An arbitrary external bootstrap is not a governed destructive-DDL capability.
-    assert source_owned_pg_runtime is None, (
-        "Migration proof requires native owned DB authority"
-    )
+    assert source_owned_pg_runtime is None, "Migration proof requires native owned DB authority"
     authorization = authorize_database_cleanup(
         runtime=native_harness._test_runtime, engine=db_engine
     )
@@ -118,32 +116,22 @@ def source_migration_schema(db_engine, clean_db, source_owned_pg_runtime):
     marker = "core1176-c177-owned:" + uuid4().hex
     require_database_cleanup_authorization(authorization, engine=db_engine)
     with db_engine.begin() as connection:
-        assert (
-            connection.scalar(text("SELECT current_database()"))
-            == authorization.target.database
-        )
-        assert (
-            connection.scalar(text("SELECT session_user"))
-            == authorization.target.username
-        )
+        assert connection.scalar(text("SELECT current_database()")) == authorization.target.database
+        assert connection.scalar(text("SELECT session_user")) == authorization.target.username
         connection.execute(text(f'CREATE SCHEMA "{schema}" AUTHORIZATION CURRENT_USER'))
         connection.execute(text(f"COMMENT ON SCHEMA \"{schema}\" IS '{marker}'"))
         # Clone parent columns/checks, not c177 SQL or shared data. All inserted values
         # are explicit, so no copied defaults/sequences can write into public.
         for table in _MIGRATION_PARENT_TABLES:
             connection.execute(
-                text(
-                    f'CREATE TABLE "{schema}".{table} (LIKE public.{table} INCLUDING CONSTRAINTS)'
-                )
+                text(f'CREATE TABLE "{schema}".{table} (LIKE public.{table} INCLUDING CONSTRAINTS)')
             )
         for table, columns in (
             ("portfolios", "tenant_id, portfolio_id"),
             ("outbox_events", "id"),
             ("ingestion_jobs", "tenant_id, job_id"),
         ):
-            connection.execute(
-                text(f'ALTER TABLE "{schema}".{table} ADD UNIQUE ({columns})')
-            )
+            connection.execute(text(f'ALTER TABLE "{schema}".{table} ADD UNIQUE ({columns})'))
     owned = db_engine, authorization, schema, marker
     try:
         yield owned
@@ -180,15 +168,11 @@ def _source_migration_connection(owned):
 
 def _source_migration(connection):
     path = Path(__file__).resolve().parents[4] / "alembic/versions"
-    module = runpy.run_path(
-        str(path / "c177b2c3d538_add_transaction_source_evidence_revisions.py")
-    )
+    module = runpy.run_path(str(path / "c177b2c3d538_add_transaction_source_evidence_revisions.py"))
     assert module["revision"] == "c177b2c3d538"
     assert module["down_revision"] == "c176b2c3d537"
     # Real Alembic operations, real connection, actual migration implementation.
-    module["upgrade"].__globals__["op"] = Operations(
-        MigrationContext.configure(connection)
-    )
+    module["upgrade"].__globals__["op"] = Operations(MigrationContext.configure(connection))
     return module
 
 
@@ -220,9 +204,7 @@ def _source_migration_shape(connection, schema):
 
 
 def _assert_source_migration_installed(connection, schema, module):
-    columns, constraints, indexes, triggers, functions = _source_migration_shape(
-        connection, schema
-    )
+    columns, constraints, indexes, triggers, functions = _source_migration_shape(connection, schema)
     assert {row[1] for row in columns if row[0] == "transaction_source_revisions"} == {
         column.name for column in TransactionSourceRevision.__table__.columns
     }
@@ -246,8 +228,7 @@ def _assert_source_migration_installed(connection, schema, module):
     assert {
         (row[1], row[2], row[3])
         for row in columns
-        if row[0] == "transaction_source_revisions"
-        and row[1] in {"source_local", "source_base"}
+        if row[0] == "transaction_source_revisions" and row[1] in {"source_local", "source_base"}
     } == {
         ("source_local", "numeric(18,10)", True),
         ("source_base", "numeric(18,10)", True),
@@ -260,9 +241,7 @@ def _assert_source_migration_installed(connection, schema, module):
             for row in constraints
         )
     assert any(row[1] == "uq_transaction_source_revision_owner" for row in constraints)
-    assert any(
-        row[1] == "uq_source_revision_initial" and "WHERE" in row[2] for row in indexes
-    )
+    assert any(row[1] == "uq_source_revision_initial" and "WHERE" in row[2] for row in indexes)
     assert len(triggers) == 1
     assert triggers[0][:4] == (
         "transaction_source_revisions",
@@ -271,10 +250,7 @@ def _assert_source_migration_installed(connection, schema, module):
         "O",
     )
     assert "reject_transaction_source_revision_mutation" in triggers[0][4]
-    assert (
-        len(functions) == 1
-        and functions[0][0] == "reject_transaction_source_revision_mutation"
-    )
+    assert len(functions) == 1 and functions[0][0] == "reject_transaction_source_revision_mutation"
     return columns, constraints, indexes, triggers, functions
 
 
@@ -294,9 +270,7 @@ async def test_actual_c177_empty_upgrade_downgrade_upgrade(source_migration_sche
         assert _source_migration_shape(connection, schema) == parent
         module = _source_migration(connection)
         module["upgrade"]()
-        assert (
-            _assert_source_migration_installed(connection, schema, module) == installed
-        )
+        assert _assert_source_migration_installed(connection, schema, module) == installed
     with _source_migration_connection(source_migration_schema) as connection:
         assert _source_migration_shape(connection, schema) == installed
 
@@ -336,7 +310,7 @@ async def test_actual_c177_populated_downgrade_refusal_preserves_authority(
     with pytest.raises(DBAPIError) as refusal:
         with _source_migration_connection(source_migration_schema) as connection:
             _source_migration(connection)["downgrade"]()
-    assert refusal.value.orig.sqlstate == "55000"
+    assert refusal.value.orig.pgcode == "55000"
     assert "Durable source history blocks downgrade" in str(refusal.value.orig)
     with _source_migration_connection(source_migration_schema) as connection:
         assert _source_migration_shape(connection, schema) == before
@@ -348,9 +322,7 @@ def _source_migration_rows(connection):
     return tuple(
         tuple(
             connection.scalars(
-                text(
-                    f"SELECT to_jsonb(row) FROM {table} row ORDER BY to_jsonb(row)::text"
-                )
+                text(f"SELECT to_jsonb(row) FROM {table} row ORDER BY to_jsonb(row)::text")
             )
         )
         for table in (*_MIGRATION_PARENT_TABLES, "transaction_source_revisions")
@@ -372,12 +344,10 @@ async def test_actual_c177_upgrade_failure_rolls_back_ddl(source_migration_schem
     with pytest.raises(DBAPIError) as failure:
         with _source_migration_connection(source_migration_schema) as connection:
             _source_migration(connection)["upgrade"]()
-    assert failure.value.orig.sqlstate == "42723"
+    assert failure.value.orig.pgcode == "42723"
     with _source_migration_connection(source_migration_schema) as connection:
         assert _source_migration_shape(connection, schema) == before
-        connection.execute(
-            text("DROP FUNCTION reject_transaction_source_revision_mutation()")
-        )
+        connection.execute(text("DROP FUNCTION reject_transaction_source_revision_mutation()"))
         module = _source_migration(connection)
         module["upgrade"]()
         _assert_source_migration_installed(connection, schema, module)
@@ -389,9 +359,7 @@ def source_owned_pg_runtime():
     if not bootstrap_path:
         yield None
         return
-    spec = importlib.util.spec_from_file_location(
-        "source_owned_pg_bootstrap", bootstrap_path
-    )
+    spec = importlib.util.spec_from_file_location("source_owned_pg_bootstrap", bootstrap_path)
     assert spec is not None and spec.loader is not None
     bootstrap = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(bootstrap)
@@ -515,9 +483,7 @@ async def source_confirmation_db(clean_db, async_db_session, monkeypatch):
     monkeypatch.setattr(ingress, "get_kafka_producer", lambda: broker)
     transport = httpx.ASGITransport(app=ingress.app)
     async with ingress.app.router.lifespan_context(ingress.app):
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             yield client, factory
 
 
@@ -538,9 +504,7 @@ async def _seed(
     async with factory() as db, db.begin():
         if (
             await db.scalar(
-                select(Portfolio.id).where(
-                    Portfolio.portfolio_id == ledger.portfolio_id
-                )
+                select(Portfolio.id).where(Portfolio.portfolio_id == ledger.portfolio_id)
             )
             is None
         ):
@@ -631,12 +595,8 @@ async def test_actual_pg_source_confirmation_qcp_ledger_cut(
 ):
     client, factory = source_confirmation_db
     producer = _original_v1_producer() if producer_version == 1 else None
-    first = await _seed(
-        factory, companion, transaction_id="SOURCE-A", producer=producer
-    )
-    outside = await _seed(
-        factory, companion, transaction_id="SOURCE-Z", producer=producer
-    )
+    first = await _seed(factory, companion, transaction_id="SOURCE-A", producer=producer)
+    outside = await _seed(factory, companion, transaction_id="SOURCE-Z", producer=producer)
     immutable = await _original_snapshot(factory, outside)
     before = await _read_qcp(factory)
     assert [row.transaction_id for row in before.rows] == [first[2]]
@@ -651,9 +611,7 @@ async def test_actual_pg_source_confirmation_qcp_ledger_cut(
     assert original.transaction.realized_fx_pnl_local is None
     assert original.transaction.realized_fx_pnl_base == companion
 
-    command, _ = await _submit(
-        client, factory, outside, key="consumer-cut-confirmation"
-    )
+    command, _ = await _submit(client, factory, outside, key="consumer-cut-confirmation")
     revision = await _execute(factory, command)
     # The changed immutable source lies OUTSIDE the returned page; no financial row changed.
     assert await _original_snapshot(factory, outside) == immutable
@@ -672,14 +630,9 @@ async def test_actual_pg_source_confirmation_qcp_ledger_cut(
         confirmed.realized_total_pnl_local
         == confirmed.realized_capital_pnl_local + confirmed.realized_fx_pnl_local
     )
-    assert (
-        confirmed.realized_total_pnl_base
-        == confirmed.realized_capital_pnl_base + companion
-    )
+    assert confirmed.realized_total_pnl_base == confirmed.realized_capital_pnl_base + companion
     assert confirmed.transaction_date == date(2026, 4, 1)
-    assert confirmed.transaction_source_evidence.confirmed_at > datetime(
-        2026, 4, 1, tzinfo=UTC
-    )
+    assert confirmed.transaction_source_evidence.confirmed_at > datetime(2026, 4, 1, tzinfo=UTC)
 
     current = await _read_ledger(factory, outside[2])
     explicit = await _read_ledger(
@@ -690,18 +643,15 @@ async def test_actual_pg_source_confirmation_qcp_ledger_cut(
         proof = record.transaction.transaction_source_evidence
         assert proof.consumer == "core-ledger" and proof.status == "CONFIRMED"
         assert proof.revision_id == confirmed.transaction_source_evidence.revision_id
-        assert (
-            proof.revision_sha256
-            == confirmed.transaction_source_evidence.revision_sha256
-        )
+        assert proof.revision_sha256 == confirmed.transaction_source_evidence.revision_sha256
         assert record.transaction.realized_fx_pnl_local == 0
         assert record.transaction.realized_fx_pnl_base == companion
         assert record.source_cut_sha256 is not None
     # Serving time is intentionally regenerated; ALL source/financial/proof fields stay identical.
     assert unchanged_original.generated_at >= original.generated_at
-    assert unchanged_original.model_dump(
+    assert unchanged_original.model_dump(exclude={"generated_at"}) == original.model_dump(
         exclude={"generated_at"}
-    ) == original.model_dump(exclude={"generated_at"})
+    )
     for target, selected, tenant in (
         (first[2], revision.revision_id, "tenant-test"),
         (outside[2], "not-a-retained-revision", "tenant-test"),
@@ -718,9 +668,7 @@ async def test_actual_pg_source_confirmation_qcp_ledger_cut(
     async with factory() as db:
         await db.scalar(select(func.count()).select_from(Transaction))
         with pytest.raises(RuntimeError, match="snapshot"):
-            await SqlAlchemyTransactionEconomicsReader(
-                db
-            ).establish_performance_read_snapshot()
+            await SqlAlchemyTransactionEconomicsReader(db).establish_performance_read_snapshot()
     async with factory() as db, db.begin():
         raw = await db.get(OutboxEvent, int(outside[0]))
         raw.payload = raw.payload | {"realized_fx_pnl_local": "99"}
@@ -739,9 +687,7 @@ async def test_actual_pg_source_confirmation_qcp_ledger_cut(
         )
 
 
-async def _submit(
-    client, factory, identity, *, key="source-proof-key", confirmation=None
-):
+async def _submit(client, factory, identity, *, key="source-proof-key", confirmation=None):
     raw_id, raw_hash, target = identity
     response = await client.post(
         f"/ingest/transactions/{target}/source-evidence",
@@ -755,10 +701,7 @@ async def _submit(
     )
     assert response.status_code == 202, response.text
     body = response.json()
-    assert (
-        body["status"] == "QUEUED"
-        and response.headers["Location"] == body["status_url"]
-    )
+    assert body["status"] == "QUEUED" and response.headers["Location"] == body["status_url"]
     assert body["idempotency"]["key"] != key
     async with factory() as db:
         job = await db.scalar(
@@ -771,9 +714,7 @@ async def _submit(
                 OutboxEvent.event_type == "TransactionSourceCorrectionRequested",
             )
         )
-        return TransactionSourceCorrectionRequestedEvent.model_validate(
-            intent.payload
-        ), body
+        return TransactionSourceCorrectionRequestedEvent.model_validate(intent.payload), body
 
 
 async def _execute(factory, command):
@@ -789,9 +730,7 @@ async def _original_snapshot(factory, identity):
         transaction = (
             (
                 await db.execute(
-                    select(Transaction.__table__).where(
-                        Transaction.transaction_id == identity[2]
-                    )
+                    select(Transaction.__table__).where(Transaction.transaction_id == identity[2])
                 )
             )
             .mappings()
@@ -800,9 +739,7 @@ async def _original_snapshot(factory, identity):
         raw = (
             (
                 await db.execute(
-                    select(OutboxEvent.__table__).where(
-                        OutboxEvent.id == int(identity[0])
-                    )
+                    select(OutboxEvent.__table__).where(OutboxEvent.id == int(identity[0]))
                 )
             )
             .mappings()
@@ -838,9 +775,7 @@ class _CapturedIntentMessage:
         self.command = command
 
     def value(self):
-        return json.dumps(
-            self.command.model_dump(mode="json", exclude_unset=True)
-        ).encode()
+        return json.dumps(self.command.model_dump(mode="json", exclude_unset=True)).encode()
 
     def key(self):
         return self.command.authorization.claims.target_transaction_id.encode()
@@ -871,10 +806,7 @@ async def test_native_consumer_idempotency_uow_has_one_effect(source_confirmatio
     await consumer.process_message(message)
     await consumer.process_message(message)
     async with factory() as db:
-        assert (
-            await db.scalar(select(func.count()).select_from(TransactionSourceRevision))
-            == 1
-        )
+        assert await db.scalar(select(func.count()).select_from(TransactionSourceRevision)) == 1
         assert (
             await db.scalar(
                 select(func.count())
@@ -900,20 +832,14 @@ async def test_expired_committed_retry_requalifies_actual_retained_pg_cut(
                 raw.payload = dict(raw.payload) | {"realized_fx_pnl_base": "999"}
             elif fault == "output":
                 transaction = await db.scalar(
-                    select(Transaction).where(
-                        Transaction.transaction_id == original.transaction_id
-                    )
+                    select(Transaction).where(Transaction.transaction_id == original.transaction_id)
                 )
                 transaction.realized_total_pnl_base = Decimal("999")
             else:
                 transaction = await db.scalar(
-                    select(Transaction).where(
-                        Transaction.transaction_id == original.transaction_id
-                    )
+                    select(Transaction).where(Transaction.transaction_id == original.transaction_id)
                 )
-                transaction.calculation_lineage = dict(
-                    transaction.calculation_lineage
-                ) | {
+                transaction.calculation_lineage = dict(transaction.calculation_lineage) | {
                     "output_content_hash": "0" * 64,
                 }
     future = datetime.fromtimestamp(command.authorization.claims.expires_at + 100, UTC)
@@ -930,10 +856,7 @@ async def test_expired_committed_retry_requalifies_actual_retained_pg_cut(
             with pytest.raises(SourceCorrectionRejected, match="FACT_UNVERIFIED"):
                 await application.execute(command)
     async with factory() as db:
-        assert (
-            await db.scalar(select(func.count()).select_from(TransactionSourceRevision))
-            == 1
-        )
+        assert await db.scalar(select(func.count()).select_from(TransactionSourceRevision)) == 1
         assert (
             await db.scalar(
                 select(func.count())
@@ -964,9 +887,7 @@ async def test_actual_pg_currency_basis_confirmation_matrix(
     command, _ = await _submit(client, factory, identity, confirmation=confirmation)
     if accepted:
         revision = await _execute(factory, command)
-        assert revision.source_local == (
-            companion if missing_basis == "base" else Decimal("0")
-        )
+        assert revision.source_local == (companion if missing_basis == "base" else Decimal("0"))
         assert revision.source_base == 0
         assert revision.original_local_present is (missing_basis == "base")
         assert revision.original_base_present is False
@@ -975,9 +896,9 @@ async def test_actual_pg_currency_basis_confirmation_matrix(
             await _execute(factory, command)
     assert await _original_snapshot(factory, identity) == before
     async with factory() as db:
-        assert await db.scalar(
-            select(func.count()).select_from(TransactionSourceRevision)
-        ) == int(accepted)
+        assert await db.scalar(select(func.count()).select_from(TransactionSourceRevision)) == int(
+            accepted
+        )
         assert await db.scalar(
             select(func.count())
             .select_from(OutboxEvent)
@@ -1014,9 +935,7 @@ async def test_http_intent_real_uow_independent_reload_and_exact_retry(
         original = dict(
             (
                 await db.execute(
-                    select(Transaction.__table__).where(
-                        Transaction.transaction_id == identity[2]
-                    )
+                    select(Transaction.__table__).where(Transaction.transaction_id == identity[2])
                 )
             )
             .mappings()
@@ -1027,10 +946,7 @@ async def test_http_intent_real_uow_independent_reload_and_exact_retry(
     retry = await _execute(factory, command)
     assert retry.revision_id == revision.revision_id
     async with factory() as db:
-        assert (
-            await db.scalar(select(func.count()).select_from(TransactionSourceRevision))
-            == 1
-        )
+        assert await db.scalar(select(func.count()).select_from(TransactionSourceRevision)) == 1
         assert (
             await db.scalar(
                 select(func.count())
@@ -1042,9 +958,7 @@ async def test_http_intent_real_uow_independent_reload_and_exact_retry(
         current = dict(
             (
                 await db.execute(
-                    select(Transaction.__table__).where(
-                        Transaction.transaction_id == identity[2]
-                    )
+                    select(Transaction.__table__).where(Transaction.transaction_id == identity[2])
                 )
             )
             .mappings()
@@ -1057,12 +971,8 @@ async def test_http_intent_real_uow_independent_reload_and_exact_retry(
     assert replay_ack == accepted
 
 
-@pytest.mark.parametrize(
-    "fault", ["failed", "wrong-entity", "wrong-tenant", "wrong-endpoint"]
-)
-async def test_mutable_operation_admission_refuses_without_revision(
-    source_confirmation_db, fault
-):
+@pytest.mark.parametrize("fault", ["failed", "wrong-entity", "wrong-tenant", "wrong-endpoint"])
+async def test_mutable_operation_admission_refuses_without_revision(source_confirmation_db, fault):
     client, factory = source_confirmation_db
     command, _ = await _submit(client, factory, await _seed(factory))
     changes = {
@@ -1077,15 +987,10 @@ async def test_mutable_operation_admission_refuses_without_revision(
             .where(IngestionJob.job_id == command.authorization.claims.operation_id)
             .values(**changes)
         )
-    with pytest.raises(
-        storage.SourceRevisionStorageRejected, match="OPERATION_UNAVAILABLE"
-    ):
+    with pytest.raises(storage.SourceRevisionStorageRejected, match="OPERATION_UNAVAILABLE"):
         await _execute(factory, command)
     async with factory() as db:
-        assert (
-            await db.scalar(select(func.count()).select_from(TransactionSourceRevision))
-            == 0
-        )
+        assert await db.scalar(select(func.count()).select_from(TransactionSourceRevision)) == 0
 
 
 async def test_operation_share_blocks_actual_nonkey_status_update(
@@ -1097,9 +1002,7 @@ async def test_operation_share_blocks_actual_nonkey_status_update(
     task = None
     try:
         async with factory() as holder, holder.begin():
-            await storage.TransactionSourceRevisionRepository(
-                holder
-            ).lock_admitted_operation(
+            await storage.TransactionSourceRevisionRepository(holder).lock_admitted_operation(
                 tenant_id="tenant-test",
                 operation_id=operation,
                 command_id=command.authorization.claims.command_id,
@@ -1119,9 +1022,7 @@ async def test_operation_share_blocks_actual_nonkey_status_update(
                 await _wait_for_lock(factory, task, pid)
                 await holder.commit()
                 await asyncio.wait_for(task, 8)
-        with pytest.raises(
-            storage.SourceRevisionStorageRejected, match="OPERATION_UNAVAILABLE"
-        ):
+        with pytest.raises(storage.SourceRevisionStorageRejected, match="OPERATION_UNAVAILABLE"):
             await _execute(factory, command)
     finally:
         await cancel_pending_tasks(task)
@@ -1179,10 +1080,7 @@ async def test_failure_after_revision_flush_rolls_back_revision_and_notification
     with pytest.raises(RuntimeError, match="synthetic-notification-failure"):
         await _execute(factory, command)
     async with factory() as db:
-        assert (
-            await db.scalar(select(func.count()).select_from(TransactionSourceRevision))
-            == 0
-        )
+        assert await db.scalar(select(func.count()).select_from(TransactionSourceRevision)) == 0
         assert (
             await db.scalar(
                 select(func.count())
@@ -1195,9 +1093,7 @@ async def test_failure_after_revision_flush_rolls_back_revision_and_notification
 
 
 @pytest.mark.parametrize("mutation", ["update", "delete"])
-async def test_migrated_revision_mutation_is_database_refused(
-    source_confirmation_db, mutation
-):
+async def test_migrated_revision_mutation_is_database_refused(source_confirmation_db, mutation):
     client, factory = source_confirmation_db
     command, _ = await _submit(client, factory, await _seed(factory))
     row = await _execute(factory, command)
@@ -1209,9 +1105,7 @@ async def test_migrated_revision_mutation_is_database_refused(
                 else delete(TransactionSourceRevision)
             )
             await db.execute(
-                statement.where(
-                    TransactionSourceRevision.revision_id == row.revision_id
-                )
+                statement.where(TransactionSourceRevision.revision_id == row.revision_id)
             )
         assert refusal.value.orig.sqlstate == "55000"
         await db.rollback()
@@ -1230,9 +1124,7 @@ async def test_concurrent_command_wait_rechecks_committed_or_cas(
     second = (
         first
         if same_command
-        else (
-            await _submit(client, factory, identity, key="second-concurrent-command")
-        )[0]
+        else (await _submit(client, factory, identity, key="second-concurrent-command"))[0]
     )
     task = None
     try:
@@ -1263,12 +1155,7 @@ async def test_concurrent_command_wait_rechecks_committed_or_cas(
                         await asyncio.wait_for(task, 8)
                     await contender.rollback()
         async with factory() as db:
-            assert (
-                await db.scalar(
-                    select(func.count()).select_from(TransactionSourceRevision)
-                )
-                == 1
-            )
+            assert await db.scalar(select(func.count()).select_from(TransactionSourceRevision)) == 1
             assert (
                 await db.scalar(
                     select(func.count())
@@ -1282,9 +1169,7 @@ async def test_concurrent_command_wait_rechecks_committed_or_cas(
 
 
 @pytest.mark.parametrize("change", [{"tenant_id": "foreign"}, {"status": "failed"}])
-async def test_operation_owner_wait_rechecks_actual_admission(
-    source_confirmation_db, change
-):
+async def test_operation_owner_wait_rechecks_actual_admission(source_confirmation_db, change):
     client, factory = source_confirmation_db
     command, _ = await _submit(client, factory, await _seed(factory))
     task = None
@@ -1311,12 +1196,7 @@ async def test_operation_owner_wait_rechecks_actual_admission(
                     await asyncio.wait_for(task, 8)
                 await contender.rollback()
         async with factory() as db:
-            assert (
-                await db.scalar(
-                    select(func.count()).select_from(TransactionSourceRevision)
-                )
-                == 0
-            )
+            assert await db.scalar(select(func.count()).select_from(TransactionSourceRevision)) == 0
     finally:
         await cancel_pending_tasks(task)
 
@@ -1331,9 +1211,7 @@ async def test_public_status_independent_committed_fact_and_refusal(
     client, factory = source_confirmation_db
     identity = await _seed(factory)
     command, accepted = await _submit(client, factory, identity)
-    response = await source_status_client.get(
-        accepted["status_url"], headers=_headers()
-    )
+    response = await source_status_client.get(accepted["status_url"], headers=_headers())
     assert response.status_code == 200 and response.json()["status"] == "QUEUED"
     row = await _execute(factory, command)
     if fault is not None:
@@ -1341,10 +1219,8 @@ async def test_public_status_independent_committed_fact_and_refusal(
             if fault == "intent":
                 intent = await db.scalar(
                     select(OutboxEvent).where(
-                        OutboxEvent.ingestion_job_id
-                        == command.authorization.claims.operation_id,
-                        OutboxEvent.event_type
-                        == "TransactionSourceCorrectionRequested",
+                        OutboxEvent.ingestion_job_id == command.authorization.claims.operation_id,
+                        OutboxEvent.event_type == "TransactionSourceCorrectionRequested",
                     )
                 )
                 payload = dict(intent.payload)
@@ -1363,10 +1239,8 @@ async def test_public_status_independent_committed_fact_and_refusal(
                 await db.execute(
                     update(OutboxEvent)
                     .where(
-                        OutboxEvent.ingestion_job_id
-                        == command.authorization.claims.operation_id,
-                        OutboxEvent.event_type
-                        == "TransactionSourceCorrectionRequested",
+                        OutboxEvent.ingestion_job_id == command.authorization.claims.operation_id,
+                        OutboxEvent.event_type == "TransactionSourceCorrectionRequested",
                     )
                     .values(topic="foreign.topic")
                 )
@@ -1378,14 +1252,10 @@ async def test_public_status_independent_committed_fact_and_refusal(
                 }[fault]
                 await db.execute(
                     update(IngestionJob)
-                    .where(
-                        IngestionJob.job_id == command.authorization.claims.operation_id
-                    )
+                    .where(IngestionJob.job_id == command.authorization.claims.operation_id)
                     .values(**changes)
                 )
-    response = await source_status_client.get(
-        accepted["status_url"], headers=_headers()
-    )
+    response = await source_status_client.get(accepted["status_url"], headers=_headers())
     assert response.status_code == 200
     body = response.json()
     if fault is None:
@@ -1407,19 +1277,15 @@ async def test_public_status_independent_committed_fact_and_refusal(
         assert unqualified.status_code == 403
         forged_headers = _headers()
         forged_headers["X-Tenant-Id"] = "foreign"
-        forged = await source_status_client.get(
-            accepted["status_url"], headers=forged_headers
-        )
+        forged = await source_status_client.get(accepted["status_url"], headers=forged_headers)
         assert forged.status_code == 403
         with monkeypatch.context() as invalid_configuration:
-            invalid_configuration.setenv(
-                "LOTUS_SOURCE_CORRECTION_PRODUCER_ENROLLMENTS", "{"
-            )
-            unavailable = await source_status_client.get(
-                accepted["status_url"], headers=_headers()
-            )
+            invalid_configuration.setenv("LOTUS_SOURCE_CORRECTION_PRODUCER_ENROLLMENTS", "{")
+            unavailable = await source_status_client.get(accepted["status_url"], headers=_headers())
             assert unavailable.status_code == 503
-            assert (
-                unavailable.json()["detail"]["code"]
-                == "SOURCE_COMMAND_OPERATION_UNAVAILABLE"
-            )
+            assert unavailable.json() == {
+                "code": "SOURCE_COMMAND_OPERATION_UNAVAILABLE",
+                "message": "Source-confirmation operation authority is unavailable.",
+                "correlation_id": "qualified-test-correlation",
+                "details": {},
+            }
