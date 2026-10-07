@@ -23,12 +23,23 @@ class DiagnosticCapture:
         stop_process: Callable[[Any], dict[str, Any]],
         budget_seconds: float,
         max_bytes: int,
+        request_event: Any,
+        cancel_event: Any,
+        ready_event: Any,
+        idle_seconds: float,
+        preparation_budget_seconds: float = 6.0,
     ) -> None:
         self.process, self.receiver, self.sender = process, receiver, sender
         self.public_scope, self.stop_process = public_scope, stop_process
         self.budget_seconds, self.max_bytes = budget_seconds, max_bytes
-        self.requested_at = datetime.now(UTC).isoformat()
-        self.started = time.monotonic()
+        self.request_event, self.cancel_event = request_event, cancel_event
+        self.idle_seconds = idle_seconds
+        self.preparation_started = time.monotonic()
+        self.requested_at: str | None = None
+        self.started: float | None = None
+        self.preparation_status = "preparing"
+        self.idle_started: float | None = None
+        self.preparation_seconds: float | None = None
         self.done = threading.Event()
         self.expired = threading.Event()
         self.cleanup_lock = threading.Lock()
@@ -36,24 +47,59 @@ class DiagnosticCapture:
         self.result: dict[str, Any] | None = None
         self.final_result: dict[str, Any] | None = None
         self.reader: threading.Thread | None = None
-        self.timer: threading.Timer | None = None
+        self.timer: threading.Thread | None = None
         # Reserve the existing two bounded cleanup joins within the six-second policy.
         self.cleanup_reserve = min(0.5, budget_seconds / 2)
         try:
             process.start()
             sender.close()
-            self.launch_seconds = round(time.monotonic() - self.started, 6)
-            remaining = max(0.0, budget_seconds - self.launch_seconds - self.cleanup_reserve)
-            self.timer = threading.Timer(remaining, self._expire)
-            self.timer.daemon = True
+            self.launch_seconds = time.monotonic() - self.preparation_started
+            remaining = max(0.0, preparation_budget_seconds - self.launch_seconds)
+            if (
+                not ready_event.wait(remaining)
+                or time.monotonic() - self.preparation_started >= preparation_budget_seconds
+            ):
+                self.preparation_status = "expired"
+                self._complete(self._unavailable("preparation_expired"))
+                return
+            self.preparation_status = "ready"
+            self.idle_started = time.monotonic()
+            self.timer = threading.Thread(target=self._supervise, daemon=True)
             self.reader = threading.Thread(target=self._receive, daemon=True)
             self.timer.start()
             self.reader.start()
+            self.preparation_seconds = time.monotonic() - self.preparation_started
         except Exception as exc:
-            self.launch_seconds = round(time.monotonic() - self.started, 6)
-            if self.timer is not None:
-                self.timer.cancel()
+            self.launch_seconds = time.monotonic() - self.preparation_started
+            self.preparation_status = "failed"
             self._complete(self._unavailable(type(exc).__name__))
+
+    def request(self) -> bool:
+        """Signal the pre-armed child once; never launch, wait, receive or join here."""
+        if (
+            self.started is not None
+            or self.done.is_set()
+            or self.cancel_event.is_set()
+            or self.idle_started is None
+            or time.monotonic() >= self.idle_started + self.idle_seconds
+        ):
+            return False
+        self.started = time.monotonic()
+        self.requested_at = datetime.now(UTC).isoformat()
+        self.request_event.set()
+        return True
+
+    def _supervise(self) -> None:
+        if not self.request_event.wait(self.idle_seconds):
+            self._expire()
+            return
+        if self.started is None:
+            return
+        remaining = max(
+            0.0, self.budget_seconds - self.cleanup_reserve - (time.monotonic() - self.started)
+        )
+        if not self.done.wait(remaining):
+            self._expire()
 
     def _unavailable(self, reason: str) -> dict[str, Any]:
         return {"status": "unavailable", "reason": reason, "scope": self.public_scope}
@@ -77,11 +123,19 @@ class DiagnosticCapture:
 
     def _expire(self) -> None:
         self.expired.set()
+        self.cancel_event.set()
+        self.request_event.set()
         # Killing the sole sender also releases a receiver blocked on a partial pipe frame.
         self._stop()
 
     def _receive(self) -> None:
         try:
+            if not self.request_event.wait(self.idle_seconds):
+                self.expired.set()
+            if self.started is None or self.cancel_event.is_set():
+                status = "idle_expired" if self.expired.is_set() else "unused"
+                self._complete({"status": status, "scope": self.public_scope})
+                return
             remaining = max(0.0, self.budget_seconds - (time.monotonic() - self.started))
             if self.receiver.poll(remaining):
                 decoded = json.loads(self.receiver.recv_bytes(self.max_bytes))
@@ -97,32 +151,54 @@ class DiagnosticCapture:
             result = {"status": "budget_exhausted", "scope": self.public_scope}
         self._complete(result)
 
-    def _complete(self, result: dict[str, Any]) -> None:
-        if self.timer is not None:
-            self.timer.cancel()
-        cleanup = self._stop()
+    def _close_pipes(self, cleanup: dict[str, Any]) -> None:
+        """Retire both parent handles without hiding the child-cleanup receipt."""
         for pipe in (self.sender, self.receiver):
             try:
                 pipe.close()
             except Exception as exc:
                 cleanup.setdefault("errors", []).append(type(exc).__name__)
+
+    def _capture_timing(self, result: dict[str, Any]) -> dict[str, Any]:
+        """Keep preparation, idle and requested collection costs distinct."""
+        if self.preparation_seconds is None:
+            self.preparation_seconds = time.monotonic() - self.preparation_started
         timing = {
             "requested_at": self.requested_at,
             "child_observed_at": result.get("observed_at"),
             "custody_completed_at": datetime.now(UTC).isoformat(),
-            "launch_seconds": self.launch_seconds,
-            "child_custody_seconds": round(time.monotonic() - self.started, 6),
+            "launch_seconds": round(self.launch_seconds, 6),
+            "preparation_seconds": round(self.preparation_seconds, 6),
+            "preparation_status": self.preparation_status,
+            "preparation_claim": "native_start_unbounded_outside_profile_clocks",
+            "idle_seconds": None
+            if self.idle_started is None
+            else round((self.started or time.monotonic()) - self.idle_started, 6),
+            "idle_budget_seconds": self.idle_seconds,
+            "child_custody_seconds": None
+            if self.started is None
+            else round(time.monotonic() - self.started, 6),
             "budget_seconds": self.budget_seconds,
             "claim": "requested_boundary_not_exact_capture_time_or_zero_overhead",
         }
         timing["request_to_child_observation_seconds"] = None
         try:
             observed = datetime.fromisoformat(result["observed_at"])
-            delay = (observed - datetime.fromisoformat(self.requested_at)).total_seconds()
+            delay = (observed - datetime.fromisoformat(self.requested_at or "")).total_seconds()
             if delay >= 0:
                 timing["request_to_child_observation_seconds"] = delay
         except (KeyError, TypeError, ValueError):
             pass  # Missing/invalid wall-clock capture timing is not measured zero.
+        return timing
+
+    def _complete(self, result: dict[str, Any]) -> None:
+        self.cancel_event.set()
+        # Wake idle workers even if another worker failed to start. Cancellation must
+        # precede the wake-up, so a late child cannot interpret it as probe authority.
+        self.request_event.set()
+        cleanup = self._stop()
+        self._close_pipes(cleanup)
+        timing = self._capture_timing(result)
         result.update(child_cleanup=cleanup, capture_timing=timing)
         if len(json.dumps(result, default=str).encode()) > self.max_bytes - 128:
             result = {
@@ -148,7 +224,14 @@ class DiagnosticCapture:
         """Join only owned finite custody before teardown; cache the original snapshot."""
         if self.final_result is not None:
             return self.final_result
-        remaining = max(0.0, self.budget_seconds - (time.monotonic() - self.started))
+        if self.started is None and not self.done.is_set():
+            self.cancel_event.set()
+            self.request_event.set()
+        remaining = (
+            0.0
+            if self.started is None
+            else max(0.0, self.budget_seconds - (time.monotonic() - self.started))
+        )
         self.done.wait(remaining + self.cleanup_reserve)
         if not self.done.is_set():
             self._expire()

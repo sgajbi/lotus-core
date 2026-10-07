@@ -839,7 +839,15 @@ The first qualified same-birth, unmet-target poll at or beyond the profile SLO r
 active snapshot; missing/reset continuity cannot launch it. Later completion/timeout cannot
 replace it, and an unavailable attempt is not retried. A finite owned receiver plus deadline
 timer drains pipe backpressure and stops the child without waiting for report finalization;
-cleanup time is reserved within the original six-second budget. Owned threads/child/pipe custody
+cleanup time is reserved within the original six-second request/collection budget. The child
+is pre-armed idle before any profile workload or measured clock; the pending callback only
+records the boundary and signals an existing Event, never starts a process or waits for receipt.
+Preparation readiness has a separate allowance, and native `Process.start()` has no hard
+preparation-latency guarantee. Idle custody has a separate finite allowance derived from existing
+batch/sleep/drain limits; it does not extend those limits. Expired, failed or unused preparations
+cannot probe and are retired without manufacturing an active-boundary record. Actual setup,
+idle, request and collection timing remain separate; absent request/child timing is null.
+Owned threads/child/pipe custody
 is finalized before teardown, with failures explicit rather than masking the enforcing verdict.
 Request lateness, launch/custody overhead and available child observation delay are diagnostic
 metadata, not an exact boundary timestamp or zero-overhead claim. When no active attempt exists,

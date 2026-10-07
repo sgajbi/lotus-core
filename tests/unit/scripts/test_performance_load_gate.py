@@ -994,6 +994,7 @@ def test_main_active_boundary_preserves_completed_breach_or_timeout_verdict(
     )
     diagnostic = {"status": "observed", "probes": {"active": "earlier_snapshot"}}
     child = MagicMock()
+    child.preparation_status = "ready"
     child.finish.return_value = diagnostic
     start = MagicMock(return_value=child)
     timeout_collector = MagicMock()
@@ -1024,8 +1025,43 @@ def test_main_active_boundary_preserves_completed_breach_or_timeout_verdict(
     assert completion["slo_boundary_capture"]["observation"]["count"] == 200
     assert retained["completion_evidence"]["status"] == "completed"
     start.assert_called_once()
+    child.request.assert_called_once()
     child.finish.assert_called_once()
     timeout_collector.assert_not_called()
+
+
+def test_main_prearms_before_first_workload_and_retires_unused_without_boundary(
+    load_boundary, monkeypatch
+):
+    args, _, tmp_path = load_boundary
+    events = []
+    capture = MagicMock()
+    capture.preparation_status = "ready"
+    capture.finish.return_value = {"status": "unused", "capture_timing": {"requested_at": None}}
+
+    def prepare(**kwargs):
+        events.append("prepare")
+        assert kwargs["idle_seconds"] > 4 * args.drain_timeout_seconds
+        return capture
+
+    monkeypatch.setattr(performance_load_gate, "start_load_completion_diagnostics", prepare)
+    original_ingest = performance_load_gate._ingest_transactions
+
+    def ingest(**kwargs):
+        events.append("workload")
+        assert events[0] == "prepare"
+        return original_ingest(**kwargs)
+
+    monkeypatch.setattr(performance_load_gate, "_ingest_transactions", ingest)
+    monkeypatch.setattr(
+        performance_load_gate, "_wait_for_transaction_processing", lambda **kwargs: 1
+    )
+    assert performance_load_gate.main(args) == 0
+    completion = _retained_report(tmp_path)["completion_evidence"]
+    assert completion["replay_diagnostic_preparation"]["status"] == "unused"
+    assert "slo_boundary_capture" not in completion["replay_completion"]
+    capture.request.assert_not_called()
+    capture.finish.assert_called_once()
 
 
 @pytest.mark.parametrize("collector_error", [PermissionError, TimeoutError])

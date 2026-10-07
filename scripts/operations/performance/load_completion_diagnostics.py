@@ -93,14 +93,20 @@ def _statement_structure(query: Any) -> dict[str, Any]:
 
 
 def _new_diagnostic_child(
-    database_url: str, metrics_url: str, kafka_bootstrap_servers: str, scope: dict[str, Any]
+    database_url: str,
+    metrics_url: str,
+    kafka_bootstrap_servers: str,
+    scope: dict[str, Any],
+    *,
+    idle_controls: tuple[Any, Any, Any, float] | None = None,
 ) -> tuple[Any, Any, Any]:
     context = multiprocessing.get_context("spawn")
     receiver, sender = context.Pipe(duplex=False)
     try:
         process = context.Process(
-            target=_diagnostic_worker,
-            args=(sender, database_url, metrics_url, kafka_bootstrap_servers, scope),
+            target=_diagnostic_worker if idle_controls is None else _idle_diagnostic_worker,
+            args=(sender, database_url, metrics_url, kafka_bootstrap_servers, scope)
+            + (idle_controls or ()),
             daemon=True,
         )
     except Exception:
@@ -120,12 +126,19 @@ def start_load_completion_diagnostics(
     kafka_bootstrap_servers: str,
     scope: dict[str, Any],
     isolated_runtime: bool,
+    idle_seconds: float,
 ) -> DiagnosticCapture | None:
-    """Request the existing probes once without waiting inside completion polling."""
+    """Pre-arm outside replay clocks; native process startup has no hard latency bound."""
     if not isolated_runtime:
         return None
+    context = multiprocessing.get_context("spawn")
+    request_event, cancel_event, ready_event = (context.Event() for _ in range(3))
     process, receiver, sender = _new_diagnostic_child(
-        database_url, metrics_url, kafka_bootstrap_servers, scope
+        database_url,
+        metrics_url,
+        kafka_bootstrap_servers,
+        scope,
+        idle_controls=(request_event, cancel_event, ready_event, idle_seconds),
     )
     return DiagnosticCapture(
         process=process,
@@ -139,6 +152,10 @@ def start_load_completion_diagnostics(
         stop_process=_stop_diagnostic_process,
         budget_seconds=DIAGNOSTIC_BUDGET_SECONDS,
         max_bytes=DIAGNOSTIC_MAX_BYTES,
+        request_event=request_event,
+        cancel_event=cancel_event,
+        ready_event=ready_event,
+        idle_seconds=idle_seconds,
     )
 
 
@@ -208,12 +225,35 @@ def _stop_diagnostic_process(process: Any) -> dict[str, Any]:
     return {"status": "unconfirmed", "errors": errors}
 
 
+def _idle_diagnostic_worker(
+    sender: Any,
+    database_url: str,
+    metrics_url: str,
+    kafka_bootstrap_servers: str,
+    scope: dict[str, Any],
+    request_event: Any,
+    cancel_event: Any,
+    ready_event: Any,
+    idle_seconds: float,
+) -> None:
+    """No probes until a one-shot request; expired/unused preparations cannot probe."""
+    try:
+        ready_event.set()
+        if request_event.wait(idle_seconds) and not cancel_event.is_set():
+            _diagnostic_worker(
+                sender, database_url, metrics_url, kafka_bootstrap_servers, scope, cancel_event
+            )
+    finally:
+        sender.close()
+
+
 def _diagnostic_worker(
     sender: Any,
     database_url: str,
     metrics_url: str,
     kafka_bootstrap_servers: str,
     scope: dict[str, Any],
+    cancel_event: Any = None,
 ) -> None:
     """No writes/group join/business scans; export only whitelisted SQL structure."""
     public_scope = {
@@ -235,7 +275,7 @@ def _diagnostic_worker(
         ("processing_phases", lambda: _load_processing_phases(scope, evidence["probes"])),
         ("consumer_offsets", lambda: _load_consumer_offsets(kafka_bootstrap_servers, deadline)),
     ):
-        if time.monotonic() >= deadline:
+        if time.monotonic() >= deadline or (cancel_event is not None and cancel_event.is_set()):
             evidence["probes"][name] = {"status": "budget_exhausted"}
             continue
         try:
