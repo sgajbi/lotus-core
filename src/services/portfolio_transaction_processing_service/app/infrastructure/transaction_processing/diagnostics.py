@@ -91,6 +91,13 @@ def _require_safe_snapshot_target(directory: int, name: str) -> None:
     _require_private_owner(metadata, directory=False, uid=_effective_uid())
 
 
+def _current_processing_task() -> asyncio.Task[Any] | None:
+    try:
+        return asyncio.current_task()
+    except RuntimeError:
+        return None  # Synchronous callbacks cannot own an asynchronous diagnostic capture.
+
+
 class TransientProcessingDiagnostics:
     """One process-local rolling snapshot, never a durable ledger or public metric."""
 
@@ -159,6 +166,9 @@ class TransientProcessingDiagnostics:
             or not 0 <= time.time() - created < 3600
         ):
             return None
+        task = _current_processing_task()
+        if task is None:
+            return None
         if generation != self.run_generation:
             self.rows.clear()
             self.run_generation = generation
@@ -176,7 +186,6 @@ class TransientProcessingDiagnostics:
                 return None  # Never evict an active holder to admit a newer delivery.
             del self.rows[completed]
         key = uuid.uuid4().hex
-        task = asyncio.current_task()
 
         def digest(value: str) -> str:
             return hashlib.sha256((generation + value).encode()).hexdigest()
@@ -269,10 +278,10 @@ class TransientProcessingDiagnostics:
 class _Capture:
     def __init__(self, owner: TransientProcessingDiagnostics, run: str, key: str):
         self.owner, self.run, self.key = owner, run, key
-        self.task = asyncio.current_task()
+        self.task = _current_processing_task()
 
     def row(self) -> dict[str, Any] | None:
-        if self.owner.run_generation != self.run or asyncio.current_task() is not self.task:
+        if self.owner.run_generation != self.run or _current_processing_task() is not self.task:
             return None
         row = self.owner.rows.get(self.key)
         return row if row is not None and row["active"] else None
