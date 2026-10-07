@@ -45,6 +45,8 @@ BLOCKING_ACTIVITY_KEYS = frozenset(
     }
 )
 
+NON_BLOCKING_ACTIVITY_KEYS = frozenset({"aggregation_jobs_active", "pipeline_stage_pending"})
+
 REPROCESSING_ACTIVITY_KEYS = frozenset(
     {
         "reprocessing_jobs_active",
@@ -204,15 +206,19 @@ def wait_for_pipeline_quiescence(
 ) -> dict[str, int]:
     deadline = time.time() + timeout_seconds
     last_snapshot: dict[str, int] | None = None
+    last_stability_snapshot: dict[str, int] | None = None
     stable_hits = 0
     quiescent_since: float | None = None
 
     while time.time() < deadline:
         snapshot = snapshot_reader()
+        stability_snapshot = {
+            key: value for key, value in snapshot.items() if key not in NON_BLOCKING_ACTIVITY_KEYS
+        }
         if is_pipeline_quiescent(snapshot):
             if quiescent_since is None:
                 quiescent_since = time.time()
-            stable_hits = stable_hits + 1 if snapshot == last_snapshot else 1
+            stable_hits = stable_hits + 1 if stability_snapshot == last_stability_snapshot else 1
             if stable_hits >= stable_cycles:
                 if quiet_seconds <= 0:
                     return snapshot
@@ -231,6 +237,7 @@ def wait_for_pipeline_quiescence(
             quiescent_since = None
 
         last_snapshot = snapshot
+        last_stability_snapshot = stability_snapshot
         time.sleep(poll_seconds)
 
     raise TimeoutError(

@@ -13,6 +13,9 @@ from tests.test_support.db_cleanup import (
     authorize_database_cleanup,
 )
 from tests.test_support.pipeline_quiescence import (
+    BLOCKING_ACTIVITY_KEYS,
+    NON_BLOCKING_ACTIVITY_KEYS,
+    SNAPSHOT_QUERIES,
     format_pipeline_activity_snapshot,
     has_only_reprocessing_activity,
     is_pipeline_quiescent,
@@ -200,6 +203,135 @@ def test_wait_for_pipeline_quiescence_times_out_with_last_snapshot(monkeypatch) 
             stable_cycles=2,
             snapshot_reader=lambda: snapshots[0] if len(snapshots) == 1 else snapshots.popleft(),
         )
+
+
+@pytest.fixture
+def quiescence_clock(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    clock = [0.0]
+
+    def advance(seconds: float) -> None:
+        clock[0] += seconds
+
+    monkeypatch.setattr("tests.test_support.pipeline_quiescence.time.time", lambda: clock[0])
+    monkeypatch.setattr("tests.test_support.pipeline_quiescence.time.sleep", advance)
+    return clock
+
+
+def test_quiescence_diagnostic_exemptions_match_declared_policy() -> None:
+    assert NON_BLOCKING_ACTIVITY_KEYS == {"aggregation_jobs_active", "pipeline_stage_pending"}
+    assert NON_BLOCKING_ACTIVITY_KEYS.isdisjoint(BLOCKING_ACTIVITY_KEYS)
+    assert NON_BLOCKING_ACTIVITY_KEYS == SNAPSHOT_QUERIES.keys() - BLOCKING_ACTIVITY_KEYS
+
+
+@pytest.mark.parametrize(
+    "diagnostic_keys",
+    [
+        ("aggregation_jobs_active",),
+        ("pipeline_stage_pending",),
+        ("aggregation_jobs_active", "pipeline_stage_pending"),
+    ],
+)
+@pytest.mark.parametrize("quiet_seconds, expected_time, expected_reads", [(0, 2, 3), (8, 8, 9)])
+def test_quiescence_ignores_only_declared_diagnostic_changes(
+    quiescence_clock: list[float],
+    diagnostic_keys: tuple[str, ...],
+    quiet_seconds: int,
+    expected_time: int,
+    expected_reads: int,
+) -> None:
+    reads = 0
+
+    def snapshot() -> dict[str, int]:
+        nonlocal reads
+        reads += 1
+        return {"outbox_pending": 0, **{key: 200 - reads for key in diagnostic_keys}}
+
+    result = wait_for_pipeline_quiescence(
+        timeout_seconds=120,
+        poll_seconds=1,
+        stable_cycles=3,
+        quiet_seconds=quiet_seconds,
+        snapshot_reader=snapshot,
+        last_activity_reader=lambda: None,
+    )
+    assert quiescence_clock[0] == expected_time
+    assert reads == expected_reads
+    assert result == {"outbox_pending": 0, **{key: 200 - reads for key in diagnostic_keys}}
+
+
+@pytest.mark.parametrize(
+    "blocking_key",
+    [
+        "outbox_pending",
+        "ingestion_backlog",
+        "valuation_jobs_active",
+        "reprocessing_jobs_active",
+        "reconciliation_runs_active",
+        "position_state_reprocessing",
+        "instrument_reprocessing_active",
+    ],
+)
+def test_quiescence_preserves_each_blocker_and_deadline(
+    quiescence_clock: list[float], blocking_key: str
+) -> None:
+    with pytest.raises(TimeoutError) as failure:
+        wait_for_pipeline_quiescence(
+            timeout_seconds=120,
+            poll_seconds=1,
+            stable_cycles=2,
+            quiet_seconds=8,
+            snapshot_reader=lambda: {
+                blocking_key: 1,
+                "aggregation_jobs_active": 200 - int(quiescence_clock[0]),
+            },
+            last_activity_reader=lambda: None,
+        )
+    assert quiescence_clock[0] == 120
+    assert f"{blocking_key}=1" in str(failure.value)
+    assert "aggregation_jobs_active=81" in str(failure.value)
+    assert "within 120s" in str(failure.value)
+
+
+@pytest.mark.parametrize("reset_kind, expected_time", [("blocking", 13), ("timestamp", 16)])
+def test_quiescence_preserves_activity_resets_with_changing_diagnostics(
+    quiescence_clock: list[float], reset_kind: str, expected_time: int
+) -> None:
+    result = wait_for_pipeline_quiescence(
+        timeout_seconds=120,
+        poll_seconds=1,
+        stable_cycles=2,
+        quiet_seconds=8,
+        snapshot_reader=lambda: {
+            "outbox_pending": int(reset_kind == "blocking" and quiescence_clock[0] == 4),
+            "aggregation_jobs_active": 200 - int(quiescence_clock[0]),
+        },
+        last_activity_reader=lambda: (
+            datetime(2026, 10, 8)
+            if reset_kind == "timestamp" and quiescence_clock[0] == 8
+            else None
+        ),
+    )
+    assert quiescence_clock[0] == expected_time
+    assert result == {"outbox_pending": 0, "aggregation_jobs_active": 200 - expected_time}
+
+
+def test_quiescence_does_not_exempt_unknown_changing_counters(
+    quiescence_clock: list[float],
+) -> None:
+    with pytest.raises(TimeoutError, match="unclassified_activity=119"):
+        wait_for_pipeline_quiescence(
+            timeout_seconds=120,
+            poll_seconds=1,
+            stable_cycles=2,
+            quiet_seconds=8,
+            snapshot_reader=lambda: {
+                "outbox_pending": 0,
+                "unclassified_activity": int(quiescence_clock[0]),
+                "aggregation_jobs_active": 200 - int(quiescence_clock[0]),
+            },
+            last_activity_reader=lambda: None,
+        )
+    assert quiescence_clock[0] == 120
 
 
 def test_read_pipeline_last_activity_at_ignores_non_blocking_tables() -> None:
