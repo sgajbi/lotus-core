@@ -9,6 +9,7 @@ import os
 import re
 import subprocess
 import time
+import uuid
 from collections.abc import Iterator
 from contextlib import ExitStack
 from datetime import UTC, datetime
@@ -31,6 +32,16 @@ _OFFSET_SCOPES = (
     ("transactions.raw.received", "persistence_group_transactions"),
     ("transactions.persisted", "portfolio_transaction_processing_group"),
     ("transactions.reprocessing.requested", "portfolio_transaction_replay_request_group"),
+)
+_CONSUMER_METRIC_SCOPES = frozenset(
+    {
+        ("TXNPROC", "transactions.persisted", "portfolio_transaction_processing_group"),
+        (
+            "TXNREPLAY",
+            "transactions.reprocessing.requested",
+            "portfolio_transaction_replay_request_group",
+        ),
+    }
 )
 
 # Export only known schema identifiers and grammar, never arbitrary SQL values/names.
@@ -180,6 +191,7 @@ def _diagnostic_worker(
         ("managed_worker", lambda: _load_managed_worker_identity(scope)),
         ("database", lambda: _load_database_diagnostics(database_url, scope)),
         ("ptp_metrics", lambda: _load_consumer_metrics(metrics_url)),
+        ("processing_phases", lambda: _load_processing_phases(scope, evidence["probes"])),
         ("consumer_offsets", lambda: _load_consumer_offsets(kafka_bootstrap_servers, deadline)),
     ):
         if time.monotonic() >= deadline:
@@ -504,15 +516,21 @@ def _load_consumer_metrics(metrics_url: str) -> dict[str, Any]:
             if len(raw) > DIAGNOSTIC_METRICS_INPUT_MAX_BYTES:
                 return {"status": "byte_budget_exhausted", "reason": "metrics_input_limit"}
     truncated = False
+    recognized = 0
+    filtered = 0
     try:
         for family in text_string_to_metric_families(raw.decode()):
             for sample in family.samples:
-                if sample.name not in names or sample.labels.get("service") != (
-                    "portfolio-transaction-processing"
-                ):
+                if sample.name not in names:
                     continue
+                recognized += 1
                 if not _public_consumer_labels(sample.labels):
                     return {"status": "unavailable", "reason": "private_or_unknown_metric_labels"}
+                if tuple(sample.labels.get(k) for k in ("service", "topic", "group_id")) not in (
+                    _CONSUMER_METRIC_SCOPES
+                ):
+                    filtered += 1
+                    continue
                 if not math.isfinite(sample.value):
                     return {"status": "unavailable", "reason": "nonfinite_metric_value"}
                 if len(samples) == DIAGNOSTIC_MAX_ROWS:
@@ -530,7 +548,234 @@ def _load_consumer_metrics(metrics_url: str) -> dict[str, Any]:
         "lag_semantics": "cached_high_watermark_minus_committed",
         "truncated": truncated,
         "input_byte_limit": DIAGNOSTIC_METRICS_INPUT_MAX_BYTES,
+        "reason": None if samples else "no_matching_consumer_metric_samples",
+        "recognized_samples": recognized,
+        "filtered_samples": filtered,
     }
+
+
+def _processing_transport_script(*, enable: bool) -> str:
+    """Keep remote filesystem operations within one exclusively owned private directory."""
+    header = """import os, stat, sys, tempfile
+from pathlib import Path
+root = Path(tempfile.gettempdir()) / 'lotus-load-uow'
+def require_private(meta, directory):
+    kind = stat.S_ISDIR(meta.st_mode) if directory else stat.S_ISREG(meta.st_mode)
+    mode = 0o700 if directory else 0o600
+    if not kind or meta.st_uid != os.geteuid() or stat.S_IMODE(meta.st_mode) != mode:
+        raise PermissionError('processing_diagnostic_transport_not_private')
+"""
+    action = (
+        """os.mkdir(root, 0o700)
+directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+descriptor = None
+try:
+    require_private(os.fstat(directory), True)
+    descriptor = os.open('enable.json', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                         0o600, dir_fd=directory)
+    require_private(os.fstat(descriptor), False)
+    with os.fdopen(descriptor, 'w') as stream:
+        descriptor = None
+        stream.write(sys.argv[1])
+finally:
+    if descriptor is not None:
+        os.close(descriptor)
+    os.close(directory)
+"""
+        if enable
+        else """directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+descriptor = None
+try:
+    require_private(os.fstat(directory), True)
+    descriptor = os.open('snapshot.json', os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory)
+    require_private(os.fstat(descriptor), False)
+    with os.fdopen(descriptor, 'rb') as stream:
+        descriptor = None
+        sys.stdout.buffer.write(stream.read(16385))
+finally:
+    if descriptor is not None:
+        os.close(descriptor)
+    os.close(directory)
+"""
+    )
+    return header + action
+
+
+def enable_managed_processing_phases(scope: dict[str, Any]) -> dict[str, Any]:
+    """Opt the exact disposable load container into a private transient snapshot."""
+    if scope.get("tenant_id") != LOAD_TENANT_ID or scope.get("portfolio_id") != "PERF_BALANCED_V1":
+        return {"status": "unavailable", "reason": "governed_phase_scope_required"}
+    try:
+        identity = _load_managed_worker_identity(scope)
+        if identity.get("status") != "observed":
+            return identity
+        generation = uuid.uuid4().hex
+        config = {
+            "generation": generation,
+            "tenant_id": LOAD_TENANT_ID,
+            "portfolio_id": "PERF_BALANCED_V1",
+            "created_at": time.time(),
+        }
+        script = _processing_transport_script(enable=True)
+        subprocess.run(
+            [
+                "docker",
+                "exec",
+                identity["container_id"],
+                "python",
+                "-c",
+                script,
+                json.dumps(config),
+            ],
+            check=True,
+            capture_output=True,
+            timeout=DIAGNOSTIC_IO_SECONDS,
+        )
+        return {
+            "status": "enabled",
+            "generation": generation,
+            "container_id": identity["container_id"],
+            "created_at": identity["created_at"],
+            "started_at": identity["started_at"],
+        }
+    except Exception as exc:
+        return {"status": "unavailable", "reason": type(exc).__name__}
+
+
+def _load_processing_phases(scope: dict[str, Any], probes: dict[str, Any]) -> dict[str, Any]:
+    """Read only the owned snapshot; stale backend/run generations never become awaits."""
+    if scope.get("tenant_id") != LOAD_TENANT_ID or scope.get("portfolio_id") != "PERF_BALANCED_V1":
+        return {"status": "unavailable", "reason": "governed_phase_scope_required"}
+    generation = scope.get("phase_generation")
+    worker = probes.get("managed_worker", {})
+    if (
+        not isinstance(generation, str)
+        or not re.fullmatch(r"[a-f0-9]{32}", generation)
+        or worker.get("status") != "observed"
+    ):
+        return {"status": "unavailable", "reason": "phase_capture_not_enabled"}
+    if (
+        worker.get("container_id") != scope.get("phase_container_id")
+        or not scope.get("phase_container_started_at")
+        or worker.get("started_at") != scope.get("phase_container_started_at")
+    ):
+        return {"status": "unavailable", "reason": "phase_container_generation_mismatch"}
+    result = subprocess.run(
+        [
+            "docker",
+            "exec",
+            worker["container_id"],
+            "python",
+            "-c",
+            _processing_transport_script(enable=False),
+        ],
+        check=True,
+        capture_output=True,
+        timeout=DIAGNOSTIC_IO_SECONDS,
+    )
+    if len(result.stdout) > 16384:
+        return {"status": "unavailable", "reason": "phase_snapshot_byte_budget"}
+    payload = json.loads(result.stdout)
+    if payload.get("run_generation") != generation:
+        return {"status": "unavailable", "reason": "phase_run_generation_mismatch"}
+    if not 0 <= time.time() - payload.get("captured_at", 0) < 120:
+        return {"status": "unavailable", "reason": "phase_snapshot_stale"}
+    rows = payload.get("rows", [])
+    if not isinstance(rows, list) or len(rows) > DIAGNOSTIC_MAX_ROWS:
+        return {"status": "unavailable", "reason": "phase_row_budget"}
+    waits = probes.get("database", {}).get("runtime_db_waits", {}).get("rows", [])
+    qualified = [
+        projected
+        for row in rows
+        if (projected := _project_processing_phase(row, payload, waits)) is not None
+    ]
+    # A reused PID with two active generations is ambiguous, never pick one by row order.
+    pids = [r["backend"]["pid"] for r in qualified]
+    qualified = [r for r in qualified if pids.count(r["backend"]["pid"]) == 1]
+    return {
+        "status": "observed" if qualified else "unavailable",
+        "reason": None if qualified else "no_birth_qualified_active_phase",
+        "rows": qualified,
+        "truncated": bool(payload.get("truncated")),
+        "row_limit": 20,
+    }
+
+
+def _diagnostic_backend_identity(value: Any) -> tuple[int, datetime, int] | None:
+    if not isinstance(value, dict):
+        return None
+    pid, oid, birth = value.get("pid"), value.get("database_oid"), value.get("backend_start")
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return None
+    if not isinstance(oid, int) or isinstance(oid, bool) or oid <= 0 or not isinstance(birth, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(birth)
+        return (pid, parsed.astimezone(UTC), oid) if parsed.tzinfo is not None else None
+    except ValueError:
+        return None
+
+
+def _diagnostic_hex(value: Any, size: int) -> bool:
+    return isinstance(value, str) and re.fullmatch(rf"[a-f0-9]{{{size}}}", value) is not None
+
+
+def _project_processing_phase(
+    row: Any, payload: dict[str, Any], waits: list[dict[str, Any]]
+) -> dict[str, Any] | None:
+    if not isinstance(row, dict) or row.get("active") is not True:
+        return None
+    backend = row.get("backend")
+    if not isinstance(backend, dict):
+        return None
+    identity = _diagnostic_backend_identity(backend)
+    if identity is None or sum(_diagnostic_backend_identity(w) == identity for w in waits) != 1:
+        return None
+    if not _diagnostic_hex(row.get("generation"), 32) or not _diagnostic_hex(
+        row.get("delivery_hash"), 64
+    ):
+        return None
+    repair_hash = row.get("repair_delivery_hash")
+    if repair_hash is not None and not _diagnostic_hex(repair_hash, 64):
+        return None
+    if row.get("phase") not in {
+        "uow_enter",
+        "idempotency",
+        "repair_qualification",
+        "first_publication_qualification",
+        "cost",
+        "position",
+        "cashflow",
+        "readiness",
+        "commit",
+        "source_cut_flush",
+        "durable_commit",
+        "rollback",
+        "session_close",
+        "finished",
+    }:
+        return None
+    if type(row.get("worker_pid")) is not int or row["worker_pid"] != payload.get("worker_pid"):
+        return None
+    task = row.get("task_identity")
+    if not isinstance(task, str) or not re.fullmatch(r"0x[a-f0-9]{1,16}", task):
+        return None
+    elapsed = payload.get("captured_monotonic", 0) - row.get("phase_started_monotonic", 0)
+    if not math.isfinite(elapsed) or elapsed < 0:
+        return None
+    projected = {
+        k: row[k]
+        for k in ("generation", "worker_pid", "delivery_hash", "repair_delivery_hash", "phase")
+    }
+    projected.update(
+        backend={k: backend[k] for k in ("pid", "backend_start", "database_oid")},
+        task_identity=task,
+        phase_elapsed_seconds=elapsed,
+        correlation="backend_pid_birth_database_generation",
+        exact_await="MISSING",
+        boundary="phase_in_progress_not_python_await",
+    )
+    return projected
 
 
 def _public_consumer_labels(labels: dict[str, str]) -> bool:

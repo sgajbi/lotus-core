@@ -893,6 +893,28 @@ def _retained_report(tmp_path: Path) -> dict:
     return payload
 
 
+def test_main_enables_private_capture_before_first_governed_seed_delivery(
+    load_boundary, monkeypatch
+):
+    args, _replay, _tmp_path = load_boundary
+    events = []
+
+    def enable(args, managed):
+        events.append("enable")
+        return {"status": "enabled", "generation": "a" * 32}
+
+    def seed(**kwargs):
+        assert events == ["enable"]
+        events.append("seed")
+        raise RuntimeError("stop before any governed delivery")
+
+    monkeypatch.setattr(performance_load_gate, "_enable_owned_processing_phases", enable)
+    monkeypatch.setattr(performance_load_gate, "_seed_load_context", seed)
+    with pytest.raises(RuntimeError, match="stop before any governed delivery"):
+        performance_load_gate.main(args)
+    assert events == ["enable", "seed"]
+
+
 def test_main_source_timeout_preserves_partial_results_and_exact_inputs(load_boundary, monkeypatch):
     args, replay, tmp_path = load_boundary
     drains = iter([1.0, None, None])
@@ -1920,7 +1942,7 @@ def test_consumer_metrics_missing_and_byte_limits_never_become_zero(
     body = (
         b"unrelated_metric 1\n"
         if missing
-        else b'kafka_consumer_in_flight_messages{service="portfolio-transaction-processing",'
+        else b'kafka_consumer_in_flight_messages{service="TXNPROC",'
         b'topic="transactions.persisted",group_id="portfolio_transaction_processing_group"} 12\n'
     )
     if oversized:
@@ -1994,9 +2016,8 @@ def _diagnostic_metrics_response(monkeypatch, body):
 @pytest.mark.parametrize("value", ["1", "NaN", "+Inf", "-Inf"])
 def test_diagnostic_metric_values_are_finite_strict_json_or_unavailable(monkeypatch, value):
     body = (
-        'kafka_consumer_in_flight_messages{service="portfolio-transaction-processing"} '
-        + value
-        + "\n"
+        'kafka_consumer_in_flight_messages{service="TXNPROC",topic="transactions.persisted",'
+        'group_id="portfolio_transaction_processing_group"} ' + value + "\n"
     ).encode()
     _diagnostic_metrics_response(monkeypatch, body)
     result = load_completion_diagnostics._load_consumer_metrics("http://isolated/metrics")
@@ -2011,7 +2032,10 @@ def test_diagnostic_metric_values_are_finite_strict_json_or_unavailable(monkeypa
 def test_diagnostic_metrics_larger_than_output_budget_still_projects_bounded_samples(monkeypatch):
     support = load_completion_diagnostics
     body = b"# unrelated exposition padding\n" * 2500
-    body += b'kafka_consumer_in_flight_messages{service="portfolio-transaction-processing"} 3\n'
+    body += (
+        b'kafka_consumer_in_flight_messages{service="TXNPROC",topic="transactions.persisted",'
+        b'group_id="portfolio_transaction_processing_group"} 3\n'
+    )
     assert support.DIAGNOSTIC_MAX_BYTES < len(body) < support.DIAGNOSTIC_METRICS_INPUT_MAX_BYTES
     response = _diagnostic_metrics_response(monkeypatch, body)
     result = support._load_consumer_metrics("http://isolated/metrics")
@@ -2050,7 +2074,7 @@ def test_diagnostic_metrics_refuse_private_label_scope_and_values(monkeypatch, p
 
 def test_diagnostic_metrics_row_truncation_is_explicit(monkeypatch):
     body = "".join(
-        'kafka_consumer_partition_lag_messages{service="portfolio-transaction-processing",partition="'
+        'kafka_consumer_partition_lag_messages{service="TXNPROC",topic="transactions.persisted",group_id="portfolio_transaction_processing_group",partition="'
         + str(i)
         + '"} 1\n'
         for i in range(25)

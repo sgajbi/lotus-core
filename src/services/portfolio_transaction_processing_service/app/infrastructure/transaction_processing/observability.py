@@ -9,6 +9,7 @@ from types import TracebackType
 
 from prometheus_client import REGISTRY, CollectorRegistry, Counter, Histogram
 
+from ...ports.processing_diagnostics import diagnostic_phase
 from ...ports.processing_observability import (
     TransactionProcessingObservation,
     TransactionProcessingObserver,
@@ -89,6 +90,7 @@ class _PrometheusTransactionProcessingObservation(TransactionProcessingObservati
         self._outcome = outcome
 
     def __enter__(self) -> _PrometheusTransactionProcessingObservation:
+        diagnostic_phase(self._operation.value)
         self._started_at = self._clock()
         return self
 
