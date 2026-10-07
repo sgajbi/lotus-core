@@ -34,9 +34,18 @@ For a failed replay profile, inspect the retained `completion_evidence.replay_co
 ordered replay submissions in the load report. Baseline/target/final scrape states distinguish
 missing samples from measured zero and refuse observed counter resets or missing/changed
 same-scrape process birth; accepted counts do not
-identify accepted delivery IDs or prove durable financial completion. The timeout collector runs
-once within its existing six-second/32KiB/20-row limits, after completion measurement, without
-relaxing the full-profile 180-second SLO.
+identify accepted delivery IDs or prove durable financial completion. At the first qualified poll
+at or beyond the profile SLO with the target still unmet, `slo_boundary_capture` requests one
+active snapshot. Completion is checked first; drained state is not captured. Later completion
+or timeout preserves the earlier snapshot, and an unavailable request is not retried.
+
+The same private collector retains six-second/32KiB/20-row limits. An owned finite receiver and
+deadline timer provide timely receipt and child cleanup independently of late finalization,
+without blocking completion polling. Request lateness, launch overhead, capture timing and
+cleanup posture are explicit; missing timing is null, not zero. This is not an exact atomic
+180-second snapshot. If no active capture was attempted, the existing timeout collector remains.
+The full-profile 180-second SLO and completion deadline are unchanged, including a failed verdict
+for finite over-SLO completion. Diagnostic failures never replace the original enforcing failure.
 
 The diagnostic metrics scrape accepts at most 1MiB of input independently of the unchanged
 32KiB response limit. It exports only known consumer metrics and public scope labels. Recognized

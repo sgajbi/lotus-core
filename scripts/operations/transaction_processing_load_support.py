@@ -732,6 +732,7 @@ def wait_for_transaction_processing_operation_count(
     timeout_seconds: int,
     baseline: dict[str, Any] | None = None,
     on_observation: Callable[[dict[str, Any]], None] | None = None,
+    on_pending_observation: Callable[[dict[str, Any], float], None] | None = None,
 ) -> float | None:
     started = time.time()
     deadline = started + timeout_seconds
@@ -769,6 +770,12 @@ def wait_for_transaction_processing_operation_count(
             return round(time.time() - started, 3)
         if observation["status"] == "observed":
             previous = observation
+        if on_pending_observation and observation["status"] == "observed" and not discontinuity:
+            try:
+                on_pending_observation(observation, time.time() - started)
+            except Exception:
+                # Diagnostic faults cannot change completion or its original deadline.
+                pass
         time.sleep(1)
     return None
 

@@ -290,6 +290,7 @@ def test_repair_replay_completion_uses_processed_transaction_outcome(monkeypatch
         timeout_seconds: int,
         baseline: dict,
         on_observation,
+        on_pending_observation,
     ) -> float:
         waited.append(
             (
@@ -981,6 +982,50 @@ def test_main_success_keeps_original_workload_and_admission(load_boundary, monke
     assert report["completion_evidence"]["profiles_not_run"] == []
     replay.assert_called_once()
     collector.assert_not_called()
+
+
+@pytest.mark.parametrize("drain_seconds", [213.052, None])
+def test_main_active_boundary_preserves_completed_breach_or_timeout_verdict(
+    load_boundary, monkeypatch, drain_seconds
+):
+    args, _, tmp_path = load_boundary
+    monkeypatch.setattr(
+        performance_load_gate, "_wait_for_transaction_processing", lambda **kwargs: 1
+    )
+    diagnostic = {"status": "observed", "probes": {"active": "earlier_snapshot"}}
+    child = MagicMock()
+    child.finish.return_value = diagnostic
+    start = MagicMock(return_value=child)
+    timeout_collector = MagicMock()
+    monkeypatch.setattr(performance_load_gate, "start_load_completion_diagnostics", start)
+    monkeypatch.setattr(
+        performance_load_gate, "collect_load_completion_diagnostics", timeout_collector
+    )
+
+    def wait(**kwargs):
+        pending = {
+            "status": "observed",
+            "continuity": "observed",
+            "count": 200,
+            "labels": {"stage": "transaction", "outcome": "processed"},
+            "producer_birth": 123,
+        }
+        kwargs["on_pending_observation"](pending, 180)
+        kwargs["on_pending_observation"](pending, 200)
+        kwargs["on_observation"]({**pending, "count": 360 if drain_seconds else 200})
+        return drain_seconds
+
+    monkeypatch.setattr(performance_load_gate, "_wait_for_repair_replay_completion", wait)
+    assert performance_load_gate.main(args) == 1
+    retained = _retained_report(tmp_path)
+    assert retained["overall_passed"] is False
+    completion = retained["completion_evidence"]["replay_completion"]
+    assert completion["slo_boundary_capture"]["diagnostics"] == diagnostic
+    assert completion["slo_boundary_capture"]["observation"]["count"] == 200
+    assert retained["completion_evidence"]["status"] == "completed"
+    start.assert_called_once()
+    child.finish.assert_called_once()
+    timeout_collector.assert_not_called()
 
 
 @pytest.mark.parametrize("collector_error", [PermissionError, TimeoutError])

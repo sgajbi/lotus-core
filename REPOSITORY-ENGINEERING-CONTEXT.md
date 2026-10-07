@@ -834,8 +834,19 @@ receipts; missing samples never become measured zero, and observed counter decre
 counter-creation or same-exposition process-birth identity fail completion closed. Missing producer
 birth cannot certify continuity. Completion scrape input is independently bounded to 1MiB; the
 collector's 32KiB projected-output budget is unchanged. Partial accepted counts do not manufacture
-accepted IDs or durable completion receipts. Replay timeout invokes the existing collector once
-after completion measurement, preserving the failed verdict and profile deadline/SLO.
+accepted IDs or durable completion receipts. Replay polling checks completion before diagnostics.
+The first qualified same-birth, unmet-target poll at or beyond the profile SLO requests one
+active snapshot; missing/reset continuity cannot launch it. Later completion/timeout cannot
+replace it, and an unavailable attempt is not retried. A finite owned receiver plus deadline
+timer drains pipe backpressure and stops the child without waiting for report finalization;
+cleanup time is reserved within the original six-second budget. Owned threads/child/pipe custody
+is finalized before teardown, with failures explicit rather than masking the enforcing verdict.
+Request lateness, launch/custody overhead and available child observation delay are diagnostic
+metadata, not an exact boundary timestamp or zero-overhead claim. When no active attempt exists,
+the original timeout collector remains. Completion deadline, finite elapsed time and independent
+180-second full-profile verdict remain unchanged. Focused controls live in
+`tests/unit/scripts/test_load_active_diagnostics.py` and the existing load-gate/phase suites;
+spawn/pipe controls are mechanism evidence, not PostgreSQL, financial or full-load qualification.
 Database PID observations require backend birth identity and lock OIDs; NULL relation is not an
 inferred table. Managed-container lookup uses plain Docker label-filtered `ps`, not a Compose
 plugin process; inspect verifies exact project/service/published port. Its birth/init-PID metadata
