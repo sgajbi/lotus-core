@@ -18,6 +18,15 @@ checks, without float conversion or scale rounding. Each family retains its own 
 producer record/revision, source cut, business interval, observed/generated timestamps and
 server receipt. Manage is one consumer; it does not own the reusable source product.
 
+Cash facts canonicalize only representations that PostgreSQL NUMERIC cannot retain: zero has
+no negative sign, and positive exponents expand into exact fixed-point digits before hashing
+and admission. Fractional display scale and trailing digits remain significant; `0.00` is not
+rewritten as `0`. Nonzero sign and precision are unchanged, regardless of ambient Decimal
+precision. The shared calculation-lineage hash is unchanged. This does not repair or rewrite
+previously stored contradictory hashes, which continue to fail closed.
+The cash boundary checks NUMERIC's 131072 integer-digit and 16383 fractional-digit limits
+before any positive-exponent expansion; negative exponents are retained without expansion.
+
 ## Admission and terminal receipt
 
 The two registered write commands are:
