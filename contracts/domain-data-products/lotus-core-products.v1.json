@@ -6,6 +6,35 @@
   "authoritative_domain": "portfolio_state",
   "products": [
     {
+      "product_name": "PortfolioFinancialSourceObservations",
+      "product_version": "v1",
+      "owner_repository": "lotus-core",
+      "product_family": "analytics_input",
+      "authoritative_domain": "portfolio_state",
+      "lifecycle_status": "active",
+      "request_scope": {"scope_level": "portfolio", "supports_bulk": false},
+      "temporal_scope": {"primary_time_field": "as_of_date", "freshness_basis": "source_cut", "supports_restatement": true},
+      "required_trust_metadata": [
+        "product_name", "product_version", "tenant_id", "generated_at", "as_of_date",
+        "restatement_version", "reconciliation_status", "data_quality_status",
+        "latest_evidence_timestamp", "source_batch_fingerprint", "snapshot_id",
+        "content_hash", "policy_version", "correlation_id"
+      ],
+      "serving_plane": "query_control_plane_service",
+      "current_routes": ["/integration/portfolios/{portfolio_id}/financial-source-observations/query"],
+      "freshness_policy": {
+        "freshness_class": "daily",
+        "max_allowed_age_description": "Structural diagnostic source-cut projection only; default producer grants empty, qualified freshness and financial authority unavailable."
+      },
+      "completeness_policy": {"default_status": "partial", "partial_allowed": true},
+      "lineage_policy": {"lineage_required": true, "evidence_bundle_required": false, "evidence_access_class_ref": "operator_only"},
+      "security_profile_ref": "system_access:client_sensitive:retain_for_client_record:audit_system_access",
+      "approved_consumers": ["lotus-manage"],
+      "deprecation_policy": {"state": "not_deprecated", "successor_product": null},
+      "identifier_refs": ["portfolio_id", "snapshot_id", "tenant_id"],
+      "temporal_semantics_ref": "as_of_date"
+    },
+    {
       "product_name": "PortfolioStateSnapshot",
       "product_version": "v1",
       "owner_repository": "lotus-core",
