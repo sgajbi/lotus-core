@@ -19,6 +19,7 @@ from sqlalchemy.engine import Engine
 
 from scripts.operations.performance.load_completion_diagnostics import (
     _diagnostic_database_engine,
+    _load_consumer_metrics,
     _load_database_probes,
     _qualify_lock_edges,
 )
@@ -217,3 +218,112 @@ def test_native_lock_probe_prioritizes_birth_qualified_blocker_and_waiter(
         )
     finally:
         _close_owned_probes(connections, observer_engine, worker, sys.exception())
+
+
+def _serve_consumer_metrics(monkeypatch: pytest.MonkeyPatch, exposition: str) -> None:
+    response = MagicMock()
+    response.__enter__.return_value = response
+    response.iter_content.return_value = [exposition.encode()]
+    monkeypatch.setattr(
+        "scripts.operations.performance.load_completion_diagnostics.requests.get",
+        MagicMock(return_value=response),
+    )
+
+
+@pytest.mark.parametrize(
+    ("name", "extra_labels"),
+    [
+        ("kafka_consumer_in_flight_messages", ""),
+        ("kafka_consumer_backlog_pressure_total", ',reason="ordering_key_busy"'),
+        ("kafka_consumer_partition_lag_messages", ',partition="0"'),
+    ],
+)
+@pytest.mark.parametrize(
+    ("service", "topic", "group"),
+    [
+        ("TXNPROC", "transactions.persisted", "portfolio_transaction_processing_group"),
+        (
+            "TXNREPLAY",
+            "transactions.reprocessing.requested",
+            "portfolio_transaction_replay_request_group",
+        ),
+    ],
+)
+def test_consumer_metrics_supported_selected_sample(
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+    extra_labels: str,
+    service: str,
+    topic: str,
+    group: str,
+) -> None:
+    labels = f'service="{service}",topic="{topic}",group_id="{group}"'
+    _serve_consumer_metrics(monkeypatch, f"{name}{{{labels}{extra_labels}}} 3\n")
+
+    result = _load_consumer_metrics("http://metrics.test/metrics")
+
+    assert result["status"] == "observed"
+    assert result["reason"] is None
+    assert result["recognized_samples"] == 1
+    assert result["filtered_samples"] == 0
+    assert [(sample["name"], sample["value"]) for sample in result["samples"]] == [(name, 3)]
+
+
+def test_consumer_metrics_filter_cohosted_consumers_before_selected_privacy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _serve_consumer_metrics(
+        monkeypatch,
+        'kafka_consumer_in_flight_messages{service="BOOKCOST",topic="bookcost.reprocessing",'
+        'group_id="bookcost_group"} 9\n'
+        'kafka_consumer_in_flight_messages{service="CAMANIFEST",topic="corporate.actions",'
+        'group_id="manifest_group",tenant_id="private"} 7\n'
+        'kafka_consumer_in_flight_messages{service="TXNPROC",topic="transactions.persisted",'
+        'group_id="portfolio_transaction_processing_group"} 2\n'
+        'unsupported_consumer_metric{service="TXNPROC",topic="transactions.persisted",'
+        'group_id="portfolio_transaction_processing_group",tenant_id="private"} 99\n',
+    )
+
+    result = _load_consumer_metrics("http://metrics.test/metrics")
+
+    assert result["status"] == "observed"
+    assert result["recognized_samples"] == 3
+    assert result["filtered_samples"] == 2
+    assert result["samples"] == [
+        {
+            "name": "kafka_consumer_in_flight_messages",
+            "labels": {
+                "service": "TXNPROC",
+                "topic": "transactions.persisted",
+                "group_id": "portfolio_transaction_processing_group",
+            },
+            "value": 2,
+        }
+    ]
+
+
+@pytest.mark.parametrize("private_label", ["tenant_id", "transaction_id", "unsupported_label"])
+@pytest.mark.parametrize(
+    ("service", "topic", "group"),
+    [
+        ("TXNPROC", "transactions.persisted", "portfolio_transaction_processing_group"),
+        (
+            "TXNREPLAY",
+            "transactions.reprocessing.requested",
+            "portfolio_transaction_replay_request_group",
+        ),
+    ],
+)
+def test_consumer_metrics_refuse_selected_scope_private_labels(
+    monkeypatch: pytest.MonkeyPatch, private_label: str, service: str, topic: str, group: str
+) -> None:
+    _serve_consumer_metrics(
+        monkeypatch,
+        f'kafka_consumer_in_flight_messages{{service="{service}",topic="{topic}",'
+        f'group_id="{group}",{private_label}="private"}} 1\n',
+    )
+
+    assert _load_consumer_metrics("http://metrics.test/metrics") == {
+        "status": "unavailable",
+        "reason": "private_or_unknown_metric_labels",
+    }

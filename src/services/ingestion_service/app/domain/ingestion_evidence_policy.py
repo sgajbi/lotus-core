@@ -270,6 +270,8 @@ _REFERENCE_FAMILIES: tuple[tuple[str, str, PayloadClassification], ...] = (
 )
 
 _STRONG_LINEAGE_ENDPOINTS = {
+    "/ingest/portfolio-cash-availability-observations",
+    "/ingest/portfolio-funding-investment-observations",
     "/ingest/instrument-valuation-policy-assignments",
     "/ingest/authoritative-market-price-source-facts",
 }
@@ -286,6 +288,25 @@ _REFERENCE_POLICIES = tuple(
         ),
     )
     for endpoint, entity_type, classification in _REFERENCE_FAMILIES
+)
+
+_OBSERVATION_POLICIES = tuple(
+    _fingerprint_policy(
+        endpoint,
+        entity_type,
+        classification=PayloadClassification.RESTRICTED,
+        source_lineage=_STRONG_AUTHORITY_SOURCE_LINEAGE,
+    )
+    for endpoint, entity_type in (
+        (
+            "/ingest/portfolio-cash-availability-observations",
+            "portfolio_cash_availability_observation",
+        ),
+        (
+            "/ingest/portfolio-funding-investment-observations",
+            "portfolio_funding_investment_observation",
+        ),
+    )
 )
 
 INGESTION_EVIDENCE_POLICY_REGISTRY = IngestionEvidencePolicyRegistry(
@@ -326,5 +347,6 @@ INGESTION_EVIDENCE_POLICY_REGISTRY = IngestionEvidencePolicyRegistry(
             classification=PayloadClassification.CONFIDENTIAL,
         ),
         *_REFERENCE_POLICIES,
+        *_OBSERVATION_POLICIES,
     )
 )

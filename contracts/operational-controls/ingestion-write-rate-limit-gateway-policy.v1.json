@@ -50,6 +50,8 @@
     "/ingest/model-portfolios",
     "/ingest/planned-withdrawal-schedules",
     "/ingest/portfolio-bundle",
+    "/ingest/portfolio-cash-availability-observations",
+    "/ingest/portfolio-funding-investment-observations",
     "/ingest/portfolio-party-role-assignments",
     "/ingest/portfolios",
     "/ingest/reference/cash-accounts",

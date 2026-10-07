@@ -64,6 +64,24 @@ class SourceDataProductDefinition:
 
 SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
     SourceDataProductDefinition(
+        product_name="PortfolioFinancialSourceObservations",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=(
+            "/integration/portfolios/{portfolio_id}/financial-source-observations/query",
+        ),
+        paging_mode=NOT_APPLICABLE,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "Independent immutable cash and funding/investment producer facts. Original pins "
+            "survive correction; latest selection is explicitly restated. No qualified producer, "
+            "joined-cut coherence, FX aggregation or consumer eligibility is established."
+        ),
+    ),
+    SourceDataProductDefinition(
         product_name="PortfolioStateSnapshot",
         product_version="v1",
         route_family=SNAPSHOT_AND_SIMULATION,

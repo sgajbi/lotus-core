@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-10-06T03:41:12.013328+00:00",
+  "generatedAt": "2026-10-07T04:18:34.184231+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -922,6 +922,20 @@
       "example": {
         "id": "OBJ_001"
       },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.available_amount",
+      "canonicalTerm": "available_amount",
+      "preferredName": "available_amount",
+      "description": "Independent available amount; zero is observed.",
+      "example": 125000.5,
       "type": "object",
       "locations": [
         "body"
@@ -2026,6 +2040,20 @@
       ]
     },
     {
+      "semanticId": "lotus.completed_at",
+      "canonicalTerm": "completed_at",
+      "preferredName": "completed_at",
+      "description": "Timestamp when the job reached a terminal or queued state.",
+      "example": "2026-02-28T13:22:24.994Z",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.completion_declared",
       "canonicalTerm": "completion_declared",
       "preferredName": "completion_declared",
@@ -2551,11 +2579,39 @@
       ]
     },
     {
+      "semanticId": "lotus.coverage",
+      "canonicalTerm": "coverage",
+      "preferredName": "coverage",
+      "description": "Complete, partial or missing source coverage.",
+      "example": "complete",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "ObservationCoverage"
+      ]
+    },
+    {
       "semanticId": "lotus.coverage_reason",
       "canonicalTerm": "coverage_reason",
       "preferredName": "coverage_reason",
       "description": "Bounded machine-readable explanation for the coverage decision.",
       "example": "example_coverage_reason",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.coverage_scope",
+      "canonicalTerm": "coverage_scope",
+      "preferredName": "coverage_scope",
+      "description": "Producer-declared coverage boundary, not approval.",
+      "example": "example_coverage_scope",
       "type": "string",
       "locations": [
         "body"
@@ -2683,6 +2739,20 @@
       ],
       "observedTypes": [
         "integer"
+      ]
+    },
+    {
+      "semanticId": "lotus.definition_version",
+      "canonicalTerm": "definition_version",
+      "preferredName": "definition_version",
+      "description": "Producer fact definition version.",
+      "example": "example_definition_version",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -3022,8 +3092,8 @@
       "semanticId": "lotus.effective_from",
       "canonicalTerm": "effective_from",
       "preferredName": "effective_from",
-      "description": "Assignment effective start date.",
-      "example": "2025-01-01",
+      "description": "Inclusive business-date start.",
+      "example": "2026-02-27",
       "type": "string",
       "locations": [
         "body"
@@ -3036,8 +3106,8 @@
       "semanticId": "lotus.effective_to",
       "canonicalTerm": "effective_to",
       "preferredName": "effective_to",
-      "description": "Assignment effective end date, null for open-ended assignment.",
-      "example": "2026-12-31",
+      "description": "Exclusive business-date end, null when ongoing.",
+      "example": "2026-02-27",
       "type": "object",
       "locations": [
         "body"
@@ -3177,6 +3247,20 @@
       ]
     },
     {
+      "semanticId": "lotus.encumbered_amount",
+      "canonicalTerm": "encumbered_amount",
+      "preferredName": "encumbered_amount",
+      "description": "Independent encumbered amount; no formula inferred.",
+      "example": 125000.5,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.end_date",
       "canonicalTerm": "end_date",
       "preferredName": "end_date",
@@ -3189,6 +3273,20 @@
       ],
       "observedTypes": [
         "object",
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.endpoint",
+      "canonicalTerm": "endpoint",
+      "preferredName": "endpoint",
+      "description": "Ingestion API endpoint that created this job.",
+      "example": "/ingest/transactions",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
         "string"
       ]
     },
@@ -3315,6 +3413,22 @@
       ]
     },
     {
+      "semanticId": "lotus.expected_head_hash",
+      "canonicalTerm": "expected_head_hash",
+      "preferredName": "expected_head_hash",
+      "description": "Compare-and-swap hash of the current head.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.expected_head_id",
       "canonicalTerm": "expected_head_id",
       "preferredName": "expected_head_id",
@@ -3412,6 +3526,81 @@
       ],
       "observedTypes": [
         "integer"
+      ]
+    },
+    {
+      "semanticId": "lotus.failure_code",
+      "canonicalTerm": "failure_code",
+      "preferredName": "failure_code",
+      "description": "Stable original error code preserved for deterministic idempotent replay.",
+      "example": "MARKET_PRICE_SOURCE_FACT_CONFLICT",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.failure_detail",
+      "canonicalTerm": "failure_detail",
+      "preferredName": "failure_detail",
+      "description": "Source-safe original error detail preserved for deterministic idempotent replay; raw request payloads and secrets are excluded.",
+      "example": {
+        "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+        "message": "The authoritative source version conflicts with retained history."
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.failure_headers",
+      "canonicalTerm": "failure_headers",
+      "preferredName": "failure_headers",
+      "description": "Safe response headers that must be reproduced with a failed replay.",
+      "example": {
+        "Retry-After": "30"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.failure_reason",
+      "canonicalTerm": "failure_reason",
+      "preferredName": "failure_reason",
+      "description": "Failure reason when status is failed.",
+      "example": "Kafka publish timeout for topic transactions.raw.received.",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.failure_status_code",
+      "canonicalTerm": "failure_status_code",
+      "preferredName": "failure_status_code",
+      "description": "Original HTTP failure status preserved for deterministic idempotent replay.",
+      "example": 409,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -3528,6 +3717,20 @@
       ],
       "observedTypes": [
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.funded",
+      "canonicalTerm": "funded",
+      "preferredName": "funded",
+      "description": "Independent producer-funded assertion, not ledger-derived.",
+      "example": true,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -3865,6 +4068,20 @@
       "preferredName": "idempotency_key",
       "description": "Client-supplied idempotency key if provided in the X-Idempotency-Key header.",
       "example": "core-ingest-20260228-portfolio-123-batch-01",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.idempotency_key_reference",
+      "canonicalTerm": "idempotency_key_reference",
+      "preferredName": "idempotency_key_reference",
+      "description": "Key-versioned HMAC-SHA-256 pseudonymous reference for the client idempotency key; null when no key was supplied. Rotation of the declared key id intentionally changes the value.",
+      "example": "hmac-sha256:v1:ops-2026-08:6a144175d216004612747a27a1daecc816334b295076941e203816799b4b1b67",
       "type": "object",
       "locations": [
         "body"
@@ -4327,6 +4544,20 @@
       ]
     },
     {
+      "semanticId": "lotus.invested",
+      "canonicalTerm": "invested",
+      "preferredName": "invested",
+      "description": "Independent producer-invested assertion, not lifecycle-derived.",
+      "example": true,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.invested_market_value_portfolio_currency",
       "canonicalTerm": "invested_market_value_portfolio_currency",
       "preferredName": "invested_market_value_portfolio_currency",
@@ -4556,6 +4787,20 @@
       ],
       "observedTypes": [
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.last_retried_at",
+      "canonicalTerm": "last_retried_at",
+      "preferredName": "last_retried_at",
+      "description": "Timestamp of the most recent retry attempt.",
+      "example": "2026-02-28T13:24:10.512Z",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -5819,6 +6064,42 @@
       ]
     },
     {
+      "semanticId": "lotus.observations",
+      "canonicalTerm": "observations",
+      "preferredName": "observations",
+      "description": "Atomic batch of immutable cash source facts.",
+      "example": [
+        {
+          "portfolio_id": "DEMO_DPM_EUR_001",
+          "source_system": "OMS_PRIMARY",
+          "source_record_id": "SOURCE_RECORD_001",
+          "source_version": 1,
+          "source_cut_id": "SOURCE_CUT_001",
+          "definition_version": "example_definition_version",
+          "effective_from": "2026-02-27",
+          "effective_to": "2026-02-27",
+          "observed_at": "2026-02-27T10:30:00Z",
+          "generated_at": "2026-02-27T10:30:00Z",
+          "coverage": "complete",
+          "coverage_scope": "example_coverage_scope",
+          "predecessor_id": "example_value",
+          "expected_head_hash": "example_value",
+          "content_hash": "example_content_hash",
+          "currency": "USD",
+          "settled_amount": 125000.5,
+          "encumbered_amount": 125000.5,
+          "available_amount": 125000.5
+        }
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
+      ]
+    },
+    {
       "semanticId": "lotus.observed_at",
       "canonicalTerm": "observed_at",
       "preferredName": "observed_at",
@@ -6556,6 +6837,22 @@
       ],
       "observedTypes": [
         "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.predecessor_id",
+      "canonicalTerm": "predecessor_id",
+      "preferredName": "predecessor_id",
+      "description": "Original immutable observation ID for correction.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -7726,6 +8023,118 @@
       ]
     },
     {
+      "semanticId": "lotus.request_payload_classification",
+      "canonicalTerm": "request_payload_classification",
+      "preferredName": "request_payload_classification",
+      "description": "Governed information classification of the submitted payload family.",
+      "example": "restricted",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.request_payload_fingerprint",
+      "canonicalTerm": "request_payload_fingerprint",
+      "preferredName": "request_payload_fingerprint",
+      "description": "Deterministic, key-versioned HMAC-SHA-256 fingerprint of the complete original request payload. It supports equality checks without enabling offline confirmation of guessable restricted values.",
+      "example": "hmac-sha256:v1:ops-2026-08:c5b0faeb7de60bc111f109624e58d0ad6206634be5fef4d4455cdac629df4f3f",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.request_payload_partial_replay_eligible",
+      "canonicalTerm": "request_payload_partial_replay_eligible",
+      "preferredName": "request_payload_partial_replay_eligible",
+      "description": "Whether the policy snapshot authorizes record-filtered replay.",
+      "example": false,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.request_payload_policy_version",
+      "canonicalTerm": "request_payload_policy_version",
+      "preferredName": "request_payload_policy_version",
+      "description": "Version of the durable payload evidence policy applied at ingestion time.",
+      "example": "ingestion-evidence-policy.v1",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.request_payload_replay_eligible",
+      "canonicalTerm": "request_payload_replay_eligible",
+      "preferredName": "request_payload_replay_eligible",
+      "description": "Whether the policy snapshot authorizes full payload replay.",
+      "example": false,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.request_payload_replay_expires_at",
+      "canonicalTerm": "request_payload_replay_expires_at",
+      "preferredName": "request_payload_replay_expires_at",
+      "description": "Technical expiry of replay authority; null for fingerprint-only or legacy evidence.",
+      "example": "2026-08-15T13:22:24.201Z",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.request_payload_representation",
+      "canonicalTerm": "request_payload_representation",
+      "preferredName": "request_payload_representation",
+      "description": "Durable representation retained for the request: bounded source-safe replay, fingerprint only, or a non-authoritative legacy redaction.",
+      "example": "fingerprint_only",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.request_payload_retention_authority",
+      "canonicalTerm": "request_payload_retention_authority",
+      "preferredName": "request_payload_retention_authority",
+      "description": "Durable issue or policy authority governing retention and deletion posture.",
+      "example": "lotus-core#708",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.requested_as_of_date",
       "canonicalTerm": "requested_as_of_date",
       "preferredName": "requested_as_of_date",
@@ -8077,6 +8486,20 @@
       "preferredName": "retry_after_seconds",
       "description": "async command accepted field: retry after seconds.",
       "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
+      ]
+    },
+    {
+      "semanticId": "lotus.retry_count",
+      "canonicalTerm": "retry_count",
+      "preferredName": "retry_count",
+      "description": "Number of retry attempts executed for this ingestion job.",
+      "example": 1,
       "type": "integer",
       "locations": [
         "body"
@@ -8668,6 +9091,20 @@
       ]
     },
     {
+      "semanticId": "lotus.settled_amount",
+      "canonicalTerm": "settled_amount",
+      "preferredName": "settled_amount",
+      "description": "Independent settled amount; null is unobserved.",
+      "example": 125000.5,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.settlement_awareness_required",
       "canonicalTerm": "settlement_awareness_required",
       "preferredName": "settlement_awareness_required",
@@ -9094,12 +9531,13 @@
       "preferredName": "source_cut_id",
       "description": "Authoritative, comparable source-cut identity when the source owner can prove the portfolio and as-of evidence set used by this response. Null means the product does not claim cross-product cut coherence.",
       "example": "cashflow-source-cut:0123456789abcdef01234567",
-      "type": "object",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "object"
+        "object",
+        "string"
       ]
     },
     {
@@ -9472,6 +9910,20 @@
       ]
     },
     {
+      "semanticId": "lotus.source_version",
+      "canonicalTerm": "source_version",
+      "preferredName": "source_version",
+      "description": "Contiguous producer revision, starting at 1.",
+      "example": 1,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
+      ]
+    },
+    {
       "semanticId": "lotus.source_window_trust",
       "canonicalTerm": "source_window_trust",
       "preferredName": "source_window_trust",
@@ -9581,6 +10033,20 @@
       "preferredName": "status_url",
       "description": "Current status for status url.",
       "example": "ACTIVE",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.submitted_at",
+      "canonicalTerm": "submitted_at",
+      "preferredName": "submitted_at",
+      "description": "Timestamp when the ingestion job was accepted.",
+      "example": "2026-02-28T13:22:24.201Z",
       "type": "string",
       "locations": [
         "body"
@@ -13803,6 +14269,36 @@
       "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
       "example": "tenant-sg",
       "behaviorImpact": "Affects commit_upload_ingest_uploads_commit_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_portfolio_cash_availability_observations_ingest_portfolio_cash_availability_observations_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_portfolio_funding_investment_observations_ingest_portfolio_funding_investment_observations_post request behavior.",
       "exposure": "consumer_visible",
       "canonicalTerm": "x_tenant_id",
       "semanticId": "lotus.x_tenant_id"
@@ -33885,6 +34381,924 @@
             "type": "string",
             "semanticId": "lotus.message",
             "attributeRef": "lotus.message"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "ingest_portfolio_cash_availability_observations_ingest_portfolio_cash_availability_observations_post",
+      "method": "POST",
+      "path": "/ingest/portfolio-cash-availability-observations",
+      "domain": "reference_data",
+      "serviceGroup": "ingestion",
+      "tags": [
+        "Reference Data"
+      ],
+      "summary": "Record immutable portfolio cash source observations",
+      "description": "What: record independent settled, encumbered and available producer facts. How: verified producer permission, exact amounts, source revision/CAS and terminal receipt commit in one local transaction; exact idempotent replay does not repeat facts. When: source admission, not cash derivation, qualified authority or async dispatch.",
+      "naming": {
+        "boundedContext": "reference_data",
+        "canonicalTerms": [
+          "accepted_count",
+          "available_amount",
+          "completed_at",
+          "content_hash",
+          "correlation_id",
+          "coverage",
+          "coverage_scope",
+          "currency",
+          "definition_version",
+          "effective_from",
+          "effective_to",
+          "encumbered_amount",
+          "endpoint",
+          "entity_type",
+          "expected_head_hash",
+          "failure_code",
+          "failure_detail",
+          "failure_headers",
+          "failure_reason",
+          "failure_status_code",
+          "generated_at",
+          "idempotency_key",
+          "idempotency_key_reference",
+          "job_id",
+          "last_retried_at",
+          "observations",
+          "observed_at",
+          "portfolio_id",
+          "predecessor_id",
+          "request_id",
+          "request_payload_classification",
+          "request_payload_fingerprint",
+          "request_payload_partial_replay_eligible",
+          "request_payload_policy_version",
+          "request_payload_replay_eligible",
+          "request_payload_replay_expires_at",
+          "request_payload_representation",
+          "request_payload_retention_authority",
+          "retry_count",
+          "settled_amount",
+          "source_cut_id",
+          "source_record_id",
+          "source_system",
+          "source_version",
+          "status",
+          "submitted_at",
+          "tenant_id",
+          "trace_id",
+          "x_tenant_id"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
+          {
+            "name": "observations",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.observations",
+            "attributeRef": "lotus.observations"
+          },
+          {
+            "name": "observations[].portfolio_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "observations[].source_system",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "observations[].source_record_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "observations[].source_version",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.source_version",
+            "attributeRef": "lotus.source_version"
+          },
+          {
+            "name": "observations[].source_cut_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_cut_id",
+            "attributeRef": "lotus.source_cut_id"
+          },
+          {
+            "name": "observations[].definition_version",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.definition_version",
+            "attributeRef": "lotus.definition_version"
+          },
+          {
+            "name": "observations[].effective_from",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.effective_from",
+            "attributeRef": "lotus.effective_from"
+          },
+          {
+            "name": "observations[].effective_to",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.effective_to",
+            "attributeRef": "lotus.effective_to"
+          },
+          {
+            "name": "observations[].observed_at",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "observations[].generated_at",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.generated_at",
+            "attributeRef": "lotus.generated_at"
+          },
+          {
+            "name": "observations[].coverage",
+            "location": "body",
+            "required": true,
+            "type": "ObservationCoverage",
+            "semanticId": "lotus.coverage",
+            "attributeRef": "lotus.coverage"
+          },
+          {
+            "name": "observations[].coverage_scope",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.coverage_scope",
+            "attributeRef": "lotus.coverage_scope"
+          },
+          {
+            "name": "observations[].predecessor_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.predecessor_id",
+            "attributeRef": "lotus.predecessor_id"
+          },
+          {
+            "name": "observations[].expected_head_hash",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.expected_head_hash",
+            "attributeRef": "lotus.expected_head_hash"
+          },
+          {
+            "name": "observations[].content_hash",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.content_hash",
+            "attributeRef": "lotus.content_hash"
+          },
+          {
+            "name": "observations[].currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.currency",
+            "attributeRef": "lotus.currency"
+          },
+          {
+            "name": "observations[].settled_amount",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.settled_amount",
+            "attributeRef": "lotus.settled_amount"
+          },
+          {
+            "name": "observations[].encumbered_amount",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.encumbered_amount",
+            "attributeRef": "lotus.encumbered_amount"
+          },
+          {
+            "name": "observations[].available_amount",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.available_amount",
+            "attributeRef": "lotus.available_amount"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 200,
+        "model": "IngestionJobResponse",
+        "fields": [
+          {
+            "name": "job_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.job_id",
+            "attributeRef": "lotus.job_id"
+          },
+          {
+            "name": "tenant_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.tenant_id",
+            "attributeRef": "lotus.tenant_id"
+          },
+          {
+            "name": "endpoint",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.endpoint",
+            "attributeRef": "lotus.endpoint"
+          },
+          {
+            "name": "entity_type",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.entity_type",
+            "attributeRef": "lotus.entity_type"
+          },
+          {
+            "name": "status",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.status",
+            "attributeRef": "lotus.status"
+          },
+          {
+            "name": "accepted_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.accepted_count",
+            "attributeRef": "lotus.accepted_count"
+          },
+          {
+            "name": "idempotency_key",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.idempotency_key",
+            "attributeRef": "lotus.idempotency_key"
+          },
+          {
+            "name": "idempotency_key_reference",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.idempotency_key_reference",
+            "attributeRef": "lotus.idempotency_key_reference"
+          },
+          {
+            "name": "request_payload_fingerprint",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.request_payload_fingerprint",
+            "attributeRef": "lotus.request_payload_fingerprint"
+          },
+          {
+            "name": "request_payload_policy_version",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.request_payload_policy_version",
+            "attributeRef": "lotus.request_payload_policy_version"
+          },
+          {
+            "name": "request_payload_classification",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.request_payload_classification",
+            "attributeRef": "lotus.request_payload_classification"
+          },
+          {
+            "name": "request_payload_representation",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.request_payload_representation",
+            "attributeRef": "lotus.request_payload_representation"
+          },
+          {
+            "name": "request_payload_replay_eligible",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.request_payload_replay_eligible",
+            "attributeRef": "lotus.request_payload_replay_eligible"
+          },
+          {
+            "name": "request_payload_partial_replay_eligible",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.request_payload_partial_replay_eligible",
+            "attributeRef": "lotus.request_payload_partial_replay_eligible"
+          },
+          {
+            "name": "request_payload_replay_expires_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.request_payload_replay_expires_at",
+            "attributeRef": "lotus.request_payload_replay_expires_at"
+          },
+          {
+            "name": "request_payload_retention_authority",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.request_payload_retention_authority",
+            "attributeRef": "lotus.request_payload_retention_authority"
+          },
+          {
+            "name": "correlation_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.correlation_id",
+            "attributeRef": "lotus.correlation_id"
+          },
+          {
+            "name": "request_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.request_id",
+            "attributeRef": "lotus.request_id"
+          },
+          {
+            "name": "trace_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.trace_id",
+            "attributeRef": "lotus.trace_id"
+          },
+          {
+            "name": "submitted_at",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.submitted_at",
+            "attributeRef": "lotus.submitted_at"
+          },
+          {
+            "name": "completed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.completed_at",
+            "attributeRef": "lotus.completed_at"
+          },
+          {
+            "name": "failure_reason",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.failure_reason",
+            "attributeRef": "lotus.failure_reason"
+          },
+          {
+            "name": "failure_status_code",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.failure_status_code",
+            "attributeRef": "lotus.failure_status_code"
+          },
+          {
+            "name": "failure_code",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.failure_code",
+            "attributeRef": "lotus.failure_code"
+          },
+          {
+            "name": "failure_detail",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.failure_detail",
+            "attributeRef": "lotus.failure_detail"
+          },
+          {
+            "name": "failure_headers",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.failure_headers",
+            "attributeRef": "lotus.failure_headers"
+          },
+          {
+            "name": "retry_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.retry_count",
+            "attributeRef": "lotus.retry_count"
+          },
+          {
+            "name": "last_retried_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.last_retried_at",
+            "attributeRef": "lotus.last_retried_at"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "ingest_portfolio_funding_investment_observations_ingest_portfolio_funding_investment_observations_post",
+      "method": "POST",
+      "path": "/ingest/portfolio-funding-investment-observations",
+      "domain": "reference_data",
+      "serviceGroup": "ingestion",
+      "tags": [
+        "Reference Data"
+      ],
+      "summary": "Record immutable portfolio funding and investment assertions",
+      "description": "What: record independent nullable funded and invested producer assertions. How: verified producer permission and source revision/CAS persist facts and terminal receipt atomically without worker dispatch. When: explicit source assertions, never ACTIVE lifecycle, booking, valuation or consumer eligibility inference.",
+      "naming": {
+        "boundedContext": "reference_data",
+        "canonicalTerms": [
+          "accepted_count",
+          "completed_at",
+          "content_hash",
+          "correlation_id",
+          "coverage",
+          "coverage_scope",
+          "definition_version",
+          "effective_from",
+          "effective_to",
+          "endpoint",
+          "entity_type",
+          "expected_head_hash",
+          "failure_code",
+          "failure_detail",
+          "failure_headers",
+          "failure_reason",
+          "failure_status_code",
+          "funded",
+          "generated_at",
+          "idempotency_key",
+          "idempotency_key_reference",
+          "invested",
+          "job_id",
+          "last_retried_at",
+          "observations",
+          "observed_at",
+          "portfolio_id",
+          "predecessor_id",
+          "request_id",
+          "request_payload_classification",
+          "request_payload_fingerprint",
+          "request_payload_partial_replay_eligible",
+          "request_payload_policy_version",
+          "request_payload_replay_eligible",
+          "request_payload_replay_expires_at",
+          "request_payload_representation",
+          "request_payload_retention_authority",
+          "retry_count",
+          "source_cut_id",
+          "source_record_id",
+          "source_system",
+          "source_version",
+          "status",
+          "submitted_at",
+          "tenant_id",
+          "trace_id",
+          "x_tenant_id"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
+          {
+            "name": "observations",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.observations",
+            "attributeRef": "lotus.observations"
+          },
+          {
+            "name": "observations[].portfolio_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "observations[].source_system",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "observations[].source_record_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "observations[].source_version",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.source_version",
+            "attributeRef": "lotus.source_version"
+          },
+          {
+            "name": "observations[].source_cut_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_cut_id",
+            "attributeRef": "lotus.source_cut_id"
+          },
+          {
+            "name": "observations[].definition_version",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.definition_version",
+            "attributeRef": "lotus.definition_version"
+          },
+          {
+            "name": "observations[].effective_from",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.effective_from",
+            "attributeRef": "lotus.effective_from"
+          },
+          {
+            "name": "observations[].effective_to",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.effective_to",
+            "attributeRef": "lotus.effective_to"
+          },
+          {
+            "name": "observations[].observed_at",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "observations[].generated_at",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.generated_at",
+            "attributeRef": "lotus.generated_at"
+          },
+          {
+            "name": "observations[].coverage",
+            "location": "body",
+            "required": true,
+            "type": "ObservationCoverage",
+            "semanticId": "lotus.coverage",
+            "attributeRef": "lotus.coverage"
+          },
+          {
+            "name": "observations[].coverage_scope",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.coverage_scope",
+            "attributeRef": "lotus.coverage_scope"
+          },
+          {
+            "name": "observations[].predecessor_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.predecessor_id",
+            "attributeRef": "lotus.predecessor_id"
+          },
+          {
+            "name": "observations[].expected_head_hash",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.expected_head_hash",
+            "attributeRef": "lotus.expected_head_hash"
+          },
+          {
+            "name": "observations[].content_hash",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.content_hash",
+            "attributeRef": "lotus.content_hash"
+          },
+          {
+            "name": "observations[].funded",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.funded",
+            "attributeRef": "lotus.funded"
+          },
+          {
+            "name": "observations[].invested",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.invested",
+            "attributeRef": "lotus.invested"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 200,
+        "model": "IngestionJobResponse",
+        "fields": [
+          {
+            "name": "job_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.job_id",
+            "attributeRef": "lotus.job_id"
+          },
+          {
+            "name": "tenant_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.tenant_id",
+            "attributeRef": "lotus.tenant_id"
+          },
+          {
+            "name": "endpoint",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.endpoint",
+            "attributeRef": "lotus.endpoint"
+          },
+          {
+            "name": "entity_type",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.entity_type",
+            "attributeRef": "lotus.entity_type"
+          },
+          {
+            "name": "status",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.status",
+            "attributeRef": "lotus.status"
+          },
+          {
+            "name": "accepted_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.accepted_count",
+            "attributeRef": "lotus.accepted_count"
+          },
+          {
+            "name": "idempotency_key",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.idempotency_key",
+            "attributeRef": "lotus.idempotency_key"
+          },
+          {
+            "name": "idempotency_key_reference",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.idempotency_key_reference",
+            "attributeRef": "lotus.idempotency_key_reference"
+          },
+          {
+            "name": "request_payload_fingerprint",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.request_payload_fingerprint",
+            "attributeRef": "lotus.request_payload_fingerprint"
+          },
+          {
+            "name": "request_payload_policy_version",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.request_payload_policy_version",
+            "attributeRef": "lotus.request_payload_policy_version"
+          },
+          {
+            "name": "request_payload_classification",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.request_payload_classification",
+            "attributeRef": "lotus.request_payload_classification"
+          },
+          {
+            "name": "request_payload_representation",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.request_payload_representation",
+            "attributeRef": "lotus.request_payload_representation"
+          },
+          {
+            "name": "request_payload_replay_eligible",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.request_payload_replay_eligible",
+            "attributeRef": "lotus.request_payload_replay_eligible"
+          },
+          {
+            "name": "request_payload_partial_replay_eligible",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.request_payload_partial_replay_eligible",
+            "attributeRef": "lotus.request_payload_partial_replay_eligible"
+          },
+          {
+            "name": "request_payload_replay_expires_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.request_payload_replay_expires_at",
+            "attributeRef": "lotus.request_payload_replay_expires_at"
+          },
+          {
+            "name": "request_payload_retention_authority",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.request_payload_retention_authority",
+            "attributeRef": "lotus.request_payload_retention_authority"
+          },
+          {
+            "name": "correlation_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.correlation_id",
+            "attributeRef": "lotus.correlation_id"
+          },
+          {
+            "name": "request_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.request_id",
+            "attributeRef": "lotus.request_id"
+          },
+          {
+            "name": "trace_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.trace_id",
+            "attributeRef": "lotus.trace_id"
+          },
+          {
+            "name": "submitted_at",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.submitted_at",
+            "attributeRef": "lotus.submitted_at"
+          },
+          {
+            "name": "completed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.completed_at",
+            "attributeRef": "lotus.completed_at"
+          },
+          {
+            "name": "failure_reason",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.failure_reason",
+            "attributeRef": "lotus.failure_reason"
+          },
+          {
+            "name": "failure_status_code",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.failure_status_code",
+            "attributeRef": "lotus.failure_status_code"
+          },
+          {
+            "name": "failure_code",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.failure_code",
+            "attributeRef": "lotus.failure_code"
+          },
+          {
+            "name": "failure_detail",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.failure_detail",
+            "attributeRef": "lotus.failure_detail"
+          },
+          {
+            "name": "failure_headers",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.failure_headers",
+            "attributeRef": "lotus.failure_headers"
+          },
+          {
+            "name": "retry_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.retry_count",
+            "attributeRef": "lotus.retry_count"
+          },
+          {
+            "name": "last_retried_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.last_retried_at",
+            "attributeRef": "lotus.last_retried_at"
           }
         ]
       }

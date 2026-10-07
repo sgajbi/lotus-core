@@ -3683,6 +3683,96 @@
     {
       "service_app": "ingestion_service",
       "method": "POST",
+      "path": "/ingest/portfolio-cash-availability-observations",
+      "route_key": "POST /ingest/portfolio-cash-availability-observations",
+      "operation_id": "ingest_portfolio_cash_availability_observations_ingest_portfolio_cash_availability_observations_post",
+      "summary": "Record immutable portfolio cash source observations",
+      "tags": [
+        "Reference Data"
+      ],
+      "route_family": "Write Ingress",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "ingestion_service",
+      "auth_requirement": "governed-enterprise-readiness",
+      "audit_requirement": "audit-required",
+      "request_schema": "CashAvailabilityObservationIngestionRequest",
+      "response_schemas": [
+        {
+          "status_code": "200",
+          "schema": "IngestionJobResponse",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        }
+      ],
+      "pagination": [],
+      "filtering": [],
+      "sorting": [],
+      "idempotency_behavior": "ingestion-job-idempotency-supported-where-header-present",
+      "downstream_consumers": [
+        "source-adapters",
+        "operations"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "ingestion_service",
+      "method": "POST",
+      "path": "/ingest/portfolio-funding-investment-observations",
+      "route_key": "POST /ingest/portfolio-funding-investment-observations",
+      "operation_id": "ingest_portfolio_funding_investment_observations_ingest_portfolio_funding_investment_observations_post",
+      "summary": "Record immutable portfolio funding and investment assertions",
+      "tags": [
+        "Reference Data"
+      ],
+      "route_family": "Write Ingress",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "ingestion_service",
+      "auth_requirement": "governed-enterprise-readiness",
+      "audit_requirement": "audit-required",
+      "request_schema": "FundingInvestmentObservationIngestionRequest",
+      "response_schemas": [
+        {
+          "status_code": "200",
+          "schema": "IngestionJobResponse",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        }
+      ],
+      "pagination": [],
+      "filtering": [],
+      "sorting": [],
+      "idempotency_behavior": "ingestion-job-idempotency-supported-where-header-present",
+      "downstream_consumers": [
+        "source-adapters",
+        "operations"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "ingestion_service",
+      "method": "POST",
       "path": "/ingest/portfolio-party-role-assignments",
       "route_key": "POST /ingest/portfolio-party-role-assignments",
       "operation_id": "ingest_portfolio_party_role_assignments_ingest_portfolio_party_role_assignments_post",
@@ -7308,6 +7398,57 @@
       "downstream_consumers": [
         "lotus-manage",
         "lotus-gateway"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "query_control_plane_service",
+      "method": "POST",
+      "path": "/integration/portfolios/{portfolio_id}/financial-source-observations/query",
+      "route_key": "POST /integration/portfolios/{portfolio_id}/financial-source-observations/query",
+      "operation_id": "query_portfolio_source_observations_integration_portfolios__portfolio_id__financial_source_observations_query_post",
+      "summary": "Read pinned portfolio financial source observations",
+      "tags": [
+        "Integration"
+      ],
+      "route_family": "Analytics Input",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "query_control_plane_service",
+      "auth_requirement": "not-declared-in-openapi",
+      "audit_requirement": "mutation-audit-required",
+      "request_schema": "PortfolioSourceObservationsRequest",
+      "response_schemas": [
+        {
+          "status_code": "200",
+          "schema": "PortfolioSourceObservationsResponse",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Requested tenant does not match admitted tenant authority."
+        },
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        }
+      ],
+      "pagination": [],
+      "filtering": [
+        "portfolio_id"
+      ],
+      "sorting": [],
+      "idempotency_behavior": "not-declared",
+      "downstream_consumers": [
+        "lotus-manage"
       ],
       "deprecated_alias_metadata": {
         "is_deprecated": false,

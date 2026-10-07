@@ -90,6 +90,50 @@ async def test_openapi_declares_metrics_as_text_plain(async_test_client):
     assert "application/json" not in metrics_content
 
 
+async def test_observation_routes_are_included_with_synchronous_completed_receipt_contract(
+    async_test_client,
+):
+    schema = (await async_test_client.get("/openapi.json")).json()
+    for family in ("cash-availability", "funding-investment"):
+        operation = schema["paths"][f"/ingest/portfolio-{family}-observations"]["post"]
+        assert "200" in operation["responses"]
+        assert "202" not in operation["responses"]
+        assert operation["responses"]["200"]["content"]["application/json"]["schema"][
+            "$ref"
+        ].endswith("/IngestionJobResponse")
+    assert (
+        "completed"
+        in schema["components"]["schemas"]["IngestionJobResponse"]["properties"]["status"]["enum"]
+    )
+
+
+@pytest.mark.parametrize(
+    "capability",
+    [
+        "source_data.portfolio_financial_source_observations.read",
+        "ingestion.portfolio_funding_investment_observations.write",
+        "ingestion.reference_data.write",
+    ],
+)
+async def test_cash_observation_wrong_capability_refuses_before_handler(
+    async_test_client,
+    monkeypatch,
+    capability,
+):
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
+    _configure_auth_context_env(monkeypatch)
+    response = await async_test_client.post(
+        "/ingest/portfolio-cash-availability-observations",
+        headers=_enterprise_headers(capability),
+        json={"observations": []},
+    )
+    assert response.status_code == 403
+    assert (
+        response.json()["reason"]
+        == "missing_capability:ingestion.portfolio_cash_availability_observations.write"
+    )
+
+
 async def test_metrics_include_http_series_samples(async_test_client):
     traffic_response = await async_test_client.get("/openapi.json")
     assert traffic_response.status_code == 200

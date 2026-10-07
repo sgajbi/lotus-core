@@ -51,6 +51,29 @@ SOURCE_PRODUCT_MATERIALIZATION_DESCRIPTION = (
     "transport-serving time; the product contract states which applies."
 )
 
+
+async def test_financial_source_observation_route_is_included_without_tenant_override(
+    async_test_client,
+):
+    schema = (await async_test_client.get("/openapi.json")).json()
+    operation = schema["paths"][
+        "/integration/portfolios/{portfolio_id}/financial-source-observations/query"
+    ]["post"]
+    assert (
+        operation["x-lotus-source-data-product"]["product_name"]
+        == "PortfolioFinancialSourceObservations"
+    )
+    assert operation["x-lotus-source-data-security"][
+        "required_capability"
+    ] == required_source_data_capability("PortfolioFinancialSourceObservations")
+    request_schema = schema["components"]["schemas"]["PortfolioSourceObservationsRequest"]
+    assert request_schema["additionalProperties"] is False
+    assert "tenant_id" not in request_schema["properties"]
+    response_schema = schema["components"]["schemas"]["PortfolioSourceObservationsResponse"]
+    assert response_schema["properties"]["authoritative_state"]["const"] == "UNAVAILABLE"
+    assert response_schema["properties"]["compatibility"]["const"] == "UNAVAILABLE"
+
+
 SOURCE_DATA_PRODUCT_RUNTIME_METADATA_FIELDS = {
     "tenant_id",
     "generated_at",

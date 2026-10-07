@@ -226,5 +226,19 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             records_attribute="lookthrough_components",
             persist_method_name="upsert_instrument_lookthrough_components",
         ),
+        ReferenceDataIngestionCommand(
+            command_key="portfolio_cash_availability_observation",
+            endpoint="/ingest/portfolio-cash-availability-observations",
+            entity_type="portfolio_cash_availability_observation",
+            records_attribute="observations",
+            persist_method_name="append_cash_availability_observations",
+        ),
+        ReferenceDataIngestionCommand(
+            command_key="portfolio_funding_investment_observation",
+            endpoint="/ingest/portfolio-funding-investment-observations",
+            entity_type="portfolio_funding_investment_observation",
+            records_attribute="observations",
+            persist_method_name="append_funding_investment_observations",
+        ),
     ]
 )

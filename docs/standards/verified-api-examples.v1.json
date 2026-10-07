@@ -30,7 +30,8 @@
       "family": "Analytics Input",
       "exampleIds": [
         "analytics-degraded-source-data",
-        "analytics-pagination-filtering-sorting"
+        "analytics-pagination-filtering-sorting",
+        "portfolio-source-observations-diagnostic"
       ]
     },
     {
@@ -50,6 +51,46 @@
     }
   ],
   "examples": [
+    {
+      "id": "portfolio-source-observations-diagnostic",
+      "category": "success",
+      "service": "query_control_plane_service",
+      "family": "Analytics Input",
+      "method": "POST",
+      "path": "/integration/portfolios/{portfolio_id}/financial-source-observations/query",
+      "sourceTests": ["tests/unit/services/query_control_plane_service/application/test_portfolio_source_observations.py"],
+      "request": {
+        "path": {"portfolio_id": "portfolio-synthetic"},
+        "body": {"as_of_date": "2026-01-15", "cash": {"producer_id": "producer-synthetic", "source_record_id": "record-synthetic", "observation_id": "d73c45c3f00973789e3c0e495f225b786f539d882f3e8a5f9c969b1bb439e8e7", "content_hash": "d73c45c3f00973789e3c0e495f225b786f539d882f3e8a5f9c969b1bb439e8e7", "source_cut_id": "cut-original", "source_version": 1}},
+        "authorityBoundary": "Actual application service and full response serializer with synthetic typed port evidence, not PostgreSQL or qualified joined source execution. HTTP success remains diagnostic UNAVAILABLE."
+      },
+      "dynamicFieldPointers": ["/generated_at"],
+      "response": {"status": 200, "body": {
+        "tenant_id": "tenant-synthetic", "generated_at": "2026-10-07T00:00:00Z", "as_of_date": "2026-01-15",
+        "restatement_version": "current", "reconciliation_status": "UNKNOWN", "data_quality_status": "UNAVAILABLE",
+        "latest_evidence_timestamp": null, "source_cut_id": null, "source_batch_fingerprint": null, "snapshot_id": null,
+        "content_hash": "sha256:dbab906a6423e02dd7f44c62655581fc59d04021c33eda42f3a26b785ca1d7d2",
+        "source_digest": "sha256:dbab906a6423e02dd7f44c62655581fc59d04021c33eda42f3a26b785ca1d7d2",
+        "source_refs": ["lotus-core://source/PortfolioFinancialSourceObservations/portfolio-synthetic"],
+        "source_lineage": {"source_owner": "lotus-core", "qualification": "unqualified"},
+        "degradation": {"status": "NONE", "reason_codes": [], "details": []},
+        "source_evidence_current": false, "freshness_status": "UNAVAILABLE", "policy_version": null,
+        "correlation_id": "synthetic-correlation", "product_name": "PortfolioFinancialSourceObservations", "product_version": "v1",
+        "portfolio_id": "portfolio-synthetic", "authoritative_state": "UNAVAILABLE", "compatibility": "UNAVAILABLE",
+        "cash": {
+          "observation_id": "d73c45c3f00973789e3c0e495f225b786f539d882f3e8a5f9c969b1bb439e8e7",
+          "content_hash": "d73c45c3f00973789e3c0e495f225b786f539d882f3e8a5f9c969b1bb439e8e7",
+          "source_system": "producer-synthetic", "source_record_id": "record-synthetic", "source_version": 1,
+          "source_cut_id": "cut-original", "definition_version": "v1", "effective_from": "2026-01-01", "effective_to": "2026-02-01",
+          "observed_at": "2026-03-01T00:00:00Z", "generated_at": "2026-03-01T00:00:00Z", "received_at": "2026-03-02T00:00:00Z",
+          "receipt_job_id": "receipt-original", "coverage": "complete", "coverage_scope": "declared-accounts", "qualification": "unqualified",
+          "latest_restated": false, "currency": "SGD", "settled_amount": "10", "encumbered_amount": null, "available_amount": "0"
+        },
+        "funding_investment": null,
+        "reason_codes": ["SOURCE_PRODUCER_UNQUALIFIED", "JOINED_SOURCE_CUT_COMPATIBILITY_UNPROVEN", "FUNDING_INVESTMENT_OBSERVATION_UNAVAILABLE"]
+      }},
+      "sensitivity": {"syntheticOnly": true, "redactionPolicy": "Synthetic facts and receipt; no authority, eligibility, or live qualification. Only top-level generation time varies."}
+    },
     {
       "id": "source-confirmation-idempotency-conflict",
       "category": "conflict_idempotency",

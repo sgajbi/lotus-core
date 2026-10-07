@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-IngestionJobStatus = Literal["accepted", "queued", "failed"]
+from .ingestion_job_lifecycle_dto import IngestionJobStatus
 
 
 class IngestionReprocessingQueueItemResponse(BaseModel):

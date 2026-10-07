@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from .ingestion_job_replay_dto import ConsumerDlqEventResponse, IngestionReplayAuditResponse
 
-IngestionJobStatus = Literal["accepted", "queued", "failed"]
+IngestionJobStatus = Literal["accepted", "queued", "failed", "completed"]
 IngestionOutcome = Literal[
     "accepted",
     "partially_accepted",

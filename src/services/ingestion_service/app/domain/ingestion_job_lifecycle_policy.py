@@ -8,10 +8,12 @@ class IngestionJobStatus(StrEnum):
     ACCEPTED = "accepted"
     QUEUED = "queued"
     FAILED = "failed"
+    COMPLETED = "completed"
 
 
 class IngestionJobTransition(StrEnum):
     ACCEPTED_TO_QUEUED = "accepted_to_queued"
+    ACCEPTED_TO_COMPLETED = "accepted_to_completed"
     MARK_FAILED = "mark_failed"
     MARK_RETRIED = "mark_retried"
     RETRY_TO_QUEUED = "retry_to_queued"
@@ -31,10 +33,15 @@ class IngestionJobTransitionRule:
 
 
 KNOWN_INGESTION_JOB_STATUSES = frozenset(status.value for status in IngestionJobStatus)
-INGESTION_JOB_TERMINAL_STATUSES: frozenset[str] = frozenset()
+INGESTION_JOB_TERMINAL_STATUSES: frozenset[str] = frozenset({IngestionJobStatus.COMPLETED.value})
 
 
 INGESTION_JOB_TRANSITION_RULES: dict[IngestionJobTransition, IngestionJobTransitionRule] = {
+    IngestionJobTransition.ACCEPTED_TO_COMPLETED: IngestionJobTransitionRule(
+        transition=IngestionJobTransition.ACCEPTED_TO_COMPLETED,
+        expected_statuses=(IngestionJobStatus.ACCEPTED.value,),
+        target_status=IngestionJobStatus.COMPLETED.value,
+    ),
     IngestionJobTransition.ACCEPTED_TO_QUEUED: IngestionJobTransitionRule(
         transition=IngestionJobTransition.ACCEPTED_TO_QUEUED,
         expected_statuses=(IngestionJobStatus.ACCEPTED.value,),

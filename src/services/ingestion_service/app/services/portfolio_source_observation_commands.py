@@ -1,0 +1,93 @@
+"""Authenticate, verify typed producer facts, then create one atomic terminal receipt."""
+
+from collections.abc import Callable
+from dataclasses import dataclass
+
+from portfolio_common.domain.portfolio_source_observations import ObservationConflict
+from portfolio_common.domain.tenant import TenantContext
+from portfolio_common.portfolio_source_observation_qualification import (
+    ProducerObservationAuthority,
+    ProducerSubmissionGrant,
+)
+
+from ..application.reference_data_ingestion_registry import REFERENCE_DATA_INGESTION_REGISTRY
+from ..DTOs.ingestion_job_dto import IngestionJobResponse
+from ..DTOs.portfolio_source_observation_dto import (
+    CashAvailabilityObservationIngestionRequest,
+    FundingInvestmentObservationIngestionRequest,
+)
+from ..infrastructure.portfolio_source_observation_unit_of_work import (
+    PortfolioSourceObservationStager,
+)
+from ..ops_controls import enforce_ingestion_write_rate_limit
+from ..request_metadata import create_ingestion_job_id
+from .ingestion_job_service import IngestionJobService
+
+
+@dataclass(frozen=True, slots=True)
+class ObservationSubmission:
+    tenant_context: TenantContext
+    request: (
+        CashAvailabilityObservationIngestionRequest | FundingInvestmentObservationIngestionRequest
+    )
+    idempotency_key: str
+    correlation_id: str
+    request_id: str
+    trace_id: str
+
+
+class PortfolioSourceObservationCommands:
+    def __init__(
+        self,
+        authority: ProducerObservationAuthority,
+        service_factory: Callable[[PortfolioSourceObservationStager], IngestionJobService],
+    ):
+        self.authority = authority
+        self.service_factory = service_factory
+
+    async def submit(self, submission: ObservationSubmission) -> IngestionJobResponse:
+        context = submission.tenant_context
+        if not context.identity_verified or not submission.idempotency_key.strip():
+            raise ObservationConflict("SOURCE_OBSERVATION_PRODUCER_NOT_ADMITTED")
+        facts = tuple(
+            r.to_observation(context.tenant_id_text) for r in submission.request.observations
+        )
+        admissions = tuple(
+            self.authority.admit(
+                context,
+                ProducerSubmissionGrant(
+                    f.envelope.tenant_id, f.envelope.portfolio_id, f.envelope.producer_id, f.family
+                ),
+            )
+            for f in facts
+        )
+        key = (
+            "portfolio_cash_availability_observation"
+            if isinstance(submission.request, CashAvailabilityObservationIngestionRequest)
+            else "portfolio_funding_investment_observation"
+        )
+        command = REFERENCE_DATA_INGESTION_REGISTRY.require(key)
+        service = self.service_factory(PortfolioSourceObservationStager(facts, admissions))
+        try:
+            await service.assert_ingestion_writable()
+        except PermissionError as exc:
+            raise ObservationConflict("INGESTION_MODE_BLOCKS_WRITES") from exc
+        try:
+            enforce_ingestion_write_rate_limit(endpoint=command.endpoint, record_count=len(facts))
+        except PermissionError as exc:
+            raise ObservationConflict("INGESTION_RATE_LIMIT_EXCEEDED") from exc
+        result = await service.create_or_get_job(
+            job_id=create_ingestion_job_id(),
+            tenant_context=context,
+            endpoint=command.endpoint,
+            entity_type=command.entity_type,
+            accepted_count=len(facts),
+            idempotency_key=submission.idempotency_key,
+            correlation_id=submission.correlation_id,
+            request_id=submission.request_id,
+            trace_id=submission.trace_id,
+            request_payload=command.request_payload(submission.request),
+        )
+        if result.job.status != "completed" or result.job.completed_at is None:
+            raise ObservationConflict("SOURCE_OBSERVATION_RECEIPT_NOT_COMPLETED")
+        return result.job

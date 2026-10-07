@@ -19,6 +19,18 @@ the canonical ingestion job, failure, replay-audit, retained-payload, and consum
 Source-batch identity is nullable and appears only when retained payload evidence proves one
 unambiguous upstream batch.
 
+## Immutable Financial Source Admission
+
+The two portfolio cash-availability and funding-investment observation POST routes return a
+synchronous `completed` receipt, not an asynchronous queue acknowledgement. Verified identity,
+the exact family write capability and a separate server-owned producer grant are all required;
+the deployed grant set is empty. The creation transaction owns facts, correction heads and the
+terminal receipt together. No worker dispatch or direct Kafka publication is implied.
+
+These are independent source assertions, not bank-qualified cash or portfolio eligibility.
+Use the [source methodology](https://github.com/sgajbi/lotus-core/blob/main/docs/methodologies/source-data-products/portfolio-financial-source-observations.md)
+for exact request fields, replay/CAS refusals and outstanding database acceptance controls.
+
 ## Reader Map
 
 | Reader | Use this page for | Evidence path |

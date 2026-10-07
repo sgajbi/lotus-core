@@ -524,13 +524,13 @@ def _load_consumer_metrics(metrics_url: str) -> dict[str, Any]:
                 if sample.name not in names:
                     continue
                 recognized += 1
-                if not _public_consumer_labels(sample.labels):
-                    return {"status": "unavailable", "reason": "private_or_unknown_metric_labels"}
                 if tuple(sample.labels.get(k) for k in ("service", "topic", "group_id")) not in (
                     _CONSUMER_METRIC_SCOPES
                 ):
                     filtered += 1
                     continue
+                if not _public_consumer_labels(sample.labels):
+                    return {"status": "unavailable", "reason": "private_or_unknown_metric_labels"}
                 if not math.isfinite(sample.value):
                     return {"status": "unavailable", "reason": "nonfinite_metric_value"}
                 if len(samples) == DIAGNOSTIC_MAX_ROWS:
