@@ -65,7 +65,10 @@ async def load_error_budget_status_response(
                                 else_=0,
                             )
                         ).label("backlog_jobs"),
-                    ).where(DBIngestionJob.submitted_at >= current_since)
+                    ).where(
+                        DBIngestionJob.submitted_at >= current_since,
+                        DBIngestionJob.status != "completed",
+                    )
                 )
             ).one()
             previous_row = (
@@ -81,6 +84,7 @@ async def load_error_budget_status_response(
                         and_(
                             DBIngestionJob.submitted_at >= previous_since,
                             DBIngestionJob.submitted_at < current_since,
+                            DBIngestionJob.status != "completed",
                         )
                     )
                 )

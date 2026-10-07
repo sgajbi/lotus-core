@@ -69,7 +69,12 @@ included in ingestion processed throughput, while accepted records remain backlo
 failed record accounting retains its existing meaning. Synchronous completed receipts keep their
 completion timestamps but do not enter asynchronous queue-latency samples in either the native
 PostgreSQL aggregate or the fallback. Fast synchronous work cannot dilute a slow queue's p95.
-The existing percentile algorithms and total/failed/backlog semantics remain unchanged.
+SLO total/failed counts and current/previous error-budget windows use only the asynchronous
+cohort, excluding `completed` receipts. Synchronous successes cannot dilute asynchronous failure
+rates or inflate remaining error budget; failed admission leaves no failed synchronous receipt.
+Existing percentile algorithms, thresholds, backlog and DLQ semantics remain unchanged.
+The shared ingestion/event-replay job list and detail status schema includes `completed` for
+readable terminal receipt evidence; this does not add asynchronous processing or replay authority.
 
 Authority intervals are half-open. A null upper bound is unbounded, not a finite maximum-date
 sentinel; even an open interval beginning on the maximum supported date competes with another
