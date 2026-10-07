@@ -3,12 +3,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.services.ingestion_service.app.services.ingestion_slo_status import (
     IngestionSloSnapshot,
     build_slo_status_response,
+    load_slo_status_response,
     slo_snapshot_from_jobs,
 )
 
@@ -110,3 +114,72 @@ def test_synchronous_completion_cannot_dilute_async_queue_latency(scenario):
     )
     assert snapshot.backlog_age_seconds == (0.0 if scenario == "all_sync" else 500.0)
     assert [(job.status, job.submitted_at, job.completed_at) for job in jobs] == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "availability",
+    ["no_session", "aggregate_empty", "fallback_empty", "unavailable", "fallback_records"],
+)
+async def test_slo_query_recovery_defaults_and_metric_publication(availability):
+    now = datetime.now(UTC)
+    aggregate_error = SQLAlchemyError("synthetic aggregate unavailable")
+    fallback_error = SQLAlchemyError("synthetic fallback unavailable")
+    jobs = [_Job("failed", now - timedelta(seconds=70), now - timedelta(seconds=10))]
+    db = SimpleNamespace(
+        execute=AsyncMock(return_value=SimpleNamespace(one=lambda: (None, None, None, None))),
+        scalars=AsyncMock(
+            return_value=SimpleNamespace(
+                all=lambda: jobs if availability == "fallback_records" else []
+            )
+        ),
+    )
+    if availability in {"fallback_empty", "unavailable", "fallback_records"}:
+        db.execute.side_effect = aggregate_error
+    if availability == "unavailable":
+        db.scalars.side_effect = fallback_error
+
+    async def sessions():
+        if availability != "no_session":
+            yield db
+
+    metric, logger = Mock(), Mock()
+    response = await load_slo_status_response(
+        lookback_minutes=15,
+        failure_rate_threshold=Decimal("0.03"),
+        queue_latency_threshold_seconds=5.0,
+        backlog_age_threshold_seconds=300.0,
+        session_factory=sessions,
+        backlog_age_metric=metric,
+        logger=logger,
+    )
+    assert response.lookback_minutes == 15
+    if availability == "fallback_records":
+        assert response.total_jobs == response.failed_jobs == 1
+        assert response.failure_rate == Decimal("1")
+        assert response.p95_queue_latency_seconds == 60.0
+        assert response.breach_failure_rate and response.breach_queue_latency
+    else:
+        assert response.total_jobs == response.failed_jobs == 0
+        assert response.failure_rate == Decimal("0")
+        assert response.p95_queue_latency_seconds == response.backlog_age_seconds == 0.0
+        assert not response.breach_failure_rate and not response.breach_queue_latency
+    assert not response.breach_backlog_age
+    if availability in {"no_session", "unavailable"}:
+        metric.set.assert_not_called()
+    else:
+        metric.set.assert_called_once_with(0.0)
+    if availability == "unavailable":
+        logger.warning.assert_called_once_with(
+            "ingestion_slo_status_fallback_unavailable",
+            extra={"lookback_minutes": 15},
+            exc_info=fallback_error,
+        )
+    else:
+        logger.warning.assert_not_called()
+    if availability == "no_session":
+        db.execute.assert_not_awaited()
+    if availability in {"fallback_empty", "unavailable", "fallback_records"}:
+        db.scalars.assert_awaited_once()
+    else:
+        db.scalars.assert_not_awaited()
