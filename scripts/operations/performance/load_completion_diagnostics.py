@@ -686,21 +686,108 @@ def _load_processing_phases(scope: dict[str, Any], probes: dict[str, Any]) -> di
     if not isinstance(rows, list) or len(rows) > DIAGNOSTIC_MAX_ROWS:
         return {"status": "unavailable", "reason": "phase_row_budget"}
     waits = probes.get("database", {}).get("runtime_db_waits", {}).get("rows", [])
-    qualified = [
-        projected
-        for row in rows
-        if (projected := _project_processing_phase(row, payload, waits)) is not None
-    ]
-    # A reused PID with two active generations is ambiguous, never pick one by row order.
-    pids = [r["backend"]["pid"] for r in qualified]
-    qualified = [r for r in qualified if pids.count(r["backend"]["pid"]) == 1]
+    qualified, admission = _processing_phase_admission(rows, payload, waits)
     return {
         "status": "observed" if qualified else "unavailable",
         "reason": None if qualified else "no_birth_qualified_active_phase",
         "rows": qualified,
+        "admission": admission,
         "truncated": bool(payload.get("truncated")),
         "row_limit": 20,
     }
+
+
+_PHASE_REJECTION_REASONS = frozenset(
+    {
+        "invalid_row",
+        "inactive",
+        "backend_missing",
+        "backend_identity_invalid",
+        "backend_not_in_observed_sample",
+        "backend_identity_ambiguous",
+        "invalid_phase_metadata",
+        "duplicate_pid",
+    }
+)
+_PHASE_COUNTER_MAX = 2**31 - 1
+
+
+def _phase_counter(value: Any) -> dict[str, Any]:
+    """Missing or malformed supporting counters never become zero or row authority."""
+    if value is None:
+        return {"status": "missing", "value": None}
+    if type(value) is not int or not 0 <= value <= _PHASE_COUNTER_MAX:
+        return {"status": "invalid", "value": None}
+    return {"status": "observed", "value": value}
+
+
+def _phase_candidate_rejection(row: Any, waits: list[dict[str, Any]]) -> str | None:
+    if not isinstance(row, dict):
+        return "invalid_row"
+    if row.get("active") is not True:
+        return "inactive"
+    backend = row.get("backend")
+    if not isinstance(backend, dict):
+        return "backend_missing"
+    identity = _diagnostic_backend_identity(backend)
+    if identity is None:
+        return "backend_identity_invalid"
+    matches = sum(_diagnostic_backend_identity(w) == identity for w in waits)
+    if matches == 0:
+        return "backend_not_in_observed_sample"
+    return "backend_identity_ambiguous" if matches > 1 else None
+
+
+def _phase_admission_counts(
+    candidate: int, active: int, admitted: int, reasons: dict[str, int]
+) -> dict[str, Any]:
+    """Closed mutually exclusive first-rejection counts, not runtime failure causes."""
+    counts = (candidate, active, admitted, *reasons.values())
+    if any(type(n) is not int or not 0 <= n <= DIAGNOSTIC_MAX_ROWS for n in counts):
+        raise ValueError("phase_admission_count_invalid")
+    if set(reasons) - _PHASE_REJECTION_REASONS:
+        raise ValueError("phase_admission_category_invalid")
+    if not admitted <= active <= candidate or sum(reasons.values()) != candidate - admitted:
+        raise ValueError("phase_admission_count_mismatch")
+    if active != candidate - reasons.get("inactive", 0) - reasons.get("invalid_row", 0):
+        raise ValueError("phase_admission_active_count_mismatch")
+    return {
+        "schema_version": "processing-phase-admission.v1",
+        "candidate_count": candidate,
+        "active_count": active,
+        "admitted_count": admitted,
+        "rejected_count": candidate - admitted,
+        "rejected_by_reason": reasons,
+        "scope": "bounded_snapshot_rows_not_whole_worker",
+    }
+
+
+def _processing_phase_admission(
+    rows: list[Any], payload: dict[str, Any], waits: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    qualified = []
+    reasons: dict[str, int] = {}
+    for row in rows:
+        reason = _phase_candidate_rejection(row, waits)
+        projected = None if reason else _project_processing_phase(row, payload, waits)
+        if reason is None and projected is None:
+            reason = "invalid_phase_metadata"
+        if reason is not None:
+            reasons[reason] = reasons.get(reason, 0) + 1
+        elif projected is not None:
+            qualified.append(projected)
+    # Preserve the existing fail-closed ambiguity rule; never pick one by row order.
+    pids = [row["backend"]["pid"] for row in qualified]
+    admitted = [row for row in qualified if pids.count(row["backend"]["pid"]) == 1]
+    duplicate_count = len(qualified) - len(admitted)
+    if duplicate_count:
+        reasons["duplicate_pid"] = duplicate_count
+    active = sum(isinstance(row, dict) and row.get("active") is True for row in rows)
+    summary = _phase_admission_counts(len(rows), active, len(admitted), reasons)
+    summary["worker_counters"] = {
+        key: _phase_counter(payload.get(key)) for key in ("capture_errors", "callback_failures")
+    }
+    return admitted, summary
 
 
 def _diagnostic_backend_identity(value: Any) -> tuple[int, datetime, int] | None:
