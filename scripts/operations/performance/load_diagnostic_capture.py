@@ -3,11 +3,189 @@
 from __future__ import annotations
 
 import json
+import math
+import mmap
+import os
+import struct
 import threading
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
+from multiprocessing.shared_memory import SharedMemory
 from typing import Any
+
+SCOPE_INPUT_MAX_BYTES = 32768
+_SCOPE_HEADER = struct.Struct("!IId")
+_SCOPE_VERSION = 1
+_IDENTITY_KEYS = ("run_id", "tenant_id", "portfolio_id", "stage")
+_SCOPE_KEYS = frozenset(_IDENTITY_KEYS) | {
+    "prefix",
+    "submitted_count",
+    "submitted_ids",
+    "portfolio_claim_minimum",
+    "ingestion_job_ids",
+    "runtime",
+    "compose_file",
+    "metrics_port",
+    "phase_generation",
+    "phase_container_id",
+    "phase_container_started_at",
+}
+
+
+def _scope_identity(scope: dict[str, Any]) -> dict[str, str]:
+    identity = {}
+    for key in _IDENTITY_KEYS:
+        value = scope.get(key)
+        if not isinstance(value, str) or not value:
+            raise ValueError("scope_identity_missing")
+        identity[key] = value
+    return identity
+
+
+def _scope_buffer(mapping: SharedMemory) -> memoryview:
+    buffer = mapping.buf
+    if buffer is None:
+        raise ValueError("scope_mapping_closed")
+    return buffer
+
+
+def _validate_scope_ids(values: Any) -> list[str]:
+    if not isinstance(values, list) or len(values) > SCOPE_INPUT_MAX_BYTES:
+        raise ValueError("scope_ids_invalid")
+    size = 0
+    for value in values:
+        if not isinstance(value, str) or not value or len(value) > 1024:
+            raise ValueError("scope_ids_invalid")
+        size += len(value.encode())
+        if size > SCOPE_INPUT_MAX_BYTES:
+            raise ValueError("scope_input_oversized")
+    return values
+
+
+def _validate_scope_fields(scope: dict[str, Any]) -> None:
+    """Keep scalar metadata bounded; arbitrary nested input cannot expand the private copy."""
+    if scope.keys() - _SCOPE_KEYS:
+        raise ValueError("scope_fields_invalid")
+    for key, value in scope.items():
+        if key not in {"submitted_ids", "ingestion_job_ids"}:
+            if value is not None and type(value) not in (str, int, float):
+                raise ValueError("scope_fields_invalid")
+            if len(str(value)) > 4096:
+                raise ValueError("scope_fields_oversized")
+
+
+def _validate_scope(scope: Any, identity: dict[str, str]) -> dict[str, Any]:
+    """Refuse incomplete or foreign input; counts never manufacture delivery identity."""
+    if not isinstance(scope, dict) or _scope_identity(scope) != identity:
+        raise ValueError("scope_identity_mismatch")
+    _validate_scope_fields(scope)
+    ids = _validate_scope_ids(scope.get("submitted_ids"))
+    _validate_scope_ids(scope.get("ingestion_job_ids"))
+    if not ids or type(scope.get("submitted_count")) is not int:
+        raise ValueError("scope_source_ids_missing")
+    if scope["submitted_count"] != len(ids):
+        raise ValueError("scope_source_count_mismatch")
+    return scope
+
+
+class DiagnosticScopeSlot:
+    """One private fixed-size input, published before polling and retired by its owner."""
+
+    def __init__(self, identity_scope: dict[str, Any]) -> None:
+        self.identity = _scope_identity(identity_scope)
+        self.mapping = SharedMemory(create=True, size=_SCOPE_HEADER.size + SCOPE_INPUT_MAX_BYTES)
+        self.lock = threading.Lock()
+        self.bound = False
+        self.requested = False
+        self.closed = False
+
+    @property
+    def descriptor(self) -> dict[str, Any]:
+        return {
+            "name": self.mapping.name,
+            "version": _SCOPE_VERSION,
+            "max_bytes": SCOPE_INPUT_MAX_BYTES,
+        }
+
+    def bind(self, scope: dict[str, Any]) -> None:
+        """Copy once before the waiter; no IPC acknowledgement or child scheduling wait."""
+        encoded = json.dumps(_validate_scope(scope, self.identity), allow_nan=False).encode()
+        if len(encoded) > SCOPE_INPUT_MAX_BYTES:
+            raise ValueError("scope_input_oversized")
+        if not self.lock.acquire(blocking=False):
+            raise ValueError("scope_slot_busy")
+        try:
+            if self.closed or self.bound or self.requested:
+                raise ValueError("scope_already_bound_or_retired")
+            buffer = _scope_buffer(self.mapping)
+            buffer[_SCOPE_HEADER.size : _SCOPE_HEADER.size + len(encoded)] = encoded
+            _SCOPE_HEADER.pack_into(buffer, 0, _SCOPE_VERSION, len(encoded), 0.0)
+            self.bound = True
+        finally:
+            self.lock.release()
+
+    def request(self, deadline: float) -> bool:
+        """Only a fixed header write at the boundary; never serialize scope here."""
+        if not self.lock.acquire(blocking=False):
+            return False
+        try:
+            if self.closed or not self.bound or self.requested:
+                return False
+            struct.pack_into("!d", _scope_buffer(self.mapping), 8, deadline)
+            self.requested = True
+            return True
+        finally:
+            self.lock.release()
+
+    def close(self) -> None:
+        with self.lock:
+            if not self.closed:
+                self.mapping.close()
+                self.mapping.unlink()
+                self.closed = True
+
+
+def read_diagnostic_scope(
+    descriptor: dict[str, Any], identity_scope: dict[str, Any]
+) -> tuple[dict[str, Any], float]:
+    """Attach, validate, copy and close before probes; late attach cannot restart budget."""
+    _validate_scope_descriptor(descriptor)
+    mapping = SharedMemory(name=descriptor["name"])
+    try:
+        buffer, length, deadline = _scope_payload_header(mapping)
+        scope = json.loads(bytes(buffer[_SCOPE_HEADER.size : _SCOPE_HEADER.size + length]))
+        return _validate_scope(scope, _scope_identity(identity_scope)), deadline
+    finally:
+        mapping.close()
+
+
+def _validate_scope_descriptor(descriptor: dict[str, Any]) -> None:
+    if (
+        type(descriptor.get("version")) is not int
+        or type(descriptor.get("max_bytes")) is not int
+        or descriptor.get("version") != _SCOPE_VERSION
+        or descriptor.get("max_bytes") != SCOPE_INPUT_MAX_BYTES
+    ):
+        raise ValueError("scope_descriptor_invalid")
+
+
+def _scope_payload_header(mapping: SharedMemory) -> tuple[memoryview, int, float]:
+    """Validate capacity and the immutable request boundary before any payload copy."""
+    capacity = _SCOPE_HEADER.size + SCOPE_INPUT_MAX_BYTES
+    # Windows attachment reports the page-rounded region, not the original requested size.
+    capacities = {capacity}
+    if os.name == "nt":
+        capacities.add(math.ceil(capacity / mmap.PAGESIZE) * mmap.PAGESIZE)
+    if mapping.size not in capacities:
+        raise ValueError("scope_mapping_size_invalid")
+    buffer = _scope_buffer(mapping)
+    version, length, deadline = _SCOPE_HEADER.unpack_from(buffer)
+    if version != _SCOPE_VERSION or not 0 < length <= SCOPE_INPUT_MAX_BYTES:
+        raise ValueError("scope_header_invalid")
+    if not math.isfinite(deadline) or deadline <= time.monotonic():
+        raise ValueError("scope_request_expired")
+    return buffer, length, deadline
 
 
 class DiagnosticCapture:
@@ -28,12 +206,17 @@ class DiagnosticCapture:
         ready_event: Any,
         idle_seconds: float,
         preparation_budget_seconds: float = 6.0,
+        scope_slot: DiagnosticScopeSlot | None = None,
     ) -> None:
         self.process, self.receiver, self.sender = process, receiver, sender
         self.public_scope, self.stop_process = public_scope, stop_process
         self.budget_seconds, self.max_bytes = budget_seconds, max_bytes
         self.request_event, self.cancel_event = request_event, cancel_event
         self.idle_seconds = idle_seconds
+        self.scope_slot = scope_slot
+        self.scope_binding_status = "not_bound" if scope_slot else "legacy_direct_scope"
+        self.scope_binding_seconds: float | None = None
+        self.boundary_header_seconds: float | None = None
         self.preparation_started = time.monotonic()
         self.requested_at: str | None = None
         self.started: float | None = None
@@ -76,18 +259,49 @@ class DiagnosticCapture:
 
     def request(self) -> bool:
         """Signal the pre-armed child once; never launch, wait, receive or join here."""
-        if (
-            self.started is not None
-            or self.done.is_set()
-            or self.cancel_event.is_set()
-            or self.idle_started is None
-            or time.monotonic() >= self.idle_started + self.idle_seconds
-        ):
+        started = time.monotonic()
+        if self.started is not None or not self._idle_request_ready(started):
             return False
-        self.started = time.monotonic()
+        if self.scope_slot is not None:
+            header_started = time.monotonic()
+            requested = self.scope_slot.request(started + self.budget_seconds - 1)
+            self.boundary_header_seconds = time.monotonic() - header_started
+            if not requested:
+                return False
+        self.started = started
         self.requested_at = datetime.now(UTC).isoformat()
         self.request_event.set()
         return True
+
+    def _idle_request_ready(self, now: float) -> bool:
+        """Shared preparation/cancellation/idle validity for binding and requesting."""
+        return (
+            not self.done.is_set()
+            and not self.cancel_event.is_set()
+            and self.idle_started is not None
+            and now < self.idle_started + self.idle_seconds
+        )
+
+    def bind_scope(self, scope: dict[str, Any]) -> bool:
+        """Publish the known replay source scope once, before entering the completion waiter."""
+        started = time.monotonic()
+        try:
+            if self.scope_slot is None or not self._idle_request_ready(started):
+                self.scope_binding_status = "unavailable"
+                return False
+            self.scope_slot.bind(scope)
+            self.public_scope = {
+                key: value
+                for key, value in scope.items()
+                if key not in {"submitted_ids", "ingestion_job_ids", "compose_file"}
+            }
+            self.scope_binding_status = "bound"
+            return True
+        except (TypeError, ValueError, OSError):
+            self.scope_binding_status = "unavailable"
+            return False
+        finally:
+            self.scope_binding_seconds = time.monotonic() - started
 
     def _supervise(self) -> None:
         if not self.request_event.wait(self.idle_seconds):
@@ -164,6 +378,9 @@ class DiagnosticCapture:
         if self.preparation_seconds is None:
             self.preparation_seconds = time.monotonic() - self.preparation_started
         timing = {
+            "scope_binding_status": self.scope_binding_status,
+            "scope_binding_seconds": self.scope_binding_seconds,
+            "boundary_header_seconds": self.boundary_header_seconds,
             "requested_at": self.requested_at,
             "child_observed_at": result.get("observed_at"),
             "custody_completed_at": datetime.now(UTC).isoformat(),
@@ -198,6 +415,13 @@ class DiagnosticCapture:
         self.request_event.set()
         cleanup = self._stop()
         self._close_pipes(cleanup)
+        if self.scope_slot is not None:
+            try:
+                self.scope_slot.close()
+                cleanup["scope_slot"] = "retired"
+            except Exception as exc:
+                cleanup["scope_slot"] = "unconfirmed"
+                cleanup.setdefault("errors", []).append(type(exc).__name__)
         timing = self._capture_timing(result)
         result.update(child_cleanup=cleanup, capture_timing=timing)
         if len(json.dumps(result, default=str).encode()) > self.max_bytes - 128:

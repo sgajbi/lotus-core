@@ -21,7 +21,11 @@ from portfolio_common.database_runtime_profile import DatabasePoolMode
 from portfolio_common.db import create_sync_database_engine
 from prometheus_client.parser import text_string_to_metric_families
 
-from scripts.operations.performance.load_diagnostic_capture import DiagnosticCapture
+from scripts.operations.performance.load_diagnostic_capture import (
+    DiagnosticCapture,
+    DiagnosticScopeSlot,
+    read_diagnostic_scope,
+)
 from scripts.operations.transaction_processing_load_support import LOAD_TENANT_ID
 
 DIAGNOSTIC_BUDGET_SECONDS = 6.0
@@ -98,7 +102,7 @@ def _new_diagnostic_child(
     kafka_bootstrap_servers: str,
     scope: dict[str, Any],
     *,
-    idle_controls: tuple[Any, Any, Any, float] | None = None,
+    idle_controls: tuple[Any, ...] | None = None,
 ) -> tuple[Any, Any, Any]:
     context = multiprocessing.get_context("spawn")
     receiver, sender = context.Pipe(duplex=False)
@@ -133,13 +137,18 @@ def start_load_completion_diagnostics(
         return None
     context = multiprocessing.get_context("spawn")
     request_event, cancel_event, ready_event = (context.Event() for _ in range(3))
-    process, receiver, sender = _new_diagnostic_child(
-        database_url,
-        metrics_url,
-        kafka_bootstrap_servers,
-        scope,
-        idle_controls=(request_event, cancel_event, ready_event, idle_seconds),
-    )
+    slot = DiagnosticScopeSlot(scope)
+    try:
+        process, receiver, sender = _new_diagnostic_child(
+            database_url,
+            metrics_url,
+            kafka_bootstrap_servers,
+            scope,
+            idle_controls=(request_event, cancel_event, ready_event, idle_seconds, slot.descriptor),
+        )
+    except Exception:
+        slot.close()
+        raise
     return DiagnosticCapture(
         process=process,
         receiver=receiver,
@@ -156,6 +165,7 @@ def start_load_completion_diagnostics(
         cancel_event=cancel_event,
         ready_event=ready_event,
         idle_seconds=idle_seconds,
+        scope_slot=slot,
     )
 
 
@@ -235,11 +245,30 @@ def _idle_diagnostic_worker(
     cancel_event: Any,
     ready_event: Any,
     idle_seconds: float,
+    scope_descriptor: dict[str, Any] | None = None,
 ) -> None:
     """No probes until a one-shot request; expired/unused preparations cannot probe."""
     try:
         ready_event.set()
         if request_event.wait(idle_seconds) and not cancel_event.is_set():
+            if scope_descriptor is not None:
+                try:
+                    scope, deadline = read_diagnostic_scope(scope_descriptor, scope)
+                except Exception as exc:
+                    sender.send_bytes(
+                        json.dumps({"status": "unavailable", "reason": type(exc).__name__}).encode()
+                    )
+                    return
+                _diagnostic_worker(
+                    sender,
+                    database_url,
+                    metrics_url,
+                    kafka_bootstrap_servers,
+                    scope,
+                    cancel_event,
+                    deadline,
+                )
+                return
             _diagnostic_worker(
                 sender, database_url, metrics_url, kafka_bootstrap_servers, scope, cancel_event
             )
@@ -254,6 +283,7 @@ def _diagnostic_worker(
     kafka_bootstrap_servers: str,
     scope: dict[str, Any],
     cancel_event: Any = None,
+    request_deadline: float | None = None,
 ) -> None:
     """No writes/group join/business scans; export only whitelisted SQL structure."""
     public_scope = {
@@ -267,7 +297,11 @@ def _diagnostic_worker(
         "observed_at": datetime.now(UTC).isoformat(),
         "probes": {},
     }
-    deadline = time.monotonic() + DIAGNOSTIC_BUDGET_SECONDS - 1
+    deadline = (
+        time.monotonic() + DIAGNOSTIC_BUDGET_SECONDS - 1
+        if request_deadline is None
+        else request_deadline
+    )
     for name, probe in (
         ("managed_worker", lambda: _load_managed_worker_identity(scope)),
         ("database", lambda: _load_database_diagnostics(database_url, scope)),
@@ -449,6 +483,9 @@ def _load_database_probes(
     }
     result: dict[str, Any] = {}
     for name, (query, params) in probes.items():
+        if name in {"exact_prefix_counts", "outbox_lifecycle"} and not ids:
+            result[name] = {"status": "unavailable", "reason": "submitted_source_ids_missing"}
+            continue
         if name in {"ingestion_lifecycle", "consumer_rejections"} and not jobs:
             result[name] = {"status": "unavailable", "reason": "acknowledgement_job_ids_missing"}
             continue

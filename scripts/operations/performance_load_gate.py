@@ -79,6 +79,8 @@ LOAD_TENANT_HEADERS = {"X-Tenant-Id": LOAD_TENANT_ID}
 MAX_GOVERNED_KEYS_PER_PARTITION = 2
 TRANSACTION_TOPIC_PARTITIONS = KAFKA_TOPIC_PARTITION_COUNTS["transactions.persisted"]
 DRAIN_OBSERVATION_TIMEOUT_SECONDS = 240
+HEALTH_REQUEST_TIMEOUT_SECONDS = 20
+HEALTH_SNAPSHOT_REQUESTS = 3
 GOVERNED_MAX_DRAIN_SECONDS: dict[str, dict[str, float]] = {
     "fast": {
         "steady_state": 60.0,
@@ -314,17 +316,17 @@ def _get_health_snapshot(*, event_replay_base_url: str, ops_token: str) -> dict[
     summary = requests.get(
         f"{event_replay_base_url}/ingestion/health/summary",
         headers=headers,
-        timeout=20,
+        timeout=HEALTH_REQUEST_TIMEOUT_SECONDS,
     )
     slo = requests.get(
         f"{event_replay_base_url}/ingestion/health/slo?lookback_minutes=60",
         headers=headers,
-        timeout=20,
+        timeout=HEALTH_REQUEST_TIMEOUT_SECONDS,
     )
     error_budget = requests.get(
         f"{event_replay_base_url}/ingestion/health/error-budget?lookback_minutes=60",
         headers=headers,
-        timeout=20,
+        timeout=HEALTH_REQUEST_TIMEOUT_SECONDS,
     )
     for response in (summary, slo, error_budget):
         if response.status_code != 200:
@@ -560,6 +562,7 @@ class _LoadEvidenceReport:
             4 * self.args.drain_timeout_seconds
             + 30 * (bursts + 1 + sum(profile["batches"] for profile in profiles))
             + sum(profile["batches"] * profile["sleep_seconds"] for profile in profiles)
+            + (2 * len(profiles) + 1) * HEALTH_SNAPSHOT_REQUESTS * HEALTH_REQUEST_TIMEOUT_SECONDS
         )
         try:
             arguments = self._diagnostic_arguments("replay_deliveries", None)
@@ -578,6 +581,18 @@ class _LoadEvidenceReport:
             self.replay_preparation.update(
                 setup_elapsed_seconds=round(time.monotonic() - preparation_started, 6),
                 setup_claim="all_factory_and_ready_cost_outside_profile_clocks_no_hard_latency_bound",
+                idle_claim="configured_request_timeout_allowance_not_full_response_wall_clock_bound",
+            )
+
+    def bind_replay_scope(self) -> None:
+        """Publish actual replay submissions/ack jobs before waiting; no new receipt claims."""
+        try:
+            scope = self._diagnostic_arguments("replay_deliveries", None)["scope"]
+            bound = self.boundary_capture is not None and self.boundary_capture.bind_scope(scope)
+            self.replay_preparation["scope_binding_status"] = "bound" if bound else "unavailable"
+        except Exception as exc:
+            self.replay_preparation.update(
+                scope_binding_status="unavailable", scope_reason=type(exc).__name__
             )
 
     def replay_pending(self, observation: dict[str, Any], elapsed: float) -> None:
@@ -1117,6 +1132,7 @@ def main(
         report.replay_completion.update(
             accepted_count_sum=replay_request_count, target=replay_target
         )
+        report.bind_replay_scope()
         replay_drain_seconds = _wait_for_repair_replay_completion(
             transaction_processing_base_url=args.transaction_processing_base_url,
             expected_minimum=replay_target if replay_target is not None else replay_request_count,

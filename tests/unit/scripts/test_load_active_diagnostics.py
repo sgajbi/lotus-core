@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import json
 import multiprocessing
+import struct
+import subprocess
+import sys
 import threading
 import time
 from types import SimpleNamespace
@@ -14,7 +17,12 @@ import pytest
 from scripts.operations import performance_load_gate as gate
 from scripts.operations import transaction_processing_load_support as support
 from scripts.operations.performance import load_completion_diagnostics as collector
-from scripts.operations.performance.load_diagnostic_capture import DiagnosticCapture
+from scripts.operations.performance.load_diagnostic_capture import (
+    SCOPE_INPUT_MAX_BYTES,
+    DiagnosticCapture,
+    DiagnosticScopeSlot,
+    read_diagnostic_scope,
+)
 
 
 def observation(count=0, **changes):
@@ -191,7 +199,7 @@ def idle_test_worker(sender, request, cancel, ready, payload, idle_seconds):
         if payload is None:
             hold_pipe(sender)
         else:
-            sender.send_bytes(payload)
+            sender.send_bytes(b"x" * 200000 if payload == "oversized" else payload)
     finally:
         sender.close()
 
@@ -220,6 +228,7 @@ def actual_capture(
     idle_seconds=10,
     start_delay=0,
     preparation_budget=6,
+    scope_slot=None,
 ):
     context = multiprocessing.get_context("spawn")
     receiver, sender = context.Pipe(duplex=False)
@@ -243,6 +252,7 @@ def actual_capture(
         ready_event=ready_event,
         idle_seconds=idle_seconds,
         preparation_budget_seconds=preparation_budget,
+        scope_slot=scope_slot,
     )
     if request:
         capture.request()
@@ -400,6 +410,335 @@ def test_idle_worker_canceled_before_ready_request_never_calls_probes(monkeypatc
     sender.close.assert_called_once()
 
 
+def bound_scope(**changes):
+    return {
+        "run_id": "run",
+        "tenant_id": "tenant",
+        "portfolio_id": "portfolio",
+        "stage": "replay_storm",
+        "submitted_count": 2,
+        "submitted_ids": ["actual-source-1", "actual-source-2"],
+        "ingestion_job_ids": ["present-ack-job"],
+        **changes,
+    }
+
+
+def scope_test_worker(sender, request, cancel, ready, descriptor, identity, expected, delay):
+    """Actual spawn/attachment proof, not database or financial execution."""
+    ready.set()
+    try:
+        if request.wait(10) and not cancel.is_set():
+            time.sleep(delay)
+            try:
+                scope, deadline = read_diagnostic_scope(descriptor, identity)
+                evidence = {
+                    "status": "observed",
+                    "exact_private_scope": scope == expected,
+                    "parent_deadline": deadline,
+                    "job_count": len(scope["ingestion_job_ids"]),
+                }
+            except (ValueError, OSError) as exc:
+                evidence = {"status": "unavailable", "reason": type(exc).__name__}
+            sender.send_bytes(json.dumps(evidence).encode())
+    finally:
+        sender.close()
+
+
+def scope_capture(scope, *, request=True, delay=0, budget=2):
+    context = multiprocessing.get_context("spawn")
+    request_event, cancel, ready = (context.Event() for _ in range(3))
+    slot = DiagnosticScopeSlot(bound_scope())
+    receiver, sender = context.Pipe(duplex=False)
+    process = context.Process(
+        target=scope_test_worker,
+        args=(sender, request_event, cancel, ready, slot.descriptor, bound_scope(), scope, delay),
+    )
+    capture = DiagnosticCapture(
+        process=process,
+        receiver=receiver,
+        sender=sender,
+        public_scope={"run_id": "run"},
+        stop_process=collector._stop_diagnostic_process,
+        budget_seconds=budget,
+        max_bytes=32768,
+        request_event=request_event,
+        cancel_event=cancel,
+        ready_event=ready,
+        idle_seconds=10,
+        scope_slot=slot,
+    )
+    assert capture.preparation_status == "ready"
+    assert capture.bind_scope(scope)
+    if request:
+        assert capture.request()
+    return capture, slot.descriptor
+
+
+@pytest.mark.parametrize("jobs", [[], ["present-ack-job"]])
+def test_actual_spawn_private_scope_after_submissions_is_exact_and_retired(jobs):
+    capture, descriptor = scope_capture(bound_scope(ingestion_job_ids=jobs))
+    result = assert_custody_closed(capture)
+    assert result["status"] == "observed" and result["exact_private_scope"]
+    assert result["parent_deadline"] == capture.started + capture.budget_seconds - 1
+    assert result["job_count"] == len(jobs)
+    assert result["child_cleanup"]["scope_slot"] == "retired"
+    assert result["capture_timing"]["scope_binding_status"] == "bound"
+    assert result["capture_timing"]["boundary_header_seconds"] >= 0
+    assert all(
+        value not in json.dumps(result)
+        for value in [descriptor["name"], "actual-source-1", "present-ack-job", "submitted_ids"]
+    )
+    with pytest.raises(FileNotFoundError):
+        read_diagnostic_scope(descriptor, bound_scope())
+
+
+def test_actual_spawn_late_attachment_never_restarts_parent_deadline():
+    capture, descriptor = scope_capture(bound_scope(), delay=0.3, budget=1.2)
+    result = assert_custody_closed(capture)
+    assert result["status"] == "unavailable" and result["reason"] == "ValueError"
+    assert result["child_cleanup"]["scope_slot"] == "retired"
+
+
+def test_actual_spawn_unused_scope_is_unlinked_without_active_record():
+    capture, descriptor = scope_capture(bound_scope(), request=False)
+    result = assert_custody_closed(capture)
+    assert result["status"] == "unused"
+    assert result["capture_timing"]["requested_at"] is None
+    with pytest.raises(FileNotFoundError):
+        read_diagnostic_scope(descriptor, bound_scope())
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"run_id": "other"},
+        {"tenant_id": "other"},
+        {"portfolio_id": "other"},
+        {"stage": "other"},
+        {"submitted_ids": []},
+        {"submitted_ids": "MISSING"},
+        {"ingestion_job_ids": "MISSING"},
+        {"submitted_count": 3},
+        {"submitted_ids": ["", "actual-source-2"]},
+        {"extra": "x" * SCOPE_INPUT_MAX_BYTES},
+    ],
+)
+def test_scope_slot_refuses_foreign_missing_malformed_or_oversized_input(changes):
+    slot = DiagnosticScopeSlot(bound_scope())
+    try:
+        with pytest.raises(ValueError):
+            slot.bind(bound_scope(**changes))
+        assert not slot.request(time.monotonic() + 1)
+    finally:
+        slot.close()
+
+
+@pytest.mark.parametrize(
+    "corruption", ["version", "length", "truncated", "expired", "identity", "descriptor"]
+)
+def test_scope_attachment_refuses_invalid_header_payload_or_fixed_identity(corruption):
+    slot = DiagnosticScopeSlot(bound_scope())
+    try:
+        slot.bind(bound_scope())
+        slot.request(time.monotonic() + 2)
+        identity, descriptor = bound_scope(), slot.descriptor
+        if corruption == "version":
+            struct.pack_into("!I", slot.mapping.buf, 0, 9)
+        elif corruption == "length":
+            struct.pack_into("!I", slot.mapping.buf, 4, SCOPE_INPUT_MAX_BYTES + 1)
+        elif corruption == "truncated":
+            struct.pack_into("!I", slot.mapping.buf, 4, 1)
+        elif corruption == "expired":
+            struct.pack_into("!d", slot.mapping.buf, 8, time.monotonic() - 1)
+        elif corruption == "identity":
+            identity["tenant_id"] = "foreign"
+        else:
+            descriptor["max_bytes"] += 1
+        with pytest.raises(ValueError):
+            read_diagnostic_scope(descriptor, identity)
+    finally:
+        slot.close()
+
+
+@pytest.mark.parametrize("tier,bursts,size", [("fast", 4, 15), ("full", 12, 30)])
+def test_governed_replay_shape_fits_or_is_explicitly_unavailable(tier, bursts, size):
+    # Actual generated IDs, repeated submissions and one present acknowledgement per burst.
+    sources = gate._build_transaction_batch(
+        portfolio_id=gate.GOVERNED_LOAD_PORTFOLIO_ID,
+        batch_size=120,
+        seed="PERF-20261008T000000Z-replay-source",
+        transaction_date="2026-10-08T00:00:00Z",
+        security_prefix=gate.GOVERNED_LOAD_SECURITY_PREFIX,
+        sequence_offset=0,
+    )
+    ids = [row["transaction_id"] for row in sources[:size]] * bursts
+    scope = bound_scope(
+        submitted_ids=ids,
+        submitted_count=len(ids),
+        ingestion_job_ids=[f"job-{index}" for index in range(bursts)],
+    )
+    slot = DiagnosticScopeSlot(bound_scope())
+    try:
+        slot.bind(scope)
+        assert slot.request(time.monotonic() + 2)
+        assert read_diagnostic_scope(slot.descriptor, bound_scope())[0] == scope
+        with pytest.raises(ValueError, match="already_bound"):
+            slot.bind(scope)
+    finally:
+        slot.close()
+
+
+def test_scope_factory_failure_retires_mapping(monkeypatch):
+    slots = []
+
+    def factory(scope):
+        slot = DiagnosticScopeSlot(scope)
+        slots.append(slot)
+        return slot
+
+    monkeypatch.setattr(collector, "DiagnosticScopeSlot", factory)
+    monkeypatch.setattr(
+        collector, "_new_diagnostic_child", MagicMock(side_effect=RuntimeError("failed"))
+    )
+    with pytest.raises(RuntimeError):
+        collector.start_load_completion_diagnostics(
+            database_url="unused",
+            metrics_url="unused",
+            kafka_bootstrap_servers="unused",
+            scope=bound_scope(),
+            isolated_runtime=True,
+            idle_seconds=10,
+        )
+    assert slots[0].closed
+
+
+@pytest.mark.parametrize("failure", ["_supervise", "_receive", "start", "idle"])
+def test_partial_spawn_or_worker_failure_and_idle_expiry_retire_private_slot(monkeypatch, failure):
+    slot = DiagnosticScopeSlot(bound_scope())
+    descriptor = slot.descriptor
+    original_start = threading.Thread.start
+
+    def start(worker):
+        if getattr(worker._target, "__name__", None) == failure:
+            raise RuntimeError("private worker adapter")
+        original_start(worker)
+
+    monkeypatch.setattr(threading.Thread, "start", start)
+    if failure == "start":
+        monkeypatch.setattr(DelayedProcess, "start", MagicMock(side_effect=RuntimeError("private")))
+    capture = actual_capture(
+        request=False, scope_slot=slot, idle_seconds=0.05 if failure == "idle" else 10
+    )
+    if failure == "idle":
+        assert capture.done.wait(2)
+    result = assert_custody_closed(capture)
+    assert result["child_cleanup"]["scope_slot"] == "retired"
+    assert not capture.bind_scope(bound_scope()) and not capture.request()
+    with pytest.raises(FileNotFoundError):
+        read_diagnostic_scope(descriptor, bound_scope())
+
+
+def test_request_header_is_constant_work_without_json_serialization_or_ack_wait(monkeypatch):
+    slot = DiagnosticScopeSlot(bound_scope())
+    capture = actual_capture(request=False, scope_slot=slot)
+    try:
+        assert not capture.request()  # Unbound is unavailable, not authority for empty-ID probes.
+        assert capture.bind_scope(bound_scope())
+        with monkeypatch.context() as patched:
+            patched.setattr(
+                json, "dumps", MagicMock(side_effect=AssertionError("serialization at poll"))
+            )
+            assert capture.request()
+            assert not capture.request()
+        assert_custody_closed(capture)
+    finally:
+        capture.finish()
+
+
+def test_expired_parent_request_never_calls_any_probe(monkeypatch):
+    probes = [
+        "_load_managed_worker_identity",
+        "_load_database_diagnostics",
+        "_load_consumer_metrics",
+        "_load_processing_phases",
+        "_load_consumer_offsets",
+    ]
+    for name in probes:
+        monkeypatch.setattr(collector, name, MagicMock(side_effect=AssertionError("late probe")))
+    sender = MagicMock()
+    collector._diagnostic_worker(
+        sender, "unused", "unused", "unused", bound_scope(), request_deadline=time.monotonic() - 1
+    )
+    result = json.loads(sender.send_bytes.call_args.args[0])
+    assert all(value["status"] == "budget_exhausted" for value in result["probes"].values())
+
+
+@pytest.mark.parametrize("timeout", [20, 31])
+def test_health_nominal_allowance_tracks_same_configured_requests_without_changing_wait(
+    report, monkeypatch, timeout
+):
+    monkeypatch.setattr(gate, "HEALTH_REQUEST_TIMEOUT_SECONDS", timeout)
+    monkeypatch.setattr(gate._LoadEvidenceReport, "_diagnostic_arguments", lambda *a: {"scope": {}})
+    prepare = MagicMock(return_value=report.boundary_capture)
+    monkeypatch.setattr(gate, "start_load_completion_diagnostics", prepare)
+    profiles = [{"batches": 2, "sleep_seconds": 1}, {"batches": 3, "sleep_seconds": 2}]
+    report.prepare_replay_capture(profiles)
+    assert (
+        prepare.call_args.kwargs["idle_seconds"]
+        == 4 * 240 + 30 * (12 + 1 + 5) + 8 + 5 * 3 * timeout
+    )
+    responses = MagicMock(return_value=SimpleNamespace(status_code=200, json=lambda: {}))
+    monkeypatch.setattr(gate.requests, "get", responses)
+    gate._get_health_snapshot(event_replay_base_url="unused", ops_token="private")
+    assert responses.call_count == gate.HEALTH_SNAPSHOT_REQUESTS
+    assert all(call.kwargs["timeout"] == timeout for call in responses.call_args_list)
+    assert report.args.drain_timeout_seconds == 240
+    assert gate.GOVERNED_MAX_DRAIN_SECONDS["full"]["replay_storm"] == 180
+
+
+def test_report_binds_only_after_ack_scope_and_keeps_missing_accepted_ids(report, monkeypatch):
+    monkeypatch.undo()
+    report.stage = "replay_storm"
+    report.args.transaction_processing_base_url = "http://unused:8090"
+    report.batches[report.stage] = [
+        {"submitted_ids": ["source-a"], "accepted_ids": "MISSING", "acknowledgement": {}},
+        {
+            "submitted_ids": ["source-b"],
+            "accepted_ids": "MISSING",
+            "acknowledgement": {"job_id": "present-job"},
+        },
+    ]
+    report.bind_replay_scope()
+    scope = report.boundary_capture.bind_scope.call_args.args[0]
+    assert scope["submitted_ids"] == ["source-a", "source-b"]
+    assert scope["ingestion_job_ids"] == ["present-job"]
+    assert all(batch["accepted_ids"] == "MISSING" for batch in report.batches[report.stage])
+    report.boundary_capture.request.assert_not_called()
+
+
+def test_spawn_scope_lifecycle_subprocess_emits_no_resource_tracker_warnings():
+    code = (
+        "from tests.unit.scripts import test_load_active_diagnostics as t; import pytest; "
+        "t.test_actual_spawn_private_scope_after_submissions_is_exact_and_retired([]); "
+        "t.test_actual_spawn_unused_scope_is_unlinked_without_active_record(); "
+        "t.test_actual_spawn_late_attachment_never_restarts_parent_deadline(); "
+        "m=pytest.MonkeyPatch(); t.test_scope_factory_failure_retires_mapping(m); m.undo(); "
+        "m=pytest.MonkeyPatch(); "
+        "t.test_partial_spawn_or_worker_failure_and_idle_expiry_retire_private_slot"
+        "(m, '_receive'); "
+        "m.undo()"
+    )
+    result = subprocess.run(
+        [sys.executable, "-Werror", "-c", code],
+        capture_output=True,
+        text=True,
+        timeout=45,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert not result.stderr, result.stderr
+
+
 def test_actual_blocked_child_stopped_without_finish_at_budget():
     capture = actual_capture(budget=2)
     assert capture.done.wait(3)
@@ -409,7 +748,9 @@ def test_actual_blocked_child_stopped_without_finish_at_budget():
 
 
 def test_actual_oversized_pipe_frame_cannot_leave_live_child():
-    capture = actual_capture(payload=b"x" * 200000)
+    # Generate the oversized frame after READY, not in the spawn constructor input.
+    capture = actual_capture(payload="oversized")
+    assert capture.preparation_status == "ready", capture.finish()
     assert capture.done.wait(1.5)
     result = assert_custody_closed(capture)
     assert result["status"] == "unavailable" and result["reason"] == "OSError"
