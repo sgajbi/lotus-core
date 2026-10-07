@@ -840,13 +840,24 @@ active snapshot; missing/reset continuity cannot launch it. Later completion/tim
 replace it, and an unavailable attempt is not retried. A finite owned receiver plus deadline
 timer drains pipe backpressure and stops the child without waiting for report finalization;
 cleanup time is reserved within the original six-second request/collection budget. The child
-is pre-armed idle before any profile workload or measured clock; the pending callback only
-records the boundary and signals an existing Event, never starts a process or waits for receipt.
+is pre-armed idle before any profile workload or measured clock. After replay submissions, one
+validated private scope is copied into a fixed 32KiB input slot before entering the waiter.
+Only actual submitted source transaction IDs and present acknowledgement job IDs are bound;
+count-only acknowledgements do not create accepted delivery IDs. Missing, oversized, malformed,
+foreign or expired scope is unavailable; workload probes refuse empty-ID arrays independently.
+The callback records the boundary, writes a fixed-size immutable parent-deadline header and
+signals an existing Event; it never serializes scope, starts a process or waits for receipt.
+The child validates identity/version/bounds, copies and closes its attachment before probing;
+late scheduling cannot restart its request budget. The input slot is separate from the existing
+32KiB output budget and is closed/unlinked during owned cleanup. Names/payload/IDs remain private.
 Preparation readiness has a separate allowance, and native `Process.start()` has no hard
 preparation-latency guarantee. Idle custody has a separate finite allowance derived from existing
-batch/sleep/drain limits; it does not extend those limits. Expired, failed or unused preparations
+batch/sleep/drain limits plus all pre-boundary health requests, using the same configured timeout
+as those requests (five snapshots times three requests times20s in current profiles). This is
+nominal timeout allowance, not a full-response-duration or scheduling wall-clock guarantee;
+it does not extend any enforcing limit. Expired, failed or unused preparations
 cannot probe and are retired without manufacturing an active-boundary record. Actual setup,
-idle, request and collection timing remain separate; absent request/child timing is null.
+idle, scope-binding, fixed-header, request and collection timing remain separate; absent timing is null.
 Owned threads/child/pipe custody
 is finalized before teardown, with failures explicit rather than masking the enforcing verdict.
 Request lateness, launch/custody overhead and available child observation delay are diagnostic

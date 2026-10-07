@@ -1053,6 +1053,25 @@ def test_main_prearms_before_first_workload_and_retires_unused_without_boundary(
         return original_ingest(**kwargs)
 
     monkeypatch.setattr(performance_load_gate, "_ingest_transactions", ingest)
+
+    def replay(**kwargs):
+        kwargs["on_acknowledgement"](
+            {
+                "submitted_ids": kwargs["transaction_ids"][:10],
+                "accepted_ids": "MISSING",
+                "acknowledgement": {"job_id": "present-job"},
+            }
+        )
+        return 10
+
+    monkeypatch.setattr(performance_load_gate, "_trigger_replay_storm", replay)
+    original_wait = performance_load_gate._wait_for_repair_replay_completion
+
+    def wait_replay(**kwargs):
+        capture.bind_scope.assert_called_once()
+        return original_wait(**kwargs)
+
+    monkeypatch.setattr(performance_load_gate, "_wait_for_repair_replay_completion", wait_replay)
     monkeypatch.setattr(
         performance_load_gate, "_wait_for_transaction_processing", lambda **kwargs: 1
     )
@@ -1062,6 +1081,10 @@ def test_main_prearms_before_first_workload_and_retires_unused_without_boundary(
     assert "slo_boundary_capture" not in completion["replay_completion"]
     capture.request.assert_not_called()
     capture.finish.assert_called_once()
+    capture.bind_scope.assert_called_once()
+    scope = capture.bind_scope.call_args.args[0]
+    assert scope["stage"] == "replay_storm" and scope["submitted_ids"]
+    assert scope["submitted_count"] == len(scope["submitted_ids"])
 
 
 @pytest.mark.parametrize("collector_error", [PermissionError, TimeoutError])
@@ -1235,6 +1258,26 @@ def test_missing_acknowledgement_never_becomes_zero_rejects():
     result = load_completion_diagnostics._load_database_probes(connection, scope, object)
     assert result["consumer_rejections"]["status"] == "unavailable"
     assert result["ingestion_lifecycle"]["status"] == "unavailable"
+
+
+@pytest.mark.parametrize("jobs", [[], ["actual-job"]])
+def test_missing_source_ids_refuse_any_empty_without_suppressing_independent_probes(jobs):
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchmany.return_value = []
+    result = load_completion_diagnostics._load_database_probes(
+        connection, {"submitted_ids": [], "ingestion_job_ids": jobs, "portfolio_id": "p"}, object
+    )
+    for name in ("exact_prefix_counts", "outbox_lifecycle"):
+        assert result[name] == {"status": "unavailable", "reason": "submitted_source_ids_missing"}
+    assert result["runtime_db_waits"]["status"] == "observed"
+    assert result["ingestion_lifecycle"]["status"] == ("observed" if jobs else "unavailable")
+    queries = [call.args[0] for call in cursor.execute.call_args_list]
+    assert not any(
+        "FROM transactions " in query or "FROM outbox_events " in query for query in queries
+    )
+    if jobs:
+        assert "actual-job" in str(cursor.execute.call_args_list)
 
 
 @pytest.mark.parametrize(
@@ -2299,7 +2342,7 @@ def test_diagnostic_lock_projection_qualifies_sql_ordered_rows_and_reports_trunc
     # Model the driver cap and SQL ordering, not Python recovery of unseen rows.
     # Actual priority over lower-PID noise requires the separate native PG proof.
     sql_ordered = locks[-2:] + locks[:19]
-    cursor.fetchmany.side_effect = [[], [], waits, sql_ordered]
+    cursor.fetchmany.side_effect = [waits, sql_ordered]
     assert len(sql_ordered) == load_completion_diagnostics.DIAGNOSTIC_MAX_ROWS + 1
     result = load_completion_diagnostics._load_database_probes(
         connection, {"submitted_ids": [], "ingestion_job_ids": [], "portfolio_id": "p"}, object

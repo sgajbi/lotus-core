@@ -422,18 +422,30 @@ Capture uses the same managed, private, birth-qualified probes and unchanged 32K
 completion polling continues; a separate owned deadline timer stops the child independently of
 late report finalization, reserving cleanup time within the six-second request/collection policy.
 Before all profile workloads and measured clocks, the owned child is prepared idle with a
-readiness receipt. The callback records the boundary and signals an existing Event only; it
-never spawns, receives or joins. Native `Process.start()` has no hard preparation latency bound,
+readiness receipt. After replay submissions and before waiting, a publish-once private32KiB
+input slot binds actual source IDs and only present acknowledgement job IDs. Accepted delivery
+IDs remain missing when acknowledgements contain only counts. Missing, oversized, malformed,
+foreign or expired scope is unavailable, never an observed zero from empty-ID workload queries.
+The callback records the boundary, writes only a fixed-size immutable parent-deadline header,
+and signals the existing Event; it never serializes scope, spawns, receives or joins. The child
+validates descriptor/version/bounds/run/tenant/portfolio/stage, copies and closes its attachment
+before probes, and cannot restart its budget after late scheduling. Input and output each have
+separate32KiB caps; parent cleanup closes/unlinks the private slot without publishing its name,
+payload or IDs. Native `Process.start()` has no hard preparation latency bound,
 so actual setup time is reported separately, not certified as a startup SLO. Preparation expiry
 or failure is unavailable, not retried. A separate finite idle allowance derives from existing
-batch/sleep/drain limits without extending any enforcing deadline. Idle expiry/cancellation and
+batch/sleep/drain limits plus pre-boundary health requests using their configured timeout.
+Current profiles have five health snapshots, each three sequential requests at20s:300s nominal
+allowance. Requests timeouts are not full-response wall-clock bounds; this arithmetic is not a
+hard scheduling/runtime guarantee and extends no enforcing deadline. Idle expiry/cancellation and
 unused teardown prevent probes and do not manufacture active capture evidence. Both workers are joined
 before runtime teardown. A partial/oversized frame, child failure or unavailable cleanup is
 explicit evidence, not measured zero. No diagnostic callback or finalization exception replaces
 the original completion result, timeout or enforcing failure.
 
 Request time is not exact capture time. Launch overhead, request-to-child wall-clock delay when
-available, custody elapsed time and cleanup status are retained; missing timing remains null.
+available, scope-binding/fixed-header overhead, custody elapsed time and cleanup status are
+retained; missing timing remains null.
 Scheduling and probe latency can make observation late. The capture is supporting evidence,
 not an exact 180-second atomic snapshot, delivery receipt, Python await or financial cause proof.
 Completion polling, workload, ordering, UOW/outbox behavior and the independent SLO verdict are

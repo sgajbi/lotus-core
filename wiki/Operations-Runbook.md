@@ -42,9 +42,20 @@ or timeout preserves the earlier snapshot, and an unavailable request is not ret
 The same private collector retains six-second/32KiB/20-row limits. An owned finite receiver and
 deadline timer provide timely receipt and child cleanup independently of late finalization,
 without spawning or waiting in completion polling. The child is pre-armed idle before all
-profile workloads/clocks; the callback records the boundary and signals an existing Event only.
+profile workloads/clocks. Actual submitted source IDs and present acknowledgement job IDs bind
+once into a private32KiB input slot after submissions, before waiting. Accepted delivery IDs are
+not inferred from counts. Missing/oversized/malformed/foreign/expired scope is unavailable, and
+empty-ID workload probes refuse to report observed zero. The callback records the boundary,
+writes only the fixed-size immutable parent-deadline header and signals the existing Event;
+no scope serialization, child startup or acknowledgement wait occurs there. The child validates
+version/bounds/run/tenant/portfolio/stage, copies/closes its attachment before probing and never
+restarts the parent budget after delayed scheduling. Input/output caps are separate; owned
+cleanup closes/unlinks the mapping without publishing its name, payload or IDs.
 Setup/readiness and finite idle custody are separate from the unchanged six-second collection
-budget. Native process startup has no hard preparation-latency guarantee; report actual setup
+budget. Idle allowance includes all pre-boundary health requests using their actual configured
+timeout: currently five snapshots times three requests times20s gives300s nominal allowance,
+not a full-response or scheduling wall-clock guarantee. Binding/header overhead is retained;
+the180SLO/240wait remain unchanged. Native process startup has no hard preparation-latency guarantee; report actual setup
 cost, not a startup SLO. Failed/expired/unused preparations retire without probes, retries or a
 manufactured active-boundary record. Request lateness, launch overhead, capture timing and
 cleanup posture are explicit; missing timing is null, not zero. This is not an exact atomic
