@@ -411,9 +411,21 @@ async def _configure(lease, monkeypatch, *, grants=True, funding=False):
             )
         )
 
+    from src.services.ingestion_service.app.infrastructure import (
+        ingestion_idempotency_replay_reader as replay_adapter,
+    )
+
+    class ReplayReader:
+        async def find_matching_job(self, **kwargs):
+            async with lease.sessions() as session:
+                return await replay_adapter.SqlAlchemyIngestionIdempotencyReplayReader(
+                    session, fingerprint_keyring={"synthetic-key": "synthetic-secret"}
+                ).find_matching_job(**kwargs)
+
     commands = PortfolioSourceObservationCommands(
         UnqualifiedProducerAuthority((grant,) if grants else ()),
         factory,
+        ReplayReader(),
     )
     monkeypatch.setitem(
         write_app.dependency_overrides, get_portfolio_source_observation_commands, lambda: commands
@@ -541,12 +553,30 @@ async def test_actual_included_handlers_commit_receipt_and_keep_original_after_c
         assert response.status_code == 200, response.text
         receipt = response.json()
         assert receipt["status"] == "completed" and receipt["completed_at"] is not None
-        replay = await writer.post(
-            "/ingest/portfolio-cash-availability-observations",
-            headers=_headers(lease.tenant, WRITE_CAP),
-            json=_payload(original),
+        async with lease.sessions.begin() as session:
+            control = await session.get(IngestionOpsControl, 1)
+            control.mode = "paused"
+        from unittest.mock import Mock
+
+        from src.services.ingestion_service.app.services import (
+            portfolio_source_observation_commands as command_module,
         )
+
+        with monkeypatch.context() as replay_controls:
+            exhausted_rate = Mock(side_effect=PermissionError("rate exhausted"))
+            replay_controls.setattr(
+                command_module, "enforce_ingestion_write_rate_limit", exhausted_rate
+            )
+            replay = await writer.post(
+                "/ingest/portfolio-cash-availability-observations",
+                headers=_headers(lease.tenant, WRITE_CAP),
+                json=_payload(original),
+            )
+            exhausted_rate.assert_not_called()
         assert replay.status_code == 200 and replay.json()["job_id"] == receipt["job_id"]
+        async with lease.sessions.begin() as session:
+            control = await session.get(IngestionOpsControl, 1)
+            control.mode = "normal"
     correction = replace(
         original,
         available=Decimal("3"),

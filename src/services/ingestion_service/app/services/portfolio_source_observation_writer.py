@@ -1,7 +1,7 @@
 """Append/CAS inside the supplied receipt transaction; never commit or dispatch."""
 
 from dataclasses import asdict
-from datetime import date, datetime
+from datetime import datetime
 
 from portfolio_common.domain.calculation_lineage import canonical_content_hash
 from portfolio_common.domain.portfolio_source_observations import (
@@ -213,6 +213,8 @@ class PortfolioSourceObservationWriter:
     async def _refuse_competing_interval(self, row_model, head_model, fact):
         envelope = fact.envelope
         authority_scope = [row_model.coverage_scope == envelope.coverage_scope]
+        if envelope.effective_to is not None:
+            authority_scope.append(row_model.effective_from < envelope.effective_to)
         if isinstance(fact, CashAvailabilityObservation):
             authority_scope.append(row_model.currency == fact.currency)
         competing = await self.session.scalar(
@@ -228,7 +230,6 @@ class PortfolioSourceObservationWriter:
                 row_model.producer_id == envelope.producer_id,
                 *authority_scope,
                 row_model.source_record_id != envelope.source_record_id,
-                row_model.effective_from < (envelope.effective_to or date.max),
                 (row_model.effective_to.is_(None))
                 | (row_model.effective_to > envelope.effective_from),
             )

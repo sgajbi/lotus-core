@@ -467,6 +467,62 @@ async def test_competing_same_scope_interval_refuses_without_orphan_receipt(obse
     assert await lease.counts() == (1, 1, 1)
 
 
+@pytest.mark.parametrize(
+    "existing_from,existing_to,new_from,new_to,overlaps",
+    [
+        (date.max, None, date.max, None, True),
+        (date.max, None, date(2026, 1, 1), None, True),
+        (date(2026, 1, 1), None, date.max, None, True),
+        (date(2026, 1, 1), date(2026, 2, 1), date(2026, 2, 1), None, False),
+        (date(2026, 2, 1), None, date(2026, 1, 1), date(2026, 2, 1), False),
+        (date(2026, 2, 1), None, date(2026, 1, 1), date(2026, 3, 1), True),
+    ],
+)
+async def test_nullable_interval_boundary_admission_and_completed_replay(
+    observation_lease, existing_from, existing_to, new_from, new_to, overlaps
+):
+    lease = observation_lease
+    first = lease.cash(record="first")
+    first = replace(
+        first,
+        envelope=replace(first.envelope, effective_from=existing_from, effective_to=existing_to),
+    )
+    original = await lease.create(first, idempotency="boundary-original")
+    replay = await lease.create(first, idempotency="boundary-original")
+    assert not replay.created and replay.job.job_id == original.job.job_id
+    assert replay.job.status == "completed" and replay.job.completed_at is not None
+    second = lease.cash(record="second")
+    second = replace(
+        second, envelope=replace(second.envelope, effective_from=new_from, effective_to=new_to)
+    )
+    if overlaps:
+        with pytest.raises(ObservationConflict, match="SOURCE_OBSERVATION_AMBIGUOUS_OVERLAP"):
+            await lease.create(second)
+        assert await lease.counts() == (1, 1, 1)
+    else:
+        assert (await lease.create(second)).job.status == "completed"
+        assert await lease.counts() == (2, 2, 2)
+
+
+async def test_concurrent_open_date_max_intervals_have_one_completed_receipt(observation_lease):
+    lease = observation_lease
+    facts = [
+        replace(
+            lease.cash(record=record),
+            envelope=replace(lease.cash(record=record).envelope, effective_from=date.max),
+        )
+        for record in ("first", "second")
+    ]
+    results = await asyncio.gather(*(lease.create(fact) for fact in facts), return_exceptions=True)
+    winners = [result for result in results if not isinstance(result, Exception)]
+    refusals = [result for result in results if isinstance(result, Exception)]
+    assert len(winners) == len(refusals) == 1
+    assert winners[0].job.status == "completed"
+    assert isinstance(refusals[0], ObservationConflict)
+    assert "SOURCE_OBSERVATION_AMBIGUOUS_OVERLAP" in str(refusals[0])
+    assert await lease.counts() == (1, 1, 1)
+
+
 @pytest.mark.parametrize("operation", ["UPDATE", "DELETE", "TRUNCATE", "PARENT_TRUNCATE"])
 async def test_database_refuses_fact_mutation_without_disabling_triggers(
     observation_lease,

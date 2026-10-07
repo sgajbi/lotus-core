@@ -33,6 +33,10 @@ from src.services.ingestion_service.app.services.portfolio_source_observation_co
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 
 
+def _reader():
+    return SimpleNamespace(find_matching_job=AsyncMock(return_value=None))
+
+
 def _submission():
     envelope = ObservationEnvelope(
         "tenant-synthetic",
@@ -89,9 +93,9 @@ async def test_default_no_producer_permission_has_no_receipt_or_rate_effect(monk
     rate = Mock()
     monkeypatch.setattr(module, "enforce_ingestion_write_rate_limit", rate)
     with pytest.raises(ObservationConflict, match="PRODUCER_NOT_ADMITTED"):
-        await PortfolioSourceObservationCommands(UnqualifiedProducerAuthority(), factory).submit(
-            submission
-        )
+        await PortfolioSourceObservationCommands(
+            UnqualifiedProducerAuthority(), factory, _reader()
+        ).submit(submission)
     factory.assert_not_called()
     rate.assert_not_called()
 
@@ -114,7 +118,9 @@ async def test_admitted_submission_binds_server_scope_and_atomic_callback_withou
     )
     factory = Mock(return_value=service)
     monkeypatch.setattr(module, "enforce_ingestion_write_rate_limit", Mock())
-    result = await PortfolioSourceObservationCommands(authority, factory).submit(submission)
+    result = await PortfolioSourceObservationCommands(authority, factory, _reader()).submit(
+        submission
+    )
     assert result is job
     stage = factory.call_args.args[0]
     assert stage.facts == (fact,)
@@ -148,9 +154,9 @@ async def test_command_resolves_native_request_lineage_when_submission_has_no_ov
     monkeypatch.setattr(module, "get_request_lineage", resolver)
     monkeypatch.setattr(module, "enforce_ingestion_write_rate_limit", Mock())
     assert (
-        await PortfolioSourceObservationCommands(authority, lambda stage: service).submit(
-            submission
-        )
+        await PortfolioSourceObservationCommands(
+            authority, lambda stage: service, _reader()
+        ).submit(submission)
         is job
     )
     resolver.assert_called_once_with()
@@ -179,6 +185,100 @@ async def test_nonterminal_or_failed_receipt_is_not_reported_as_synchronous_succ
     )
     monkeypatch.setattr(module, "enforce_ingestion_write_rate_limit", Mock())
     with pytest.raises(ObservationConflict, match="RECEIPT_NOT_COMPLETED"):
-        await PortfolioSourceObservationCommands(authority, lambda stage: service).submit(
+        await PortfolioSourceObservationCommands(
+            authority, lambda stage: service, _reader()
+        ).submit(submission)
+
+
+@pytest.mark.parametrize(
+    "status,completed_at",
+    [
+        ("completed", datetime(2026, 1, 1, tzinfo=UTC)),
+        ("completed", None),
+        ("accepted", None),
+        ("queued", None),
+        ("failed", None),
+    ],
+)
+async def test_matching_replay_precedes_write_controls_but_requires_complete_receipt(
+    monkeypatch, status, completed_at
+):
+    submission, fact = _submission()
+    authority = UnqualifiedProducerAuthority(
+        (
+            ProducerSubmissionGrant(
+                "tenant-synthetic", "portfolio-synthetic", "producer-synthetic", fact.family
+            ),
+        )
+    )
+    job = SimpleNamespace(status=status, completed_at=completed_at)
+    reader = _reader()
+    reader.find_matching_job.return_value = SimpleNamespace(job_id="existing", status=status)
+    service = SimpleNamespace(
+        get_job=AsyncMock(return_value=job),
+        assert_ingestion_writable=AsyncMock(side_effect=PermissionError("read-only")),
+        create_or_get_job=AsyncMock(),
+    )
+    rate = Mock(side_effect=PermissionError("rate exhausted"))
+    monkeypatch.setattr(module, "enforce_ingestion_write_rate_limit", rate)
+    commands = PortfolioSourceObservationCommands(authority, lambda stage: service, reader)
+    if status == "completed" and completed_at is not None:
+        assert await commands.submit(submission) is job
+    else:
+        with pytest.raises(ObservationConflict, match="RECEIPT_NOT_COMPLETED"):
+            await commands.submit(submission)
+    service.get_job.assert_awaited_once_with("existing", tenant_id="tenant-synthetic")
+    assert reader.find_matching_job.call_args.kwargs["tenant_id"] == "tenant-synthetic"
+    service.assert_ingestion_writable.assert_not_awaited()
+    service.create_or_get_job.assert_not_awaited()
+    rate.assert_not_called()
+
+
+async def test_unadmitted_producer_cannot_read_matching_receipt():
+    submission, _ = _submission()
+    reader = _reader()
+    with pytest.raises(ObservationConflict, match="PRODUCER_NOT_ADMITTED"):
+        await PortfolioSourceObservationCommands(
+            UnqualifiedProducerAuthority(), Mock(), reader
+        ).submit(submission)
+    reader.find_matching_job.assert_not_awaited()
+
+
+@pytest.mark.parametrize("blocked_control", ["mode", "rate"])
+async def test_no_matching_fingerprint_still_requires_write_controls(monkeypatch, blocked_control):
+    submission, fact = _submission()
+    authority = UnqualifiedProducerAuthority(
+        (
+            ProducerSubmissionGrant(
+                "tenant-synthetic", "portfolio-synthetic", "producer-synthetic", fact.family
+            ),
+        )
+    )
+    service = SimpleNamespace(
+        assert_ingestion_writable=AsyncMock(
+            side_effect=PermissionError("read-only") if blocked_control == "mode" else None
+        ),
+        create_or_get_job=AsyncMock(),
+    )
+    reader = _reader()
+    rate = Mock(side_effect=PermissionError("rate exhausted"))
+    monkeypatch.setattr(module, "enforce_ingestion_write_rate_limit", rate)
+    expected = "MODE_BLOCKS_WRITES" if blocked_control == "mode" else "RATE_LIMIT_EXCEEDED"
+    with pytest.raises(ObservationConflict, match=expected):
+        await PortfolioSourceObservationCommands(authority, lambda stage: service, reader).submit(
             submission
         )
+    reader.find_matching_job.assert_awaited_once()
+    service.create_or_get_job.assert_not_awaited()
+
+
+async def test_dependency_wires_existing_fingerprint_reader():
+    from src.services.ingestion_service.app.dependencies import (
+        get_portfolio_source_observation_commands,
+    )
+
+    reader = _reader()
+    commands = get_portfolio_source_observation_commands(
+        authority=UnqualifiedProducerAuthority(), idempotency_replay_reader=reader
+    )
+    assert commands.idempotency_replay_reader is reader

@@ -1,14 +1,94 @@
 """Native callback/control proof with simulated SQL I/O; not PostgreSQL ACID proof."""
 
-from datetime import UTC, datetime
+import sqlite3
+from contextlib import closing
+from datetime import UTC, date, datetime
+from types import SimpleNamespace
 
 import pytest
+from portfolio_common.domain.portfolio_source_observations import ObservationConflict
+from portfolio_common.portfolio_source_observation_models import (
+    CashAvailabilityObservationHead,
+    CashAvailabilityObservationRow,
+)
+from sqlalchemy.dialects import sqlite
 
 from src.services.ingestion_service.app.services.ingestion_job_lifecycle import (
     create_or_get_job_result,
 )
+from src.services.ingestion_service.app.services.portfolio_source_observation_writer import (
+    PortfolioSourceObservationWriter,
+)
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
+
+
+@pytest.mark.parametrize(
+    "existing_from,existing_to,new_from,new_to,overlaps",
+    [
+        (date.max, None, date.max, None, True),
+        (date.max, None, date(2026, 1, 1), None, True),
+        (date(2026, 1, 1), None, date.max, None, True),
+        (date(2026, 1, 1), date(2026, 2, 1), date(2026, 2, 1), None, False),
+        (date(2026, 2, 1), None, date(2026, 1, 1), date(2026, 2, 1), False),
+        (date(2026, 2, 1), None, date(2026, 1, 1), date(2026, 3, 1), True),
+    ],
+)
+async def test_overlap_executes_nullable_half_open_predicate(
+    existing_from, existing_to, new_from, new_to, overlaps
+):
+    # SQLite evaluates the actual SQL predicate; native PostgreSQL proof is separate.
+    row_model, head_model = CashAvailabilityObservationRow, CashAvailabilityObservationHead
+    with closing(sqlite3.connect(":memory:")) as connection:
+        connection.execute(
+            f"CREATE TABLE {row_model.__tablename__} (observation_id TEXT, content_hash TEXT, "
+            "tenant_id TEXT, portfolio_id TEXT, producer_id TEXT, coverage_scope TEXT, "
+            "source_record_id TEXT, effective_from TEXT, effective_to TEXT)"
+        )
+        connection.execute(
+            f"CREATE TABLE {head_model.__tablename__} (observation_id TEXT, content_hash TEXT)"
+        )
+        connection.execute(
+            f"INSERT INTO {row_model.__tablename__} VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "old",
+                "hash",
+                "tenant",
+                "portfolio",
+                "producer",
+                "scope",
+                "old",
+                existing_from.isoformat(),
+                existing_to.isoformat() if existing_to else None,
+            ),
+        )
+        connection.execute(f"INSERT INTO {head_model.__tablename__} VALUES ('old', 'hash')")
+
+        class Session:
+            async def scalar(self, statement):
+                sql = statement.compile(
+                    dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}
+                )
+                row = connection.execute(str(sql)).fetchone()
+                return row[0] if row else None
+
+        fact = SimpleNamespace(
+            envelope=SimpleNamespace(
+                tenant_id="tenant",
+                portfolio_id="portfolio",
+                producer_id="producer",
+                coverage_scope="scope",
+                source_record_id="new",
+                effective_from=new_from,
+                effective_to=new_to,
+            )
+        )
+        writer = PortfolioSourceObservationWriter(Session())
+        if overlaps:
+            with pytest.raises(ObservationConflict, match="SOURCE_OBSERVATION_AMBIGUOUS_OVERLAP"):
+                await writer._refuse_competing_interval(row_model, head_model, fact)
+        else:
+            await writer._refuse_competing_interval(row_model, head_model, fact)
 
 
 class _Begin:

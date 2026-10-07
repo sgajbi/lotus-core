@@ -94,7 +94,7 @@ async def load_capacity_status_response(
                 func.sum(
                     case(
                         (
-                            DBIngestionJob.status.in_(["queued", "failed"]),
+                            DBIngestionJob.status.in_(["queued", "failed", "completed"]),
                             DBIngestionJob.accepted_count,
                         ),
                         else_=0,
