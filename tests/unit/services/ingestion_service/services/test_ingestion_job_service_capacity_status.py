@@ -2,9 +2,12 @@ import sqlite3
 from contextlib import closing
 from datetime import UTC, datetime
 from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy.dialects import sqlite
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.services.ingestion_service.app.services import ingestion_job_service as service_module
 from src.services.ingestion_service.app.services.ingestion_job_service import (
@@ -141,3 +144,69 @@ async def test_get_capacity_status_aggregates_groups(service: IngestionJobServic
     assert first.utilization_ratio == Decimal("0.6666666666666666666666666666")
     assert first.saturation_state == "stable"
     assert first.estimated_drain_seconds is not None
+
+
+async def test_capacity_without_session_returns_empty_default_replica_posture(service, monkeypatch):
+    async def sessions():
+        for session in ():
+            yield session
+
+    monkeypatch.setattr(service_module, "get_async_db_session", sessions)
+    monkeypatch.setattr(service_module, "CAPACITY_ASSUMED_REPLICAS", 3)
+    result = await service.get_capacity_status(lookback_minutes=15, limit=10)
+    assert result.assumed_replicas == 3
+    assert result.lookback_minutes == 15
+    assert result.groups == [] and result.total_groups == result.total_backlog_records == 0
+
+
+async def test_capacity_query_failure_propagates_instead_of_fabricating_available_metrics(
+    service, monkeypatch
+):
+    error = SQLAlchemyError("synthetic capacity lookup unavailable")
+    db = SimpleNamespace(execute=AsyncMock(side_effect=error))
+    monkeypatch.setattr(
+        service_module, "get_async_db_session", lambda: _SingleSessionAsyncIterator(db)
+    )
+    with pytest.raises(SQLAlchemyError) as observed:
+        await service.get_capacity_status()
+    assert observed.value is error
+    db.execute.assert_awaited_once()
+
+
+@pytest.mark.parametrize("rows", [[], [("/observations", "observation", None, None, None, None)]])
+async def test_capacity_empty_query_and_null_counts_do_not_invent_backlog(
+    service, monkeypatch, rows
+):
+    db = SimpleNamespace(execute=AsyncMock(return_value=rows))
+    monkeypatch.setattr(
+        service_module, "get_async_db_session", lambda: _SingleSessionAsyncIterator(db)
+    )
+    result = await service.get_capacity_status(assumed_replicas=0)
+    assert result.assumed_replicas == 1
+    assert result.total_backlog_records == 0 and result.total_groups == len(rows)
+    if rows:
+        group = result.groups[0]
+        assert group.total_records == group.processed_records == group.backlog_records == 0
+        assert group.utilization_ratio == 0 and group.headroom_ratio == 1
+        assert group.estimated_drain_seconds is None and group.saturation_state == "stable"
+
+
+@pytest.mark.parametrize("replicas,expected_state", [(1, "near_capacity"), (2, "stable")])
+async def test_capacity_distinguishes_near_capacity_from_drainable_headroom(
+    replicas, expected_state
+):
+    group = _derive_capacity_group(
+        endpoint="/observations",
+        entity_type="observation",
+        total_records=100,
+        processed_records=120,
+        backlog_records=100,
+        backlog_jobs=1,
+        lookback_seconds=Decimal("60"),
+        assumed_replicas=replicas,
+    )
+    assert group.saturation_state == expected_state
+    expected_drain = float(Decimal(100) / (Decimal(2 * replicas) - Decimal(100) / Decimal(60)))
+    assert group.estimated_drain_seconds == expected_drain
+    assert group.effective_capacity_events_per_second == Decimal(2 * replicas)
+    assert group.total_records == 100 and group.backlog_records == 100
