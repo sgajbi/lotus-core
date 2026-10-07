@@ -37,6 +37,10 @@ from src.services.ingestion_service.app.services.ingestion_replay_audits import 
     record_consumer_dlq_replay_audit_response,
 )
 from tests.integration.ingestion_job_sql_fixture import transaction_ingestion_job_insert_fragments
+from tests.test_support.portfolio_source_observation_migration_dependencies import (
+    downgrade_observation_schema,
+    observation_schema_semantics,
+)
 
 pytestmark = [pytest.mark.integration_db, pytest.mark.db_direct, pytest.mark.lifecycle]
 
@@ -73,8 +77,10 @@ def _bind(migration, connection) -> None:
     migration["downgrade"].__globals__["op"] = operations
 
 
-def _restore_predecessor_schema(migration, connection) -> None:
+def _restore_predecessor_schema(migration, connection) -> tuple:
     """The managed test stack starts at head; exercise c176 from its real predecessor."""
+    observation_semantics = observation_schema_semantics(connection)
+    downgrade_observation_schema(connection)
     source_migration = runpy.run_path(str(SOURCE_REVISION_MIGRATION))
     _bind(source_migration, connection)
     # Descend through the real empty-history refusal before dropping its owner key.
@@ -84,9 +90,11 @@ def _restore_predecessor_schema(migration, connection) -> None:
     assert "tenant_id" not in {
         column["name"] for column in inspect(connection).get_columns("consumer_dlq_events")
     }
+    return observation_semantics
 
 
-def _assert_restored_source_revision_integrity(connection) -> None:
+def _assert_restored_source_revision_integrity(connection, observation_semantics) -> None:
+    assert observation_schema_semantics(connection) == observation_semantics
     owner = next(
         foreign_key
         for foreign_key in inspect(connection).get_foreign_keys(
@@ -188,7 +196,7 @@ def test_upgrade_backfills_and_enforces_tenant_scoped_identity(db_engine, clean_
     migration = runpy.run_path(str(MIGRATION))
     with db_engine.begin() as connection:
         head_schema = connection.begin_nested()
-        _restore_predecessor_schema(migration, connection)
+        observation_semantics = _restore_predecessor_schema(migration, connection)
         _insert_job(connection, job_id="job-a", tenant_id="tenant-a")
         _insert_job(connection, job_id="job-b", tenant_id="tenant-b")
         _insert_legacy_dlq(connection, event_id="shared-event", job_id="job-a")
@@ -335,7 +343,7 @@ def test_upgrade_backfills_and_enforces_tenant_scoped_identity(db_engine, clean_
         with pytest.raises(DBAPIError, match="block downgrade"), connection.begin_nested():
             migration["downgrade"]()
         head_schema.rollback()
-        _assert_restored_source_revision_integrity(connection)
+        _assert_restored_source_revision_integrity(connection, observation_semantics)
 
 
 @pytest.mark.parametrize("orphan_kind", ["dlq", "audit", "audit_unknown_job"])
@@ -343,7 +351,7 @@ def test_upgrade_refuses_unattributable_legacy_rows(db_engine, clean_db, orphan_
     migration = runpy.run_path(str(MIGRATION))
     with db_engine.begin() as connection:
         head_schema = connection.begin_nested()
-        _restore_predecessor_schema(migration, connection)
+        observation_semantics = _restore_predecessor_schema(migration, connection)
         if orphan_kind == "dlq":
             _insert_legacy_dlq(connection, event_id="orphan-event", job_id=None)
         elif orphan_kind == "audit":
@@ -365,14 +373,14 @@ def test_upgrade_refuses_unattributable_legacy_rows(db_engine, clean_db, orphan_
         with pytest.raises(DBAPIError, match=expected_error):
             migration["upgrade"]()
         head_schema.rollback()
-        _assert_restored_source_revision_integrity(connection)
+        _assert_restored_source_revision_integrity(connection, observation_semantics)
 
 
 def test_upgrade_refuses_conflicting_job_and_dlq_owners(db_engine, clean_db) -> None:
     migration = runpy.run_path(str(MIGRATION))
     with db_engine.begin() as connection:
         head_schema = connection.begin_nested()
-        _restore_predecessor_schema(migration, connection)
+        observation_semantics = _restore_predecessor_schema(migration, connection)
         _insert_job(connection, job_id="conflict-job-a", tenant_id="tenant-a")
         _insert_job(connection, job_id="conflict-job-b", tenant_id="tenant-b")
         _insert_legacy_dlq(connection, event_id="conflict-event", job_id="conflict-job-a")
@@ -385,14 +393,14 @@ def test_upgrade_refuses_conflicting_job_and_dlq_owners(db_engine, clean_db) -> 
         with pytest.raises(DBAPIError, match="conflicting owner"):
             migration["upgrade"]()
         head_schema.rollback()
-        _assert_restored_source_revision_integrity(connection)
+        _assert_restored_source_revision_integrity(connection, observation_semantics)
 
 
 def test_clean_upgrade_and_downgrade_remain_executable(db_engine, clean_db) -> None:
     migration = runpy.run_path(str(MIGRATION))
     with db_engine.begin() as connection:
         head_schema = connection.begin_nested()
-        _restore_predecessor_schema(migration, connection)
+        observation_semantics = _restore_predecessor_schema(migration, connection)
         migration["upgrade"]()
         assert "tenant_id" in {
             column["name"] for column in inspect(connection).get_columns("consumer_dlq_events")
@@ -446,7 +454,7 @@ def test_clean_upgrade_and_downgrade_remain_executable(db_engine, clean_db) -> N
         )
         migration["upgrade"]()
         head_schema.rollback()
-        _assert_restored_source_revision_integrity(connection)
+        _assert_restored_source_revision_integrity(connection, observation_semantics)
 
 
 @pytest.mark.asyncio
