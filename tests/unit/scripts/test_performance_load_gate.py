@@ -2072,6 +2072,15 @@ def test_diagnostic_metrics_refuse_private_label_scope_and_values(monkeypatch, p
     assert "samples" not in result
 
 
+def test_diagnostic_metrics_without_selected_samples_are_unavailable_not_measured_zero(monkeypatch):
+    _diagnostic_metrics_response(monkeypatch, b"unrelated_metric 0\n")
+    result = load_completion_diagnostics._load_consumer_metrics("http://isolated/metrics")
+    assert result["status"] == "unavailable"
+    assert result["reason"] == "no_matching_consumer_metric_samples"
+    assert "samples" not in result
+    assert result["recognized_samples"] == 0
+
+
 def test_diagnostic_metrics_row_truncation_is_explicit(monkeypatch):
     body = "".join(
         'kafka_consumer_partition_lag_messages{service="TXNPROC",topic="transactions.persisted",group_id="portfolio_transaction_processing_group",partition="'

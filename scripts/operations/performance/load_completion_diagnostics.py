@@ -541,9 +541,8 @@ def _load_consumer_metrics(metrics_url: str) -> dict[str, Any]:
                 )
     except (ValueError, UnicodeError):
         return {"status": "unavailable", "reason": "malformed_metrics"}
-    return {
+    result = {
         "status": "observed" if samples else "unavailable",
-        "samples": samples,
         "scope": "runtime_aggregate_not_prefix",
         "lag_semantics": "cached_high_watermark_minus_committed",
         "truncated": truncated,
@@ -552,6 +551,9 @@ def _load_consumer_metrics(metrics_url: str) -> dict[str, Any]:
         "recognized_samples": recognized,
         "filtered_samples": filtered,
     }
+    if samples:
+        result["samples"] = samples
+    return result
 
 
 def _processing_transport_script(*, enable: bool) -> str:

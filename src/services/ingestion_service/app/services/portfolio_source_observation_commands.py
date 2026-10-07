@@ -20,7 +20,7 @@ from ..infrastructure.portfolio_source_observation_unit_of_work import (
     PortfolioSourceObservationStager,
 )
 from ..ops_controls import enforce_ingestion_write_rate_limit
-from ..request_metadata import create_ingestion_job_id
+from ..request_metadata import create_ingestion_job_id, get_request_lineage
 from .ingestion_job_service import IngestionJobService
 
 
@@ -31,9 +31,9 @@ class ObservationSubmission:
         CashAvailabilityObservationIngestionRequest | FundingInvestmentObservationIngestionRequest
     )
     idempotency_key: str
-    correlation_id: str
-    request_id: str
-    trace_id: str
+    correlation_id: str | None = None
+    request_id: str | None = None
+    trace_id: str | None = None
 
 
 class PortfolioSourceObservationCommands:
@@ -76,6 +76,7 @@ class PortfolioSourceObservationCommands:
             enforce_ingestion_write_rate_limit(endpoint=command.endpoint, record_count=len(facts))
         except PermissionError as exc:
             raise ObservationConflict("INGESTION_RATE_LIMIT_EXCEEDED") from exc
+        correlation_id, request_id, trace_id = get_request_lineage()
         result = await service.create_or_get_job(
             job_id=create_ingestion_job_id(),
             tenant_context=context,
@@ -83,9 +84,13 @@ class PortfolioSourceObservationCommands:
             entity_type=command.entity_type,
             accepted_count=len(facts),
             idempotency_key=submission.idempotency_key,
-            correlation_id=submission.correlation_id,
-            request_id=submission.request_id,
-            trace_id=submission.trace_id,
+            correlation_id=submission.correlation_id
+            if submission.correlation_id is not None
+            else correlation_id or "",
+            request_id=submission.request_id
+            if submission.request_id is not None
+            else request_id or "",
+            trace_id=submission.trace_id if submission.trace_id is not None else trace_id or "",
             request_payload=command.request_payload(submission.request),
         )
         if result.job.status != "completed" or result.job.completed_at is None:

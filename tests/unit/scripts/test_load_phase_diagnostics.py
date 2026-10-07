@@ -86,7 +86,7 @@ def test_wrong_metric_tuple_is_explicit_missing_not_zero(monkeypatch, service, t
     )
     response_body(monkeypatch, body.encode())
     result = support._load_consumer_metrics("http://isolated/metrics")
-    assert result["status"] == "unavailable" and result["samples"] == []
+    assert result["status"] == "unavailable" and "samples" not in result
     assert result["reason"] == "no_matching_consumer_metric_samples"
     assert result["recognized_samples"] == result["filtered_samples"] == 1
 

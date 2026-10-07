@@ -47,7 +47,7 @@ from ..DTOs.reference_data_dto import (
     RiskFreeSeriesIngestionRequest,
     SustainabilityPreferenceProfileIngestionRequest,
 )
-from ..request_metadata import get_request_lineage, resolve_idempotency_key
+from ..request_metadata import resolve_idempotency_key
 from ..services.ingestion_job_lifecycle import IngestionIdempotencyConflictError
 from ..services.portfolio_source_observation_commands import (
     ObservationSubmission,
@@ -80,16 +80,12 @@ async def _handle_observation_submission(http_request, request, commands):
                 "message": "A source observation requires X-Idempotency-Key.",
             },
         )
-    correlation_id, request_id, trace_id = get_request_lineage()
     try:
         return await commands.submit(
             ObservationSubmission(
                 tenant_context=http_request.state.tenant_context,
                 request=request,
                 idempotency_key=key,
-                correlation_id=correlation_id or "",
-                request_id=request_id or "",
-                trace_id=trace_id or "",
             )
         )
     except IngestionIdempotencyConflictError as exc:

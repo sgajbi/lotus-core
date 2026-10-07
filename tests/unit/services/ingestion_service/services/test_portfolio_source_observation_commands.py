@@ -1,5 +1,6 @@
 """Admission occurs before receipt/SQL effects; mocked I/O is not financial PG proof."""
 
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -123,6 +124,39 @@ async def test_admitted_submission_binds_server_scope_and_atomic_callback_withou
     assert kwargs["endpoint"] == "/ingest/portfolio-cash-availability-observations"
     assert kwargs["idempotency_key"] == "synthetic-idempotency"
     assert kwargs["request_payload"]["observations"][0]["available_amount"] == "0"
+
+
+@pytest.mark.parametrize("lineage", [("corr", "req", "trace"), (None, None, None)])
+async def test_command_resolves_native_request_lineage_when_submission_has_no_overrides(
+    monkeypatch, lineage
+):
+    submission, fact = _submission()
+    submission = replace(submission, correlation_id=None, request_id=None, trace_id=None)
+    authority = UnqualifiedProducerAuthority(
+        (
+            ProducerSubmissionGrant(
+                "tenant-synthetic", "portfolio-synthetic", "producer-synthetic", fact.family
+            ),
+        )
+    )
+    job = SimpleNamespace(status="completed", completed_at=datetime.now(UTC))
+    service = SimpleNamespace(
+        assert_ingestion_writable=AsyncMock(),
+        create_or_get_job=AsyncMock(return_value=SimpleNamespace(job=job)),
+    )
+    resolver = Mock(return_value=lineage)
+    monkeypatch.setattr(module, "get_request_lineage", resolver)
+    monkeypatch.setattr(module, "enforce_ingestion_write_rate_limit", Mock())
+    assert (
+        await PortfolioSourceObservationCommands(authority, lambda stage: service).submit(
+            submission
+        )
+        is job
+    )
+    resolver.assert_called_once_with()
+    kwargs = service.create_or_get_job.call_args.kwargs
+    for key, value in zip(("correlation_id", "request_id", "trace_id"), lineage, strict=True):
+        assert kwargs[key] == (value or "")
 
 
 @pytest.mark.parametrize("status", ["accepted", "queued", "failed"])

@@ -430,6 +430,10 @@ def test_critical_lifecycle_suite_has_repository_native_make_target() -> None:
 
 def test_query_authority_db_contract_executes_tenant_and_service_regressions() -> None:
     assert get_suite("query-authority-db-contract") == [
+        "tests/integration/services/ingestion_service/"
+        "test_portfolio_source_observation_admission_postgresql.py",
+        "tests/integration/services/query_control_plane_service/"
+        "test_portfolio_source_observation_router_postgresql.py",
         "tests/integration/services/persistence_service/"
         "test_transaction_source_correction_postgresql.py::"
         "test_actual_pg_source_confirmation_qcp_ledger_cut",

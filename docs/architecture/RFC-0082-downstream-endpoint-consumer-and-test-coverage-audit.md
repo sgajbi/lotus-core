@@ -13,6 +13,18 @@ The source of truth for product identity, route family, route ownership, paging/
 
 ## Summary
 
+### Structural Financial Source Observations — Not Downstream Certification
+
+`PortfolioFinancialSourceObservations` exposes
+`POST /integration/portfolios/{portfolio_id}/financial-source-observations/query` as a
+diagnostic immutable-source projection. `lotus-manage` is the intended catalog consumer;
+no actual downstream client execution or qualified producer is established by this registration.
+Default producer grants are empty, and financial authority and joined-source compatibility remain
+UNAVAILABLE. The complete owning Core PostgreSQL selection passed 37 tests, covering
+immutable retention, refusal and pinned reads; mocked diagnostic examples and this database proof
+are not live downstream integration, deployed restart or banking certification. The historical
+live proof below does not cover this newly added structural route.
+
 The query-control-plane API is the correct surface for cross-application integration. Downstream systems should call governed `/integration`, `/support`, and `/lineage` contracts rather than query-service convenience reads when they need analytics input, simulation state, benchmark/reference data, data-quality evidence, or operational lineage.
 
 Current posture:
