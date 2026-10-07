@@ -26,6 +26,10 @@ precision. The shared calculation-lineage hash is unchanged. This does not repai
 previously stored contradictory hashes, which continue to fail closed.
 The cash boundary checks NUMERIC's 131072 integer-digit and 16383 fractional-digit limits
 before any positive-exponent expansion; negative exponents are retained without expansion.
+An existing source revision replays only when its reconstructed, validated content hash
+matches the submitted content hash. Numerical equality alone is insufficient: changing
+`1.00` to `1.0` or `0.00` to `0` under a new receipt is divergent replay and rolls back the
+new receipt without changing immutable facts or scoped heads.
 
 ## Admission and terminal receipt
 
