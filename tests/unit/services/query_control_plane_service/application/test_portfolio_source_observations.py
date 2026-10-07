@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from portfolio_common.domain.portfolio_source_observations import (
     CashAvailabilityObservation,
+    FundingInvestmentObservation,
     ObservationCoverage,
     ObservationEnvelope,
 )
@@ -96,13 +97,14 @@ def _pin(record):
 
 
 class _Reader:
-    def __init__(self, cash):
+    def __init__(self, cash, funding=None):
         self.cash = cash
+        self.funding = funding
         self.requests = []
 
     async def read_snapshot(self, **scope):
         self.requests.append(scope)
-        return self.cash, None
+        return self.cash, self.funding
 
 
 async def _query(record, selector, as_of_date=date(2026, 1, 15)):
@@ -194,3 +196,152 @@ async def test_selector_refuses_mixed_latest_and_pin_and_missing_pin():
             latest_restated=True,
             observation_id="f" * 64,
         )
+
+
+async def test_owning_router_preserves_unavailable_degradation_and_admitted_scope():
+    from fastapi import Request
+    from portfolio_common.domain.tenant import TenantContext, TenantId
+
+    from src.services.query_control_plane_service.app.routers.portfolio_source_observations import (
+        query_portfolio_source_observations,
+        router,
+    )
+
+    reader = _Reader(None)
+    http_request = Request({"type": "http"})
+    http_request.state.tenant_context = TenantContext(
+        tenant_id=TenantId("tenant-synthetic"), identity_verified=True
+    )
+    request = PortfolioSourceObservationsRequest(as_of_date=date(2026, 1, 15))
+    response = await query_portfolio_source_observations(
+        request=request,
+        http_request=http_request,
+        portfolio_id="portfolio-synthetic",
+        service=PortfolioSourceObservationsService(reader),
+    )
+    route = router.routes[0]
+    body = route.response_model.model_validate(response).model_dump(mode="json")
+    assert body["cash"] is None and body["funding_investment"] is None
+    assert body["degradation"]["status"] == "UNAVAILABLE"
+    assert body["degradation"]["reason_codes"] == sorted(body["reason_codes"])
+    assert {detail["section"] for detail in body["degradation"]["details"]} == {
+        "product",
+        "cash",
+        "funding_investment",
+    }
+    assert reader.requests == [
+        {"tenant_id": "tenant-synthetic", "portfolio_id": "portfolio-synthetic", "request": request}
+    ]
+
+
+@pytest.mark.parametrize("family", ["cash", "funding_investment"])
+@pytest.mark.parametrize(
+    "scenario, suffix",
+    [
+        ("complete", None),
+        ("no_selector", "OBSERVATION_UNAVAILABLE"),
+        ("no_record", "OBSERVATION_UNAVAILABLE"),
+        ("tenant_id", "SOURCE_SCOPE_MISMATCH"),
+        ("portfolio_id", "SOURCE_SCOPE_MISMATCH"),
+        ("producer_id", "SOURCE_SCOPE_MISMATCH"),
+        ("source_record_id", "SOURCE_SCOPE_MISMATCH"),
+        ("wrong_family", "SOURCE_SCOPE_MISMATCH"),
+        ("before_window", "BUSINESS_DATE_UNAVAILABLE"),
+        ("end_window", "BUSINESS_DATE_UNAVAILABLE"),
+        ("record_hash", "SOURCE_EVIDENCE_INVALID"),
+        ("qualification", "SOURCE_EVIDENCE_INVALID"),
+        ("observation_id", "IMMUTABLE_PIN_MISMATCH"),
+        ("content_hash", "IMMUTABLE_PIN_MISMATCH"),
+        ("source_cut_id", "IMMUTABLE_PIN_MISMATCH"),
+        ("source_version", "IMMUTABLE_PIN_MISMATCH"),
+        ("partial", "COVERAGE_PARTIAL"),
+        ("missing", "COVERAGE_MISSING"),
+    ],
+)
+async def test_degradation_serialization_matches_each_family_projection(family, scenario, suffix):
+    original = _record()
+    if family == "funding_investment":
+        fact = FundingInvestmentObservation(original.fact.envelope, False, None)
+        original = replace(original, fact=fact, observation_id=fact.content_hash)
+    record, selector = original, _pin(original)
+    as_of_date = date(2026, 1, 15)
+    if scenario == "no_selector":
+        selector = None
+    elif scenario == "no_record":
+        record = None
+    elif scenario in ("tenant_id", "portfolio_id", "producer_id", "source_record_id"):
+        fact = replace(
+            original.fact, envelope=replace(original.fact.envelope, **{scenario: "foreign"})
+        )
+        record = replace(original, fact=fact, observation_id=fact.content_hash)
+    elif scenario == "wrong_family":
+        fact = (
+            FundingInvestmentObservation(original.fact.envelope, False, None)
+            if family == "cash"
+            else _record().fact
+        )
+        record = replace(original, fact=fact, observation_id=fact.content_hash)
+    elif scenario in ("before_window", "end_window"):
+        as_of_date = date(2025, 12, 31) if scenario == "before_window" else date(2026, 2, 1)
+    elif scenario == "record_hash":
+        record = replace(original, observation_id="f" * 64)
+    elif scenario == "qualification":
+        record = replace(original, qualification="qualified")
+    elif scenario in ("observation_id", "content_hash", "source_cut_id", "source_version"):
+        value = 2 if scenario == "source_version" else "f" * 64
+        selector = selector.model_copy(update={scenario: value})
+    elif scenario in ("partial", "missing"):
+        fact = replace(
+            original.fact,
+            envelope=replace(original.fact.envelope, coverage=ObservationCoverage(scenario)),
+        )
+        record = replace(original, fact=fact, observation_id=fact.content_hash)
+        selector = _pin(record)
+    reader = _Reader(record if family == "cash" else None, record if family != "cash" else None)
+    result = await PortfolioSourceObservationsService(reader).query(
+        tenant_id="tenant-synthetic",
+        portfolio_id="portfolio-synthetic",
+        request=PortfolioSourceObservationsRequest(as_of_date=as_of_date, **{family: selector}),
+    )
+    body = result.model_dump(mode="json")
+    assert body["degradation"]["status"] == body["data_quality_status"] == "UNAVAILABLE"
+    assert (
+        body["freshness_status"]
+        == body["authoritative_state"]
+        == body["compatibility"]
+        == "UNAVAILABLE"
+    )
+    assert body["source_cut_id"] is None and body["source_evidence_current"] is False
+    assert body["degradation"]["reason_codes"] == sorted(set(body["reason_codes"]))
+    details = {detail["reason_code"]: detail for detail in body["degradation"]["details"]}
+    assert set(details) == set(body["reason_codes"])
+    for detail in details.values():
+        assert detail["source_kind"] == detail["freshness_status"] == "UNAVAILABLE"
+        assert detail["source_product_name"] == body["product_name"]
+        assert detail["source_product_version"] == body["product_version"]
+        assert detail["source_as_of_date"] is None
+        assert detail["latest_evidence_timestamp"] is None
+        assert detail["record_key"] is None
+    prefix = "CASH_AVAILABILITY" if family == "cash" else "FUNDING_INVESTMENT"
+    if suffix:
+        reason = f"{prefix}_{suffix}"
+        assert details[reason]["section"] == family
+        assert details[reason]["affected_fields"] == [family]
+    assert details["SOURCE_PRODUCER_UNQUALIFIED"]["affected_fields"] == [
+        "authoritative_state",
+        "cash",
+        "funding_investment",
+    ]
+    assert details["JOINED_SOURCE_CUT_COMPATIBILITY_UNPROVEN"]["affected_fields"] == [
+        "compatibility"
+    ]
+    if scenario in ("complete", "partial", "missing"):
+        assert body[family]["qualification"] == "unqualified"
+        if family == "cash":
+            assert body[family]["available_amount"] == "0"
+            assert body[family]["encumbered_amount"] is None
+        else:
+            assert body[family]["funded"] is False
+            assert body[family]["invested"] is None
+    else:
+        assert body[family] is None

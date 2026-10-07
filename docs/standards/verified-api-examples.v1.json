@@ -73,7 +73,11 @@
         "source_digest": "sha256:dbab906a6423e02dd7f44c62655581fc59d04021c33eda42f3a26b785ca1d7d2",
         "source_refs": ["lotus-core://source/PortfolioFinancialSourceObservations/portfolio-synthetic"],
         "source_lineage": {"source_owner": "lotus-core", "qualification": "unqualified"},
-        "degradation": {"status": "NONE", "reason_codes": [], "details": []},
+        "degradation": {"status": "UNAVAILABLE", "reason_codes": ["FUNDING_INVESTMENT_OBSERVATION_UNAVAILABLE", "JOINED_SOURCE_CUT_COMPATIBILITY_UNPROVEN", "SOURCE_PRODUCER_UNQUALIFIED"], "details": [
+          {"section": "product", "record_key": null, "affected_fields": ["authoritative_state", "cash", "funding_investment"], "source_kind": "UNAVAILABLE", "source_product_name": "PortfolioFinancialSourceObservations", "source_product_version": "v1", "source_as_of_date": null, "latest_evidence_timestamp": null, "freshness_status": "UNAVAILABLE", "reason_code": "SOURCE_PRODUCER_UNQUALIFIED"},
+          {"section": "product", "record_key": null, "affected_fields": ["compatibility"], "source_kind": "UNAVAILABLE", "source_product_name": "PortfolioFinancialSourceObservations", "source_product_version": "v1", "source_as_of_date": null, "latest_evidence_timestamp": null, "freshness_status": "UNAVAILABLE", "reason_code": "JOINED_SOURCE_CUT_COMPATIBILITY_UNPROVEN"},
+          {"section": "funding_investment", "record_key": null, "affected_fields": ["funding_investment"], "source_kind": "UNAVAILABLE", "source_product_name": "PortfolioFinancialSourceObservations", "source_product_version": "v1", "source_as_of_date": null, "latest_evidence_timestamp": null, "freshness_status": "UNAVAILABLE", "reason_code": "FUNDING_INVESTMENT_OBSERVATION_UNAVAILABLE"}
+        ]},
         "source_evidence_current": false, "freshness_status": "UNAVAILABLE", "policy_version": null,
         "correlation_id": "synthetic-correlation", "product_name": "PortfolioFinancialSourceObservations", "product_version": "v1",
         "portfolio_id": "portfolio-synthetic", "authoritative_state": "UNAVAILABLE", "compatibility": "UNAVAILABLE",

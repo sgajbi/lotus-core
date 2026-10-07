@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Any
 
 from portfolio_common.database_models import IngestionJob as DBIngestionJob
-from sqlalchemy import case, func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from ..DTOs.ingestion_job_dto import IngestionSloStatusResponse
@@ -74,7 +74,7 @@ async def load_slo_status_response(
 def _latency_seconds_expression() -> Any:
     return case(
         (
-            DBIngestionJob.completed_at.is_not(None),
+            and_(DBIngestionJob.completed_at.is_not(None), DBIngestionJob.status != "completed"),
             func.extract(
                 "epoch",
                 DBIngestionJob.completed_at - DBIngestionJob.submitted_at,
@@ -160,7 +160,7 @@ def slo_snapshot_from_jobs(
     latencies = sorted(
         (job.completed_at - job.submitted_at).total_seconds()
         for job in jobs
-        if job.completed_at is not None
+        if job.completed_at is not None and job.status != "completed"
     )
     non_terminal_submitted_at = [
         job.submitted_at for job in jobs if job.status in {"accepted", "queued"}

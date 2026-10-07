@@ -7,6 +7,8 @@ from portfolio_common.domain.portfolio_source_observations import (
     ObservationFamily,
 )
 from portfolio_common.source_data_product_metadata import (
+    SourceDataDegradationDetail,
+    SourceDataDegradationSummary,
     source_data_product_runtime_metadata,
     stable_content_hash,
 )
@@ -75,7 +77,13 @@ class PortfolioSourceObservationsService:
             lineage={"source_owner": "lotus-core", "qualification": "unqualified"},
         )
         return PortfolioSourceObservationsResponse(
-            **{**metadata, **payload, "cash": cash_evidence, "funding_investment": funding_evidence}
+            **{
+                **metadata,
+                **payload,
+                "cash": cash_evidence,
+                "funding_investment": funding_evidence,
+            },
+            degradation=_unavailable_degradation(reasons),
         )
 
     @staticmethod
@@ -146,3 +154,30 @@ class PortfolioSourceObservationsService:
                 available_amount=fact.available,
             )
         return FundingInvestmentEvidence(**common, funded=fact.funded, invested=fact.invested)
+
+
+def _unavailable_degradation(reasons: list[str]) -> SourceDataDegradationSummary:
+    """Project bounded reasons, without qualifying facts or inventing source timestamps."""
+    details = []
+    for reason in reasons:
+        if reason.startswith("CASH_AVAILABILITY_"):
+            section, fields = "cash", ["cash"]
+        elif reason.startswith("FUNDING_INVESTMENT_"):
+            section, fields = "funding_investment", ["funding_investment"]
+        elif reason == "SOURCE_PRODUCER_UNQUALIFIED":
+            section, fields = "product", ["authoritative_state", "cash", "funding_investment"]
+        else:
+            section, fields = "product", ["compatibility"]
+        details.append(
+            SourceDataDegradationDetail(
+                section=section,
+                affected_fields=fields,
+                source_kind="UNAVAILABLE",
+                source_product_name="PortfolioFinancialSourceObservations",
+                freshness_status="UNAVAILABLE",
+                reason_code=reason,
+            )
+        )
+    return SourceDataDegradationSummary(
+        status="UNAVAILABLE", reason_codes=sorted(set(reasons)), details=details
+    )
