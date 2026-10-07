@@ -177,18 +177,25 @@ def test_synchronous_diagnostic_refusal_preserves_business_exception_and_context
     assert owner.writer is None and not owner.rows
 
 
-def test_capture_callbacks_after_loop_exit_refuse_foreign_context_without_mutation(owner):
+@pytest.mark.asyncio
+async def test_capture_callbacks_refuse_foreign_task_and_no_loop_thread_without_mutation(owner):
     async def create_capture():
         capture = owner.capture(TENANT, PORTFOLIO, "tx", None)
         assert capture.row() is not None
         await stop_writer(owner)
         return capture
 
-    capture = asyncio.run(create_capture())
+    capture = await asyncio.create_task(create_capture())
     prior = dict(owner.rows[capture.key])
-    assert capture.row() is None
-    capture.phase("position")
-    capture.close()
+
+    def foreign_callbacks():
+        assert capture.row() is None
+        capture.phase("position")
+        capture.close()
+
+    foreign_callbacks()
+    assert owner.rows[capture.key] == prior
+    await asyncio.to_thread(foreign_callbacks)
     assert owner.rows[capture.key] == prior
 
 
