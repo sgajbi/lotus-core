@@ -409,6 +409,29 @@ a runtime validation requirement. Exhaustion is unavailable evidence, not comple
 Missing counter-creation metadata remains `MISSING`, not a verified worker lifetime. The existing
 240-second observation deadline and independent full-profile 180-second SLO remain unchanged.
 
+At the first continuity-qualified poll at or beyond the profile SLO, an unmet replay target
+requests one active diagnostic capture. The completion check comes first: a target already
+observed as complete does not capture drained state, even when its finite elapsed time breaches
+the SLO. Missing/reset producer continuity cannot request an active snapshot. The retained
+`slo_boundary_capture` records the observed count/birth, request elapsed time and lateness;
+later completion or timeout cannot replace this earlier evidence. An unavailable request still
+counts as the one attempt. Without an active attempt, the existing timeout diagnostic remains.
+
+Capture uses the same managed, private, birth-qualified probes and unchanged 32KiB/20-row,
+120-second enable-age and 500ms I/O bounds. A finite owned receiver drains its child pipe while
+completion polling continues; a separate owned deadline timer stops the child independently of
+late report finalization, reserving cleanup time within the six-second policy. Both are joined
+before runtime teardown. A partial/oversized frame, child failure or unavailable cleanup is
+explicit evidence, not measured zero. No diagnostic callback or finalization exception replaces
+the original completion result, timeout or enforcing failure.
+
+Request time is not exact capture time. Launch overhead, request-to-child wall-clock delay when
+available, custody elapsed time and cleanup status are retained; missing timing remains null.
+Scheduling and probe latency can make observation late. The capture is supporting evidence,
+not an exact 180-second atomic snapshot, delivery receipt, Python await or financial cause proof.
+Completion polling, workload, ordering, UOW/outbox behavior and the independent SLO verdict are
+unchanged: a completed 213-second full replay still fails the 180-second limit.
+
 Ordered replay submissions and supported job/correlation/request/trace acknowledgements are
 retained per request. Partial `accepted_count` is count-only evidence: accepted IDs and per-ID
 durable completion receipts remain `MISSING`. Repeated submitted IDs retain their submission

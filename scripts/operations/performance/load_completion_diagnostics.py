@@ -21,6 +21,7 @@ from portfolio_common.database_runtime_profile import DatabasePoolMode
 from portfolio_common.db import create_sync_database_engine
 from prometheus_client.parser import text_string_to_metric_families
 
+from scripts.operations.performance.load_diagnostic_capture import DiagnosticCapture
 from scripts.operations.transaction_processing_load_support import LOAD_TENANT_ID
 
 DIAGNOSTIC_BUDGET_SECONDS = 6.0
@@ -91,6 +92,56 @@ def _statement_structure(query: Any) -> dict[str, Any]:
     }
 
 
+def _new_diagnostic_child(
+    database_url: str, metrics_url: str, kafka_bootstrap_servers: str, scope: dict[str, Any]
+) -> tuple[Any, Any, Any]:
+    context = multiprocessing.get_context("spawn")
+    receiver, sender = context.Pipe(duplex=False)
+    try:
+        process = context.Process(
+            target=_diagnostic_worker,
+            args=(sender, database_url, metrics_url, kafka_bootstrap_servers, scope),
+            daemon=True,
+        )
+    except Exception:
+        for pipe in (sender, receiver):
+            try:
+                pipe.close()
+            except Exception:
+                pass  # Preserve construction refusal; no child was created.
+        raise
+    return process, receiver, sender
+
+
+def start_load_completion_diagnostics(
+    *,
+    database_url: str,
+    metrics_url: str,
+    kafka_bootstrap_servers: str,
+    scope: dict[str, Any],
+    isolated_runtime: bool,
+) -> DiagnosticCapture | None:
+    """Request the existing probes once without waiting inside completion polling."""
+    if not isolated_runtime:
+        return None
+    process, receiver, sender = _new_diagnostic_child(
+        database_url, metrics_url, kafka_bootstrap_servers, scope
+    )
+    return DiagnosticCapture(
+        process=process,
+        receiver=receiver,
+        sender=sender,
+        public_scope={
+            key: value
+            for key, value in scope.items()
+            if key not in {"submitted_ids", "ingestion_job_ids", "compose_file"}
+        },
+        stop_process=_stop_diagnostic_process,
+        budget_seconds=DIAGNOSTIC_BUDGET_SECONDS,
+        max_bytes=DIAGNOSTIC_MAX_BYTES,
+    )
+
+
 def collect_load_completion_diagnostics(
     *,
     database_url: str,
@@ -107,18 +158,8 @@ def collect_load_completion_diagnostics(
         for key, value in scope.items()
         if key not in {"submitted_ids", "ingestion_job_ids", "compose_file"}
     }
-    context = multiprocessing.get_context("spawn")
-    receiver, sender = context.Pipe(duplex=False)
-    process = context.Process(
-        target=_diagnostic_worker,
-        args=(
-            sender,
-            database_url,
-            metrics_url,
-            kafka_bootstrap_servers,
-            scope,
-        ),
-        daemon=True,
+    process, receiver, sender = _new_diagnostic_child(
+        database_url, metrics_url, kafka_bootstrap_servers, scope
     )
     result: dict[str, Any]
     try:

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 import time
@@ -37,7 +38,9 @@ from portfolio_common.config import KAFKA_TOPIC_PARTITION_COUNTS  # noqa: E402
 from scripts.operations.performance.load_completion_diagnostics import (  # noqa: E402
     collect_load_completion_diagnostics,
     enable_managed_processing_phases,
+    start_load_completion_diagnostics,
 )
+from scripts.operations.performance.load_diagnostic_capture import DiagnosticCapture  # noqa: E402
 from scripts.operations.transaction_processing_load_support import (  # noqa: E402
     LOAD_TENANT_ID,
     accepted_batch_evidence,
@@ -288,6 +291,7 @@ def _wait_for_repair_replay_completion(
     timeout_seconds: int,
     baseline: dict[str, Any],
     on_observation: Callable[[dict[str, Any]], None],
+    on_pending_observation: Callable[[dict[str, Any], float], None] | None = None,
 ) -> float | None:
     """Wait until canonical repair deliveries complete the unified processing flow."""
     return _wait_for_operation_count(
@@ -298,6 +302,7 @@ def _wait_for_repair_replay_completion(
         timeout_seconds=timeout_seconds,
         baseline=baseline,
         on_observation=on_observation,
+        on_pending_observation=on_pending_observation,
     )
 
 
@@ -528,6 +533,7 @@ class _LoadEvidenceReport:
     replay_storm_status: str = "not_run"
     replay_completion: dict[str, Any] = field(default_factory=dict)
     phase_capture: dict[str, Any] = field(default_factory=dict)
+    boundary_capture: DiagnosticCapture | None = None
 
     def __enter__(self) -> "_LoadEvidenceReport":
         return self
@@ -544,7 +550,57 @@ class _LoadEvidenceReport:
     def replay_observed(self, observation: dict[str, Any]) -> None:
         self.replay_completion["final"] = observation
 
+    def replay_pending(self, observation: dict[str, Any], elapsed: float) -> None:
+        threshold = GOVERNED_MAX_DRAIN_SECONDS[self.args.profile_tier]["replay_storm"]
+        target = self.replay_completion.get("target")
+        count, birth = observation.get("count"), observation.get("producer_birth")
+        if (
+            not math.isfinite(elapsed)
+            or elapsed < threshold
+            or "slo_boundary_capture" in self.replay_completion
+            or observation.get("status") != "observed"
+            or observation.get("continuity") != "observed"
+            or type(count) is not int
+            or count < 0
+            or type(target) is not int
+            or count >= target
+            or type(birth) not in (int, float)
+            or not math.isfinite(birth)
+            or birth <= 0
+            or observation.get("labels") != {"stage": "transaction", "outcome": "processed"}
+        ):
+            return
+        created = observation.get("counter_created_at")
+        boundary: dict[str, Any] = {
+            "status": "requested",
+            "threshold_seconds": threshold,
+            "observed_elapsed_seconds": elapsed,
+            "late_request_seconds": elapsed - threshold,
+            "observation": {
+                "status": "observed",
+                "continuity": "observed",
+                "count": count,
+                "producer_birth": birth,
+                "counter_created_at": created
+                if type(created) in (int, float) and math.isfinite(created) and created > 0
+                else "MISSING",
+                "labels": {"stage": "transaction", "outcome": "processed"},
+            },
+            "claims_scope": "counter_continuity_not_exact_replay_receipts_or_await",
+        }
+        self.replay_completion["slo_boundary_capture"] = boundary
+        try:
+            self.boundary_capture = start_load_completion_diagnostics(
+                **self._diagnostic_arguments("replay_deliveries", None)
+            )
+            if self.boundary_capture is None:
+                boundary.update(status="unavailable", reason="managed_isolated_runtime_required")
+        except Exception as exc:
+            boundary.update(status="unavailable", reason=type(exc).__name__)
+
     def replay_timeout(self) -> None:
+        if "slo_boundary_capture" in self.replay_completion:
+            return  # Never replace the earlier active-boundary evidence with drained rows.
         if "diagnostics" not in self.replay_completion:
             self.source_timeout("replay_deliveries", None)
             self.replay_completion["diagnostics"] = self.timeouts.pop()
@@ -552,7 +608,7 @@ class _LoadEvidenceReport:
                 "preexisting_rows_not_replay_receipts"
             )
 
-    def source_timeout(self, prefix: str, claim_minimum: int | None) -> None:
+    def _diagnostic_arguments(self, prefix: str, claim_minimum: int | None) -> dict[str, Any]:
         batches = self.batches.get(self.stage, [])
         ids = [item for batch in batches for item in batch["submitted_ids"]]
         scope = {
@@ -578,29 +634,32 @@ class _LoadEvidenceReport:
             "phase_container_id": self.phase_capture.get("container_id"),
             "phase_container_started_at": self.phase_capture.get("started_at"),
         }
+        return {
+            "database_url": self.engine.url.render_as_string(hide_password=False),
+            "metrics_url": f"{self.args.transaction_processing_base_url}/metrics",
+            "kafka_bootstrap_servers": self.runtime.runtime.endpoints.kafka_bootstrap_servers
+            if self.runtime
+            else "",
+            "scope": scope,
+            "isolated_runtime": (
+                self.runtime is not None
+                and self.args.host_database_url == self.runtime.runtime.endpoints.host_database_url
+                and self.args.transaction_processing_base_url
+                == self.runtime.runtime.endpoints.e2e_transaction_processing_url
+            ),
+        }
+
+    def source_timeout(self, prefix: str, claim_minimum: int | None) -> None:
+        arguments = self._diagnostic_arguments(prefix, claim_minimum)
         try:
-            result = collect_load_completion_diagnostics(
-                database_url=self.engine.url.render_as_string(hide_password=False),
-                metrics_url=f"{self.args.transaction_processing_base_url}/metrics",
-                kafka_bootstrap_servers=self.runtime.runtime.endpoints.kafka_bootstrap_servers
-                if self.runtime
-                else "",
-                scope=scope,
-                isolated_runtime=(
-                    self.runtime is not None
-                    and self.args.host_database_url
-                    == self.runtime.runtime.endpoints.host_database_url
-                    and self.args.transaction_processing_base_url
-                    == self.runtime.runtime.endpoints.e2e_transaction_processing_url
-                ),
-            )
+            result = collect_load_completion_diagnostics(**arguments)
         except Exception as exc:
             result = {
                 "status": "unavailable",
                 "reason": type(exc).__name__,
                 "scope": {
                     key: value
-                    for key, value in scope.items()
+                    for key, value in arguments["scope"].items()
                     if key not in {"submitted_ids", "ingestion_job_ids", "compose_file"}
                 },
             }
@@ -610,6 +669,16 @@ class _LoadEvidenceReport:
         self.deadline_counts = {}
 
     def __exit__(self, exc_type: Any, exc: BaseException | None, traceback: Any) -> Literal[False]:
+        if self.boundary_capture is not None:
+            try:
+                diagnostics = self.boundary_capture.finish()
+            except Exception as diagnostic_error:
+                diagnostics = {
+                    "status": "unavailable",
+                    "reason": type(diagnostic_error).__name__,
+                    "child_cleanup": {"status": "unconfirmed"},
+                }
+            self.replay_completion["slo_boundary_capture"]["diagnostics"] = diagnostics
         evidence = {
             "status": "failed" if exc else "completed",
             "stage": self.stage,
@@ -1015,6 +1084,7 @@ def main(
             timeout_seconds=args.drain_timeout_seconds,
             baseline=replay_completion_baseline,
             on_observation=report.replay_observed,
+            on_pending_observation=report.replay_pending,
         )
         replay_ended = time.time()
         if replay_drain_seconds is None:
