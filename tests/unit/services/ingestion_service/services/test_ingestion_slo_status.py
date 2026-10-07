@@ -35,7 +35,7 @@ def test_slo_snapshot_from_jobs_derives_fallback_metrics():
 
     snapshot = slo_snapshot_from_jobs(jobs=jobs, now=now)
 
-    assert snapshot.total_jobs == 4
+    assert snapshot.total_jobs == 3
     assert snapshot.failed_jobs == 1
     assert snapshot.p95_latency_seconds == 30.0
     assert snapshot.backlog_age_seconds == 120.0
@@ -105,7 +105,7 @@ def test_synchronous_completion_cannot_dilute_async_queue_latency(scenario):
     }[scenario]
     before = [(job.status, job.submitted_at, job.completed_at) for job in jobs]
     snapshot = slo_snapshot_from_jobs(jobs=jobs, now=now)
-    assert snapshot.total_jobs == len(jobs)
+    assert snapshot.total_jobs == sum(job.status != "completed" for job in jobs)
     assert snapshot.failed_jobs == (
         5 if scenario in ("mixed", "async_completed") else int(scenario == "no_completion")
     )
@@ -114,6 +114,32 @@ def test_synchronous_completion_cannot_dilute_async_queue_latency(scenario):
     )
     assert snapshot.backlog_age_seconds == (0.0 if scenario == "all_sync" else 500.0)
     assert [(job.status, job.submitted_at, job.completed_at) for job in jobs] == before
+
+
+@pytest.mark.parametrize("sync_count", [0, 1, 1000])
+def test_async_failure_cohort_is_invariant_to_synchronous_success(sync_count):
+    now = datetime(2026, 6, 5, 12, 0, tzinfo=UTC)
+    asynchronous = [
+        _Job(status, now - timedelta(seconds=500), now - timedelta(seconds=100))
+        for status in ("accepted", "queued", "failed")
+    ]
+    sync = [_Job("completed", now, now) for _ in range(sync_count)]
+    jobs = asynchronous + sync
+    before = list(jobs)
+    snapshot = slo_snapshot_from_jobs(jobs=jobs, now=now)
+    assert snapshot == slo_snapshot_from_jobs(jobs=asynchronous, now=now)
+    response = build_slo_status_response(
+        lookback_minutes=60,
+        snapshot=snapshot,
+        failure_rate_threshold=Decimal("0.03"),
+        queue_latency_threshold_seconds=5.0,
+        backlog_age_threshold_seconds=300.0,
+    )
+    assert response.total_jobs == 3 and response.failed_jobs == 1
+    assert response.failure_rate == Decimal(1) / Decimal(3)
+    assert response.breach_failure_rate
+    assert response.p95_queue_latency_seconds == 400.0 and response.backlog_age_seconds == 500.0
+    assert jobs == before
 
 
 @pytest.mark.asyncio

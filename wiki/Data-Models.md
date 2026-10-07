@@ -1,5 +1,10 @@
 # Data Models
 
+Synchronous observation receipts remain readable as `completed` through shared ingestion and
+event-replay job list/detail contracts. Async SLO and error-budget cohorts exclude these receipts
+from total/failed counts and current/previous windows, so synchronous successes cannot dilute an
+async incident. Backlog, DLQ, latency algorithms and thresholds retain their existing semantics.
+
 ## Purpose
 
 `lotus-core` owns the canonical operational data model for foundational portfolio and transaction

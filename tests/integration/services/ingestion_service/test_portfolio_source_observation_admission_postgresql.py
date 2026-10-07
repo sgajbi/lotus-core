@@ -1134,11 +1134,8 @@ async def test_completed_receipt_is_nonactionable_in_native_operations(observati
 
 @pytest.mark.parametrize("scenario", ["mixed", "all_sync", "no_completion", "async_completed"])
 async def test_native_queue_latency_excludes_synchronous_completed_receipts(
-    observation_lease, scenario, monkeypatch
+    observation_lease, scenario
 ):
-    from sqlalchemy import case, func
-
-    from src.services.ingestion_service.app.services import ingestion_slo_status as slo
     from src.services.ingestion_service.app.services.ingestion_slo_status import (
         _load_aggregate_slo_snapshot,
         slo_snapshot_from_jobs,
@@ -1189,25 +1186,15 @@ async def test_native_queue_latency_excludes_synchronous_completed_receipts(
         if scenario == "mixed":
             # Execute the predecessor expression against the same rows: fast synchronous
             # receipts really hide the queue's 400-second latency, not just a SQL-shape issue.
-            with monkeypatch.context() as prior:
-                prior.setattr(
-                    slo,
-                    "_latency_seconds_expression",
-                    lambda: case(
-                        (
-                            IngestionJob.completed_at.is_not(None),
-                            func.extract(
-                                "epoch", IngestionJob.completed_at - IngestionJob.submitted_at
-                            ),
-                        ),
-                        else_=None,
-                    ),
-                )
-                diluted = await _load_aggregate_slo_snapshot(
-                    session, since=now - timedelta(hours=1), now=now
-                )
-            assert diluted.p95_latency_seconds == 1.0
-        assert aggregate.total_jobs == len(controls) + 1
+            diluted = await session.scalar(
+                select(
+                    func.percentile_cont(0.95).within_group(
+                        func.extract("epoch", IngestionJob.completed_at - IngestionJob.submitted_at)
+                    )
+                ).where(IngestionJob.completed_at.is_not(None))
+            )
+            assert diluted == 1.0
+        assert aggregate.total_jobs == sum(status != "completed" for status, _, _ in controls)
         assert aggregate.failed_jobs == (
             5 if scenario in ("mixed", "async_completed") else int(scenario == "no_completion")
         )
@@ -1223,6 +1210,142 @@ async def test_native_queue_latency_excludes_synchronous_completed_receipts(
         assert after == before
         retained = next(row for row in after if row["job_id"] == receipt.job.job_id)
         assert retained["status"] == "completed" and retained["completed_at"] is not None
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("sync_count", [1, 100])
+async def test_native_async_failure_cohort_is_invariant_to_sync_receipts(
+    observation_lease, asynchronous, sync_count
+):
+    import logging
+
+    from src.services.ingestion_service.app.services.ingestion_error_budget_status import (
+        load_error_budget_status_response,
+    )
+    from src.services.ingestion_service.app.services.ingestion_slo_status import (
+        _load_aggregate_slo_snapshot,
+        _load_fallback_slo_snapshot,
+        build_slo_status_response,
+        slo_snapshot_from_jobs,
+    )
+
+    lease = observation_lease
+    receipt = await lease.create(lease.cash())
+    now = datetime.now(UTC)
+    async with lease.sessions.begin() as session:
+        await session.execute(
+            text(
+                f'CREATE TABLE "{lease.schema}".consumer_dlq_events '
+                "(LIKE public.consumer_dlq_events INCLUDING CONSTRAINTS)"
+            )
+        )
+        original = (await session.execute(select(IngestionJob.__table__))).mappings().one()
+        template = dict(original)
+        template.pop("id")
+        controls = (
+            [
+                ("accepted", 500, None),
+                ("queued", 500, 100),
+                ("failed", 500, 100),
+                ("queued", 5400, None),
+            ]
+            if asynchronous
+            else []
+        )
+        for index, (status, age, completion) in enumerate(controls):
+            await session.execute(
+                insert(IngestionJob.__table__).values(
+                    **{
+                        **template,
+                        "job_id": f"async-{index}",
+                        "idempotency_key": f"async-{index}",
+                        "status": status,
+                        "submitted_at": now - timedelta(seconds=age),
+                        "completed_at": None
+                        if completion is None
+                        else now - timedelta(seconds=completion),
+                    }
+                )
+            )
+
+    async def observed():
+        async with lease.sessions() as session:
+            aggregate = await _load_aggregate_slo_snapshot(
+                session, since=now - timedelta(hours=1), now=now
+            )
+            jobs = (
+                await session.scalars(
+                    select(IngestionJob).where(
+                        IngestionJob.submitted_at >= now - timedelta(hours=1)
+                    )
+                )
+            ).all()
+            assert aggregate == slo_snapshot_from_jobs(jobs=jobs, now=now)
+            assert aggregate == await _load_fallback_slo_snapshot(
+                session, since=now - timedelta(hours=1), now=now
+            )
+
+        async def sessions():
+            async with lease.sessions() as session:
+                yield session
+
+        budget = await load_error_budget_status_response(
+            lookback_minutes=60,
+            failure_rate_threshold=Decimal("0.03"),
+            backlog_growth_threshold=0,
+            replay_max_backlog_jobs=10,
+            dlq_budget_events_per_window=5,
+            session_factory=sessions,
+            logger=logging.getLogger(__name__),
+        )
+        return aggregate, budget
+
+    baseline, baseline_budget = await observed()
+    async with lease.sessions.begin() as session:
+        for index in range(sync_count):
+            for window, age in (("current", 2), ("previous", 5400)):
+                await session.execute(
+                    insert(IngestionJob.__table__).values(
+                        **{
+                            **template,
+                            "job_id": f"sync-{window}-{index}",
+                            "idempotency_key": f"sync-{window}-{index}",
+                            "status": "completed",
+                            "submitted_at": now - timedelta(seconds=age),
+                            "completed_at": now,
+                        }
+                    )
+                )
+    before = await _replay_identity_snapshot(lease)
+    aggregate, budget = await observed()
+    assert aggregate == baseline and budget == baseline_budget
+    assert budget.total_jobs == (3 if asynchronous else 0)
+    assert budget.failed_jobs == int(asynchronous)
+    assert budget.failure_rate == (Decimal(1) / Decimal(3) if asynchronous else Decimal(0))
+    assert budget.remaining_error_budget == (Decimal(0) if asynchronous else Decimal("0.03"))
+    assert budget.breach_failure_rate is asynchronous
+    assert budget.backlog_jobs == (2 if asynchronous else 0)
+    assert budget.previous_backlog_jobs == int(asynchronous)
+    assert budget.backlog_growth == int(asynchronous)
+    assert budget.replay_backlog_pressure_ratio == (Decimal("0.2") if asynchronous else Decimal(0))
+    assert budget.dlq_events_in_window == 0 and budget.dlq_pressure_ratio == 0
+    response = build_slo_status_response(
+        lookback_minutes=60,
+        snapshot=aggregate,
+        failure_rate_threshold=Decimal("0.03"),
+        queue_latency_threshold_seconds=5.0,
+        backlog_age_threshold_seconds=300.0,
+    )
+    assert response.failure_rate == budget.failure_rate
+    assert response.breach_failure_rate is asynchronous
+    assert response.p95_queue_latency_seconds == (400.0 if asynchronous else 0.0)
+    assert response.backlog_age_seconds == (500.0 if asynchronous else 0.0)
+    assert await _replay_identity_snapshot(lease) == before
+    async with lease.sessions() as session:
+        retained = await session.scalar(
+            select(IngestionJob).where(IngestionJob.job_id == receipt.job.job_id)
+        )
+        assert retained.status == "completed" and retained.completed_at is not None
 
 
 async def test_complete_seeded_financial_fence_outbox_snapshots_unchanged(observation_lease):

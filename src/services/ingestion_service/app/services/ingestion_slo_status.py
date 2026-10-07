@@ -121,7 +121,10 @@ async def _load_aggregate_slo_snapshot(
                 func.percentile_cont(0.95)
                 .within_group(_latency_seconds_expression())
                 .label("p95_latency"),
-            ).where(DBIngestionJob.submitted_at >= since)
+            ).where(
+                DBIngestionJob.submitted_at >= since,
+                DBIngestionJob.status != "completed",
+            )
         )
     ).one()
     total_jobs = int(row[0] or 0)
@@ -147,7 +150,12 @@ async def _load_fallback_slo_snapshot(
     now: datetime,
 ) -> IngestionSloSnapshot:
     jobs = (
-        await db.scalars(select(DBIngestionJob).where(DBIngestionJob.submitted_at >= since))
+        await db.scalars(
+            select(DBIngestionJob).where(
+                DBIngestionJob.submitted_at >= since,
+                DBIngestionJob.status != "completed",
+            )
+        )
     ).all()
     return slo_snapshot_from_jobs(jobs=list(jobs), now=now)
 
@@ -157,6 +165,7 @@ def slo_snapshot_from_jobs(
     jobs: list[Any],
     now: datetime,
 ) -> IngestionSloSnapshot:
+    jobs = [job for job in jobs if job.status != "completed"]
     latencies = sorted(
         (job.completed_at - job.submitted_at).total_seconds()
         for job in jobs

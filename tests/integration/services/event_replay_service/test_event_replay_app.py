@@ -170,7 +170,7 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
 
     status_parameter = next(param for param in list_jobs["parameters"] if param["name"] == "status")
     assert status_parameter["description"] == "Optional job status filter."
-    assert _enum_values(status_parameter["schema"]) == ["accepted", "queued", "failed"]
+    assert _enum_values(status_parameter["schema"]) == ["accepted", "queued", "failed", "completed"]
 
     entity_type_parameter = next(
         param for param in list_jobs["parameters"] if param["name"] == "entity_type"
@@ -741,7 +741,12 @@ async def test_openapi_describes_ingestion_job_shared_schema_depth(async_test_cl
         "Ingestion API endpoint that created this job."
     )
     assert job_detail["properties"]["accepted_count"]["minimum"] == 0
-    assert job_detail["properties"]["status"]["enum"] == ["accepted", "queued", "failed"]
+    assert job_detail["properties"]["status"]["enum"] == [
+        "accepted",
+        "queued",
+        "failed",
+        "completed",
+    ]
     assert job_detail["properties"]["failure_reason"]["description"] == (
         "Failure reason when status is failed."
     )
