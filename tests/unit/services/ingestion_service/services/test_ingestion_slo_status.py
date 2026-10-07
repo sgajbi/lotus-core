@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+import pytest
+
 from src.services.ingestion_service.app.services.ingestion_slo_status import (
     IngestionSloSnapshot,
     build_slo_status_response,
@@ -74,3 +76,37 @@ def test_build_slo_status_response_handles_empty_snapshot():
     assert response.breach_failure_rate is False
     assert response.breach_queue_latency is False
     assert response.breach_backlog_age is False
+
+
+@pytest.mark.parametrize("scenario", ["mixed", "all_sync", "no_completion", "async_completed"])
+def test_synchronous_completion_cannot_dilute_async_queue_latency(scenario):
+    now = datetime(2026, 6, 5, 12, 0, tzinfo=UTC)
+    sync = [
+        _Job("completed", now - timedelta(seconds=2), now - timedelta(seconds=1))
+        for _ in range(1000)
+    ]
+    asynchronous = [
+        _Job(status, now - timedelta(seconds=500), now - timedelta(seconds=100))
+        for status in ("queued", "failed")
+        for _ in range(5)
+    ]
+    pending = [
+        _Job(status, now - timedelta(seconds=500)) for status in ("accepted", "queued", "failed")
+    ]
+    jobs = {
+        "mixed": sync + asynchronous,
+        "all_sync": sync,
+        "no_completion": pending,
+        "async_completed": asynchronous,
+    }[scenario]
+    before = [(job.status, job.submitted_at, job.completed_at) for job in jobs]
+    snapshot = slo_snapshot_from_jobs(jobs=jobs, now=now)
+    assert snapshot.total_jobs == len(jobs)
+    assert snapshot.failed_jobs == (
+        5 if scenario in ("mixed", "async_completed") else int(scenario == "no_completion")
+    )
+    assert snapshot.p95_latency_seconds == (
+        400.0 if scenario in ("mixed", "async_completed") else 0.0
+    )
+    assert snapshot.backlog_age_seconds == (0.0 if scenario == "all_sync" else 500.0)
+    assert [(job.status, job.submitted_at, job.completed_at) for job in jobs] == before

@@ -53,7 +53,10 @@ After verified producer, family capability and tenant admission, an exact finger
 returns only a completed receipt with its completion timestamp. It bypasses new-write mode and
 rate controls; an incomplete receipt cannot be reported as success. Completed record counts are
 included in ingestion processed throughput, while accepted records remain backlog and queued or
-failed record accounting retains its existing meaning.
+failed record accounting retains its existing meaning. Synchronous completed receipts keep their
+completion timestamps but do not enter asynchronous queue-latency samples in either the native
+PostgreSQL aggregate or the fallback. Fast synchronous work cannot dilute a slow queue's p95.
+The existing percentile algorithms and total/failed/backlog semantics remain unchanged.
 
 Authority intervals are half-open. A null upper bound is unbounded, not a finite maximum-date
 sentinel; even an open interval beginning on the maximum supported date competes with another
@@ -107,6 +110,14 @@ availability. The response has no combined authoritative source cut. Date equali
 not establish compatibility with valuation, cashflow or another product. Existing composite,
 prior-lineage, transition-preimage and live financial qualification gaps are not closed by this
 product or by candidate unit/CI evidence.
+
+Generic metadata agrees with this posture: `data_quality_status`, `freshness_status` and
+`degradation.status` are `UNAVAILABLE`. The degradation summary contains the deduplicated bounded
+response reasons, with product-level qualification/compatibility details and family-level
+unavailable, scope, business-date, evidence, pin or coverage details. Diagnostic facts remain
+attributed evidence, including observed zero and false values; null remains unknown. Degradation
+does not replace those facts with defaults or qualify their use. Its details do not substitute
+the request date or serving timestamp for missing authoritative source-time evidence.
 
 ## Verification and evidence limits
 

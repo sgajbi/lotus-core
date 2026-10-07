@@ -901,9 +901,14 @@ both independently selected families in one statement snapshot, but always repor
 state and cross-product compatibility as unavailable. Scope/currency locks are separate from
 source-record revision locks; corrections cannot change their authority dimensions.
 
+QCP projects the same bounded product/family reasons into the existing generic degradation
+summary with UNAVAILABLE severity. Eligible diagnostic facts remain unchanged; absent evidence
+is not zero or false, and request/serving time is not authoritative source-time evidence.
+
 Exact fingerprint replay is read-only after verified producer/capability/tenant admission and
 requires a completed receipt with its completion timestamp before bypassing new-write mode/rate
-controls. Completed records count as processed capacity, not backlog. Interval overlap uses an
+controls. Completed records count as processed capacity, not backlog, and remain excluded from
+asynchronous queue-latency samples without removing their completion timestamps. Interval overlap uses an
 explicit nullable upper bound and half-open finite boundaries; no date sentinel substitutes for
 infinity. Four bounded actual c178 downgrade/TRUNCATE barrier nodes are routed to
 `critical-db-coverage` as well as the complete owning query-authority proof module.

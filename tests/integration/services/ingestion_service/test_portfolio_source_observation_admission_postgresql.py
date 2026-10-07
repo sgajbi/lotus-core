@@ -934,6 +934,99 @@ async def test_completed_receipt_is_nonactionable_in_native_operations(observati
         assert retained.status == "completed" and retained.retry_count == 0
 
 
+@pytest.mark.parametrize("scenario", ["mixed", "all_sync", "no_completion", "async_completed"])
+async def test_native_queue_latency_excludes_synchronous_completed_receipts(
+    observation_lease, scenario, monkeypatch
+):
+    from sqlalchemy import case, func
+
+    from src.services.ingestion_service.app.services import ingestion_slo_status as slo
+    from src.services.ingestion_service.app.services.ingestion_slo_status import (
+        _load_aggregate_slo_snapshot,
+        slo_snapshot_from_jobs,
+    )
+
+    lease = observation_lease
+    receipt = await lease.create(lease.cash())
+    now = datetime.now(UTC)
+    async with lease.sessions.begin() as session:
+        original = (await session.execute(select(IngestionJob.__table__))).mappings().one()
+        values = dict(original)
+        values.pop("id")
+        if scenario in ("mixed", "all_sync"):
+            controls = [("completed", 2, 1)] * (1000 if scenario == "mixed" else 100)
+        else:
+            controls = []
+        if scenario in ("mixed", "async_completed"):
+            controls += [(status, 500, 100) for status in ("queued", "failed") for _ in range(5)]
+        if scenario == "no_completion":
+            controls += [(status, 500, None) for status in ("accepted", "queued", "failed")]
+        for index, (status, submitted_age, completed_age) in enumerate(controls):
+            await session.execute(
+                insert(IngestionJob.__table__).values(
+                    **{
+                        **values,
+                        "job_id": f"queue-control-{index}",
+                        "idempotency_key": f"queue-control-{index}",
+                        "status": status,
+                        "submitted_at": now - timedelta(seconds=submitted_age),
+                        "completed_at": None
+                        if completed_age is None
+                        else now - timedelta(seconds=completed_age),
+                    }
+                )
+            )
+    async with lease.sessions() as session:
+        before = (
+            (await session.execute(select(IngestionJob.__table__).order_by(IngestionJob.id)))
+            .mappings()
+            .all()
+        )
+        aggregate = await _load_aggregate_slo_snapshot(
+            session, since=now - timedelta(hours=1), now=now
+        )
+        jobs = (await session.scalars(select(IngestionJob))).all()
+        fallback = slo_snapshot_from_jobs(jobs=jobs, now=now)
+        assert aggregate == fallback
+        if scenario == "mixed":
+            # Execute the predecessor expression against the same rows: fast synchronous
+            # receipts really hide the queue's 400-second latency, not just a SQL-shape issue.
+            with monkeypatch.context() as prior:
+                prior.setattr(
+                    slo,
+                    "_latency_seconds_expression",
+                    lambda: case(
+                        (
+                            IngestionJob.completed_at.is_not(None),
+                            func.extract(
+                                "epoch", IngestionJob.completed_at - IngestionJob.submitted_at
+                            ),
+                        ),
+                        else_=None,
+                    ),
+                )
+                diluted = await _load_aggregate_slo_snapshot(
+                    session, since=now - timedelta(hours=1), now=now
+                )
+            assert diluted.p95_latency_seconds == 1.0
+        assert aggregate.total_jobs == len(controls) + 1
+        assert aggregate.failed_jobs == (
+            5 if scenario in ("mixed", "async_completed") else int(scenario == "no_completion")
+        )
+        assert aggregate.p95_latency_seconds == (
+            400.0 if scenario in ("mixed", "async_completed") else 0.0
+        )
+        assert aggregate.backlog_age_seconds == (0.0 if scenario == "all_sync" else 500.0)
+        after = (
+            (await session.execute(select(IngestionJob.__table__).order_by(IngestionJob.id)))
+            .mappings()
+            .all()
+        )
+        assert after == before
+        retained = next(row for row in after if row["job_id"] == receipt.job.job_id)
+        assert retained["status"] == "completed" and retained["completed_at"] is not None
+
+
 async def test_complete_seeded_financial_fence_outbox_snapshots_unchanged(observation_lease):
     lease = observation_lease
     tables = (
