@@ -2,7 +2,7 @@
 
 from dataclasses import FrozenInstanceError, replace
 from datetime import UTC, date, datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, Inexact, Rounded, localcontext
 
 import pytest
 from portfolio_common.domain.portfolio_source_observations import (
@@ -97,6 +97,55 @@ def test_zero_unknown_and_negative_supplied_available_are_not_a_formula() -> Non
     assert observation.encumbered is None and observation.available == Decimal("0")
     assert replace(observation, available=None).content_hash != observation.content_hash
     assert replace(observation, available=Decimal("-2")).available == Decimal("-2")
+
+
+@pytest.mark.parametrize("field", ["settled", "encumbered", "available"])
+@pytest.mark.parametrize(
+    "source,expected",
+    [
+        ("-0", "0"),
+        ("-0.00", "0.00"),
+        ("1E+3", "1000"),
+        ("0E+3", "0"),
+        ("-1E+3", "-1000"),
+        ("0.00", "0.00"),
+        (
+            "123456789012345678901234.1234567890123456789000",
+            "123456789012345678901234.1234567890123456789000",
+        ),
+        (
+            "-123456789012345678901234.1234567890123456789000",
+            "-123456789012345678901234.1234567890123456789000",
+        ),
+    ],
+)
+def test_cash_numeric_identity_is_exact_under_low_precision_context(field, source, expected):
+    supplied = Decimal(source)
+    before = supplied.as_tuple()
+    with localcontext() as context:
+        context.prec = 2
+        context.traps[Inexact] = context.traps[Rounded] = True
+        fact = _cash(**{field: supplied})
+        equivalent = _cash(**{field: Decimal(expected)})
+        assert getattr(fact, field).as_tuple() == Decimal(expected).as_tuple()
+        assert fact.content_hash == equivalent.content_hash
+    assert supplied.as_tuple() == before
+
+
+def test_cash_canonicalization_keeps_fractional_display_scale_unknown_and_shared_hash():
+    from portfolio_common.domain.calculation_lineage import canonical_content_hash
+
+    assert (
+        _cash(available=Decimal("-0.00")).content_hash
+        == _cash(available=Decimal("0.00")).content_hash
+    )
+    assert (
+        _cash(available=Decimal("0.00")).content_hash != _cash(available=Decimal("0")).content_hash
+    )
+    assert _cash(available=None).available is None
+    assert canonical_content_hash({"amount": Decimal("-0")}) != canonical_content_hash(
+        {"amount": Decimal("0")}
+    )
 
 
 def test_business_visibility_uses_half_open_effective_interval_not_observed_date() -> None:
@@ -268,6 +317,38 @@ def test_correction_cannot_reassign_authority_scope(dimension) -> None:
         correction = replace(correction, envelope=replace(envelope, coverage_scope="other"))
     with pytest.raises(ObservationConflict, match="SOURCE_OBSERVATION_OWNER_MISMATCH"):
         require_successor(original, correction, original_id=original.content_hash)
+
+
+@pytest.mark.parametrize("field", ["settled", "encumbered", "available"])
+@pytest.mark.parametrize(
+    "source",
+    ["1E+999999999", "-1E+999999999", "1E-999999999", "-0E-999999999", "1E+131072", "1E-16384"],
+)
+def test_cash_refuses_compact_unrepresentable_exponents_before_expansion(field, source) -> None:
+    class NoExpansionDecimal(Decimal):
+        def __format__(self, spec):
+            raise AssertionError("unrepresentable value must not be expanded")
+
+    with pytest.raises(ValueError, match="PostgreSQL NUMERIC representation limits"):
+        _cash(**{field: NoExpansionDecimal(source)})
+
+
+@pytest.mark.parametrize("source", ["1E-7", "-1E-16383", "1E+131071", "-0E+999999999"])
+def test_cash_retains_supported_numeric_limits_without_context_rounding(source) -> None:
+    value = Decimal(source)
+    with localcontext() as context:
+        context.prec = 2
+        context.traps[Inexact] = True
+        context.traps[Rounded] = True
+        fact = _cash(settled=value)
+    expected = (
+        Decimal("0")
+        if value.is_zero()
+        else Decimal(format(value, "f"))
+        if value.as_tuple().exponent > 0
+        else value
+    )
+    assert fact.settled.as_tuple() == expected.as_tuple()
 
 
 def test_successor_keeps_owner_but_may_change_independent_source_values() -> None:

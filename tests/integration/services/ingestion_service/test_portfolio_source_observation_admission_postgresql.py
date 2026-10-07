@@ -298,6 +298,100 @@ async def test_receipt_fact_head_commit_and_ambiguous_response_replay(observatio
         assert head.observation_id == head.content_hash == fact.content_hash
 
 
+@pytest.mark.parametrize("field", ["settled", "encumbered", "available"])
+@pytest.mark.parametrize(
+    "source,expected",
+    [
+        pytest.param("-0", "0", id="signed-zero"),
+        pytest.param("-0.00", "0.00", id="scaled-signed-zero"),
+        pytest.param("1E-7", "0.0000001", id="positive-tiny-control"),
+        pytest.param("-1E-7", "-0.0000001", id="negative-tiny-control"),
+        pytest.param("1E+3", "1000", id="positive-exponent"),
+        pytest.param("0E+3", "0", id="zero-exponent"),
+        pytest.param("-1E+3", "-1000", id="negative-integer-exponent"),
+        pytest.param("0.00", "0.00", id="positive-zero-control"),
+        pytest.param(
+            "123456789012345678901234.1234567890123456789000",
+            "123456789012345678901234.1234567890123456789000",
+            id="positive-precision-control",
+        ),
+        pytest.param(
+            "-123456789012345678901234.1234567890123456789000",
+            "-123456789012345678901234.1234567890123456789000",
+            id="negative-precision-control",
+        ),
+    ],
+)
+async def test_cash_numeric_representation_survives_persisted_read_and_cross_receipt_replay(
+    observation_lease, field, source, expected
+):
+    from portfolio_common.portfolio_source_observation_models import observation_from_row
+
+    lease = observation_lease
+    fact = replace(lease.cash(), **{field: Decimal(source)})
+    committed = await lease.create(fact, idempotency="signed-zero-original")
+    assert committed.created and committed.job.status == "completed"
+    assert await lease.counts() == (1, 1, 1)
+
+    async def snapshot():
+        async with lease.sessions() as session:
+            return {
+                table: (
+                    await session.execute(
+                        text(f"SELECT to_jsonb(t) FROM {table} t ORDER BY to_jsonb(t)::text")
+                    )
+                )
+                .scalars()
+                .all()
+                for table in (
+                    "ingestion_jobs",
+                    "portfolio_cash_availability_observations",
+                    "portfolio_cash_availability_observation_heads",
+                )
+            }
+
+    before = await snapshot()
+    read_error = replay_error = None
+    loaded = replay = None
+    async with lease.sessions() as session:
+        row = (await session.scalars(select(CashAvailabilityObservationRow))).one()
+        stored = getattr(row, f"{field}_amount")
+        assert stored.as_tuple() == Decimal(expected).as_tuple()
+        try:
+            loaded = observation_from_row(row)
+        except ObservationConflict as error:
+            read_error = str(error)
+    try:
+        replay = await lease.create(fact, idempotency="signed-zero-cross-receipt")
+    except ObservationConflict as error:
+        replay_error = str(error)
+    after = await snapshot()
+    if replay_error is not None:
+        assert after == before, "failed cross-receipt replay must leave all durable rows unchanged"
+    print(
+        f"CASH_NUMERIC field={field} input={source} stored={stored} "
+        f"read_error={read_error} replay_error={replay_error}"
+    )
+    assert read_error is None and replay_error is None
+    assert loaded == fact and loaded.content_hash == fact.content_hash
+    assert fact.content_hash == replace(fact, **{field: Decimal(expected)}).content_hash
+    assert replay is not None and replay.created and replay.job.status == "completed"
+    assert replay.job.job_id != committed.job.job_id
+    assert await lease.counts() == (2, 1, 1)
+    assert (
+        after["portfolio_cash_availability_observations"]
+        == before["portfolio_cash_availability_observations"]
+    )
+    assert (
+        after["portfolio_cash_availability_observation_heads"]
+        == before["portfolio_cash_availability_observation_heads"]
+    )
+    original_row = next(
+        row for row in after["ingestion_jobs"] if row["job_id"] == committed.job.job_id
+    )
+    assert original_row == before["ingestion_jobs"][0]
+
+
 async def test_actual_empty_downgrade_upgrade_preserves_parent_and_model_columns(observation_lease):
     lease = observation_lease
     async with lease.sessions.begin() as session:

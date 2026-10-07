@@ -109,6 +109,20 @@ class ObservationEnvelope:
         )
 
 
+def _canonical_cash_amount(value: Decimal, field_name: str) -> Decimal:
+    """Match unconstrained PostgreSQL NUMERIC without unbounded exponent expansion."""
+    exponent = value.as_tuple().exponent
+    # Finite Decimal was required by the caller; NUMERIC supports 131072 integer
+    # digits and 16383 fractional digits. Check compact metadata before formatting.
+    if exponent < -16383 or (not value.is_zero() and value.adjusted() >= 131072):
+        raise ValueError(f"{field_name} exceeds PostgreSQL NUMERIC representation limits")
+    if value.is_zero():
+        return Decimal((0, (0,), min(exponent, 0)))
+    if exponent > 0:
+        return Decimal(format(value, "f"))
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class CashAvailabilityObservation:
     """Independent supplied amounts; unknown, observed zero and partial differ."""
@@ -135,6 +149,7 @@ class CashAvailabilityObservation:
             value = getattr(self, name)
             if value is not None:
                 EXACT_UNBOUNDED.require_exact(value, field_name=name)
+                object.__setattr__(self, name, _canonical_cash_amount(value, name))
 
     @property
     def family(self) -> ObservationFamily:

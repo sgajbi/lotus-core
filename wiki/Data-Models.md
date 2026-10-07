@@ -259,6 +259,13 @@ their predecessor/hash lineage. Scoped head tables project the current correctio
 rewriting original facts. Portfolio and receipt foreign keys carry tenant ownership. Exact
 amounts use unbounded finite NUMERIC; null and observed zero remain distinct.
 
+Before hashing or admission, cash facts remove zero's negative sign and expand positive
+exponents into exact fixed-point digits, matching NUMERIC reconstruction. Fractional scale,
+trailing digits and nonzero sign/precision are retained without context rounding. This does
+not change the shared hash engine or rewrite existing contradictory immutable history.
+Cash amounts outside NUMERIC's 131072 integer-digit or 16383 fractional-digit limits are
+refused before expansion; supported negative exponents remain compact and exact.
+
 Fact UPDATE/DELETE is refused. TRUNCATE refuses retained history, including parent cascades,
 and permits only empty tables under READ COMMITTED. Nonempty downgrade is refused under a
 four-table admission fence. See [Database Migrations](Database-Migrations) and the
