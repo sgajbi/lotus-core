@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -33,6 +34,35 @@ def _unit_of_work():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("capture_error", [False, True])
+async def test_opt_in_backend_identity_uses_existing_setup_roundtrip_and_preserves_commit(
+    monkeypatch, capture_error
+):
+    from src.services.portfolio_transaction_processing_service.app.ports import (
+        processing_diagnostics as port,
+    )
+
+    unit, session, transaction = _unit_of_work()
+    monkeypatch.setattr(port, "_callback_failures", 0)
+    capture = MagicMock()
+    if capture_error:
+        capture.backend.side_effect = ValueError("capture refused")
+    monkeypatch.setattr(port, "_factory", lambda *args: capture)
+    birth = datetime.now(UTC)
+    session.execute.return_value = MagicMock()
+    session.execute.return_value.one.return_value = ("on", 41, birth, 7)
+    with port.diagnostic_delivery("tenant_performance_load", "PERF_BALANCED_V1", "tx", None):
+        async with unit:
+            await unit.commit()
+    assert session.execute.await_count == 2
+    assert "pg_backend_pid()" in str(session.execute.await_args_list[0].args[0])
+    capture.backend.assert_called_once_with(port.ProcessingBackendIdentity(41, birth, 7))
+    transaction.commit.assert_awaited_once()
+    transaction.rollback.assert_not_awaited()
+    assert port.processing_diagnostic_failures() == int(capture_error)
+
+
+@pytest.mark.asyncio
 async def test_unit_of_work_builds_every_adapter_from_one_session_and_commits_once() -> None:
     unit_of_work, session, transaction = _unit_of_work()
 
@@ -49,6 +79,9 @@ async def test_unit_of_work_builds_every_adapter_from_one_session_and_commits_on
     transaction.commit.assert_awaited_once_with()
     assert session.execute.await_count == 2
     assert "cashflow_source_cut_deferred" in str(session.execute.await_args_list[0].args[0])
+    assert str(session.execute.await_args_list[0].args[0]) == (
+        "SELECT set_config('lotus.cashflow_source_cut_deferred', 'on', true)"
+    )
     assert "flush_deferred_portfolio_cashflow_source_cuts" in str(
         session.execute.await_args_list[1].args[0]
     )

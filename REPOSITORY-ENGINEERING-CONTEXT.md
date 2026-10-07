@@ -802,6 +802,33 @@ schema, machine-readable contracts, or executable evidence.
 
 ## Performance-load diagnostic practice
 
+The existing processing port owns optional transient capture; its transaction-processing
+infrastructure sink is registered with the UOW and enabled only by the owned load gate's fixed
+private file before seed delivery. Missing enablement is cached disabled once per process.
+The POSIX transport uses an exclusively created owner-only mode0700 directory in the isolated
+worker, mode0600 regular files, owner checks and no-follow directory-relative descriptors.
+Existing directory reuse and unsafe file targets are refused; snapshot replacement is exclusive
+and remains off-loop. Windows lifecycle mocks do not certify these POSIX filesystem controls.
+Exact load tenant/portfolio, finite enable age and random run generation bound admission.
+The existing setup SQL roundtrip optionally reads typed backend PID/birth/database identity;
+disabled SQL is unchanged, and phase changes issue no SQL or filesystem calls. Twenty records
+and 16KiB bound the private snapshot. Active holders survive long windows/capacity pressure;
+completed records have 120-second retention. One half-second background publisher uses a
+single off-loop write at a time. Diagnostic callback faults use one saturating process-local
+counter with no financial-path IO, logs or metric labels. Capture errors do not replace financial exceptions or
+cancellation; no hard filesystem latency bound is claimed. Task-affine handles reject inherited
+child-task and stale-generation updates. Collector projection requires fresh same-run and
+unique backend-birth/database matches; an in-progress phase is not an exact Python await.
+The separate replay-reader/publisher session is outside this instrumentation and remains
+unobserved. No financial ordering, locks, source authority, commit boundary, runtime topology,
+dependency or SLO changes are part of this diagnostic slice.
+Consumer metrics use actual production TXNPROC/TXNREPLAY service/topic/group tuples, with
+explicit no-matching-sample reasons and unchanged privacy/finite/input/output/row limits.
+Focused tests additionally live in `tests/unit/scripts/test_load_phase_diagnostics.py` and the
+transaction-processing infrastructure's `test_diagnostics.py`; their mocks do not certify PG,
+Kafka, filesystem latency or deployed worker identity. See the Operations Runbook for the
+enablement and unknown-evidence limits.
+
 Replay completion reports retain baseline/target/final bounded scrape states and ordered request
 receipts; missing samples never become measured zero, and observed counter decreases or changed
 counter-creation or same-exposition process-birth identity fail completion closed. Missing producer

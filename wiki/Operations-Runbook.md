@@ -864,6 +864,32 @@ security is unavailable evidence, never a plaintext fallback. Actual metric avai
 and genuine SQL/Kafka semantics require the existing runtime lane. This evidence does not make a
 failed gate releasable or establish its root cause.
 
+The owned load gate can enable a private processing-UOW snapshot in the exact managed
+transaction-processing container before seed delivery. Production remains disabled without the
+fixed private enable file; a missing file is checked once per process, so enabling after that
+check requires a fresh owned worker. The Linux caller creates an exclusive `lotus-load-uow`
+directory under the worker's temporary directory, with owner-only mode0700; an existing directory
+refuses enablement rather than reusing another campaign. Config and snapshot files require the
+same effective owner, regular-file kind and mode0600. Directory/file descriptors use no-follow
+opens; snapshot replacement uses an exclusive random file within that private directory. Unsafe
+ownership, modes or symlinks produce unavailable evidence. This POSIX transport is not certified
+by Windows lifecycle mocks. Admission is restricted to `tenant_performance_load` and
+`PERF_BALANCED_V1`, a finite one-hour enable window and a random run generation. Each active
+delivery has a fresh UOW generation, task affinity, salted delivery/repair hashes and typed
+PostgreSQL PID/backend-birth/database identity, read in the existing setup roundtrip. Phase
+updates are memory-only; one background writer publishes at half-second cadence, at most 20
+records and 16KiB. Active holders are never evicted for age or newer deliveries; completed
+records expire after 120 seconds, and excess active deliveries are explicitly truncated.
+The collector admits only current-run, fresh snapshots with unique birth-qualified database
+matches. Phases describe boundaries in progress, never an exact Python await. Replay-reader
+sessions and publisher confirmation outside the processing UOW remain unobserved. File/capture
+failures cannot replace a business exception; callback failures have a saturating process-local
+counter without logs or labels. Filesystem completion itself has no hard latency
+bound. No per-phase SQL, public tenant/transaction metric labels, durable ledger or runtime
+topology is introduced. Metrics admit the actual TXNPROC/persisted/processing-group and
+TXNREPLAY/reprocessing-requested/replay-group tuples; no matching samples is explicit unavailable
+evidence. The 1MiB scrape, 32KiB collector output and six-second child budgets remain unchanged.
+
 See [Bank-day load scenario](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/bank-day-load-scenario.md#performance-load-source-completion-diagnostics)
 for budgets, scopes, artifact interpretation and unchanged load/SLO boundaries.
 

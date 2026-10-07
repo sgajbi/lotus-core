@@ -24,6 +24,12 @@ from ...ports import (
     TransactionIdempotencyPort,
     TransactionReadinessProcessingPort,
 )
+from ...ports.processing_diagnostics import (
+    ProcessingBackendIdentity,
+    current_processing_diagnostic,
+    diagnostic_phase,
+    record_processing_diagnostic_failure,
+)
 from ..cashflow import (
     PROMETHEUS_CASHFLOW_CALCULATION_OBSERVER,
     CachedCashflowRuleResolver,
@@ -59,6 +65,7 @@ from ..transaction_readiness import (
     SqlAlchemyTransactionStageRepository,
     TransactionalTransactionReadinessEventStager,
 )
+from . import diagnostics as _diagnostics  # noqa: F401  -- registers optional private sink
 
 _AdapterT = TypeVar("_AdapterT")
 
@@ -117,9 +124,21 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
             # Cashflow source-cut triggers collect affected portfolio roots while
             # this aggregate rebuild runs.  The flush below refreshes each root
             # once at the same durable transaction boundary as the write.
-            await session.execute(
-                text("SELECT set_config('lotus.cashflow_source_cut_deferred', 'on', true)")
-            )
+            capture = current_processing_diagnostic()
+            setup_sql = "SELECT set_config('lotus.cashflow_source_cut_deferred', 'on', true)"
+            if capture is not None:
+                setup_sql += (
+                    ", pg_backend_pid(), (SELECT backend_start FROM pg_stat_activity "
+                    "WHERE pid=pg_backend_pid()), "
+                    "(SELECT oid FROM pg_database WHERE datname=current_database())"
+                )
+            setup = await session.execute(text(setup_sql))
+            if capture is not None:
+                try:
+                    pid, birth, database_oid = tuple(setup.one())[1:]
+                    capture.backend(ProcessingBackendIdentity(pid, birth, database_oid))
+                except Exception:
+                    record_processing_diagnostic_failure()
             self._build_adapters(session)
         except BaseException:
             if self._transaction is not None:
@@ -180,9 +199,11 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
     ) -> None:
         try:
             if not self._committed and self._transaction is not None:
+                diagnostic_phase("rollback")
                 await self._transaction.rollback()
         finally:
             if self._session is not None:
+                diagnostic_phase("session_close")
                 await self._session.close()
 
     async def commit(self) -> None:
@@ -192,7 +213,9 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
             raise RuntimeError("Transaction processing unit of work was already committed")
         if self._session is None:
             raise RuntimeError("Transaction processing unit of work has no active session")
+        diagnostic_phase("source_cut_flush")
         await self._session.execute(text("SELECT flush_deferred_portfolio_cashflow_source_cuts()"))
+        diagnostic_phase("durable_commit")
         await self._transaction.commit()
         self._committed = True
 

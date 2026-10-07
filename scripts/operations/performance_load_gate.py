@@ -36,6 +36,7 @@ from portfolio_common.config import KAFKA_TOPIC_PARTITION_COUNTS  # noqa: E402
 
 from scripts.operations.performance.load_completion_diagnostics import (  # noqa: E402
     collect_load_completion_diagnostics,
+    enable_managed_processing_phases,
 )
 from scripts.operations.transaction_processing_load_support import (  # noqa: E402
     LOAD_TENANT_ID,
@@ -526,6 +527,7 @@ class _LoadEvidenceReport:
     deadline_counts: dict[str, Any] = field(default_factory=dict)
     replay_storm_status: str = "not_run"
     replay_completion: dict[str, Any] = field(default_factory=dict)
+    phase_capture: dict[str, Any] = field(default_factory=dict)
 
     def __enter__(self) -> "_LoadEvidenceReport":
         return self
@@ -572,6 +574,9 @@ class _LoadEvidenceReport:
             else None,
             "compose_file": self.runtime.compose_file if self.runtime else None,
             "metrics_port": urlsplit(self.args.transaction_processing_base_url).port,
+            "phase_generation": self.phase_capture.get("generation"),
+            "phase_container_id": self.phase_capture.get("container_id"),
+            "phase_container_started_at": self.phase_capture.get("started_at"),
         }
         try:
             result = collect_load_completion_diagnostics(
@@ -613,6 +618,7 @@ class _LoadEvidenceReport:
             "source_timeouts": self.timeouts,
             "replay_storm_status": self.replay_storm_status,
             "replay_completion": self.replay_completion,
+            "phase_capture": self.phase_capture,
             "profiles_not_run": [
                 name
                 for name in ("steady_state", "burst", "replay_storm")
@@ -637,6 +643,29 @@ class _LoadEvidenceReport:
 
 def _requested_endpoint(cli_value: str | None, environment_key: str) -> str | None:
     return cli_value or os.getenv(environment_key)
+
+
+def _enable_owned_processing_phases(
+    args: argparse.Namespace, managed: ManagedComposeRun | None
+) -> dict[str, Any]:
+    if (
+        managed is None
+        or args.host_database_url != managed.runtime.endpoints.host_database_url
+        or args.transaction_processing_base_url
+        != managed.runtime.endpoints.e2e_transaction_processing_url
+    ):
+        return {"status": "unavailable", "reason": "managed_isolated_runtime_required"}
+    return dict(
+        enable_managed_processing_phases(
+            {
+                "tenant_id": LOAD_TENANT_ID,
+                "portfolio_id": GOVERNED_LOAD_PORTFOLIO_ID,
+                "runtime": managed.runtime.endpoints.compose_project_name,
+                "compose_file": managed.compose_file,
+                "metrics_port": urlsplit(args.transaction_processing_base_url).port,
+            }
+        )
+    )
 
 
 def main(
@@ -758,6 +787,7 @@ def main(
     run_started_at = datetime.now(UTC)
     run_id = run_started_at.strftime("%Y%m%dT%H%M%SZ")
     _validate_governed_load_identity()
+    phase_capture = _enable_owned_processing_phases(args, _managed_run)
     portfolio_id = GOVERNED_LOAD_PORTFOLIO_ID
     security_prefix = GOVERNED_LOAD_SECURITY_PREFIX
     engine = create_sync_database_engine(
@@ -779,6 +809,7 @@ def main(
         timeout_seconds=args.ready_timeout_seconds,
     )
     with _LoadEvidenceReport(args, run_id, engine, _managed_run) as report:
+        report.phase_capture = phase_capture
         all_results = report.results
         if args.profile_tier == "fast":
             profiles: list[LoadProfile] = [

@@ -35,6 +35,7 @@ from ..ports import (
     TransactionProcessingUnitOfWorkFactory,
 )
 from ..ports.position_history import AdmittedPositionCorrectionGroup
+from ..ports.processing_diagnostics import diagnostic_delivery, diagnostic_phase
 from ..ports.transaction_processing import FirstPublicationSourceAuthority, FxSourceAdmission
 from .commands import ProcessTransactionCommand, TransactionProcessingIntent
 from .errors import TransactionProcessingRejected
@@ -340,6 +341,17 @@ class ProcessTransactionUseCase:
         self._observer = observer
 
     async def execute(self, command: ProcessTransactionCommand) -> ProcessTransactionResult:
+        with diagnostic_delivery(
+            command.transaction.tenant_id or "",
+            command.transaction.portfolio_id,
+            command.transaction.transaction_id,
+            command.metadata.repair_delivery_id,
+        ):
+            return await self._execute_observed(command)
+
+    async def _execute_observed(
+        self, command: ProcessTransactionCommand
+    ) -> ProcessTransactionResult:
         with self._observer.observe(
             TransactionProcessingOperation.TRANSACTION
         ) as transaction_observation:
@@ -446,7 +458,9 @@ class ProcessTransactionUseCase:
             )
             fx_witness = None
             if canonical_unversioned_repair:
+                diagnostic_phase("repair_qualification")
                 fx_witness = await unit_of_work.cost.validate_unversioned_repair_source(transaction)
+            diagnostic_phase("first_publication_qualification")
             first_publication_source = await _qualify_first_publication_source(
                 command,
                 unit_of_work,
@@ -576,6 +590,7 @@ class ProcessTransactionUseCase:
                     )
             if financial_effect_transactions:
                 with self._observer.observe(TransactionProcessingOperation.PIPELINE):
+                    diagnostic_phase("readiness")
                     await unit_of_work.readiness.register_processed_transactions(
                         financial_effect_transactions,
                         correlation_id=metadata.correlation_id,
