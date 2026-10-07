@@ -21,6 +21,20 @@ migration still requires human review for financial and temporal correctness.
 | Prove safety | Migration smoke and contract checks |
 | Recover | Rollback and operational guidance below |
 
+## Source Observation History Protection
+
+Revision `c178b2c3d539` adds empty immutable cash and funding/investment source tables with
+separate current-head projections; no qualified history is backfilled. Downgrade locks all four
+tables deterministically before checking emptiness and refuses nonempty history. Both downgrade
+and empty-table TRUNCATE require READ COMMITTED; stale transaction-fixed snapshots cannot prove
+emptiness. A distinct truncate trigger permits empty fixture cascades but refuses populated
+direct or parent-cascade deletion. Row UPDATE/DELETE remains unconditionally prohibited.
+
+Actual isolated PostgreSQL race, cascade and rollback evidence is required before acceptance.
+DDL compilation and collection are not migration execution. The
+[methodology](https://github.com/sgajbi/lotus-core/blob/main/docs/methodologies/source-data-products/portfolio-financial-source-observations.md)
+defines the required adverse controls; never disable these guards to clean a shared test database.
+
 ## Standard workflow
 
 ### 1. Change the SQLAlchemy models

@@ -9,6 +9,19 @@ It exists alongside `query_service`, not in place of it. `query_service` owns ca
 read routes, while `query_control_plane_service` owns control-plane APIs for analytics inputs,
 integration contracts, support, lineage, policy, simulation, and export workflows.
 
+## Pinned Financial Source Observations
+
+The registered financial-source-observations query reads cash and funding/investment families
+independently. Original selection requires observation ID, content hash, source cut and source
+version; current corrected selection requires explicit `latest_restated: true`. Missing selectors
+are unavailable, not implicit latest. Business-date visibility uses the half-open effective
+interval, not receipt time. One statement reads both families without claiming a coherent
+valuation/cashflow join.
+
+Returned observations remain diagnostic and unqualified: authoritative state and compatibility
+are always `UNAVAILABLE`. The [methodology](https://github.com/sgajbi/lotus-core/blob/main/docs/methodologies/source-data-products/portfolio-financial-source-observations.md)
+explains immutable pinning, nullable values and source qualification limits.
+
 ## What it handles
 
 The current runtime centers on:

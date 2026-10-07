@@ -11,7 +11,12 @@ def test_gateway_rate_limit_policy_guard_accepts_current_truth() -> None:
 
 @pytest.mark.parametrize(
     "missing_endpoint",
-    ["/ingest/transactions", "/ingest/transactions/{transaction_id}/source-evidence"],
+    [
+        "/ingest/transactions",
+        "/ingest/transactions/{transaction_id}/source-evidence",
+        "/ingest/portfolio-cash-availability-observations",
+        "/ingest/portfolio-funding-investment-observations",
+    ],
 )
 def test_gateway_rate_limit_policy_guard_rejects_missing_endpoint(missing_endpoint: str) -> None:
     policy = guard._load_policy()

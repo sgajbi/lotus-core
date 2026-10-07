@@ -1,5 +1,33 @@
 # Operations Runbook
 
+## Current Scope And Evidence
+
+This page is the first-response map for the Core app-local runtime, durable evidence, queue
+recovery, and canonical seed operations. Commands and limits below are backed by repository-owned
+contracts, tests, or the linked deep runbooks. They describe current Core behavior; they do not by
+themselves certify a particular environment, production capacity, or downstream product surface.
+
+| Reader | Start here | Escalate when |
+| --- | --- | --- |
+| Operations and support | Main operational surfaces, useful commands, and the affected runtime section | A source-safe failure persists after the documented bounded retry or recovery path |
+| Security and audit support | Durable Enterprise Access Evidence | Durable evidence is unavailable, fails domain verification, or requires controlled repair |
+| Valuation and derived-state support | Transaction-processing runtime and bounded database work | Backlog does not drain across polls, authority is missing, or terminal work conflicts with source truth |
+| Engineers and release owners | Linked contracts, deep runbooks, and validation commands | A contract, migration, topology, or operator command must change |
+
+## Financial Source Observation Refusals
+
+For an observation rejection, retain the fixed refusal code and receipt/idempotency lineage;
+do not retry a divergent revision or stale head as a new source fact. Verify authenticated
+tenant/producer, exact family write capability and separate server grant before source review.
+The default grant set is empty. A completed receipt proves local source retention only, not a
+qualified bank feed or downstream financial completion.
+
+Original reads require four immutable pins. Missing/partial/unqualified sources remain
+unavailable for authority; do not join date-equal cuts or replace null with zero. Never truncate
+retained history, disable triggers or reset shared providers to make tests green. Use the
+[source methodology](https://github.com/sgajbi/lotus-core/blob/main/docs/methodologies/source-data-products/portfolio-financial-source-observations.md)
+and owning isolated PostgreSQL proof before promotion.
+
 ## Replay Load Diagnostic Evidence
 
 For a failed replay profile, inspect the retained `completion_evidence.replay_completion` and
@@ -11,8 +39,9 @@ once within its existing six-second/32KiB/20-row limits, after completion measur
 relaxing the full-profile 180-second SLO.
 
 The diagnostic metrics scrape accepts at most 1MiB of input independently of the unchanged
-32KiB response limit. It exports only known consumer metrics and public scope labels; malformed,
-private-label or nonfinite observations are unavailable, never measured zero. Kafka offset
+32KiB response limit. It exports only known consumer metrics and public scope labels. Recognized
+metrics from cohosted, unselected scopes are filtered first; private labels in the selected scope,
+malformed values and nonfinite observations remain unavailable, never measured zero. Kafka offset
 sampling is read-only and nonjoining, round-robin across raw, persisted and replay-request
 topic/group pairs within 20 rows; group failures and omitted partitions remain explicit.
 Lock sampling prioritizes blocker heads and waiting edges over unrelated lower-PID locks,
@@ -43,20 +72,6 @@ mix, worker configuration, financial reconciliation, covered downstream stages, 
 queue age, database contention, resource use, and duplicate/correction/restart outcomes. Follow the
 bounded acceptance sequence in issue `#714`; do not substitute a larger workload for missing
 correctness or recovery evidence. Preserve failed runs with their measured boundary and cause.
-
-## Current Scope And Evidence
-
-This page is the first-response map for the Core app-local runtime, durable evidence, queue
-recovery, and canonical seed operations. Commands and limits below are backed by repository-owned
-contracts, tests, or the linked deep runbooks. They describe current Core behavior; they do not by
-themselves certify a particular environment, production capacity, or downstream product surface.
-
-| Reader | Start here | Escalate when |
-| --- | --- | --- |
-| Operations and support | Main operational surfaces, useful commands, and the affected runtime section | A source-safe failure persists after the documented bounded retry or recovery path |
-| Security and audit support | Durable Enterprise Access Evidence | Durable evidence is unavailable, fails domain verification, or requires controlled repair |
-| Valuation and derived-state support | Transaction-processing runtime and bounded database work | Backlog does not drain across polls, authority is missing, or terminal work conflicts with source truth |
-| Engineers and release owners | Linked contracts, deep runbooks, and validation commands | A contract, migration, topology, or operator command must change |
 
 ## Main operational surfaces
 

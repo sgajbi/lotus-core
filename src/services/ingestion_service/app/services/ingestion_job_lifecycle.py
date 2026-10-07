@@ -13,13 +13,15 @@ from portfolio_common.monitoring import (
     INGESTION_JOBS_FAILED_TOTAL,
     INGESTION_JOBS_RETRIED_TOTAL,
 )
-from sqlalchemy import and_, desc, func, null, select, text, update
+from sqlalchemy import and_, desc, func, inspect, null, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..application.ingestion_failure_evidence import project_ingestion_failure_evidence
 from ..domain.ingestion_job_lifecycle_policy import (
+    INGESTION_JOB_TERMINAL_STATUSES,
     IngestionJobStatus,
     IngestionJobTransition,
+    ingestion_job_transition_allowed,
     ingestion_job_transition_expected_statuses,
 )
 from ..DTOs.ingestion_job_dto import (
@@ -40,6 +42,43 @@ class IngestionIdempotencyConflictError(ValueError):
         super().__init__(
             "Ingestion idempotency key was reused for the same endpoint with a different payload."
         )
+
+
+_SYNCHRONOUS_CREATION_ROW = "portfolio_source_observation_creation_row"
+_SYNCHRONOUS_OBSERVATION_ENDPOINTS = frozenset(
+    {
+        "/ingest/portfolio-cash-availability-observations",
+        "/ingest/portfolio-funding-investment-observations",
+    }
+)
+
+
+async def complete_synchronous_observation_receipt(
+    db: AsyncSession, row: DBIngestionJob, *, tenant_id: str, job_id: str
+) -> None:
+    """Finish only the new observation receipt inside its creation transaction.
+
+    The dedicated callback invokes this after append/CAS has succeeded. It cannot
+    complete an existing, foreign, detached or asynchronous job, nor commit facts.
+    The surrounding creation transaction owns both completion and rollback.
+    """
+    if (
+        not db.in_transaction()
+        or db.info.get(_SYNCHRONOUS_CREATION_ROW) is not row
+        or inspect(row).session is not db.sync_session
+        or not inspect(row).persistent
+        or row.tenant_id != tenant_id
+        or row.job_id != job_id
+        or row.endpoint not in _SYNCHRONOUS_OBSERVATION_ENDPOINTS
+        or not ingestion_job_transition_allowed(
+            transition=IngestionJobTransition.ACCEPTED_TO_COMPLETED,
+            current_status=row.status,
+        )
+    ):
+        raise ValueError("Synchronous observation receipt is not an attached creation effect")
+    row.status = IngestionJobStatus.COMPLETED.value
+    row.completed_at = datetime.now(UTC)
+    await db.flush()
 
 
 @dataclass(slots=True)
@@ -232,7 +271,14 @@ async def create_or_get_job_result(
             if on_created is not None:
                 # Capability-specific durable intent shares this existing job UOW.
                 # Exact idempotent returns above never repeat the creation effect.
-                await on_created(db, row)
+                if endpoint not in _SYNCHRONOUS_OBSERVATION_ENDPOINTS:
+                    await on_created(db, row)
+                else:
+                    db.info[_SYNCHRONOUS_CREATION_ROW] = row
+                    try:
+                        await on_created(db, row)
+                    finally:
+                        db.info.pop(_SYNCHRONOUS_CREATION_ROW, None)
             INGESTION_JOBS_CREATED_TOTAL.labels(endpoint=endpoint, entity_type=entity_type).inc()
             return IngestionJobCreateResult(
                 job=to_job_response(
@@ -278,6 +324,7 @@ async def mark_job_queued(
                 .where(DBIngestionJob.job_id == job_id)
                 .where(DBIngestionJob.tenant_id == tenant_id)
                 .where(DBIngestionJob.status.in_(tuple(expected_statuses)))
+                .where(DBIngestionJob.status.not_in(tuple(INGESTION_JOB_TERMINAL_STATUSES)))
                 .values(
                     status=IngestionJobStatus.QUEUED.value,
                     completed_at=datetime.now(UTC),
@@ -331,6 +378,7 @@ async def mark_job_failed(
                 .where(DBIngestionJob.job_id == job_id)
                 .where(DBIngestionJob.tenant_id == tenant_id)
                 .where(DBIngestionJob.status.in_(tuple(expected_statuses)))
+                .where(DBIngestionJob.status.not_in(tuple(INGESTION_JOB_TERMINAL_STATUSES)))
                 .values(
                     status=IngestionJobStatus.FAILED.value,
                     completed_at=datetime.now(UTC),
@@ -374,7 +422,10 @@ async def record_job_failure_observation(
     async for db in session_factory():
         async with db.begin():
             row = await db.scalar(
-                select(DBIngestionJob).where(DBIngestionJob.job_id == job_id).limit(1)
+                select(DBIngestionJob)
+                .where(DBIngestionJob.job_id == job_id)
+                .where(DBIngestionJob.status.not_in(tuple(INGESTION_JOB_TERMINAL_STATUSES)))
+                .limit(1)
             )
             if row is None:
                 return
@@ -426,6 +477,7 @@ async def mark_job_retried(
                 .where(DBIngestionJob.job_id == job_id)
                 .where(DBIngestionJob.tenant_id == tenant_id)
                 .where(DBIngestionJob.status.in_(tuple(expected_statuses)))
+                .where(DBIngestionJob.status.not_in(tuple(INGESTION_JOB_TERMINAL_STATUSES)))
                 .values(
                     retry_count=func.coalesce(DBIngestionJob.retry_count, 0) + 1,
                     last_retried_at=datetime.now(UTC),
@@ -459,6 +511,7 @@ async def mark_job_retried_and_queued(
                 .where(DBIngestionJob.job_id == job_id)
                 .where(DBIngestionJob.tenant_id == tenant_id)
                 .where(DBIngestionJob.status.in_(tuple(expected_statuses)))
+                .where(DBIngestionJob.status.not_in(tuple(INGESTION_JOB_TERMINAL_STATUSES)))
                 .values(
                     status=IngestionJobStatus.QUEUED.value,
                     completed_at=datetime.now(UTC),

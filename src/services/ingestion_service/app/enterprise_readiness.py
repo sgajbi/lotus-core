@@ -21,6 +21,12 @@ SERVICE_NAME = "ingestion_service"
 logger = logging.getLogger("enterprise_readiness")
 
 INGESTION_WRITE_CAPABILITY_RULES: dict[str, str] = {
+    "POST /ingest/portfolio-cash-availability-observations": (
+        "ingestion.portfolio_cash_availability_observations.write"
+    ),
+    "POST /ingest/portfolio-funding-investment-observations": (
+        "ingestion.portfolio_funding_investment_observations.write"
+    ),
     "POST /ingest/portfolios": "ingestion.portfolios.write",
     "POST /ingest/transaction": "ingestion.transactions.write",
     "POST /ingest/transactions": "ingestion.transactions.write",

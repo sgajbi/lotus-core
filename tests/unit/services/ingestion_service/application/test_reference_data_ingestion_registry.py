@@ -12,6 +12,18 @@ from src.services.ingestion_service.app.application.reference_data_ingestion_reg
 )
 
 EXPECTED_COMMANDS = {
+    "portfolio_cash_availability_observation": (
+        "/ingest/portfolio-cash-availability-observations",
+        "portfolio_cash_availability_observation",
+        "observations",
+        "append_cash_availability_observations",
+    ),
+    "portfolio_funding_investment_observation": (
+        "/ingest/portfolio-funding-investment-observations",
+        "portfolio_funding_investment_observation",
+        "observations",
+        "append_funding_investment_observations",
+    ),
     "benchmark_assignment": (
         "/ingest/benchmark-assignments",
         "benchmark_assignment",

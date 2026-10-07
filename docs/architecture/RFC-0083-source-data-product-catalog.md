@@ -594,6 +594,22 @@ that the declared risk-facing products cover operational holdings, transaction w
 state, analytics-input market/reference products, and evidence products on the governed serving plane
 for each route family.
 
+### Independent Portfolio Financial Source Observations
+
+`PortfolioFinancialSourceObservations:v1` is a reusable Core-owned Analytics Input served by
+QCP at `POST /integration/portfolios/{portfolio_id}/financial-source-observations/query`.
+Manage is one consumer, not the owner of the source definitions. It exposes independently
+pinned cash and funding/investment producer assertions with immutable revision/cut/hash lineage,
+server receipt time, coverage and explicitly unqualified admission. Original pins survive
+correction; current-head selection is an explicit restatement, never an implicit latest lookup.
+
+The default producer-grant set is empty. Permission to retain a synthetic assertion, an exact
+decimal, a complete coverage flag or a successful query cannot qualify a bank source. The
+product deliberately supplies no authoritative combined cut: availability and compatibility
+remain `UNAVAILABLE`. Existing mandate, valuation, cashflow and composite source contracts are
+unchanged. [Methodology and validation boundaries](../methodologies/source-data-products/portfolio-financial-source-observations.md)
+define receipt atomicity, authority scopes, history protection and the required PostgreSQL proof.
+
 ## Validation
 
 Slice 6 validation is:

@@ -49,6 +49,8 @@
     },
     "ingestion_service": {
       "Write Ingress": [
+        "POST /ingest/portfolio-cash-availability-observations",
+        "POST /ingest/portfolio-funding-investment-observations",
         "POST /ingest/transactions/{transaction_id}/source-evidence",
         "POST /ingest/authoritative-market-price-source-facts",
         "POST /ingest/benchmark-assignments",
@@ -92,6 +94,7 @@
     },
     "query_control_plane_service": {
       "Analytics Input": [
+        "POST /integration/portfolios/{portfolio_id}/financial-source-observations/query",
         "GET /integration/exports/analytics-timeseries/jobs/{job_id}",
         "GET /integration/exports/analytics-timeseries/jobs/{job_id}/result",
         "POST /integration/benchmarks/catalog",

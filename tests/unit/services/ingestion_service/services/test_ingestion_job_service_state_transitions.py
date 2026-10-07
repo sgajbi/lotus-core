@@ -2,13 +2,82 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
+from portfolio_common.database_models import IngestionJob as DBIngestionJob
 from portfolio_common.database_models import IngestionJobFailure as DBIngestionJobFailure
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.ingestion_service.app.services import ingestion_job_service as service_module
+from src.services.ingestion_service.app.services.ingestion_job_lifecycle import (
+    complete_synchronous_observation_receipt,
+)
 from src.services.ingestion_service.app.services.ingestion_job_service import IngestionJobService
 from tests.unit.test_support.async_session_iter import make_single_session_getter
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_synchronous_completion_refuses_unattached_receipt_without_mutation():
+    row = DBIngestionJob(
+        job_id="job-observation",
+        tenant_id="tenant-test",
+        status="accepted",
+        endpoint="/ingest/portfolio-cash-availability-observations",
+    )
+    async with AsyncSession() as session:
+        async with session.begin():
+            with pytest.raises(ValueError, match="attached creation effect"):
+                await complete_synchronous_observation_receipt(
+                    session, row, tenant_id="tenant-test", job_id="job-observation"
+                )
+    assert row.status == "accepted"
+    assert row.completed_at is None
+
+
+async def test_synchronous_completion_refuses_pending_not_persisted_receipt():
+    row = DBIngestionJob(
+        job_id="job-observation",
+        tenant_id="tenant-test",
+        status="accepted",
+        endpoint="/ingest/portfolio-cash-availability-observations",
+    )
+    async with AsyncSession() as session:
+        async with session.begin():
+            session.add(row)
+            session.info["portfolio_source_observation_creation_row"] = row
+            with pytest.raises(ValueError, match="attached creation effect"):
+                await complete_synchronous_observation_receipt(
+                    session, row, tenant_id="tenant-test", job_id="job-observation"
+                )
+            await session.rollback()
+    assert row.status == "accepted"
+    assert row.completed_at is None
+
+
+@pytest.mark.parametrize("mutation", ["queue", "fail", "retry", "retry_queue"])
+async def test_terminal_filter_cannot_be_overridden_by_caller_expected_statuses(mutation):
+    from src.services.ingestion_service.app.services import ingestion_job_lifecycle as lifecycle
+
+    session = _FakeSession(returned_row=None)
+    common = dict(
+        job_id="completed-receipt",
+        tenant_id="tenant-test",
+        session_factory=make_single_session_getter(session),
+        expected_statuses=("completed",),
+    )
+    if mutation == "queue":
+        await lifecycle.mark_job_queued(**common)
+    elif mutation == "fail":
+        await lifecycle.mark_job_failed(
+            **common, failure_reason="synthetic", failure_phase="persist", failed_record_keys=[]
+        )
+    elif mutation == "retry":
+        await lifecycle.mark_job_retried(**common)
+    else:
+        await lifecycle.mark_job_retried_and_queued(**common)
+    statement = session.executed_statements[0]
+    sql = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "NOT IN ('completed')" in sql
+    assert "IN ('completed')" in sql
 
 
 class _FakeBeginContext:

@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from portfolio_common.domain.portfolio_source_observations import ObservationConflict
 
 from ..ack_response import build_batch_ack
 from ..application.reference_data_ingestion_registry import (
@@ -10,10 +11,16 @@ from ..application.reference_data_ingestion_registry import (
 )
 from ..dependencies import (
     get_ingestion_job_service,  # noqa: F401
+    get_portfolio_source_observation_commands,
     get_reference_data_ingestion_command_handler,
     get_reference_data_ingestion_service,  # noqa: F401
 )
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
+from ..DTOs.ingestion_job_dto import IngestionJobResponse
+from ..DTOs.portfolio_source_observation_dto import (
+    CashAvailabilityObservationIngestionRequest,
+    FundingInvestmentObservationIngestionRequest,
+)
 from ..DTOs.reference_data_dto import (
     BenchmarkCompositionIngestionRequest,
     BenchmarkDefinitionIngestionRequest,
@@ -40,7 +47,12 @@ from ..DTOs.reference_data_dto import (
     RiskFreeSeriesIngestionRequest,
     SustainabilityPreferenceProfileIngestionRequest,
 )
-from ..request_metadata import resolve_idempotency_key
+from ..request_metadata import get_request_lineage, resolve_idempotency_key
+from ..services.ingestion_job_lifecycle import IngestionIdempotencyConflictError
+from ..services.portfolio_source_observation_commands import (
+    ObservationSubmission,
+    PortfolioSourceObservationCommands,
+)
 from ..services.reference_data_ingestion_commands import (
     ReferenceDataBookkeepingFailed,
     ReferenceDataIngestionCommandError,
@@ -56,6 +68,99 @@ from .publish_errors import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+async def _handle_observation_submission(http_request, request, commands):
+    key = resolve_idempotency_key(http_request)
+    if key is None:
+        raise HTTPException(
+            400,
+            detail={
+                "code": "INGESTION_IDEMPOTENCY_KEY_REQUIRED",
+                "message": "A source observation requires X-Idempotency-Key.",
+            },
+        )
+    correlation_id, request_id, trace_id = get_request_lineage()
+    try:
+        return await commands.submit(
+            ObservationSubmission(
+                tenant_context=http_request.state.tenant_context,
+                request=request,
+                idempotency_key=key,
+                correlation_id=correlation_id or "",
+                request_id=request_id or "",
+                trace_id=trace_id or "",
+            )
+        )
+    except IngestionIdempotencyConflictError as exc:
+        raise HTTPException(
+            409,
+            detail={
+                "code": "INGESTION_IDEMPOTENCY_CONFLICT",
+                "message": "The idempotency key already identifies different source facts.",
+            },
+        ) from exc
+    except ObservationConflict as exc:
+        code = str(exc)
+        http_status = {
+            "SOURCE_OBSERVATION_PRODUCER_NOT_ADMITTED": 403,
+            "INGESTION_MODE_BLOCKS_WRITES": 503,
+            "INGESTION_RATE_LIMIT_EXCEEDED": 429,
+        }.get(code, 409)
+        raise HTTPException(
+            http_status,
+            detail={
+                "code": code,
+                "message": "Observation refused; no new receipt or fact committed.",
+            },
+        ) from exc
+
+
+@router.post(
+    "/ingest/portfolio-cash-availability-observations",
+    response_model=IngestionJobResponse,
+    status_code=200,
+    tags=["Reference Data"],
+    summary="Record immutable portfolio cash source observations",
+    description=(
+        "What: record independent settled, encumbered and available producer facts. "
+        "How: verified producer permission, exact amounts, source revision/CAS and terminal "
+        "receipt commit in one local transaction; exact idempotent replay does not repeat facts. "
+        "When: source admission, not cash derivation, qualified authority or async dispatch."
+    ),
+)
+async def ingest_portfolio_cash_availability_observations(
+    request: CashAvailabilityObservationIngestionRequest,
+    http_request: Request,
+    commands: PortfolioSourceObservationCommands = Depends(
+        get_portfolio_source_observation_commands
+    ),
+) -> IngestionJobResponse:
+    return await _handle_observation_submission(http_request, request, commands)
+
+
+@router.post(
+    "/ingest/portfolio-funding-investment-observations",
+    response_model=IngestionJobResponse,
+    status_code=200,
+    tags=["Reference Data"],
+    summary="Record immutable portfolio funding and investment assertions",
+    description=(
+        "What: record independent nullable funded and invested producer assertions. "
+        "How: verified producer permission and source revision/CAS persist facts and terminal "
+        "receipt atomically without worker dispatch. When: explicit source assertions, never "
+        "ACTIVE lifecycle, booking, valuation or consumer eligibility inference."
+    ),
+)
+async def ingest_portfolio_funding_investment_observations(
+    request: FundingInvestmentObservationIngestionRequest,
+    http_request: Request,
+    commands: PortfolioSourceObservationCommands = Depends(
+        get_portfolio_source_observation_commands
+    ),
+) -> IngestionJobResponse:
+    return await _handle_observation_submission(http_request, request, commands)
+
 
 REFERENCE_MODE_BLOCKED_EXAMPLE = {
     "detail": {

@@ -154,6 +154,36 @@ def get_reference_data_ingestion_command_handler(
     )
 
 
+def get_portfolio_source_observation_authority():
+    from portfolio_common.portfolio_source_observation_qualification import (
+        UnqualifiedProducerAuthority,
+    )
+
+    # No production submission grants or qualified providers are introduced.
+    return UnqualifiedProducerAuthority()
+
+
+def get_portfolio_source_observation_commands(
+    authority=Depends(get_portfolio_source_observation_authority),
+):
+    from .infrastructure.workflow_stores import SqlAlchemyIngestionJobStore
+    from .services.portfolio_source_observation_commands import PortfolioSourceObservationCommands
+
+    def service_factory(stager):
+        evidence = get_ingestion_service_settings().evidence_hmac
+        return IngestionJobService(
+            job_store=SqlAlchemyIngestionJobStore(
+                session_factory=get_async_db_session,
+                fingerprint_key_id=evidence.key_id,
+                fingerprint_hmac_secret=evidence.hmac_secret,
+                fingerprint_previous_keys=evidence.previous_keys,
+                on_created=stager.stage,
+            )
+        )
+
+    return PortfolioSourceObservationCommands(authority, service_factory)
+
+
 def get_transaction_source_correction_submitter():
     from portfolio_common.command_authorization import load_command_authorization_policy
 

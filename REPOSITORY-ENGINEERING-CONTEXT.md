@@ -884,6 +884,32 @@ python scripts/development/repository_python.py -m pytest tests/unit/contracts/t
 python scripts/development/repository_python.py -m pytest tests/unit/contracts/test_app_local_runtime_security_contract.py::test_direct_kafka_clients_cannot_bypass_shared_transport_security tests/unit/libs/portfolio-common/test_db.py::test_database_engines_use_governed_factory -q
 ```
 
+## Portfolio Source Observation Practice
+
+The `PortfolioFinancialSourceObservations` product retains independent cash-availability and
+funding/investment assertions. Submission requires a verified identity, the exact family write
+capability, and a separate server-owned tenant/portfolio/producer grant; deployed grants are empty.
+Admission does not qualify a bank feed. Amounts remain independent nullable exact decimals and
+flags remain independent nullable booleans; no available-cash formula or lifecycle inference is
+owned here. See [the methodology](docs/methodologies/source-data-products/portfolio-financial-source-observations.md).
+
+The dedicated ingestion creation callback appends immutable facts, advances scoped heads and
+completes the new receipt in one supplied local transaction. It does not commit independently,
+queue a worker or publish directly. Existing asynchronous reference ingestion remains unchanged.
+Original reads require all four immutable pins; latest-restated selection is explicit. QCP reads
+both independently selected families in one statement snapshot, but always reports authoritative
+state and cross-product compatibility as unavailable. Scope/currency locks are separate from
+source-record revision locks; corrections cannot change their authority dimensions.
+
+Owning PostgreSQL tests derive a capability-validated, UUID-named schema from the native
+`db_engine` lease and apply the actual migration there. Parent identity sequences are local to
+that schema; teardown verifies the database, session owner and schema marker before dropping
+only the owned namespace. They do not use shared `clean_db` or optional-URL skip fallbacks.
+Populated history blocks
+downgrade and TRUNCATE, including parent cascades. Empty truncate is supported only under
+READ COMMITTED; stale transaction-fixed snapshots fail closed. Unit/collection evidence cannot
+replace the actual PostgreSQL rollback, correction-race and migration-barrier controls.
+
 ## Context Maintenance Rule
 
 Update this file only when current Core ownership, architecture, financial invariants, task routes,

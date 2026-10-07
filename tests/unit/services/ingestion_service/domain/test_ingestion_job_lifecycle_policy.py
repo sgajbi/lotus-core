@@ -11,11 +11,12 @@ from src.services.ingestion_service.app.domain.ingestion_job_lifecycle_policy im
 
 
 def test_ingestion_job_lifecycle_declares_known_statuses() -> None:
-    assert KNOWN_INGESTION_JOB_STATUSES == {"accepted", "queued", "failed"}
+    assert KNOWN_INGESTION_JOB_STATUSES == {"accepted", "queued", "failed", "completed"}
     assert [status.value for status in IngestionJobStatus] == [
         "accepted",
         "queued",
         "failed",
+        "completed",
     ]
 
 
@@ -76,11 +77,21 @@ def test_retry_transitions_require_audit_and_retry_metadata() -> None:
 
 
 def test_unknown_or_terminal_statuses_are_not_mutation_sources() -> None:
-    assert INGESTION_JOB_TERMINAL_STATUSES == frozenset()
-    assert all(
-        not ingestion_job_status_is_terminal(status) for status in KNOWN_INGESTION_JOB_STATUSES
-    )
+    assert INGESTION_JOB_TERMINAL_STATUSES == frozenset({"completed"})
+    assert ingestion_job_status_is_terminal("completed")
+    for transition in IngestionJobTransition:
+        assert not ingestion_job_transition_allowed(
+            transition=transition, current_status="completed"
+        )
     assert not ingestion_job_transition_allowed(
         transition=IngestionJobTransition.RETRY_TO_QUEUED,
         current_status="archived",
     )
+
+
+def test_synchronous_completion_requires_accepted_predecessor() -> None:
+    rule = ingestion_job_transition_rule(IngestionJobTransition.ACCEPTED_TO_COMPLETED)
+    assert rule.target_status == "completed"
+    assert rule.expected_statuses == ("accepted",)
+    for status in KNOWN_INGESTION_JOB_STATUSES:
+        assert rule.allows(status) is (status == "accepted")

@@ -20,13 +20,15 @@ from src.services.ingestion_service.app.domain.ingestion_evidence_policy import 
 def test_every_reference_family_has_one_explicit_lineage_and_payload_policy() -> None:
     commands = REFERENCE_DATA_INGESTION_REGISTRY.all_commands()
     versioned_endpoints = {
+        "/ingest/portfolio-cash-availability-observations",
+        "/ingest/portfolio-funding-investment-observations",
         "/ingest/benchmark-assignments",
         "/ingest/instrument-valuation-policy-assignments",
         "/ingest/authoritative-market-price-source-facts",
         "/ingest/portfolio-party-role-assignments",
     }
 
-    assert len(commands) == 25
+    assert len(commands) == 27
     for command in commands:
         policy = INGESTION_EVIDENCE_POLICY_REGISTRY.require(
             command.endpoint,
@@ -47,6 +49,22 @@ def test_every_reference_family_has_one_explicit_lineage_and_payload_policy() ->
             "source_batch_id",
             "source_version",
         }
+
+
+@pytest.mark.parametrize("family", ["cash-availability", "funding-investment"])
+def test_observations_are_restricted_fingerprint_only_without_quality_approval(family):
+    endpoint = f"/ingest/portfolio-{family}-observations"
+    policy = INGESTION_EVIDENCE_POLICY_REGISTRY.require(endpoint)
+    assert policy.classification is PayloadClassification.RESTRICTED
+    assert policy.durable_representation is DurablePayloadRepresentation.FINGERPRINT_ONLY
+    assert not policy.replay_eligible
+    assert not policy.partial_replay_eligible
+    assert policy.replay_ttl is None
+    assert policy.source_lineage.quality_status is LineageFieldPosture.NOT_APPLICABLE
+    for field in ("source_system", "source_record_id", "source_version", "observed_at"):
+        assert getattr(policy.source_lineage, field) is LineageFieldPosture.REQUIRED
+    with pytest.raises(ValueError, match="entity mismatch"):
+        INGESTION_EVIDENCE_POLICY_REGISTRY.require(endpoint, entity_type="portfolio")
 
 
 def test_registry_covers_every_job_creating_endpoint_family() -> None:

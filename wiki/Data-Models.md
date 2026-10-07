@@ -252,6 +252,18 @@ being guessed into a tenant and is excluded from tenant-facing APIs. Dedupe keys
 tenant; downgrade stops if retained cross-tenant keys cannot be represented by the former global
 unique index or if a tenant-wide run would lose its authority classification.
 
+## Immutable Portfolio Source Families
+
+Separate cash-availability and funding/investment fact tables retain original revisions and
+their predecessor/hash lineage. Scoped head tables project the current correction without
+rewriting original facts. Portfolio and receipt foreign keys carry tenant ownership. Exact
+amounts use unbounded finite NUMERIC; null and observed zero remain distinct.
+
+Fact UPDATE/DELETE is refused. TRUNCATE refuses retained history, including parent cascades,
+and permits only empty tables under READ COMMITTED. Nonempty downgrade is refused under a
+four-table admission fence. See [Database Migrations](Database-Migrations) and the
+[source methodology](https://github.com/sgajbi/lotus-core/blob/main/docs/methodologies/source-data-products/portfolio-financial-source-observations.md).
+
 ## Model rules that matter
 
 1. New temporal semantics must follow

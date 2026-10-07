@@ -21,6 +21,18 @@ wiki publication evidence remain pending until that delivery loop completes.
 | Distinguish implementation, live validation, and certification | [Proof Posture](#proof-posture) |
 | Route an unavailable or stale source condition | [Operating rule](#operating-rule) |
 
+## Independent Financial Source Assertions
+
+`PortfolioFinancialSourceObservations:v1` is a Core-owned Analytics Input on QCP. It retains
+cash-availability and funding/investment assertions with separate source cuts and immutable
+revisions; Manage is one consumer. It is not a combined eligibility product or a qualified bank
+feed. Exact original pins and explicit restatement are supported structurally, while
+authoritative availability and cross-product compatibility remain unavailable.
+
+Consult [Query Control Plane](Query-Control-Plane) and the
+[source methodology](https://github.com/sgajbi/lotus-core/blob/main/docs/methodologies/source-data-products/portfolio-financial-source-observations.md)
+before treating diagnostic coverage or source permission as institutional approval.
+
 ## Governed product
 
 - Product ID: `lotus-core:PortfolioStateSnapshot:v1`

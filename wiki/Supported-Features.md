@@ -3,6 +3,12 @@
 This page summarizes the current implementation-backed `lotus-core` feature set for business,
 operations, sales, client-demo, and engineering audiences.
 
+| Reader | Start here | Claim boundary |
+| --- | --- | --- |
+| Business, sales, and demo owners | Executive Summary and lifecycle capability links | Use only implementation-backed safe claims; diagnostics are not financial authority |
+| Operations and support | Financial Source Observation Boundary and linked service pages | Retention is not qualified feed or downstream financial completion |
+| Engineers and release owners | Evidence And Scope and canonical capability manifest | Preserve limitations and require owning validation plus protected delivery |
+
 ## Evidence And Scope
 
 Use this as a current-state map, not a target-state roadmap. A capability is listed here only when
@@ -20,6 +26,19 @@ For transaction types, corporate actions, and product lifecycle detail, use
 [Transaction and Product Lifecycles](Transaction-and-Product-Lifecycle-Capabilities). Its canonical
 source is `contracts/transaction-processing/transaction-capability-catalog.v1.json`, guarded by
 `make transaction-capability-catalog-guard`.
+
+## Financial Source Observation Boundary
+
+Core now defines structural immutable cash-availability and funding/investment observation
+admission and a diagnostic pinned query. Default producer grants are empty; institutional feed
+qualification, authoritative availability and joined valuation/cashflow compatibility are not
+supported by this structural slice. No funded/invested state is inferred from ACTIVE lifecycle,
+booking or valuation, and no available-cash formula is invented.
+
+Focused source tests are not PostgreSQL, exact-main release or live banking certification.
+Acceptance still requires owning database evidence and protected delivery. See
+[Ingestion Service](Ingestion-Service), [Query Control Plane](Query-Control-Plane) and the
+[methodology](https://github.com/sgajbi/lotus-core/blob/main/docs/methodologies/source-data-products/portfolio-financial-source-observations.md).
 
 ## Executive Summary
 

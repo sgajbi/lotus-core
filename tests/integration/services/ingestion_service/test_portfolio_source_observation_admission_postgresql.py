@@ -1,0 +1,985 @@
+"""Owned, migrated PostgreSQL lease only; no shared cleanup or runtime provisioning."""
+
+import asyncio
+from dataclasses import dataclass, replace
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
+from uuid import uuid4
+
+import pytest
+import pytest_asyncio
+from portfolio_common.database_models import IngestionJob, Portfolio
+from portfolio_common.database_runtime_profile import DatabasePoolMode
+from portfolio_common.db import create_async_database_engine
+from portfolio_common.domain.portfolio_source_observations import (
+    CashAvailabilityObservation,
+    FundingInvestmentObservation,
+    ObservationConflict,
+    ObservationCoverage,
+    ObservationEnvelope,
+)
+from portfolio_common.portfolio_source_observation_models import (
+    CashAvailabilityObservationHead,
+    CashAvailabilityObservationRow,
+)
+from portfolio_common.portfolio_source_observation_qualification import (
+    ProducerSubmissionGrant,
+    UnqualifiedProducerAdmission,
+)
+from sqlalchemy import func, insert, select, text
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import async_sessionmaker
+
+from src.services.ingestion_service.app.infrastructure import (
+    portfolio_source_observation_unit_of_work as observation_uow,
+)
+from src.services.ingestion_service.app.services.ingestion_job_lifecycle import (
+    create_or_get_job_result,
+)
+from src.services.ingestion_service.app.services.portfolio_source_observation_writer import (
+    PortfolioSourceObservationWriter,
+)
+
+pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db, pytest.mark.db_direct]
+
+
+@dataclass
+class ObservationLease:
+    sessions: async_sessionmaker
+    tenant: str
+    portfolio: str
+    schema: str
+
+    def cash(self, *, record="cash", scope="accounts", currency="SGD"):
+        envelope = ObservationEnvelope(
+            self.tenant,
+            self.portfolio,
+            "synthetic-source",
+            record,
+            1,
+            "original-cut",
+            "v1",
+            date(2026, 1, 1),
+            None,
+            datetime(2026, 3, 1, tzinfo=UTC),
+            datetime(2026, 3, 1, tzinfo=UTC),
+            ObservationCoverage.COMPLETE,
+            scope,
+        )
+        return CashAvailabilityObservation(envelope, currency, Decimal("10.00"), None, Decimal("0"))
+
+    async def create(self, fact, *, idempotency=None, callback=None):
+        async def sessions():
+            async with self.sessions() as session:
+                yield session
+
+        admission = UnqualifiedProducerAdmission(
+            ProducerSubmissionGrant(
+                self.tenant,
+                self.portfolio,
+                fact.envelope.producer_id,
+                fact.family,
+            )
+        )
+        stager = observation_uow.PortfolioSourceObservationStager((fact,), (admission,))
+        return await create_or_get_job_result(
+            job_id=str(uuid4()),
+            tenant_id=self.tenant,
+            endpoint=(
+                "/ingest/portfolio-cash-availability-observations"
+                if isinstance(fact, CashAvailabilityObservation)
+                else "/ingest/portfolio-funding-investment-observations"
+            ),
+            entity_type=(
+                "portfolio_cash_availability_observation"
+                if isinstance(fact, CashAvailabilityObservation)
+                else "portfolio_funding_investment_observation"
+            ),
+            accepted_count=1,
+            idempotency_key=idempotency or str(uuid4()),
+            correlation_id="synthetic-correlation",
+            request_id="synthetic-request",
+            trace_id="synthetic-trace",
+            request_payload={
+                "observations": [
+                    {
+                        "source_system": fact.envelope.producer_id,
+                        "source_record_id": fact.envelope.source_record_id,
+                        "source_version": fact.envelope.source_revision,
+                        "observed_at": fact.envelope.observed_at.isoformat(),
+                        "content_hash": fact.content_hash,
+                    }
+                ]
+            },
+            fingerprint_key_id="synthetic-key",
+            fingerprint_hmac_secret="synthetic-secret",
+            fingerprint_previous_keys={},
+            session_factory=sessions,
+            on_created=callback or stager.stage,
+        )
+
+    async def counts(self):
+        async with self.sessions() as session:
+            counts = []
+            for model in (
+                IngestionJob,
+                CashAvailabilityObservationRow,
+                CashAvailabilityObservationHead,
+            ):
+                counts.append(
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(model)
+                        .where(
+                            model.tenant_id == self.tenant,
+                        )
+                    )
+                )
+            return tuple(counts)
+
+
+@pytest.fixture
+def observation_schema(db_engine):
+    """Adapt the native owned migration namespace pattern, never clean public."""
+    from tests import conftest as harness
+    from tests.test_support.db_cleanup import (
+        authorize_database_cleanup,
+        require_database_cleanup_authorization,
+    )
+
+    authorization = authorize_database_cleanup(runtime=harness._test_runtime, engine=db_engine)
+    schema, marker = "core1227_" + uuid4().hex, "core1227-owned:" + uuid4().hex
+    require_database_cleanup_authorization(authorization, engine=db_engine)
+    with db_engine.begin() as connection:
+        assert connection.scalar(text("SELECT current_database()")) == authorization.target.database
+        assert connection.scalar(text("SELECT session_user")) == authorization.target.username
+        connection.execute(text(f'CREATE SCHEMA "{schema}" AUTHORIZATION CURRENT_USER'))
+        connection.execute(text(f"""COMMENT ON SCHEMA "{schema}" IS '{marker}'"""))
+        for table in ("portfolios", "ingestion_jobs", "ingestion_ops_control"):
+            connection.execute(
+                text(f'CREATE TABLE "{schema}".{table} (LIKE public.{table} INCLUDING CONSTRAINTS)')
+            )
+        # No shared defaults or sequences. These defaults belong solely to this
+        # namespace and are necessary for the ACTUAL native receipt constructor.
+        for table in ("portfolios", "ingestion_jobs"):
+            connection.execute(
+                text(
+                    f'ALTER TABLE "{schema}".{table} ALTER COLUMN id '
+                    "ADD GENERATED BY DEFAULT AS IDENTITY"
+                )
+            )
+        for table, columns in (
+            ("portfolios", "tenant_id, portfolio_id"),
+            ("ingestion_jobs", "tenant_id, job_id"),
+            ("ingestion_jobs", "job_id"),
+            ("ingestion_ops_control", "id"),
+        ):
+            connection.execute(text(f'ALTER TABLE "{schema}".{table} ADD UNIQUE ({columns})'))
+        for table, column in (
+            ("ingestion_jobs", "submitted_at"),
+            ("ingestion_ops_control", "updated_at"),
+            ("portfolios", "created_at"),
+            ("portfolios", "updated_at"),
+        ):
+            connection.execute(
+                text(f'ALTER TABLE "{schema}".{table} ALTER COLUMN {column} SET DEFAULT now()')
+            )
+        connection.execute(text(f'SET LOCAL search_path TO "{schema}", pg_temp'))
+        observation_migration(connection)["upgrade"]()
+    owned = db_engine, authorization, schema, marker
+    try:
+        yield owned
+    finally:
+        # No inherited namespace, disabled trigger or public table teardown.
+        require_database_cleanup_authorization(authorization, engine=db_engine)
+        with db_engine.begin() as connection:
+            identity = connection.execute(
+                text("""
+                SELECT current_database(), session_user, pg_get_userbyid(nspowner),
+                       obj_description(oid, 'pg_namespace')
+                FROM pg_namespace WHERE nspname=:schema
+            """),
+                {"schema": schema},
+            ).one()
+            assert tuple(identity) == (
+                authorization.target.database,
+                authorization.target.username,
+                authorization.target.username,
+                marker,
+            )
+            connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+
+
+def observation_migration(connection):
+    """Actual frozen migration functions with actual Alembic SQL operations."""
+    import runpy
+    from pathlib import Path
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    path = Path(__file__).resolve().parents[4] / "alembic/versions"
+    module = runpy.run_path(str(path / "c178b2c3d539_add_portfolio_source_observations.py"))
+    assert module["revision"] == "c178b2c3d539" and module["down_revision"] == "c177b2c3d538"
+    module["upgrade"].__globals__["op"] = Operations(MigrationContext.configure(connection))
+    return module
+
+
+@pytest_asyncio.fixture
+async def observation_lease(observation_schema):
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session
+
+    db_engine, _, schema, _ = observation_schema
+    engine = create_async_database_engine(
+        runtime_identity="lotus-core-test",
+        database_url=db_engine.url.render_as_string(hide_password=False),
+        pool_mode=DatabasePoolMode.NULL,
+    )
+
+    class OwnedObservationSession(Session):
+        pass
+
+    def bind_owned_namespace(session, transaction, connection):
+        connection.execute(text(f'SET LOCAL search_path TO "{schema}", pg_temp'))
+
+    event.listen(OwnedObservationSession, "after_begin", bind_owned_namespace)
+    sessions = async_sessionmaker(
+        engine, expire_on_commit=False, sync_session_class=OwnedObservationSession
+    )
+    identity = uuid4().hex
+    lease = ObservationLease(sessions, f"observation-{identity}", f"portfolio-{identity}", schema)
+    try:
+        async with sessions.begin() as session:
+            assert await session.scalar(text("SELECT current_schema()")) == schema
+            session.add(
+                Portfolio(
+                    portfolio_id=lease.portfolio,
+                    tenant_id=lease.tenant,
+                    legal_book_id="synthetic-book",
+                    base_currency="SGD",
+                    open_date=date(2020, 1, 1),
+                    risk_exposure="MODERATE",
+                    investment_time_horizon="LONG_TERM",
+                    portfolio_type="DISCRETIONARY",
+                    booking_center_code="SG",
+                    client_id="synthetic-client",
+                    status="ACTIVE",
+                    is_leverage_allowed=False,
+                )
+            )
+        yield lease
+    finally:
+        await engine.dispose()
+        event.remove(OwnedObservationSession, "after_begin", bind_owned_namespace)
+
+
+async def test_receipt_fact_head_commit_and_ambiguous_response_replay(observation_lease):
+    lease = observation_lease
+    fact = lease.cash()
+    original = await lease.create(fact, idempotency="ambiguous-response")
+    replay = await lease.create(fact, idempotency="ambiguous-response")
+    assert original.created and not replay.created
+    assert original.job.job_id == replay.job.job_id
+    assert replay.job.status == "completed" and replay.job.completed_at is not None
+    assert await lease.counts() == (1, 1, 1)
+    async with lease.sessions() as session:
+        receipt = await session.scalar(
+            select(IngestionJob).where(
+                IngestionJob.job_id == original.job.job_id,
+            )
+        )
+        assert receipt.request_payload is None and not receipt.request_payload_replay_eligible
+        head = await session.scalar(
+            select(CashAvailabilityObservationHead).where(
+                CashAvailabilityObservationHead.tenant_id == lease.tenant,
+            )
+        )
+        assert head.observation_id == head.content_hash == fact.content_hash
+
+
+async def test_actual_empty_downgrade_upgrade_preserves_parent_and_model_columns(observation_lease):
+    lease = observation_lease
+    async with lease.sessions.begin() as session:
+        connection = await session.connection()
+        before = await session.scalar(
+            text("SELECT to_jsonb(p) FROM portfolios p WHERE portfolio_id=:p"),
+            {"p": lease.portfolio},
+        )
+        await connection.run_sync(lambda c: observation_migration(c)["downgrade"]())
+        assert (
+            await session.scalar(
+                text("SELECT to_regclass('portfolio_cash_availability_observations')")
+            )
+            is None
+        )
+    # Reopen the session to rule out transient in-session schema state.
+    async with lease.sessions.begin() as session:
+        connection = await session.connection()
+        await connection.run_sync(lambda c: observation_migration(c)["upgrade"]())
+        assert (
+            await session.scalar(
+                text("SELECT to_jsonb(p) FROM portfolios p WHERE portfolio_id=:p"),
+                {"p": lease.portfolio},
+            )
+            == before
+        )
+        for model in (CashAvailabilityObservationRow, CashAvailabilityObservationHead):
+            columns = set(
+                (
+                    await session.execute(
+                        text(
+                            "SELECT column_name FROM information_schema.columns "
+                            "WHERE table_schema=:schema AND table_name=:table"
+                        ),
+                        {"schema": lease.schema, "table": model.__tablename__},
+                    )
+                ).scalars()
+            )
+            assert columns == set(model.__table__.columns.keys())
+
+
+async def test_actual_nonempty_downgrade_refuses_and_keeps_history(observation_lease):
+    lease = observation_lease
+    await lease.create(lease.cash())
+    with pytest.raises(RuntimeError, match="nonempty portfolio source observation history"):
+        async with lease.sessions.begin() as session:
+            connection = await session.connection()
+            await connection.run_sync(lambda c: observation_migration(c)["downgrade"]())
+    assert await lease.counts() == (1, 1, 1)
+
+
+async def test_failure_after_fact_and_head_flush_rolls_back_receipt_too(observation_lease):
+    lease = observation_lease
+    fact = lease.cash()
+    admission = UnqualifiedProducerAdmission(
+        ProducerSubmissionGrant(
+            lease.tenant,
+            lease.portfolio,
+            fact.envelope.producer_id,
+            fact.family,
+        )
+    )
+
+    async def fail_after_head(session, receipt):
+        await PortfolioSourceObservationWriter(session).append(
+            (fact,),
+            (admission,),
+            receipt_job_id=receipt.job_id,
+            received_at=receipt.submitted_at,
+        )
+        raise RuntimeError("synthetic failure before receipt completion")
+
+    with pytest.raises(RuntimeError, match="before receipt completion"):
+        await lease.create(fact, callback=fail_after_head)
+    assert await lease.counts() == (0, 0, 0)
+    assert (await lease.create(fact)).job.status == "completed"
+    assert await lease.counts() == (1, 1, 1)
+
+
+async def test_two_competing_corrections_have_one_committed_winner(observation_lease):
+    lease = observation_lease
+    original = lease.cash()
+    await lease.create(original)
+    envelope = replace(
+        original.envelope,
+        source_revision=2,
+        predecessor_id=original.content_hash,
+        expected_head_hash=original.content_hash,
+    )
+    corrections = tuple(
+        replace(original, envelope=envelope, available=Decimal(value)) for value in ("1", "2")
+    )
+    start = asyncio.Event()
+
+    async def submit(fact):
+        await start.wait()
+        try:
+            return await lease.create(fact)
+        except ObservationConflict as error:
+            return str(error)
+
+    tasks = [asyncio.create_task(submit(fact)) for fact in corrections]
+    start.set()
+    outcomes = await asyncio.wait_for(asyncio.gather(*tasks), timeout=10)
+    assert sum(not isinstance(result, str) for result in outcomes) == 1
+    assert "SOURCE_OBSERVATION_DIVERGENT_REPLAY" in outcomes
+    assert await lease.counts() == (2, 2, 1)
+    # Original replay never rewinds the committed corrected head.
+    await lease.create(original)
+    async with lease.sessions() as session:
+        head = await session.scalar(
+            select(CashAvailabilityObservationHead).where(
+                CashAvailabilityObservationHead.tenant_id == lease.tenant,
+            )
+        )
+        assert head.observation_id in {fact.content_hash for fact in corrections}
+
+
+@pytest.mark.parametrize("dimension", ["scope", "currency"])
+async def test_same_portfolio_distinct_authority_keys_progress_while_other_transaction_open(
+    observation_lease,
+    dimension,
+):
+    lease = observation_lease
+    holding, release = asyncio.Event(), asyncio.Event()
+    first = lease.cash(record="first")
+    second = lease.cash(
+        record="second", **({"scope": "other"} if dimension == "scope" else {"currency": "USD"})
+    )
+
+    async def hold(session, receipt):
+        admission = UnqualifiedProducerAdmission(
+            ProducerSubmissionGrant(
+                lease.tenant,
+                lease.portfolio,
+                first.envelope.producer_id,
+                first.family,
+            )
+        )
+        await PortfolioSourceObservationWriter(session).append(
+            (first,),
+            (admission,),
+            receipt_job_id=receipt.job_id,
+            received_at=receipt.submitted_at,
+        )
+        holding.set()
+        await release.wait()
+        raise RuntimeError("synthetic held transaction rollback")
+
+    task = asyncio.create_task(lease.create(first, callback=hold))
+    try:
+        await asyncio.wait_for(holding.wait(), timeout=5)
+        result = await asyncio.wait_for(lease.create(second), timeout=5)
+        assert result.job.status == "completed"  # Must finish BEFORE release.
+    finally:
+        release.set()
+        with pytest.raises(RuntimeError, match="held transaction rollback"):
+            await task
+    assert await lease.counts() == (1, 1, 1)
+
+
+async def test_competing_same_scope_interval_refuses_without_orphan_receipt(observation_lease):
+    lease = observation_lease
+    await lease.create(lease.cash(record="first"))
+    with pytest.raises(ObservationConflict, match="SOURCE_OBSERVATION_AMBIGUOUS_OVERLAP"):
+        await lease.create(lease.cash(record="second"))
+    assert await lease.counts() == (1, 1, 1)
+
+
+@pytest.mark.parametrize("operation", ["UPDATE", "DELETE", "TRUNCATE", "PARENT_TRUNCATE"])
+async def test_database_refuses_fact_mutation_without_disabling_triggers(
+    observation_lease,
+    operation,
+):
+    lease = observation_lease
+    fact = lease.cash()
+    await lease.create(fact)
+    table = "portfolio_cash_availability_observations"
+    statements = {
+        "UPDATE": f"UPDATE {table} SET available_amount=1 WHERE tenant_id=:tenant",
+        "DELETE": f"DELETE FROM {table} WHERE tenant_id=:tenant",
+        "TRUNCATE": f"TRUNCATE TABLE {table} CASCADE",
+        "PARENT_TRUNCATE": "TRUNCATE TABLE portfolios RESTART IDENTITY CASCADE",
+    }
+    with pytest.raises(DBAPIError) as error:
+        async with lease.sessions.begin() as session:
+            await session.execute(text(statements[operation]), {"tenant": lease.tenant})
+    assert getattr(error.value.orig, "sqlstate", None) == "23514"
+    assert await lease.counts() == (1, 1, 1)
+    async with lease.sessions() as session:
+        assert (
+            await session.get(CashAvailabilityObservationRow, fact.content_hash)
+        ).available_amount == 0
+
+
+async def test_empty_fixture_cascade_and_stale_snapshot_refusal(observation_lease):
+    lease = observation_lease
+    # This exact namespace is fresh. Use the existing fixture table inventory,
+    # filtered to present owned parents, with its real CASCADE/RESTART behavior.
+    # This is the observation-parent cleanup seam, not full-suite acceptance.
+    from tests.conftest import TABLES_TO_TRUNCATE
+
+    async with lease.sessions() as session:
+        async with session.begin():
+            assert await session.scalar(text("SHOW transaction_isolation")) == "read committed"
+            existing = set(
+                (
+                    await session.execute(
+                        text("SELECT tablename FROM pg_tables WHERE schemaname=:schema"),
+                        {"schema": lease.schema},
+                    )
+                ).scalars()
+            )
+            tables = [table for table in TABLES_TO_TRUNCATE if table in existing]
+            await session.execute(
+                text("TRUNCATE TABLE " + ", ".join(tables) + " RESTART IDENTITY CASCADE")
+            )
+            portfolio = await session.scalar(
+                select(Portfolio).where(
+                    Portfolio.tenant_id == lease.tenant,
+                    Portfolio.portfolio_id == lease.portfolio,
+                )
+            )
+            assert portfolio is None
+            await session.rollback()
+    # Establish a genuinely stale transaction-fixed snapshot before the other
+    # session commits history. The guard must refuse, never mistake old zero for empty.
+    async with lease.sessions() as stale:
+        async with stale.begin():
+            await stale.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
+            assert (
+                await stale.scalar(select(func.count()).select_from(CashAvailabilityObservationRow))
+                == 0
+            )
+            await lease.create(lease.cash())
+            with pytest.raises(DBAPIError) as error:
+                await stale.execute(
+                    text("TRUNCATE TABLE portfolio_cash_availability_observations CASCADE")
+                )
+            assert getattr(error.value.orig, "sqlstate", None) == "23514"
+            await stale.rollback()
+    assert await lease.counts() == (1, 1, 1)
+
+
+async def test_waiting_truncate_sees_insert_committed_after_statement_start(observation_lease):
+    lease = observation_lease
+    inserted, release, truncating = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    fact = lease.cash()
+    pid = None
+
+    async def hold_insert(session, receipt):
+        admission = UnqualifiedProducerAdmission(
+            ProducerSubmissionGrant(
+                lease.tenant,
+                lease.portfolio,
+                fact.envelope.producer_id,
+                fact.family,
+            )
+        )
+        await PortfolioSourceObservationWriter(session).append(
+            (fact,),
+            (admission,),
+            receipt_job_id=receipt.job_id,
+            received_at=receipt.submitted_at,
+        )
+        inserted.set()
+        await release.wait()
+        await observation_uow.complete_synchronous_observation_receipt(
+            session,
+            receipt,
+            tenant_id=lease.tenant,
+            job_id=receipt.job_id,
+        )
+
+    async def truncate():
+        nonlocal pid
+        async with lease.sessions.begin() as session:
+            pid = await session.scalar(text("SELECT pg_backend_pid()"))
+            truncating.set()
+            await session.execute(
+                text("TRUNCATE TABLE portfolio_cash_availability_observations CASCADE")
+            )
+
+    async def observed_lock_wait():
+        while True:
+            async with lease.sessions() as observer:
+                waiting = await observer.scalar(
+                    text("SELECT wait_event_type='Lock' FROM pg_stat_activity WHERE pid=:pid"),
+                    {"pid": pid},
+                )
+                if waiting:
+                    return
+            await asyncio.sleep(0.01)
+
+    writer = asyncio.create_task(lease.create(fact, callback=hold_insert))
+    truncate_task = None
+    try:
+        await asyncio.wait_for(inserted.wait(), timeout=5)
+        truncate_task = asyncio.create_task(truncate())
+        await asyncio.wait_for(truncating.wait(), timeout=5)
+        await asyncio.wait_for(observed_lock_wait(), timeout=5)  # Actual PG barrier.
+        release.set()
+        assert (await asyncio.wait_for(writer, timeout=5)).job.status == "completed"
+        with pytest.raises(DBAPIError) as error:
+            await asyncio.wait_for(truncate_task, timeout=5)
+        assert getattr(error.value.orig, "sqlstate", None) == "23514"
+    finally:
+        release.set()
+        for task in (writer, truncate_task):
+            if task is not None and not task.done():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+    assert await lease.counts() == (1, 1, 1)
+
+
+async def test_actual_downgrade_waits_for_admission_then_refuses_committed_history(
+    observation_lease,
+):
+    lease = observation_lease
+    inserted, release, downgrading = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    fact = lease.cash()
+    pid = None
+
+    async def hold_insert(session, receipt):
+        admission = UnqualifiedProducerAdmission(
+            ProducerSubmissionGrant(
+                lease.tenant,
+                lease.portfolio,
+                fact.envelope.producer_id,
+                fact.family,
+            )
+        )
+        await PortfolioSourceObservationWriter(session).append(
+            (fact,),
+            (admission,),
+            receipt_job_id=receipt.job_id,
+            received_at=receipt.submitted_at,
+        )
+        inserted.set()
+        await release.wait()
+        await observation_uow.complete_synchronous_observation_receipt(
+            session,
+            receipt,
+            tenant_id=lease.tenant,
+            job_id=receipt.job_id,
+        )
+
+    async def downgrade():
+        nonlocal pid
+        async with lease.sessions.begin() as session:
+            pid = await session.scalar(text("SELECT pg_backend_pid()"))
+            downgrading.set()
+            connection = await session.connection()
+            await connection.run_sync(lambda c: observation_migration(c)["downgrade"]())
+
+    async def wait_for_lock():
+        while True:
+            async with lease.sessions() as observer:
+                if await observer.scalar(
+                    text("SELECT wait_event_type='Lock' FROM pg_stat_activity WHERE pid=:pid"),
+                    {"pid": pid},
+                ):
+                    return
+            await asyncio.sleep(0.01)
+
+    writer = asyncio.create_task(lease.create(fact, callback=hold_insert))
+    migration = None
+    try:
+        await asyncio.wait_for(inserted.wait(), timeout=5)
+        migration = asyncio.create_task(downgrade())
+        await asyncio.wait_for(downgrading.wait(), timeout=5)
+        await asyncio.wait_for(wait_for_lock(), timeout=3)
+        release.set()
+        assert (await asyncio.wait_for(writer, timeout=5)).job.status == "completed"
+        with pytest.raises(RuntimeError, match="nonempty portfolio source observation history"):
+            await asyncio.wait_for(migration, timeout=5)
+    finally:
+        release.set()
+        for task in (writer, migration):
+            if task is not None and not task.done():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+    assert await lease.counts() == (1, 1, 1)
+
+
+@pytest.mark.parametrize(
+    "bad, sqlstate",
+    [
+        ("tenant", "23503"),
+        ("portfolio", "23503"),
+        ("receipt", "23503"),
+        ("predecessor", "23503"),
+        ("duplicate", "23505"),
+        ("nan", "23514"),
+        ("infinity", "23514"),
+        ("qualification", "23514"),
+    ],
+)
+async def test_actual_direct_constraints_refuse_bad_rows_and_accept_valid(
+    observation_lease, bad, sqlstate
+):
+    lease = observation_lease
+    original = lease.cash()
+    await lease.create(original)
+    async with lease.sessions() as session:
+        row = (
+            (await session.execute(select(CashAvailabilityObservationRow.__table__)))
+            .mappings()
+            .one()
+        )
+        values = dict(row)
+    valid = lease.cash(record="direct-valid")
+    values.update(
+        source_record_id="direct-valid",
+        observation_id=valid.content_hash,
+        content_hash=valid.content_hash,
+    )
+    bad_values = dict(values)
+    if bad == "tenant":
+        bad_values["tenant_id"] = "foreign-tenant"
+    elif bad == "portfolio":
+        bad_values["portfolio_id"] = "foreign-portfolio"
+    elif bad == "receipt":
+        bad_values["receipt_job_id"] = "foreign-receipt"
+    elif bad == "predecessor":
+        bad_values.update(
+            source_revision=2,
+            predecessor_id=original.content_hash,
+            expected_head_hash=original.content_hash,
+        )
+    elif bad == "duplicate":
+        bad_values = dict(row)
+    elif bad == "nan":
+        bad_values["available_amount"] = Decimal("NaN")
+    elif bad == "infinity":
+        bad_values["settled_amount"] = Decimal("Infinity")
+    else:
+        bad_values["qualification"] = "qualified"
+    with pytest.raises(DBAPIError) as error:
+        async with lease.sessions.begin() as session:
+            if bad in {"nan", "infinity"}:
+                # Fixed test SQL bypasses the ORM precision binder, exercising
+                # PostgreSQL's constraint rather than binder rejection.
+                columns = list(CashAvailabilityObservationRow.__table__.columns.keys())
+                expressions = list(columns)
+                expressions[columns.index("source_record_id")] = "'direct-valid'"
+                for name in ("observation_id", "content_hash"):
+                    expressions[columns.index(name)] = ":hash"
+                column = "available_amount" if bad == "nan" else "settled_amount"
+                expressions[columns.index(column)] = (
+                    "'NaN'::numeric" if bad == "nan" else "'Infinity'::numeric"
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO portfolio_cash_availability_observations ("
+                        + ",".join(columns)
+                        + ") SELECT "
+                        + ",".join(expressions)
+                        + " FROM portfolio_cash_availability_observations"
+                    ),
+                    {"hash": valid.content_hash},
+                )
+            else:
+                await session.execute(
+                    insert(CashAvailabilityObservationRow.__table__).values(**bad_values)
+                )
+    assert getattr(error.value.orig, "sqlstate", None) == sqlstate
+    assert await lease.counts() == (1, 1, 1)
+    async with lease.sessions.begin() as session:
+        await session.execute(insert(CashAvailabilityObservationRow.__table__).values(**values))
+    assert await lease.counts() == (1, 2, 1)
+
+
+async def test_actual_funding_immutability_and_head_owner_constraint(observation_lease):
+    from portfolio_common.portfolio_source_observation_models import (
+        FundingInvestmentObservationHead,
+        FundingInvestmentObservationRow,
+    )
+
+    lease = observation_lease
+    cash = lease.cash()
+    fact = FundingInvestmentObservation(
+        replace(cash.envelope, source_record_id="funding"), None, False
+    )
+    await lease.create(fact)
+    for sql in (
+        "UPDATE portfolio_funding_investment_observations SET funded=true",
+        "DELETE FROM portfolio_funding_investment_observations",
+        "TRUNCATE portfolio_funding_investment_observation_heads CASCADE",
+    ):
+        with pytest.raises(DBAPIError) as error:
+            async with lease.sessions.begin() as session:
+                await session.execute(text(sql))
+        assert getattr(error.value.orig, "sqlstate", None) == "23514"
+    with pytest.raises(DBAPIError) as error:
+        async with lease.sessions.begin() as session:
+            await session.execute(
+                text(
+                    "UPDATE portfolio_funding_investment_observation_heads SET tenant_id='foreign'"
+                )
+            )
+    assert getattr(error.value.orig, "sqlstate", None) == "23503"
+    async with lease.sessions() as session:
+        row = (await session.scalars(select(FundingInvestmentObservationRow))).one()
+        head = (await session.scalars(select(FundingInvestmentObservationHead))).one()
+        assert row.funded is None and row.invested is False
+        assert head.tenant_id == lease.tenant and head.observation_id == fact.content_hash
+
+
+async def test_completed_receipt_is_nonactionable_in_native_operations(observation_lease):
+    from src.services.ingestion_service.app.services.ingestion_backlog_breakdown import (
+        load_backlog_breakdown_response,
+    )
+    from src.services.ingestion_service.app.services.ingestion_job_lifecycle import (
+        get_job_response,
+        mark_job_queued,
+        mark_job_retried,
+    )
+    from src.services.ingestion_service.app.services.ingestion_retry_permissions import (
+        count_backlog_jobs,
+    )
+    from src.services.ingestion_service.app.services.ingestion_stalled_jobs import (
+        load_stalled_job_list_response,
+    )
+
+    lease = observation_lease
+    completed = await lease.create(lease.cash())
+
+    async def sessions():
+        async with lease.sessions() as session:
+            yield session
+
+    response = await get_job_response(
+        job_id=completed.job.job_id,
+        tenant_id=lease.tenant,
+        session_factory=sessions,
+        reference_key_id="synthetic-key",
+        reference_hmac_secret="synthetic-secret",
+    )
+    assert response.status == "completed" and response.completed_at is not None
+    assert not response.request_payload_replay_eligible
+    assert not await mark_job_queued(
+        job_id=completed.job.job_id,
+        tenant_id=lease.tenant,
+        session_factory=sessions,
+        expected_statuses=("completed",),
+    )
+    assert not await mark_job_retried(
+        job_id=completed.job.job_id, tenant_id=lease.tenant, session_factory=sessions
+    )
+    # A real accepted control ensures the queries do not merely return empty unconditionally.
+    async with lease.sessions.begin() as session:
+        row = (await session.execute(select(IngestionJob.__table__))).mappings().one()
+        values = dict(row)
+        values.pop("id")
+        values.update(
+            job_id="accepted-control",
+            idempotency_key="accepted-control",
+            status="accepted",
+            completed_at=None,
+            submitted_at=datetime.now(UTC) - timedelta(seconds=2),
+        )
+        await session.execute(insert(IngestionJob.__table__).values(**values))
+    now = datetime.now(UTC)
+    assert await count_backlog_jobs(session_factory=sessions) == 1
+    backlog = await load_backlog_breakdown_response(
+        lookback_minutes=60, limit=10, session_factory=sessions, now=now
+    )
+    assert backlog.total_backlog_jobs == 1
+    stalled = await load_stalled_job_list_response(
+        threshold_seconds=1, limit=10, session_factory=sessions, now=now
+    )
+    assert [row.job_id for row in stalled.jobs] == ["accepted-control"]
+    async with lease.sessions() as session:
+        retained = await session.scalar(
+            select(IngestionJob).where(IngestionJob.job_id == completed.job.job_id)
+        )
+        assert retained.status == "completed" and retained.retry_count == 0
+
+
+async def test_complete_seeded_financial_fence_outbox_snapshots_unchanged(observation_lease):
+    lease = observation_lease
+    tables = (
+        "transactions",
+        "cashflows",
+        "position_history",
+        "cost_basis_processing_state",
+        "processed_events",
+        "outbox_events",
+    )
+    async with lease.sessions.begin() as session:
+        for table in tables:
+            await session.execute(
+                text(
+                    f'CREATE TABLE "{lease.schema}".{table} '
+                    f"(LIKE public.{table} INCLUDING CONSTRAINTS)"
+                )
+            )
+        params = {
+            "portfolio": lease.portfolio,
+            "tenant": lease.tenant,
+            "fingerprint": "sha256:" + "a" * 64,
+        }
+        await session.execute(
+            text("""
+            INSERT INTO transactions(id,transaction_id,portfolio_id,instrument_id,security_id,
+            transaction_type,quantity,price,gross_transaction_amount,trade_currency,currency,
+            transaction_date,created_at,updated_at,payload_fingerprint)
+            VALUES(1,'economic-original',:portfolio,'SEC','SEC','BUY',1,20,20,'SGD','SGD',
+            now(),now(),now(),:fingerprint)
+        """),
+            params,
+        )
+        await session.execute(
+            text("""
+            INSERT INTO cashflows(id,transaction_id,portfolio_id,security_id,cashflow_date,epoch,
+            amount,currency,classification,timing,calculation_type,is_position_flow,is_portfolio_flow,
+            created_at,updated_at) VALUES(1,'economic-original',:portfolio,'SEC',CURRENT_DATE,0,
+            20,'SGD','INVESTMENT','EOD','NET',true,false,now(),now())
+        """),
+            params,
+        )
+        await session.execute(
+            text("""
+            INSERT INTO position_history(id,portfolio_id,security_id,transaction_id,position_date,
+            epoch,quantity,cost_basis,cost_basis_local,created_at,updated_at)
+            VALUES(1,:portfolio,'SEC','economic-original',CURRENT_DATE,0,1,20,20,now(),now())
+        """),
+            params,
+        )
+        await session.execute(
+            text("""
+            INSERT INTO cost_basis_processing_state(portfolio_id,security_id,cost_basis_method,
+            latest_transaction_date,latest_dependency_rank,latest_cash_dependency_rank,
+            latest_child_sequence,latest_target_instrument_id,latest_quantity,latest_transaction_id,
+            engine_state_version,created_at,updated_at)
+            VALUES(:portfolio,'SEC','FIFO',now(),0,0,0,'SEC',1,'economic-original','v1',now(),now())
+        """),
+            params,
+        )
+        await session.execute(
+            text("""
+            INSERT INTO processed_events(id,event_id,portfolio_id,service_name,tenant_id,
+            correlation_id,processed_at) VALUES(1,'economic-fence',:portfolio,
+            'portfolio-transaction-processing',:tenant,'synthetic-correlation',now())
+        """),
+            params,
+        )
+        await session.execute(
+            text("""
+            INSERT INTO outbox_events(id,aggregate_type,aggregate_id,partition_key,event_type,
+            payload,topic,status,retry_count,created_at)
+            VALUES(1,'Transaction','economic-original',:portfolio,'TransactionPersisted',
+            '{"transaction_id":"economic-original"}','transactions.persisted','PENDING',0,now())
+        """),
+            params,
+        )
+
+    async def snapshot():
+        async with lease.sessions() as session:
+            return {
+                table: (
+                    await session.execute(
+                        text(f"SELECT to_jsonb(t) FROM {table} t ORDER BY to_jsonb(t)::text")
+                    )
+                )
+                .scalars()
+                .all()
+                for table in tables
+            }
+
+    before = await snapshot()
+    assert all(len(rows) == 1 for rows in before.values())
+    cash = lease.cash()
+    funding = FundingInvestmentObservation(
+        replace(cash.envelope, source_record_id="funding"), None, False
+    )
+    for fact in (cash, funding):
+        await lease.create(fact, idempotency=fact.content_hash)
+        await lease.create(fact, idempotency=fact.content_hash)
+        assert await snapshot() == before
+    divergent = replace(cash, available=Decimal("5"))
+    with pytest.raises(ObservationConflict):
+        await lease.create(divergent)
+    assert await snapshot() == before
