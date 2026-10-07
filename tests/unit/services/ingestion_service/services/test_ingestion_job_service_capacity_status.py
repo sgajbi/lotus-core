@@ -1,7 +1,10 @@
+import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
+from sqlalchemy.dialects import sqlite
 
 from src.services.ingestion_service.app.services import ingestion_job_service as service_module
 from src.services.ingestion_service.app.services.ingestion_job_service import (
@@ -10,6 +13,55 @@ from src.services.ingestion_service.app.services.ingestion_job_service import (
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+@pytest.mark.parametrize(
+    "records,expected",
+    [
+        ([("completed", 60)], (60, 60, 0, 0)),
+        ([("completed", 60), ("queued", 20), ("failed", 10), ("accepted", 30)], (120, 90, 30, 1)),
+    ],
+)
+async def test_capacity_executes_status_aggregation_sql(service, monkeypatch, records, expected):
+    # Execute the production aggregation, not precomputed fake result rows.
+    with closing(sqlite3.connect(":memory:")) as connection:
+        connection.execute(
+            "CREATE TABLE ingestion_jobs (endpoint TEXT, entity_type TEXT, "
+            "accepted_count INTEGER, status TEXT, submitted_at TEXT)"
+        )
+        connection.executemany(
+            "INSERT INTO ingestion_jobs VALUES (?, ?, ?, ?, ?)",
+            [
+                (
+                    "/observations",
+                    "observation",
+                    count,
+                    status,
+                    datetime.now(UTC).replace(tzinfo=None).isoformat(" "),
+                )
+                for status, count in records
+            ],
+        )
+
+        class Session:
+            async def execute(self, statement):
+                sql = statement.compile(
+                    dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}
+                )
+                return connection.execute(str(sql)).fetchall()
+
+        monkeypatch.setattr(
+            service_module, "get_async_db_session", lambda: _SingleSessionAsyncIterator(Session())
+        )
+        result = await service.get_capacity_status(lookback_minutes=1, limit=10, assumed_replicas=1)
+    group = result.groups[0]
+    assert (
+        group.total_records,
+        group.processed_records,
+        group.backlog_records,
+        group.backlog_jobs,
+    ) == expected
+    assert group.mu_msg_per_replica_events_per_second == Decimal(expected[1]) / Decimal(60)
 
 
 class _SingleSessionAsyncIterator:

@@ -49,6 +49,18 @@ stalled/backlog selectors and queue/failure/retry transitions, and readable thro
 job detail/list contracts. There is no source event/outbox dispatch in this product; local
 financial PostgreSQL ACID remains the boundary, not XA/2PC.
 
+After verified producer, family capability and tenant admission, an exact fingerprint replay
+returns only a completed receipt with its completion timestamp. It bypasses new-write mode and
+rate controls; an incomplete receipt cannot be reported as success. Completed record counts are
+included in ingestion processed throughput, while accepted records remain backlog and queued or
+failed record accounting retains its existing meaning.
+
+Authority intervals are half-open. A null upper bound is unbounded, not a finite maximum-date
+sentinel; even an open interval beginning on the maximum supported date competes with another
+open interval in the same authority scope. Finite touching intervals do not overlap. The bounded
+actual `c178` descent and concurrent downgrade/TRUNCATE refusal proofs also execute in
+`critical-db-coverage`; suite routing alone is not PostgreSQL execution evidence.
+
 ## Immutable history and authority keys
 
 The source revision key is tenant, portfolio, producer, family and producer record. First

@@ -70,6 +70,18 @@ SUITES: dict[str, list[str]] = {
         "test_redemption_correction_clears_superseded_terms_and_interest_cash_link",
     ],
     "critical-db-coverage": [
+        "tests/integration/services/ingestion_service/"
+        "test_portfolio_source_observation_admission_postgresql.py::"
+        "test_actual_empty_downgrade_upgrade_preserves_parent_and_model_columns",
+        "tests/integration/services/ingestion_service/"
+        "test_portfolio_source_observation_admission_postgresql.py::"
+        "test_actual_nonempty_downgrade_refuses_and_keeps_history",
+        "tests/integration/services/ingestion_service/"
+        "test_portfolio_source_observation_admission_postgresql.py::"
+        "test_waiting_truncate_sees_insert_committed_after_statement_start",
+        "tests/integration/services/ingestion_service/"
+        "test_portfolio_source_observation_admission_postgresql.py::"
+        "test_actual_downgrade_waits_for_admission_then_refuses_committed_history",
         "tests/integration/services/persistence_service/"
         "test_transaction_source_correction_postgresql.py",
         "tests/integration/services/query_control_plane_service/"

@@ -20,6 +20,7 @@ from ..infrastructure.portfolio_source_observation_unit_of_work import (
     PortfolioSourceObservationStager,
 )
 from ..ops_controls import enforce_ingestion_write_rate_limit
+from ..ports.ingestion_idempotency_replay import IngestionIdempotencyReplayReader
 from ..request_metadata import create_ingestion_job_id, get_request_lineage
 from .ingestion_job_service import IngestionJobService
 
@@ -41,9 +42,11 @@ class PortfolioSourceObservationCommands:
         self,
         authority: ProducerObservationAuthority,
         service_factory: Callable[[PortfolioSourceObservationStager], IngestionJobService],
+        idempotency_replay_reader: IngestionIdempotencyReplayReader,
     ):
         self.authority = authority
         self.service_factory = service_factory
+        self.idempotency_replay_reader = idempotency_replay_reader
 
     async def submit(self, submission: ObservationSubmission) -> IngestionJobResponse:
         context = submission.tenant_context
@@ -68,6 +71,23 @@ class PortfolioSourceObservationCommands:
         )
         command = REFERENCE_DATA_INGESTION_REGISTRY.require(key)
         service = self.service_factory(PortfolioSourceObservationStager(facts, admissions))
+        request_payload = command.request_payload(submission.request)
+        replay = await self.idempotency_replay_reader.find_matching_job(
+            tenant_id=context.tenant_id_text,
+            endpoint=command.endpoint,
+            idempotency_key=submission.idempotency_key,
+            request_payload=request_payload,
+        )
+        if replay is not None:
+            job = await service.get_job(replay.job_id, tenant_id=context.tenant_id_text)
+            if (
+                replay.status != "completed"
+                or job is None
+                or job.status != "completed"
+                or job.completed_at is None
+            ):
+                raise ObservationConflict("SOURCE_OBSERVATION_RECEIPT_NOT_COMPLETED")
+            return job
         try:
             await service.assert_ingestion_writable()
         except PermissionError as exc:
@@ -91,7 +111,7 @@ class PortfolioSourceObservationCommands:
             if submission.request_id is not None
             else request_id or "",
             trace_id=submission.trace_id if submission.trace_id is not None else trace_id or "",
-            request_payload=command.request_payload(submission.request),
+            request_payload=request_payload,
         )
         if result.job.status != "completed" or result.job.completed_at is None:
             raise ObservationConflict("SOURCE_OBSERVATION_RECEIPT_NOT_COMPLETED")

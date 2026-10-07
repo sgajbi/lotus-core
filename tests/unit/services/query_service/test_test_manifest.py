@@ -41,6 +41,35 @@ INGESTION_OPENAPI_CONTRACT_FILE = (
 )
 
 
+C178_CRITICAL_PROOF_NODES = tuple(
+    "tests/integration/services/ingestion_service/"
+    "test_portfolio_source_observation_admission_postgresql.py::" + node
+    for node in (
+        "test_actual_empty_downgrade_upgrade_preserves_parent_and_model_columns",
+        "test_actual_nonempty_downgrade_refuses_and_keeps_history",
+        "test_waiting_truncate_sees_insert_committed_after_statement_start",
+        "test_actual_downgrade_waits_for_admission_then_refuses_committed_history",
+    )
+)
+
+
+def test_c178_critical_coverage_executes_bounded_actual_migration_guards():
+    for node in C178_CRITICAL_PROOF_NODES:
+        assert get_suite("critical-db-coverage").count(node) == 1
+    assert SUITE_RUNTIME_MODE["critical-db-coverage"] == "db_direct"
+
+
+@pytest.mark.parametrize("node", C178_CRITICAL_PROOF_NODES)
+@pytest.mark.parametrize("mutation", ["missing", "duplicate"])
+def test_c178_manifest_refuses_lost_or_duplicate_native_proof(monkeypatch, node, mutation):
+    paths = [path for path in get_suite("critical-db-coverage") if path != node]
+    if mutation == "duplicate":
+        paths.extend([node, node])
+    monkeypatch.setitem(SUITES, "critical-db-coverage", paths)
+    with pytest.raises(AssertionError):
+        test_c178_critical_coverage_executes_bounded_actual_migration_guards()
+
+
 def test_ops_contract_executes_complete_ingestion_openapi_contract() -> None:
     assert get_suite("ops-contract").count(INGESTION_OPENAPI_CONTRACT_FILE) == 1
 

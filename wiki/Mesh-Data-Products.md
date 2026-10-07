@@ -29,6 +29,12 @@ revisions; Manage is one consumer. It is not a combined eligibility product or a
 feed. Exact original pins and explicit restatement are supported structurally, while
 authoritative availability and cross-product compatibility remain unavailable.
 
+An authenticated, producer-admitted exact replay returns a completed receipt without consuming
+new-write rate capacity, including while ingestion is paused. Incomplete receipts still refuse.
+Completed counts contribute to processed throughput rather than backlog. Source intervals remain
+half-open; an omitted end date is unbounded, including at the maximum supported start date.
+These admission controls do not qualify a bank feed or establish financial compatibility.
+
 Consult [Query Control Plane](Query-Control-Plane) and the
 [source methodology](https://github.com/sgajbi/lotus-core/blob/main/docs/methodologies/source-data-products/portfolio-financial-source-observations.md)
 before treating diagnostic coverage or source permission as institutional approval.
