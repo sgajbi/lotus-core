@@ -114,22 +114,82 @@ async def test_naive_backend_birth_is_not_qualified(owner):
     await stop_writer(owner)
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "change",
     [
         {"created_at": float("nan")},
-        {"created_at": time.time() + 100},
+        {"created_at": "future"},
         {"generation": "bad"},
         {"tenant_id": "foreign"},
-        {"created_at": time.time() - 3601},
+        {"created_at": "stale"},
     ],
 )
-def test_invalid_enablement_is_refused_without_writer(owner, change):
+async def test_invalid_enablement_is_refused_without_writer(owner, change, monkeypatch):
+    now = time.time()
+    monkeypatch.setattr(sink.time, "time", lambda: now)
+    change = dict(change)
+    if change.get("created_at") == "future":
+        change["created_at"] = now + 100
+    elif change.get("created_at") == "stale":
+        change["created_at"] = now - 3601
     config = json.loads(owner.enable_path.read_text())
+    valid = owner.capture(TENANT, PORTFOLIO, "valid-control", None)
+    assert valid is not None
+    valid.close()
+    await stop_writer(owner)
+    owner.writer = None
+    owner.rows.clear()
+    owner.run_generation = None
+    owner.config_checked = False
+    owner.config = None
     config.update(change)
     owner.enable_path.write_text(json.dumps(config))
     assert owner.capture(TENANT, PORTFOLIO, "tx", None) is None
     assert owner.writer is None and not owner.rows
+
+
+def test_valid_enablement_without_running_task_refuses_without_state_mutation(owner):
+    assert owner.capture(TENANT, PORTFOLIO, "tx", None) is None
+    assert owner.writer is None and not owner.rows and owner.run_generation is None
+    assert owner.capture_errors == 0
+
+
+@pytest.mark.parametrize("configuration_failure", [False, True])
+def test_synchronous_diagnostic_refusal_preserves_business_exception_and_context(
+    owner, monkeypatch, configuration_failure
+):
+    monkeypatch.setattr(port, "_callback_failures", 0)
+    monkeypatch.setattr(port, "_factory", owner.capture)
+    if configuration_failure:
+        monkeypatch.setattr(
+            owner, "_read_configuration", MagicMock(side_effect=OSError("unreadable"))
+        )
+    error = RuntimeError("original processing failure")
+    with pytest.raises(RuntimeError) as raised:
+        with port.diagnostic_delivery(TENANT, PORTFOLIO, "tx", None):
+            assert port.current_processing_diagnostic() is None
+            port.diagnostic_phase("cost")
+            raise error
+    assert raised.value is error and port.current_processing_diagnostic() is None
+    assert owner.capture_errors == int(configuration_failure)
+    assert port.processing_diagnostic_failures() == 0
+    assert owner.writer is None and not owner.rows
+
+
+def test_capture_callbacks_after_loop_exit_refuse_foreign_context_without_mutation(owner):
+    async def create_capture():
+        capture = owner.capture(TENANT, PORTFOLIO, "tx", None)
+        assert capture.row() is not None
+        await stop_writer(owner)
+        return capture
+
+    capture = asyncio.run(create_capture())
+    prior = dict(owner.rows[capture.key])
+    assert capture.row() is None
+    capture.phase("position")
+    capture.close()
+    assert owner.rows[capture.key] == prior
 
 
 def test_missing_enablement_is_cached_and_foreign_scope_never_reads(tmp_path, monkeypatch):
