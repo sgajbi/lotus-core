@@ -348,3 +348,170 @@ def test_load_caller_passes_real_container_admission_scope(monkeypatch):
     args.host_database_url = "foreign-db"
     assert gate._enable_owned_processing_phases(args, managed)["status"] == "unavailable"
     assert calls == []
+
+
+def test_phase_admission_valid_counters_and_counts_preserve_identity(phase_snapshot):
+    scope, probes, payload, row, run = phase_snapshot
+    payload.update(capture_errors=2, callback_failures=3)
+    result = support._load_processing_phases(scope, probes)
+    counts = result["admission"]
+    assert (
+        counts["candidate_count"],
+        counts["active_count"],
+        counts["admitted_count"],
+    ) == (1, 1, 1)
+    assert counts["rejected_count"] == 0 and counts["rejected_by_reason"] == {}
+    assert counts["worker_counters"]["capture_errors"] == {
+        "status": "observed",
+        "value": 2,
+    }
+    assert counts["worker_counters"]["callback_failures"]["value"] == 3
+    assert result["rows"][0]["exact_await"] == "MISSING"
+    assert "do-not-export" not in json.dumps(result)
+    assert len(json.dumps(result).encode()) < support.DIAGNOSTIC_MAX_BYTES
+
+
+@pytest.mark.parametrize(
+    "bad", [True, False, -1, 1.0, float("nan"), float("inf"), 2**31, "private"]
+)
+def test_phase_admission_invalid_counters_never_coerce_or_export(phase_snapshot, bad):
+    scope, probes, payload, row, run = phase_snapshot
+    payload.update(capture_errors=bad, callback_failures=bad)
+    result = support._load_processing_phases(scope, probes)
+    assert result["status"] == "observed"  # Supporting counters cannot alter row admission.
+    assert all(
+        counter == {"status": "invalid", "value": None}
+        for counter in result["admission"]["worker_counters"].values()
+    )
+    assert "private" not in json.dumps(result)
+
+
+@pytest.mark.parametrize("value", [0, 2**31 - 1, None])
+def test_phase_admission_counter_boundaries_and_absence(value):
+    expected = "missing" if value is None else "observed"
+    assert support._phase_counter(value) == {"status": expected, "value": value}
+
+
+@pytest.mark.parametrize(
+    "mutation,reason",
+    [
+        ("inactive", "inactive"),
+        ("missing", "backend_missing"),
+        ("invalid", "backend_identity_invalid"),
+        ("birth", "backend_not_in_observed_sample"),
+        ("database", "backend_not_in_observed_sample"),
+        ("backend_duplicate", "backend_identity_ambiguous"),
+        ("pid_duplicate", "duplicate_pid"),
+        ("metadata", "invalid_phase_metadata"),
+        ("nondict", "invalid_row"),
+    ],
+)
+def test_phase_admission_closed_rejections_do_not_qualify_rows(phase_snapshot, mutation, reason):
+    scope, probes, payload, row, run = phase_snapshot
+    payload.update(capture_errors=0, callback_failures=0)
+    if mutation == "inactive":
+        row["active"] = False
+    elif mutation == "missing":
+        row["backend"] = None
+    elif mutation == "invalid":
+        row["backend"]["pid"] = True
+    elif mutation in {"birth", "database"}:
+        observed = probes["database"]["runtime_db_waits"]["rows"][0]
+        observed["backend_start" if mutation == "birth" else "database_oid"] = (
+            "2020-01-01T00:00:00+00:00" if mutation == "birth" else 999
+        )
+    elif mutation == "backend_duplicate":
+        probes["database"]["runtime_db_waits"]["rows"].append(dict(row["backend"]))
+    elif mutation == "pid_duplicate":
+        payload["rows"].append(dict(row, generation="f" * 32))
+    elif mutation == "metadata":
+        row["task_identity"] = "private-invalid-task"
+    else:
+        payload["rows"] = ["private-invalid-row"]
+    result = support._load_processing_phases(scope, probes)
+    count = 2 if mutation == "pid_duplicate" else 1
+    assert result["status"] == "unavailable" and result["rows"] == []
+    assert result["admission"]["admitted_count"] == 0
+    assert result["admission"]["rejected_count"] == count
+    assert result["admission"]["rejected_by_reason"] == {reason: count}
+    assert "private-invalid" not in json.dumps(result)
+
+
+@pytest.mark.parametrize(
+    "mutation,reason",
+    [
+        ("run", "phase_run_generation_mismatch"),
+        ("stale", "phase_snapshot_stale"),
+        ("overflow", "phase_row_budget"),
+        ("bytes", "phase_snapshot_byte_budget"),
+    ],
+)
+def test_phase_admission_outer_fences_remain_closed(phase_snapshot, mutation, reason):
+    scope, probes, payload, row, run = phase_snapshot
+    if mutation == "run":
+        payload["run_generation"] = "f" * 32
+    elif mutation == "stale":
+        payload["captured_at"] -= 121
+    elif mutation == "overflow":
+        payload["rows"] = [dict(row)] * 21
+    else:
+        payload["private"] = "x" * 16385
+    result = support._load_processing_phases(scope, probes)
+    assert result == {"status": "unavailable", "reason": reason}
+
+
+def test_phase_admission_truncation_and_missing_counters_do_not_claim_worker_total(
+    phase_snapshot,
+):
+    scope, probes, payload, row, run = phase_snapshot
+    payload["truncated"] = True
+    payload["rows"] = []
+    result = support._load_processing_phases(scope, probes)
+    assert result["truncated"] and result["status"] == "unavailable"
+    assert result["admission"]["candidate_count"] == 0
+    assert result["admission"]["scope"] == "bounded_snapshot_rows_not_whole_worker"
+    assert all(
+        counter["status"] == "missing"
+        for counter in result["admission"]["worker_counters"].values()
+    )
+
+
+@pytest.mark.parametrize(
+    "candidate,active,admitted,reasons",
+    [
+        (1, 1, 0, {"unknown": 1}),
+        (True, 1, 0, {"inactive": 1}),
+        (21, 1, 0, {"inactive": 21}),
+        (1, 1, 0, {"inactive": float("nan")}),
+        (1, 1, 0, {"inactive": -1}),
+        (1, 1, 0, {"inactive": True}),
+        (1, 0, 1, {}),
+        (1, 1, 0, {}),
+    ],
+)
+def test_phase_admission_contract_counts_reject_unknown_or_inconsistent_categories(
+    candidate, active, admitted, reasons
+):
+    with pytest.raises(ValueError):
+        support._phase_admission_counts(candidate, active, admitted, reasons)
+
+
+def test_phase_admission_mixed_snapshot_counts_partition_all_candidates(phase_snapshot):
+    scope, probes, payload, row, run = phase_snapshot
+    payload["rows"] = [row, dict(row, active=False), dict(row, backend=None), "private-row"]
+    result = support._load_processing_phases(scope, probes)
+    counts = result["admission"]
+    assert (counts["candidate_count"], counts["active_count"], counts["admitted_count"]) == (
+        4,
+        2,
+        1,
+    )
+    assert counts["rejected_count"] == 3
+    assert counts["rejected_by_reason"] == {"inactive": 1, "backend_missing": 1, "invalid_row": 1}
+    assert "private-row" not in json.dumps(result)
+    assert result["rows"][0]["exact_await"] == "MISSING"
+
+
+def test_phase_admission_active_count_cannot_disagree_with_rejection_partition():
+    with pytest.raises(ValueError, match="phase_admission_active_count_mismatch"):
+        support._phase_admission_counts(1, 1, 0, {"inactive": 1})

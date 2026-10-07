@@ -896,7 +896,15 @@ updates are memory-only; one background writer publishes at half-second cadence,
 records and 16KiB. Active holders are never evicted for age or newer deliveries; completed
 records expire after 120 seconds, and excess active deliveries are explicitly truncated.
 The collector admits only current-run, fresh snapshots with unique birth-qualified database
-matches. Phases describe boundaries in progress, never an exact Python await. Replay-reader
+matches. Phases describe boundaries in progress, never an exact Python await.
+Phase admission includes bounded candidate/active/admitted/rejected counts and closed,
+mutually exclusive first-rejection reasons. Counts cover only the retained snapshot rows,
+not all worker deliveries: truncation can omit work. Missing or invalid capture/callback
+counters remain explicit missing/invalid with null values, never zero. Counters do not
+qualify rejected rows, and rejection reasons do not diagnose timeout causes. Backend-not-in-
+observed-sample differs from an absent backend; duplicate PID candidates remain refused.
+No raw rejected task, delivery or backend rows are exported. Exact await remains `MISSING`.
+Replay-reader
 sessions and publisher confirmation outside the processing UOW remain unobserved. File/capture
 failures cannot replace a business exception; callback failures have a saturating process-local
 counter without logs or labels. Filesystem completion itself has no hard latency
