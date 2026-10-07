@@ -265,6 +265,8 @@ trailing digits and nonzero sign/precision are retained without context rounding
 not change the shared hash engine or rewrite existing contradictory immutable history.
 Cash amounts outside NUMERIC's 131072 integer-digit or 16383 fractional-digit limits are
 refused before expansion; supported negative exponents remain compact and exact.
+Same-revision replay compares validated content hashes, not numerical value equality.
+Fractional-scale changes are divergent replay; refusal leaves facts, heads and receipts unchanged.
 
 Fact UPDATE/DELETE is refused. TRUNCATE refuses retained history, including parent cascades,
 and permits only empty tables under READ COMMITTED. Nonempty downgrade is refused under a

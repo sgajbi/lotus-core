@@ -2,14 +2,23 @@
 
 import sqlite3
 from contextlib import closing
+from dataclasses import asdict
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
-from portfolio_common.domain.portfolio_source_observations import ObservationConflict
+from portfolio_common.domain.portfolio_source_observations import (
+    CashAvailabilityObservation,
+    FundingInvestmentObservation,
+    ObservationConflict,
+    ObservationCoverage,
+    ObservationEnvelope,
+)
 from portfolio_common.portfolio_source_observation_models import (
     CashAvailabilityObservationHead,
     CashAvailabilityObservationRow,
+    FundingInvestmentObservationRow,
 )
 from sqlalchemy.dialects import sqlite
 
@@ -199,3 +208,51 @@ async def test_native_callback_failure_rolls_back_new_receipt_and_clears_creatio
     assert session.rows == []
     assert session.rollbacks == 1 and session.commits == 0
     assert session.info == {}
+
+
+@pytest.mark.parametrize("family", ["cash", "funding"])
+@pytest.mark.parametrize("corruption", ["content_hash", "observation_id"])
+async def test_existing_revision_hash_identity_validates_stored_row_before_replay(
+    family, corruption
+):
+    envelope = ObservationEnvelope(
+        "tenant",
+        "portfolio",
+        "producer",
+        "record",
+        1,
+        "cut",
+        "v1",
+        date(2026, 1, 1),
+        None,
+        datetime(2026, 1, 1, tzinfo=UTC),
+        datetime(2026, 1, 1, tzinfo=UTC),
+        ObservationCoverage.COMPLETE,
+        "scope",
+    )
+    values = asdict(envelope)
+    values["coverage"] = envelope.coverage.value
+    if family == "cash":
+        fact = CashAvailabilityObservation(envelope, "SGD", Decimal("1.00"), None, Decimal("0"))
+        row = CashAvailabilityObservationRow(
+            **values,
+            currency="SGD",
+            settled_amount=fact.settled,
+            encumbered_amount=None,
+            available_amount=fact.available,
+        )
+    else:
+        fact = FundingInvestmentObservation(envelope, None, False)
+        row = FundingInvestmentObservationRow(**values, funded=None, invested=False)
+    row.content_hash = row.observation_id = fact.content_hash
+    setattr(row, corruption, "0" * 64)
+
+    class ReadOnlySession:
+        async def scalar(self, statement):
+            return row
+
+    writer = PortfolioSourceObservationWriter(ReadOnlySession())
+    with pytest.raises(ObservationConflict, match="^SOURCE_OBSERVATION_HASH_MISMATCH$"):
+        await writer._append_one(
+            fact, None, receipt_job_id="never-written", received_at=datetime.now(UTC)
+        )

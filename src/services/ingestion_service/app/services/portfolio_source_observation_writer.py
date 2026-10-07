@@ -152,7 +152,8 @@ class PortfolioSourceObservationWriter:
             )
         )
         if existing is not None:
-            if observation_from_row(existing) != fact:
+            stored = observation_from_row(existing)
+            if stored.content_hash != fact.content_hash:
                 raise ObservationConflict("SOURCE_OBSERVATION_DIVERGENT_REPLAY")
             # Replaying an original after correction never rewinds the head.
             return existing.observation_id

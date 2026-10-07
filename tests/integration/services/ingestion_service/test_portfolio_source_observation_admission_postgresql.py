@@ -392,6 +392,110 @@ async def test_cash_numeric_representation_survives_persisted_read_and_cross_rec
     assert original_row == before["ingestion_jobs"][0]
 
 
+async def _replay_identity_snapshot(lease):
+    async with lease.sessions() as session:
+        return {
+            table: (
+                await session.execute(
+                    text(f"SELECT to_jsonb(t) FROM {table} t ORDER BY to_jsonb(t)::text")
+                )
+            )
+            .scalars()
+            .all()
+            for table in (
+                "ingestion_jobs",
+                "portfolio_cash_availability_observations",
+                "portfolio_cash_availability_observation_heads",
+                "portfolio_funding_investment_observations",
+                "portfolio_funding_investment_observation_heads",
+            )
+        }
+
+
+@pytest.mark.parametrize("field", ["settled", "encumbered", "available"])
+@pytest.mark.parametrize("original,replayed", [("1.00", "1.0"), ("0.00", "0")])
+async def test_existing_revision_scale_change_refuses_without_receipt_or_fact_mutation(
+    observation_lease, field, original, replayed
+):
+    lease = observation_lease
+    fact = replace(lease.cash(), **{field: Decimal(original)})
+    divergent = replace(fact, **{field: Decimal(replayed)})
+    assert fact == divergent and fact.content_hash != divergent.content_hash
+    committed = await lease.create(fact, idempotency="scale-original")
+    assert committed.created and committed.job.status == "completed"
+    before = await _replay_identity_snapshot(lease)
+    refusal = None
+    try:
+        await lease.create(divergent, idempotency="scale-divergent")
+    except ObservationConflict as error:
+        refusal = str(error)
+    after = await _replay_identity_snapshot(lease)
+    print(
+        f"REPLAY_SCALE field={field} original={original} replay={replayed} "
+        f"refusal={refusal} unchanged={before == after}"
+    )
+    assert refusal == "SOURCE_OBSERVATION_DIVERGENT_REPLAY"
+    assert after == before
+    assert await lease.counts() == (1, 1, 1)
+
+
+@pytest.mark.parametrize("field", ["settled", "encumbered", "available"])
+@pytest.mark.parametrize(
+    "original,replayed",
+    [
+        ("1.00", "1.00"),
+        ("-0.00", "0.00"),
+        ("1E+3", "1000"),
+        ("-12345678901234567890.12345678900", "-12345678901234567890.12345678900"),
+    ],
+)
+async def test_existing_revision_hash_identity_accepts_exact_and_canonicalized_replay(
+    observation_lease, field, original, replayed
+):
+    lease = observation_lease
+    fact = replace(lease.cash(), **{field: Decimal(original)})
+    equivalent = replace(fact, **{field: Decimal(replayed)})
+    assert fact.content_hash == equivalent.content_hash
+    committed = await lease.create(fact, idempotency="identity-original")
+    before = await _replay_identity_snapshot(lease)
+    replay = await lease.create(equivalent, idempotency="identity-replay")
+    assert committed.created and replay.created
+    assert replay.job.status == "completed" and replay.job.job_id != committed.job.job_id
+    after = await _replay_identity_snapshot(lease)
+    for table in before.keys() - {"ingestion_jobs"}:
+        assert after[table] == before[table]
+    assert len(after["ingestion_jobs"]) == 2
+    assert (
+        next(row for row in after["ingestion_jobs"] if row["job_id"] == committed.job.job_id)
+        == before["ingestion_jobs"][0]
+    )
+    assert await lease.counts() == (2, 1, 1)
+
+
+async def test_existing_revision_hash_identity_preserves_funding_replay_and_refusal(
+    observation_lease,
+):
+    lease = observation_lease
+    fact = FundingInvestmentObservation(
+        replace(lease.cash().envelope, source_record_id="funding"), None, False
+    )
+    committed = await lease.create(fact, idempotency="funding-original")
+    before = await _replay_identity_snapshot(lease)
+    replay = await lease.create(fact, idempotency="funding-identical")
+    assert committed.created and replay.created and replay.job.status == "completed"
+    after = await _replay_identity_snapshot(lease)
+    for table in before.keys() - {"ingestion_jobs"}:
+        assert after[table] == before[table]
+    assert len(after["ingestion_jobs"]) == 2
+    assert (
+        next(row for row in after["ingestion_jobs"] if row["job_id"] == committed.job.job_id)
+        == before["ingestion_jobs"][0]
+    )
+    with pytest.raises(ObservationConflict, match="^SOURCE_OBSERVATION_DIVERGENT_REPLAY$"):
+        await lease.create(replace(fact, funded=False), idempotency="funding-divergent")
+    assert await _replay_identity_snapshot(lease) == after
+
+
 async def test_actual_empty_downgrade_upgrade_preserves_parent_and_model_columns(observation_lease):
     lease = observation_lease
     async with lease.sessions.begin() as session:
