@@ -534,6 +534,7 @@ class _LoadEvidenceReport:
     replay_completion: dict[str, Any] = field(default_factory=dict)
     phase_capture: dict[str, Any] = field(default_factory=dict)
     boundary_capture: DiagnosticCapture | None = None
+    replay_preparation: dict[str, Any] = field(default_factory=lambda: {"status": "not_prepared"})
 
     def __enter__(self) -> "_LoadEvidenceReport":
         return self
@@ -549,6 +550,35 @@ class _LoadEvidenceReport:
 
     def replay_observed(self, observation: dict[str, Any]) -> None:
         self.replay_completion["final"] = observation
+
+    def prepare_replay_capture(self, profiles: list[LoadProfile]) -> None:
+        """Prepare idle custody before replay workload/clocks; never perform probes yet."""
+        preparation_started = time.monotonic()
+        bursts = 4 if self.args.profile_tier == "fast" else 12
+        # Separate finite idle allowance; does not change any workload/deadline or SLO.
+        idle_seconds = (
+            4 * self.args.drain_timeout_seconds
+            + 30 * (bursts + 1 + sum(profile["batches"] for profile in profiles))
+            + sum(profile["batches"] * profile["sleep_seconds"] for profile in profiles)
+        )
+        try:
+            arguments = self._diagnostic_arguments("replay_deliveries", None)
+            arguments["scope"]["stage"] = "replay_storm"
+            self.boundary_capture = start_load_completion_diagnostics(
+                **arguments, idle_seconds=idle_seconds
+            )
+            self.replay_preparation = (
+                {"status": "unavailable"}
+                if self.boundary_capture is None
+                else {"status": self.boundary_capture.preparation_status}
+            )
+        except Exception as exc:
+            self.replay_preparation = {"status": "unavailable", "reason": type(exc).__name__}
+        finally:
+            self.replay_preparation.update(
+                setup_elapsed_seconds=round(time.monotonic() - preparation_started, 6),
+                setup_claim="all_factory_and_ready_cost_outside_profile_clocks_no_hard_latency_bound",
+            )
 
     def replay_pending(self, observation: dict[str, Any], elapsed: float) -> None:
         threshold = GOVERNED_MAX_DRAIN_SECONDS[self.args.profile_tier]["replay_storm"]
@@ -590,11 +620,10 @@ class _LoadEvidenceReport:
         }
         self.replay_completion["slo_boundary_capture"] = boundary
         try:
-            self.boundary_capture = start_load_completion_diagnostics(
-                **self._diagnostic_arguments("replay_deliveries", None)
-            )
             if self.boundary_capture is None:
-                boundary.update(status="unavailable", reason="managed_isolated_runtime_required")
+                boundary.update(status="unavailable", reason="preparation_unavailable")
+            elif not self.boundary_capture.request():
+                boundary.update(status="unavailable", reason="preparation_not_ready")
         except Exception as exc:
             boundary.update(status="unavailable", reason=type(exc).__name__)
 
@@ -678,7 +707,15 @@ class _LoadEvidenceReport:
                     "reason": type(diagnostic_error).__name__,
                     "child_cleanup": {"status": "unconfirmed"},
                 }
-            self.replay_completion["slo_boundary_capture"]["diagnostics"] = diagnostics
+            if "slo_boundary_capture" in self.replay_completion:
+                self.replay_completion["slo_boundary_capture"]["diagnostics"] = diagnostics
+                self.replay_preparation["custody_status"] = diagnostics.get("status", "unavailable")
+            else:
+                self.replay_preparation.update(
+                    setup_status=self.replay_preparation["status"],
+                    status=diagnostics.get("status", "unavailable"),
+                    custody=diagnostics,
+                )
         evidence = {
             "status": "failed" if exc else "completed",
             "stage": self.stage,
@@ -688,6 +725,7 @@ class _LoadEvidenceReport:
             "replay_storm_status": self.replay_storm_status,
             "replay_completion": self.replay_completion,
             "phase_capture": self.phase_capture,
+            "replay_diagnostic_preparation": self.replay_preparation,
             "profiles_not_run": [
                 name
                 for name in ("steady_state", "burst", "replay_storm")
@@ -944,6 +982,7 @@ def main(
             ]
 
         transaction_sequence_offset = 0
+        report.prepare_replay_capture(profiles)
         for profile in profiles:
             report.stage = profile["name"]
             baseline_health = _get_health_snapshot(

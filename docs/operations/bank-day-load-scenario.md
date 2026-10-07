@@ -420,7 +420,14 @@ counts as the one attempt. Without an active attempt, the existing timeout diagn
 Capture uses the same managed, private, birth-qualified probes and unchanged 32KiB/20-row,
 120-second enable-age and 500ms I/O bounds. A finite owned receiver drains its child pipe while
 completion polling continues; a separate owned deadline timer stops the child independently of
-late report finalization, reserving cleanup time within the six-second policy. Both are joined
+late report finalization, reserving cleanup time within the six-second request/collection policy.
+Before all profile workloads and measured clocks, the owned child is prepared idle with a
+readiness receipt. The callback records the boundary and signals an existing Event only; it
+never spawns, receives or joins. Native `Process.start()` has no hard preparation latency bound,
+so actual setup time is reported separately, not certified as a startup SLO. Preparation expiry
+or failure is unavailable, not retried. A separate finite idle allowance derives from existing
+batch/sleep/drain limits without extending any enforcing deadline. Idle expiry/cancellation and
+unused teardown prevent probes and do not manufacture active capture evidence. Both workers are joined
 before runtime teardown. A partial/oversized frame, child failure or unavailable cleanup is
 explicit evidence, not measured zero. No diagnostic callback or finalization exception replaces
 the original completion result, timeout or enforcing failure.

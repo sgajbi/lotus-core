@@ -41,7 +41,12 @@ or timeout preserves the earlier snapshot, and an unavailable request is not ret
 
 The same private collector retains six-second/32KiB/20-row limits. An owned finite receiver and
 deadline timer provide timely receipt and child cleanup independently of late finalization,
-without blocking completion polling. Request lateness, launch overhead, capture timing and
+without spawning or waiting in completion polling. The child is pre-armed idle before all
+profile workloads/clocks; the callback records the boundary and signals an existing Event only.
+Setup/readiness and finite idle custody are separate from the unchanged six-second collection
+budget. Native process startup has no hard preparation-latency guarantee; report actual setup
+cost, not a startup SLO. Failed/expired/unused preparations retire without probes, retries or a
+manufactured active-boundary record. Request lateness, launch overhead, capture timing and
 cleanup posture are explicit; missing timing is null, not zero. This is not an exact atomic
 180-second snapshot. If no active capture was attempted, the existing timeout collector remains.
 The full-profile 180-second SLO and completion deadline are unchanged, including a failed verdict
