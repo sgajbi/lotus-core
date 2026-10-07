@@ -12,6 +12,10 @@ from alembic.operations import Operations
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 
+from tests.test_support.portfolio_source_observation_migration_dependencies import (
+    downgrade_observation_schema,
+    observation_schema_semantics,
+)
 from tests.test_support.selected_history_migration_dependencies import (
     restore_selected_history_portfolio_foreign_keys,
     suspend_selected_history_portfolio_foreign_keys,
@@ -140,6 +144,7 @@ def _downgrade_dependent_schema(connection) -> list[dict[str, Any]]:
     """Downgrade later schema that deliberately references valuation-book scope."""
 
     dependent_migrations: list[dict[str, Any]] = []
+    dependent_migrations.append(downgrade_observation_schema(connection))
     if inspect(connection).has_table("transaction_source_revisions", schema="public"):
         source_revision_migration: dict[str, Any] = runpy.run_path(str(SOURCE_REVISION_MIGRATION))
         _bind_operations(source_revision_migration, connection)
@@ -319,6 +324,7 @@ def test_portfolio_valuation_book_scope_applies_rolls_back_and_enforces_authorit
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
 
     with db_engine.begin() as connection:
+        original_observation_semantics = observation_schema_semantics(connection)
         suspend_selected_history_portfolio_foreign_keys(connection)
         dependent_migrations = _downgrade_dependent_schema(connection)
         _bind_operations(migration, connection)
@@ -391,6 +397,7 @@ def test_portfolio_valuation_book_scope_applies_rolls_back_and_enforces_authorit
 
         for dependent_migration in reversed(dependent_migrations):
             dependent_migration["upgrade"]()
+        assert observation_schema_semantics(connection) == original_observation_semantics
         restore_selected_history_portfolio_foreign_keys(connection)
         if any(migration["revision"] == "c177b2c3d538" for migration in dependent_migrations):
             _assert_source_revision_integrity(connection)

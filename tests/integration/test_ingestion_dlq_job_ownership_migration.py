@@ -15,6 +15,10 @@ from sqlalchemy.exc import IntegrityError
 from tests.integration.ingestion_job_sql_fixture import (
     transaction_ingestion_job_insert_fragments,
 )
+from tests.test_support.portfolio_source_observation_migration_dependencies import (
+    downgrade_observation_schema,
+    observation_schema_semantics,
+)
 from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = [pytest.mark.integration_db, pytest.mark.db_direct]
@@ -78,7 +82,9 @@ def test_migration_backfills_only_unique_correlation_owner_and_enforces_fk(
 
     with db_engine.begin() as connection:
         source_foreign_keys = inspect(connection).get_foreign_keys("transaction_source_revisions")
+        observation_semantics = observation_schema_semantics(connection)
         head_schema = connection.begin_nested()
+        downgrade_observation_schema(connection)
         source_migration: dict[str, Any] = runpy.run_path(str(SOURCE_REVISION_MIGRATION))
         _bind_operations(source_migration, connection)
         # Run the real empty-history refusal before descending to its dependency.
@@ -219,6 +225,7 @@ def test_migration_backfills_only_unique_correlation_owner_and_enforces_fk(
         }
         migration["upgrade"]()
         head_schema.rollback()
+        assert observation_schema_semantics(connection) == observation_semantics
         assert (
             inspect(connection).get_foreign_keys("transaction_source_revisions")
             == source_foreign_keys
