@@ -841,6 +841,270 @@ def test_projected_output_plus_metadata_retains_byte_budget():
     assert "probes" not in result
 
 
+def bound_diagnostic_evidence(evidence, max_bytes):
+    # Defer the new API import: baseline behavior tests must collect on original source.
+    from scripts.operations.performance.load_diagnostic_capture import (
+        bound_diagnostic_evidence as bound,
+    )
+
+    return bound(evidence, max_bytes)
+
+
+def public_diagnostic_payload():
+    """Supported projected shapes; no raw SQL, private metric labels or runtime I/O."""
+    waits = [
+        {
+            "pid": 200 + n,
+            "backend_start": "2026-10-08T01:15:39Z",
+            "database_oid": 1,
+            "backend_identity_status": "observed",
+            "wait_event_type": "Lock",
+            "wait_event": "transactionid",
+            "blocking_pids": [100],
+            "exact_await": "MISSING",
+            "statement": {
+                "status": "observed",
+                "structure": ("select transactions where portfolio_id = ? " * 24)[:1024],
+                "policy": "whitelisted_schema_and_grammar_all_other_tokens_redacted",
+            },
+        }
+        for n in range(20)
+    ]
+    return {
+        "status": "observed",
+        "scope": {
+            "run_id": "burst-run",
+            "tenant_id": "tenant_performance_load",
+            "portfolio_id": "PERF_BALANCED_V1",
+            "stage": "burst",
+            "submitted_count": 640,
+            "portfolio_claim_minimum": 840,
+            "phase_generation": "a" * 32,
+            "phase_container_id": "b" * 64,
+            "phase_container_started_at": "2026-10-08T01:15:39Z",
+        },
+        "observed_at": "2026-10-08T01:20:44Z",
+        "probes": {
+            "managed_worker": {"status": "observed", "started_at": "2026-10-08T01:15:39Z"},
+            "database": {
+                "exact_prefix_counts": {
+                    "status": "observed",
+                    "scope": "submitted_ids",
+                    "row_limit": 20,
+                    "truncated": False,
+                    "rows": [
+                        {
+                            "transaction_count": 640,
+                            "cost_count": 629,
+                            "cashflow_count": 629,
+                            "portfolio_aggregate_claims": 829,
+                        }
+                    ],
+                },
+                "runtime_db_waits": {
+                    "status": "observed",
+                    "scope": "isolated_runtime",
+                    "row_limit": 20,
+                    "truncated": True,
+                    "observed_total_rows": None,
+                    "rows": waits,
+                },
+                "runtime_db_locks": {
+                    "status": "observed",
+                    "scope": "isolated_runtime",
+                    "row_limit": 20,
+                    "observed_total_rows": 30,
+                    "truncated": True,
+                    "rows": [
+                        {
+                            "pid": 200 + n,
+                            "backend_start": "2026-10-08T01:15:39Z",
+                            "database_oid": 1,
+                            "backend_identity_status": "observed",
+                            "waiter_pid": 200 + n,
+                            "waiter_backend_start": "2026-10-08T01:15:39Z",
+                            "blocker_pid": 100,
+                            "blocker_backend_start": "2026-10-08T01:15:38Z",
+                            "locktype": "transactionid",
+                            "mode": "ShareLock",
+                            "granted": False,
+                            "blocking_role": "waiting_edge",
+                            "edge_identity_status": "observed",
+                        }
+                        for n in range(20)
+                    ],
+                },
+                "consumer_rejections": {
+                    "status": "unavailable",
+                    "reason": "PermissionError",
+                },
+            },
+            "ptp_metrics": {"status": "unavailable", "reason": "private_or_unknown_metric_labels"},
+            "processing_phases": {
+                "status": "unavailable",
+                "reason": "no_birth_qualified_active_phase",
+                "rows": [],
+                "truncated": True,
+                "row_limit": 20,
+                "admission": {
+                    "candidate_count": 20,
+                    "admitted_count": 0,
+                    "rejected_by_reason": {"backend_not_in_observed_sample": 20},
+                },
+            },
+            "consumer_offsets": {
+                "status": "partial",
+                "group_joined": False,
+                "groups": [{"status": "budget_exhausted"}],
+                "partitions": [],
+                "truncated": True,
+                "row_limit": 20,
+            },
+        },
+    }
+
+
+def test_supported_oversized_capture_keeps_probes_counts_and_refusals():
+    original = public_diagnostic_payload()
+    before = json.dumps(original)
+    assert len(before.encode()) > 32768
+    result = bound_diagnostic_evidence(original, 32768 - 2048)
+    assert len(json.dumps(result).encode()) <= 32768 - 2048
+    assert json.dumps(original) == before  # Do not mutate the retained original snapshot.
+    assert result["scope"] == original["scope"]
+    assert result["observed_at"] == original["observed_at"]
+    assert result["probes"].keys() == original["probes"].keys()
+    for name in ("ptp_metrics", "processing_phases", "consumer_offsets"):
+        assert result["probes"][name] == original["probes"][name]
+    database = result["probes"]["database"]
+    assert database["exact_prefix_counts"] == original["probes"]["database"]["exact_prefix_counts"]
+    assert database["consumer_rejections"]["reason"] == "PermissionError"
+    row = database["runtime_db_waits"]["rows"][0]
+    assert row["pid"] == 200 and row["backend_start"] == "2026-10-08T01:15:39Z"
+    assert row["exact_await"] == "MISSING" and row["statement"]["structure_truncated"]
+
+
+def test_child_send_compacts_supported_capture_before_pipe_limit(monkeypatch):
+    original = public_diagnostic_payload()
+    for function, probe in (
+        ("_load_managed_worker_identity", "managed_worker"),
+        ("_load_database_diagnostics", "database"),
+        ("_load_consumer_metrics", "ptp_metrics"),
+        ("_load_processing_phases", "processing_phases"),
+        ("_load_consumer_offsets", "consumer_offsets"),
+    ):
+        monkeypatch.setattr(collector, function, lambda *a, probe=probe: original["probes"][probe])
+    scope = {
+        **original["scope"],
+        "submitted_ids": ["private-source"],
+        "ingestion_job_ids": ["private-job"],
+        "compose_file": "private-path",
+    }
+    sender = MagicMock()
+    collector._diagnostic_worker(sender, "unused", "unused", "unused", scope)
+    encoded = sender.send_bytes.call_args.args[0]
+    assert len(encoded) <= collector.DIAGNOSTIC_MAX_BYTES - 2048
+    result = json.loads(encoded)
+    assert "probes" in result, "original child discarded supported probe evidence"
+    assert result["scope"] == original["scope"]
+    assert result["probes"]["database"]["exact_prefix_counts"]["rows"][0]["cost_count"] == 629
+    assert result["probes"]["ptp_metrics"]["reason"] == "private_or_unknown_metric_labels"
+    assert "private-source" not in encoded.decode() and "private-job" not in encoded.decode()
+    assert "private-path" not in encoded.decode()
+    sender.close.assert_called_once()
+
+
+def test_parent_actual_metadata_independently_bounds_supported_capture():
+    original = public_diagnostic_payload()
+    # Baseline-only APIs: the red parent proof must not depend on the new compactor.
+    child = public_diagnostic_payload()
+    waits = child["probes"]["database"]["runtime_db_waits"]
+    waits["rows"] = waits["rows"][:3]
+    locks = child["probes"]["database"]["runtime_db_locks"]
+    locks["rows"] = locks["rows"][:1]
+    for row in waits["rows"]:
+        row["statement"]["structure"] = "select ?"
+    # Fill only already-supported redacted previews, each still <= the collector's
+    # existing 1024-character projection limit. No unknown padding probe.
+    gap = 5968 - len(json.dumps(child).encode())
+    for row in child["probes"]["database"]["runtime_db_waits"]["rows"]:
+        preview = row["statement"]["structure"]
+        added = min(gap, 1024 - len(preview))
+        row["statement"]["structure"] += (" select ?" * 128)[:added]
+        gap -= added
+    assert gap == 0
+    encoded = json.dumps(child).encode()
+    assert len(encoded) == 5968 < 6000
+    capture = actual_capture(payload=encoded, max_bytes=6000, request=False)
+    capture.public_scope = original["scope"]
+    assert capture.request()
+    assert capture.done.wait(2)
+    result = assert_custody_closed(capture)
+    assert "probes" in result, "original parent discarded supported probe evidence"
+    raw_parent = {
+        **child,
+        "scope": capture.public_scope,
+        "child_cleanup": result["child_cleanup"],
+        "capture_timing": result["capture_timing"],
+    }
+    assert len(json.dumps(raw_parent).encode()) > 6000 - 128
+    assert len(json.dumps(result).encode()) <= 6000
+    assert result["scope"] == capture.public_scope
+    assert result["child_cleanup"]["status"] == "stopped"
+    assert result["capture_timing"]["budget_seconds"] == 2
+    assert result["capture_timing"]["requested_at"] is not None
+    assert result["capture_timing"]["child_observed_at"] == original["observed_at"]
+    assert result["capture_timing"]["request_to_child_observation_seconds"] is None
+    assert result["custody_threads_cleanup"] == "stopped"
+    assert (
+        result["probes"]["processing_phases"]["admission"]
+        == original["probes"]["processing_phases"]["admission"]
+    )
+
+
+def test_row_reduction_records_coverage_and_unknown_refusal_controls():
+    original = public_diagnostic_payload()
+    rows = original["probes"]["database"]["runtime_db_waits"]["rows"]
+    rows[-1].update(status="unknown_future_status", reason="unknown_future_refusal")
+    rows[-1]["statement"] = {"status": "unavailable", "reason": "unknown_statement_refusal"}
+    result = bound_diagnostic_evidence(original, 6000)
+    assert len(json.dumps(result).encode()) <= 6000
+    waits = result["probes"]["database"]["runtime_db_waits"]
+    coverage = waits["byte_budget_coverage"]["rows"]
+    assert waits["truncated"] is True
+    assert coverage["original_rows"] == 20
+    assert coverage["retained_rows"] + coverage["omitted_rows"] == 20
+    assert (
+        sum(row["omitted_rows_with_controls"] for row in coverage["omitted_row_controls"])
+        == coverage["omitted_rows"]
+    )
+    assert any(
+        row.get("status") == "unknown_future_status"
+        and row.get("reason") == "unknown_future_refusal"
+        for row in coverage["omitted_row_controls"]
+    )
+    assert any(
+        row.get("statement", {}).get("reason") == "unknown_statement_refusal"
+        for row in coverage["omitted_row_controls"]
+    )
+    assert waits["rows"][0]["pid"] == 200
+
+
+def test_ordinary_public_payload_unchanged_and_irreducible_envelope_refused():
+    original = {"status": "unavailable", "reason": "scope_identity_mismatch"}
+    assert bound_diagnostic_evidence(original, 32768) is original
+    oversized = public_diagnostic_payload()
+    oversized["scope"]["run_id"] = "r" * 40000
+    result = bound_diagnostic_evidence(oversized, 32768)
+    assert result["status"] == "byte_budget_exhausted"
+    assert result["reason"] == "irreducible_diagnostic_envelope"
+    assert result["scope_timing_cleanup"] == "unavailable_due_to_byte_budget"
+    assert "probes" not in result and "scope" not in result
+    assert len(json.dumps(result).encode()) <= 32768
+    with pytest.raises(ValueError, match="diagnostic_envelope_cannot_fit"):
+        bound_diagnostic_evidence(oversized, 8)
+
+
 def test_unconfirmed_receiver_finalization_is_explicit_and_cached():
     capture = DiagnosticCapture.__new__(DiagnosticCapture)
     capture.final_result = None

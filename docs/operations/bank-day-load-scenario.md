@@ -351,6 +351,17 @@ reconciled across all `1000` portfolios with this workflow.
 
 ### Performance-load source completion diagnostics
 
+Oversized diagnostic receipts retain admitted public probes through bounded sample compaction.
+The child reserves metadata space inside the existing 32KiB output cap; the parent independently
+bounds the receipt after adding original timing and cleanup, including a final custody reserve.
+Already-redacted statement previews may be shortened with explicit truncation and original-byte
+metadata. Sample tails may be omitted with original/retained/omitted row counts and retained
+row refusal controls. Admission counts, probe statuses/reasons, scope and worker birth/generation
+remain distinct from retained sample detail. Unknown probes or an irreducible envelope are
+explicit byte-budget refusals; unavailable evidence is not zero or successful completion.
+Compaction neither relaxes admission/redaction nor proves the financial timeout cause. The
+20-row, six-second collection and enforcing drain/SLO budgets remain unchanged.
+
 Fee-source qualification examines the complete original cost/raw authority before requesting
 retained processing receipts. Only an explicit absence of qualified original authority admits
 the scoped receipt lookup; conflicting raw sources, malformed fees and ambiguous authority still

@@ -32,6 +32,150 @@ _SCOPE_KEYS = frozenset(_IDENTITY_KEYS) | {
     "phase_container_started_at",
 }
 
+_PUBLIC_PROBES = frozenset(
+    {"managed_worker", "database", "ptp_metrics", "processing_phases", "consumer_offsets"}
+)
+_ROW_COLLECTIONS = frozenset({"rows", "samples", "partitions"})
+_ROW_CONTROLS = frozenset(
+    {
+        "status",
+        "reason",
+        "reason_code",
+        "failure_code",
+        "failure_reason_code",
+        "backend_identity_status",
+        "edge_identity_status",
+        "exact_await",
+        "scope",
+    }
+)
+
+
+def _diagnostic_bytes(value: dict[str, Any]) -> bytes:
+    return json.dumps(value, default=str).encode()
+
+
+def _diagnostic_row_collections(value: Any) -> list[tuple[dict[str, Any], str]]:
+    """Only sample collections are expendable; admission and refusal trees are not."""
+    collections = []
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key in _ROW_COLLECTIONS and isinstance(child, list):
+                collections.append((value, key))
+            elif isinstance(child, dict):
+                collections.extend(_diagnostic_row_collections(child))
+    return collections
+
+
+def _diagnostic_budget_refusal(result: dict[str, Any], max_bytes: int) -> dict[str, Any]:
+    """An irreducible envelope is unavailable, never an empty successful observation."""
+    refusal = {
+        key: result[key]
+        for key in ("scope", "observed_at", "child_cleanup", "capture_timing")
+        if key in result
+    }
+    refusal.update(
+        status="byte_budget_exhausted",
+        reason="irreducible_diagnostic_envelope",
+        probe_evidence="unavailable_not_zero",
+    )
+    if len(_diagnostic_bytes(refusal)) <= max_bytes:
+        return refusal
+    # No truncated identity, timing, or cleanup can masquerade as the original.
+    refusal = {
+        "status": "byte_budget_exhausted",
+        "reason": "irreducible_diagnostic_envelope",
+        "scope_timing_cleanup": "unavailable_due_to_byte_budget",
+        "probe_evidence": "unavailable_not_zero",
+    }
+    if len(_diagnostic_bytes(refusal)) > max_bytes:
+        raise ValueError("diagnostic_envelope_cannot_fit")
+    return refusal
+
+
+def _diagnostic_row_controls(row: dict[str, Any]) -> dict[str, Any]:
+    controls = {key: value for key, value in row.items() if key in _ROW_CONTROLS}
+    for key in ("statement", "labels"):
+        nested = row.get(key)
+        if isinstance(nested, dict):
+            selected = {name: value for name, value in nested.items() if name in _ROW_CONTROLS}
+            if selected:
+                controls[key] = selected
+    return controls
+
+
+def _record_omitted_controls(records: list[dict[str, Any]], controls: dict[str, Any]) -> None:
+    """Count repeated controls without losing distinct unknown/refusal outcomes."""
+    for record in records:
+        existing = {
+            key: value for key, value in record.items() if key != "omitted_rows_with_controls"
+        }
+        if existing == controls:
+            record["omitted_rows_with_controls"] += 1
+            return
+    records.append({**controls, "omitted_rows_with_controls": 1})
+
+
+def bound_diagnostic_evidence(evidence: dict[str, Any], max_bytes: int) -> dict[str, Any]:
+    """Compact already-admitted public samples, not raw input or admission policy.
+
+    Preserve control metadata exactly. Bound the final ordinary JSON representation,
+    not only an optimistically compact transport encoding. Never rerun a probe.
+    """
+    raw = _diagnostic_bytes(evidence)
+    if len(raw) <= max_bytes:
+        return evidence
+    result = json.loads(raw)
+    probes = result.get("probes", {})
+    if not isinstance(probes, dict) or probes.keys() - _PUBLIC_PROBES:
+        return _diagnostic_budget_refusal(result, max_bytes)
+    collections = _diagnostic_row_collections(probes)
+    if any(len(owner[key]) > 20 for owner, key in collections):
+        return _diagnostic_budget_refusal(result, max_bytes)
+    result["output_compaction"] = {
+        "policy": "public_samples_only_preserve_control_metadata",
+        "original_bytes": len(raw),
+        "byte_limit": max_bytes,
+        "row_detail_is_partial": True,
+    }
+    for owner, key in collections:
+        for row in owner[key]:
+            if not isinstance(row, dict):
+                continue
+            statement = row.get("statement")
+            if isinstance(statement, dict):
+                structure = statement.get("structure")
+                if isinstance(structure, str) and len(structure) > 256:
+                    statement["structure"] = structure[:256]
+                    statement["structure_truncated"] = True
+                    statement["original_structure_bytes"] = len(structure.encode())
+    # Prefer retaining one complete row per sampled family. Earlier collector ordering
+    # prioritizes birth-qualified lock edges; dropping a tail never upgrades correlation.
+    while len(_diagnostic_bytes(result)) > max_bytes:
+        candidates = [(owner, key) for owner, key in collections if len(owner[key]) > 1]
+        if not candidates:
+            candidates = [(owner, key) for owner, key in collections if owner[key]]
+        if not candidates:
+            return _diagnostic_budget_refusal(result, max_bytes)
+        owner, key = max(candidates, key=lambda item: len(json.dumps(item[0][item[1]])))
+        removed = owner[key].pop()
+        coverage = owner.setdefault("byte_budget_coverage", {}).setdefault(
+            key,
+            {
+                "original_rows": len(owner[key]) + 1,
+                "omitted_rows": 0,
+                "omitted_row_controls": [],
+            },
+        )
+        coverage["omitted_rows"] += 1
+        coverage["retained_rows"] = len(owner[key])
+        if isinstance(removed, dict):
+            controls = _diagnostic_row_controls(removed)
+            if controls:
+                _record_omitted_controls(coverage["omitted_row_controls"], controls)
+        owner["truncated"] = True
+    return result
+
 
 def _scope_identity(scope: dict[str, Any]) -> dict[str, str]:
     identity = {}
@@ -424,13 +568,8 @@ class DiagnosticCapture:
                 cleanup.setdefault("errors", []).append(type(exc).__name__)
         timing = self._capture_timing(result)
         result.update(child_cleanup=cleanup, capture_timing=timing)
-        if len(json.dumps(result, default=str).encode()) > self.max_bytes - 128:
-            result = {
-                "status": "byte_budget_exhausted",
-                "scope": self.public_scope,
-                "child_cleanup": cleanup,
-                "capture_timing": timing,
-            }
+        # Keep the existing final-thread-receipt reserve; compact after actual metadata.
+        result = bound_diagnostic_evidence(result, self.max_bytes - 128)
         self.result = result
         self.done.set()
 
