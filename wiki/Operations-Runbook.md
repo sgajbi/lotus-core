@@ -887,6 +887,15 @@ domain truth, replay, persistence, or supportability behavior, stay in `lotus-co
 
 ## Performance-load failure evidence
 
+Diagnostic compaction preserves admitted public evidence within the existing 32KiB cap at both
+child send and parent timing/cleanup boundaries. Shortened redacted statement previews and
+omitted sample tails carry explicit byte/row coverage; omitted row refusal controls remain
+reported. Probe status/reason, scope/birth/generation and phase admission do not become complete
+sample membership. Unknown probes and irreducible envelopes remain byte-budget refusals, never
+zero or passing observations. Inspect original timing and cleanup separately. Compaction does
+not establish completion or a financial timeout cause and changes no admission, redaction,
+20-row, six-second collection or drain/SLO limit.
+
 The performance-load gate publishes partial completed-profile results and exact accepted batch
 IDs/counts when source drain fails. Inspect JSON `completion_evidence` for the active failure
 stage, deadline domain counts, replay not-run status and supported acknowledgement lineage.

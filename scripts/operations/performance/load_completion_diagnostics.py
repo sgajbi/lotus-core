@@ -24,6 +24,7 @@ from prometheus_client.parser import text_string_to_metric_families
 from scripts.operations.performance.load_diagnostic_capture import (
     DiagnosticCapture,
     DiagnosticScopeSlot,
+    bound_diagnostic_evidence,
     read_diagnostic_scope,
 )
 from scripts.operations.transaction_processing_load_support import LOAD_TENANT_ID
@@ -207,7 +208,7 @@ def collect_load_completion_diagnostics(
             except Exception as exc:
                 cleanup.setdefault("errors", []).append(type(exc).__name__)
     result["child_cleanup"] = cleanup
-    return result
+    return bound_diagnostic_evidence(result, DIAGNOSTIC_MAX_BYTES)
 
 
 def _stop_diagnostic_process(process: Any) -> dict[str, Any]:
@@ -316,9 +317,10 @@ def _diagnostic_worker(
             evidence["probes"][name] = probe()
         except Exception as exc:
             evidence["probes"][name] = {"status": "unavailable", "reason": type(exc).__name__}
+    # Reserve space inside the existing limit for parent timing and cleanup. The parent
+    # still independently bounds its actual envelope; this is not a larger byte budget.
+    evidence = bound_diagnostic_evidence(evidence, DIAGNOSTIC_MAX_BYTES - 2048)
     encoded = json.dumps(evidence, default=str).encode()
-    if len(encoded) > DIAGNOSTIC_MAX_BYTES:
-        encoded = json.dumps({"status": "byte_budget_exhausted", "scope": public_scope}).encode()
     try:
         sender.send_bytes(encoded)
     finally:
