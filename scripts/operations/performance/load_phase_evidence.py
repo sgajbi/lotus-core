@@ -210,12 +210,18 @@ def diagnostic_backend_identity(value: Any) -> tuple[int, datetime, int] | None:
     pid, oid, birth = value.get("pid"), value.get("database_oid"), value.get("backend_start")
     if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
         return None
-    if not isinstance(oid, int) or isinstance(oid, bool) or oid <= 0 or not isinstance(birth, str):
+    if (
+        not isinstance(oid, int)
+        or isinstance(oid, bool)
+        or oid <= 0
+        or not isinstance(birth, (datetime, str))
+    ):
         return None
     try:
-        parsed = datetime.fromisoformat(birth)
-        return (pid, parsed.astimezone(UTC), oid) if parsed.tzinfo is not None else None
-    except ValueError:
+        # RealDictCursor supplies native timestamps before child JSON serialization.
+        parsed = birth if isinstance(birth, datetime) else datetime.fromisoformat(birth)
+        return (pid, parsed.astimezone(UTC), oid) if parsed.utcoffset() is not None else None
+    except (ValueError, OverflowError):
         return None
 
 

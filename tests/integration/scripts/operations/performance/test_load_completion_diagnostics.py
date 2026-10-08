@@ -9,7 +9,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -178,6 +178,28 @@ def test_native_lock_probe_prioritizes_birth_qualified_blocker_and_waiter(
                 # Bounded condition polling: elapsed time never establishes a wait.
                 finished.wait(timeout=0.01)
         result = _load_database_probes(observer, scope, RealDictCursor)
+        waits = result["runtime_db_waits"]
+        sample = waits["original_sample"]
+        assert sample["original_rows"] == len(waits["rows"])
+        assert sample["detail_status"] == "retained"
+        for index, (native_row, projected) in enumerate(
+            zip(waits["rows"], sample["rows"], strict=True)
+        ):
+            birth = native_row["backend_start"]
+            assert isinstance(birth, datetime) and birth.utcoffset() is not None
+            assert projected == {
+                "sample_index": index,
+                "backend": {
+                    "status": "observed",
+                    "value": {
+                        "pid": native_row["pid"],
+                        "database_oid": native_row["database_oid"],
+                        "backend_start": birth.astimezone(UTC).isoformat(),
+                    },
+                },
+            }
+        assert {row["backend"]["value"]["pid"] for row in sample["rows"]} >= {head_pid, waiter_pid}
+        json.dumps(sample, allow_nan=False)
         locks = result["runtime_db_locks"]
         assert locks["status"] == "observed"
         assert locks["truncated"] and locks["observed_total_rows"] > 20
@@ -208,6 +230,7 @@ def test_native_lock_probe_prioritizes_birth_qualified_blocker_and_waiter(
                     "unrelated_advisory_locks": 30,
                     "noise_pid": noise_pid,
                     "qualified_rows": qualified,
+                    "original_wait_sample": sample,
                     "observed_total_rows": locks["observed_total_rows"],
                     "truncated": locks["truncated"],
                     "stale_observation_refused": True,
