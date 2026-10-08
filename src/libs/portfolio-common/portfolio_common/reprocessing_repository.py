@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from types import SimpleNamespace
 from typing import Any, cast
 
-from sqlalchemy import and_, case, or_, select
+from sqlalchemy import and_, case, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import OutboxEvent, Portfolio, ProcessedEvent, TransactionCost
@@ -145,10 +145,12 @@ async def load_transaction_fee_facts(
     raw_stmt = (
         select(OutboxEvent.id, OutboxEvent.aggregate_id, OutboxEvent.payload)
         .where(
-            OutboxEvent.aggregate_type == "RawTransaction",
-            OutboxEvent.event_type == "RawTransactionPersisted",
+            OutboxEvent.aggregate_type == literal("RawTransaction", literal_execute=True),
+            OutboxEvent.event_type == literal("RawTransactionPersisted", literal_execute=True),
             OutboxEvent.aggregate_id.in_(portfolios),
-            OutboxEvent.payload["transaction_id"].as_string().in_(ids),
+            OutboxEvent.payload[literal("transaction_id", literal_execute=True)]
+            .as_string()
+            .in_(ids),
         )
         .order_by(OutboxEvent.id)
     )
