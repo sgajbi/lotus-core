@@ -51,6 +51,7 @@ from .financial_reconciliation_schema import (
     financial_reconciliation_run_table_args,
 )
 from .ingestion_job_schema import IngestionJobColumns, ingestion_job_table_args
+from .outbox_event_schema import outbox_event_table_args
 from .processed_event_schema import processed_event_table_args
 from .transaction_source_revision_schema import (
     TransactionSourceRevisionColumns,
@@ -4505,48 +4506,8 @@ class OutboxEvent(Base):
     last_failure_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
     processed_at = Column(DateTime(timezone=True), nullable=True)
-    __table_args__ = (
-        Index(
-            "ix_outbox_events_status_created_at",
-            "status",
-            "created_at",
-        ),
-        Index(
-            "ix_outbox_events_status_last_attempted_at",
-            "status",
-            "last_attempted_at",
-        ),
-        Index(
-            "ix_outbox_events_status_next_attempt_created_at",
-            "status",
-            "next_attempt_at",
-            "created_at",
-        ),
-        Index(
-            "ix_outbox_events_status_claim_next_attempt_created_at",
-            "status",
-            "claim_expires_at",
-            "next_attempt_at",
-            "created_at",
-        ),
-        Index(
-            "ix_outbox_events_claim_token",
-            "claim_token",
-        ),
-        Index(
-            "ix_outbox_events_status_last_failure_at",
-            "status",
-            "last_failure_at",
-        ),
-        Index(
-            "ix_outbox_events_stream_unresolved_order",
-            "topic",
-            "partition_key",
-            "created_at",
-            "id",
-            postgresql_where=status.in_(("PENDING", "FAILED")),
-        ),
-        Index("ix_outbox_events_alternate_lookup_key", "alternate_lookup_key"),
+    __table_args__ = outbox_event_table_args(
+        status=status, payload=payload, aggregate_type=aggregate_type, event_type=event_type
     )
 
 
