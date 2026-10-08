@@ -994,6 +994,9 @@ Position response-page economic scope normalizes security/position selector memb
 to the adapter's distinct SQL-IN semantics, separately from unchanged cursor/request scope.
 No filter and a supplied-but-invalid filter remain distinct. Do not canonicalize other order or
 multiplicity without proving its query semantics; returned duplicate economic rows remain counted.
+Projected dimension labels use set membership; effective dimension filters use exact value sets
+with the existing last-key-wins mapping. Normalize their economic scope only, not cursor scope.
+Value whitespace/case and changed final values remain significant; duplicate keys are not unioned.
 
 ## Fee replay authority ownership practice
 

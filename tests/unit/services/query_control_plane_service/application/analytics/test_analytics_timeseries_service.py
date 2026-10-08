@@ -116,6 +116,54 @@ async def test_position_content_identity_uses_query_equivalent_selectors(selecto
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "variant", ["dimensions_order", "dimensions_duplicate", "filters_order", "values"]
+)
+async def test_position_content_identity_uses_effective_dimension_semantics(variant):
+    from src.services.query_control_plane_service.app.application.analytics import (
+        analytics_position_pages,
+    )
+
+    service = make_service()
+    _install_canonical_portfolio_timeseries_repo(service)
+    source_rows = service.repo.list_position_timeseries_rows_unpaged.return_value
+    service.repo.list_position_timeseries_rows = AsyncMock(return_value=source_rows)
+    request = PositionAnalyticsTimeseriesRequest(
+        as_of_date="2026-07-03",
+        window=AnalyticsWindow(start_date="2026-07-03", end_date="2026-07-03"),
+        dimensions=["sector", "country"],
+        filters={
+            "dimension_filters": [
+                {"dimension": "sector", "values": ["Technology", "Financials"]},
+                {"dimension": "country", "values": ["SG", "US"]},
+            ]
+        },
+    )
+    revised = request.model_copy(deep=True)
+    if variant == "dimensions_order":
+        revised.dimensions.reverse()
+    elif variant == "dimensions_duplicate":
+        revised.dimensions.append("sector")
+    elif variant == "filters_order":
+        revised.filters.dimension_filters.reverse()
+    else:
+        revised.filters.dimension_filters[0].values = ["Financials", "Technology", "Technology"]
+    assert set(request.dimensions) == set(revised.dimensions)
+    assert analytics_position_pages.position_dimension_filters(
+        request
+    ) == analytics_position_pages.position_dimension_filters(revised)
+    before = await service.get_position_timeseries(
+        portfolio_id="PB_SG_GLOBAL_BAL_001", request=request
+    )
+    after = await service.get_position_timeseries(
+        portfolio_id="PB_SG_GLOBAL_BAL_001", request=revised
+    )
+    assert before.rows == after.rows
+    assert before.page.request_scope_fingerprint != after.page.request_scope_fingerprint
+    assert before.content_hash == after.content_hash
+
+
+@pytest.mark.asyncio
 async def test_position_cashflow_epoch_evidence_failure_is_insufficient_data() -> None:
     service = make_service()
     service.repo = SimpleNamespace(

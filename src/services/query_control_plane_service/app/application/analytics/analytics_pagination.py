@@ -15,6 +15,7 @@ from ...contracts.analytics_inputs import (
     PortfolioAnalyticsTimeseriesRequest,
     PortfolioQualityDiagnostics,
     PositionAnalyticsTimeseriesRequest,
+    PositionDimensionFilter,
     QualityDiagnostics,
 )
 from ...domain.analytics import PositionValuationObservation
@@ -209,7 +210,7 @@ def position_timeseries_scopes(
     business_calendar_present: bool,
     predecessor_business_date: date | None = None,
 ) -> tuple[str, str]:
-    """Keep cursor compatibility while normalizing only SQL-IN selector semantics."""
+    """Keep cursor compatibility while matching effective query/projection semantics."""
 
     scope = dict(
         portfolio_id=portfolio_id,
@@ -235,14 +236,24 @@ def position_timeseries_scopes(
             and (normalized := normalize_security_id(value.split(":", 1)[1]))
         }
     )
+    # Match position_dimension_filters: duplicate dimension keys are last-wins,
+    # while values use exact set membership (no whitespace/case normalization).
+    dimension_filters = {
+        item.dimension: set(item.values) for item in request.filters.dimension_filters
+    }
     economic_request = request.model_copy(
         update={
+            "dimensions": sorted(set(request.dimensions)),
             "filters": request.filters.model_copy(
                 update={
                     "security_ids": security_ids,
                     "position_ids": position_ids,
+                    "dimension_filters": [
+                        PositionDimensionFilter(dimension=dimension, values=sorted(values))
+                        for dimension, values in sorted(dimension_filters.items())
+                    ],
                 }
-            )
+            ),
         }
     )
     economic_scope = request_fingerprint(

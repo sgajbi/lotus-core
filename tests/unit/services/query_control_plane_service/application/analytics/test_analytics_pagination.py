@@ -102,6 +102,25 @@ def test_economic_scope_preserves_non_selector_request_semantics(change):
     )
 
 
+def test_economic_dimension_filters_preserve_last_wins_and_exact_value_semantics():
+    def identity(filters):
+        request = PositionAnalyticsTimeseriesRequest(
+            as_of_date="2025-01-31",
+            window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31"),
+            filters={"dimension_filters": filters},
+        )
+        return _position_identity_scopes(request=request)[1]
+
+    tech = {"dimension": "sector", "values": ["Technology"]}
+    bank = {"dimension": "sector", "values": ["Financials"]}
+    assert identity([tech, bank]) == identity([bank])
+    assert identity([bank, tech]) == identity([tech])
+    assert identity([tech, bank]) != identity([bank, tech])
+    assert identity([tech]) != identity([{"dimension": "sector", "values": [" Technology "]}])
+    assert identity([tech]) != identity([{"dimension": "country", "values": ["Technology"]}])
+    assert identity([tech]) != identity([])
+
+
 @pytest.mark.asyncio
 async def test_portfolio_calendar_scope_keeps_window_and_global_horizon_coherent() -> None:
     reader = SimpleNamespace(

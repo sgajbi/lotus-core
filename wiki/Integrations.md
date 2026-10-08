@@ -46,6 +46,11 @@ rounding; dates and row ordering are deterministic. Serving timestamps and corre
 not economic revisions. Valuation, dated FX or cashflow corrections that change returned rows
 change their content identity even when the request fingerprint and selected epoch are unchanged.
 
+Projected dimension order/duplicates and effective dimension-filter value order/duplicates do not
+change economic identity. Filters preserve exact values and existing last-key-wins semantics;
+changed final values, value whitespace/case and different dimension membership remain significant.
+Cursor request identity remains unchanged; returned economic row multiplicity is preserved.
+
 Position economic identity uses normalized distinct security/position selector membership, matching
 the repository's SQL inclusion filters: equivalent selector order, duplicates and security-ID
 whitespace do not represent economic revisions. An absent filter (all rows) remains distinct from
