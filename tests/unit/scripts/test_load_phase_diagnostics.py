@@ -5,7 +5,7 @@ import os
 import stat
 import sys
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone, tzinfo
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -692,3 +692,91 @@ def test_pure_phase_evidence_preserves_raw_inputs_and_detaches_public_outputs(
     sample["rows"][0]["backend"]["value"]["pid"] = -1
     snapshot["snapshot_identity"]["worker_pid"]["value"] = -1
     assert json.dumps([payload, waits], sort_keys=True) == before
+
+
+@pytest.mark.parametrize("serialized", [False, True])
+def test_backend_identity_normalizes_native_and_serialized_offset_births(serialized):
+    birth = datetime(2026, 10, 8, 8, 0, 0, 123456, tzinfo=timezone(timedelta(hours=8)))
+    backend = {
+        "pid": 41,
+        "database_oid": 7,
+        "backend_start": birth.isoformat() if serialized else birth,
+    }
+    before = dict(backend)
+    normalized = datetime(2026, 10, 8, 0, 0, 0, 123456, tzinfo=UTC)
+    assert phase_evidence.diagnostic_backend_identity(backend) == (41, normalized, 7)
+    assert phase_evidence.backend_measurement(backend) == {
+        "status": "observed",
+        "value": {"pid": 41, "backend_start": normalized.isoformat(), "database_oid": 7},
+    }
+    assert backend == before
+
+
+class UndefinedOffset(tzinfo):
+    def utcoffset(self, dt):
+        return None
+
+
+@pytest.mark.parametrize(
+    "field,bad",
+    [
+        ("backend_start", datetime(2026, 10, 8)),
+        ("backend_start", datetime(2026, 10, 8, tzinfo=UndefinedOffset())),
+        ("backend_start", "2026-10-08T00:00:00"),
+        ("backend_start", "private-malformed-birth"),
+        ("backend_start", True),
+        ("backend_start", 1),
+        ("backend_start", None),
+        ("backend_start", datetime.min.replace(tzinfo=timezone(timedelta(hours=1)))),
+        ("pid", True),
+        ("pid", 0),
+        ("pid", -1),
+        ("database_oid", True),
+        ("database_oid", 0),
+        ("database_oid", -1),
+    ],
+)
+def test_native_birth_support_preserves_invalid_identity_refusal(field, bad):
+    backend = {"pid": 41, "database_oid": 7, "backend_start": datetime(2026, 10, 8, tzinfo=UTC)}
+    backend[field] = bad
+    assert phase_evidence.diagnostic_backend_identity(backend) is None
+    assert phase_evidence.backend_measurement(backend) == {"status": "invalid", "value": None}
+
+
+@pytest.mark.parametrize(
+    "mutation,reason",
+    [
+        ("equivalent", None),
+        ("pid", "backend_not_in_observed_sample"),
+        ("birth", "backend_not_in_observed_sample"),
+        ("database", "backend_not_in_observed_sample"),
+        ("ambiguous", "backend_identity_ambiguous"),
+    ],
+)
+def test_native_driver_birth_matches_only_unique_complete_phase_identity(
+    phase_snapshot, mutation, reason
+):
+    scope, probes, payload, row, run = phase_snapshot
+    native = datetime.fromisoformat(row["backend"]["backend_start"])
+    observed = dict(row["backend"], backend_start=native.astimezone(timezone(timedelta(hours=8))))
+    waits = probes["database"]["runtime_db_waits"]["rows"]
+    waits[:] = [observed]
+    if mutation == "pid":
+        observed["pid"] += 1
+    elif mutation == "birth":
+        observed["backend_start"] += timedelta(microseconds=1)
+    elif mutation == "database":
+        observed["database_oid"] += 1
+    elif mutation == "ambiguous":
+        waits.append(dict(observed, backend_start=native.isoformat()))
+    result = support._load_processing_phases(scope, probes)
+    assert result["admission"]["admitted_count"] == (1 if reason is None else 0)
+    assert result["admission"]["rejected_by_reason"] == ({reason: 1} if reason else {})
+    if reason is None:
+        assert result["rows"][0]["backend"] == row["backend"]
+    else:
+        assert result["rows"] == []
+        rejected = result["admission"]["rejected_active"]["rows"][0]
+        assert rejected["authority"] == "not_admitted_not_causal"
+        assert rejected["match_diagnostics"]["invalid_sample_identity_count"] == 0
+    json.dumps(result, allow_nan=False)

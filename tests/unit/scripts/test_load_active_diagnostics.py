@@ -9,10 +9,12 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import UTC, datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from psycopg2.extras import RealDictCursor, RealDictRow
 
 from scripts.operations import performance_load_gate as gate
 from scripts.operations import transaction_processing_load_support as support
@@ -1106,11 +1108,24 @@ def test_ordinary_public_payload_unchanged_and_irreducible_envelope_refused():
         bound_diagnostic_evidence(oversized, 8)
 
 
-def test_original_wait_identity_vector_is_safe_and_measures_existing_query_interval(monkeypatch):
-    backend = {"pid": 41, "backend_start": "2026-10-08T00:00:00Z", "database_oid": 7}
+@pytest.mark.parametrize(
+    "birth,valid",
+    [
+        ("2026-10-08T00:00:00Z", True),
+        (datetime(2026, 10, 8, tzinfo=UTC), True),
+        (datetime(2026, 10, 8, 8, tzinfo=timezone(timedelta(hours=8))), True),
+        (datetime(2026, 10, 8), False),
+        ("private-malformed-birth", False),
+    ],
+)
+def test_original_wait_identity_vector_is_safe_and_measures_existing_query_interval(
+    monkeypatch, birth, valid
+):
+    backend = {"pid": 41, "backend_start": birth, "database_oid": 7}
+    driver_row = RealDictRow(dict(backend, private_statement="SELECT 'private-business'"))
     cursor = MagicMock()
     cursor.__enter__.return_value = cursor
-    cursor.fetchmany.return_value = [dict(backend, private_statement="SELECT 'private-business'")]
+    cursor.fetchmany.return_value = [driver_row]
     connection = MagicMock()
     connection.cursor.return_value = cursor
     wall = iter(range(100, 140))
@@ -1120,14 +1135,24 @@ def test_original_wait_identity_vector_is_safe_and_measures_existing_query_inter
     result = collector._load_database_probes(
         connection,
         {"portfolio_id": "PERF_BALANCED_V1", "submitted_ids": [], "ingestion_job_ids": []},
-        object,
+        RealDictCursor,
     )
     waits = result["runtime_db_waits"]
     vector = waits["original_sample"]
-    assert vector["rows"][0]["backend"] == {
-        "status": "observed",
-        "value": {**backend, "backend_start": "2026-10-08T00:00:00+00:00"},
-    }
+    assert vector["rows"][0]["backend"] == (
+        {
+            "status": "observed",
+            "value": {**backend, "backend_start": "2026-10-08T00:00:00+00:00"},
+        }
+        if valid
+        else {"status": "invalid", "value": None}
+    )
+    assert driver_row["backend_start"] == birth and "private_statement" in driver_row
+    assert waits["rows"][0]["backend_start"] == birth
+    assert all(
+        call.kwargs == {"cursor_factory": RealDictCursor}
+        for call in connection.cursor.call_args_list
+    )
     assert vector["rows"][0]["sample_index"] == 0
     assert vector["original_rows"] == 1 and vector["row_limit"] == 20
     assert vector["overflow"] == "unknown_beyond_sql_limit"
