@@ -160,8 +160,12 @@ def test_fx_persisted_event_accepts_existing_canonical_wire_identity() -> None:
             "rate_date": "2026-05-28",
             "rate": "1.0875",
             "generated_at": "2026-05-28T10:00:00Z",
-            "content_hash": "sha256:bc4c86a5eaa8bbc698e2d75bcb312c87704a48bb6d7f80f9fac7745a299a2c42",
-            "observation_id": "sha256:e7b9034ad07a8bc82947096e736461888e99063177a4cc03c12187bd5c2aa9b2",
+            "content_hash": (
+                "sha256:bc4c86a5eaa8bbc698e2d75bcb312c87704a48bb6d7f80f9fac7745a299a2c42"
+            ),
+            "observation_id": (
+                "sha256:e7b9034ad07a8bc82947096e736461888e99063177a4cc03c12187bd5c2aa9b2"
+            ),
         }
     )
     assert event.rate == Decimal("1.0875")
