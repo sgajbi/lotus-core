@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from scripts.operations import performance_load_gate, transaction_processing_load_support
-from scripts.operations.performance import load_completion_diagnostics
+from scripts.operations.performance import load_completion_diagnostics, load_phase_evidence
 from scripts.operations.performance_load_gate import (
     DRAIN_OBSERVATION_TIMEOUT_SECONDS,
     GOVERNED_LOAD_PORTFOLIO_ID,
@@ -2343,7 +2343,7 @@ def test_diagnostic_lock_projection_qualifies_sql_ordered_rows_and_reports_trunc
     # Actual priority over lower-PID noise requires the separate native PG proof.
     sql_ordered = locks[-2:] + locks[:19]
     cursor.fetchmany.side_effect = [waits, sql_ordered]
-    assert len(sql_ordered) == load_completion_diagnostics.DIAGNOSTIC_MAX_ROWS + 1
+    assert len(sql_ordered) == load_phase_evidence.MAX_ROWS + 1
     result = load_completion_diagnostics._load_database_probes(
         connection, {"submitted_ids": [], "ingestion_job_ids": [], "portfolio_id": "p"}, object
     )
