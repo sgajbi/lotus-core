@@ -780,3 +780,107 @@ def test_native_driver_birth_matches_only_unique_complete_phase_identity(
         assert rejected["authority"] == "not_admitted_not_causal"
         assert rejected["match_diagnostics"]["invalid_sample_identity_count"] == 0
     json.dumps(result, allow_nan=False)
+
+
+@pytest.mark.parametrize("field", ["captured_monotonic", "phase_started_monotonic"])
+@pytest.mark.parametrize(
+    "bad,missing",
+    [
+        pytest.param(None, True, id="missing"),
+        pytest.param(None, False, id="null"),
+        pytest.param(True, False, id="true"),
+        pytest.param(False, False, id="false"),
+        pytest.param("private-timing", False, id="string"),
+        pytest.param(float("nan"), False, id="nan"),
+        pytest.param(float("inf"), False, id="infinity"),
+        pytest.param(float("-inf"), False, id="negative-infinity"),
+        pytest.param(-1, False, id="negative"),
+        pytest.param(10**400, False, id="oversized-integer"),
+    ],
+)
+def test_phase_timing_refuses_invalid_operands_without_losing_valid_peer(
+    phase_snapshot, field, bad, missing
+):
+    scope, probes, payload, row, run = phase_snapshot
+    peer = dict(row, backend=dict(row["backend"], pid=42), generation="e" * 32)
+    waits = probes["database"]["runtime_db_waits"]["rows"]
+    waits.append(dict(peer["backend"]))
+    payload["rows"] = [peer, row]
+    target = payload if field == "captured_monotonic" else row
+    if missing:
+        target.pop(field)
+    else:
+        target[field] = bad
+    before = json.dumps([payload, waits], sort_keys=True)
+    # Native operands drive the owner directly, before transport JSON coercion.
+    assert phase_evidence.project_processing_phase(row, payload, waits) is None
+    result = support._load_processing_phases(scope, probes)
+    rejected_count = 2 if field == "captured_monotonic" else 1
+    assert result["status"] == ("unavailable" if rejected_count == 2 else "observed")
+    assert result["reason"] == ("no_birth_qualified_active_phase" if rejected_count == 2 else None)
+    assert result["admission"]["candidate_count"] == result["admission"]["active_count"] == 2
+    assert result["admission"]["admitted_count"] == 2 - rejected_count
+    assert result["admission"]["rejected_count"] == rejected_count
+    assert result["admission"]["rejected_by_reason"] == {"invalid_phase_metadata": rejected_count}
+    if rejected_count == 1:
+        assert len(result["rows"]) == 1
+        assert result["rows"][0]["backend"]["pid"] == 42
+        assert result["rows"][0]["phase_elapsed_seconds"] == 201
+    else:
+        assert result["rows"] == []
+    if field == "captured_monotonic":
+        measurement = result["snapshot_timing"][field]
+    else:
+        measurement = result["admission"]["rejected_active"]["rows"][0][field]
+    assert measurement == {"status": "missing" if bad is None else "invalid", "value": None}
+    for rejected in result["admission"]["rejected_active"]["rows"]:
+        assert rejected["reason"] == "invalid_phase_metadata"
+        assert rejected["authority"] == "not_admitted_not_causal"
+        assert "phase_elapsed_seconds" not in rejected
+    assert "private-" not in json.dumps(result, allow_nan=False)
+    assert json.dumps([payload, waits], sort_keys=True) == before
+
+
+@pytest.mark.parametrize(
+    "captured,started,elapsed",
+    [(0, 0, 0), (211, 10, 201), (0.5, 0.125, 0.375), (sys.float_info.max, sys.float_info.max, 0)],
+)
+def test_phase_timing_preserves_valid_zero_fraction_and_elapsed(
+    phase_snapshot, captured, started, elapsed
+):
+    scope, probes, payload, row, run = phase_snapshot
+    payload["captured_monotonic"] = captured
+    row["phase_started_monotonic"] = started
+    before = json.dumps([payload, probes], sort_keys=True)
+    result = support._load_processing_phases(scope, probes)
+    assert result["status"] == "observed"
+    assert result["admission"]["admitted_count"] == 1
+    assert result["admission"]["rejected_by_reason"] == {}
+    assert result["rows"][0]["phase_elapsed_seconds"] == elapsed
+    assert result["snapshot_timing"]["captured_monotonic"] == {
+        "status": "observed",
+        "value": captured,
+    }
+    assert json.dumps([payload, probes], sort_keys=True) == before
+    json.dumps(result, allow_nan=False)
+
+
+@pytest.mark.parametrize("bad_first", [False, True])
+def test_phase_timing_reversed_order_refuses_row_not_valid_peer(phase_snapshot, bad_first):
+    scope, probes, payload, row, run = phase_snapshot
+    peer = dict(row, backend=dict(row["backend"], pid=42), generation="e" * 32)
+    row["phase_started_monotonic"] = payload["captured_monotonic"] + 1
+    payload["rows"] = [row, peer] if bad_first else [peer, row]
+    probes["database"]["runtime_db_waits"]["rows"].append(dict(peer["backend"]))
+    before = json.dumps([payload, probes], sort_keys=True)
+    result = support._load_processing_phases(scope, probes)
+    assert result["status"] == "observed"
+    assert result["admission"]["admitted_count"] == result["admission"]["rejected_count"] == 1
+    assert result["admission"]["rejected_by_reason"] == {"invalid_phase_metadata": 1}
+    assert result["rows"][0]["backend"]["pid"] == 42
+    assert result["rows"][0]["phase_elapsed_seconds"] == 201
+    rejected = result["admission"]["rejected_active"]["rows"][0]
+    assert rejected["phase_started_monotonic"] == {"status": "observed", "value": 212}
+    assert "phase_elapsed_seconds" not in rejected
+    assert rejected["authority"] == "not_admitted_not_causal"
+    assert json.dumps([payload, probes], sort_keys=True) == before
