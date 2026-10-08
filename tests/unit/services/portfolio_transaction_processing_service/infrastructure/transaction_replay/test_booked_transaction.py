@@ -29,8 +29,9 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.tr
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay import (  # noqa: E501
     SqlAlchemyBookedTransactionReplayAdapter,
+    fee_authority,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay.booked_transaction import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay.fee_authority import (  # noqa: E501
     qualify_transaction_fee_source,
 )
 
@@ -89,12 +90,12 @@ async def test_fee_batch_requests_receipts_only_without_original_authority(
     monkeypatch, fields, raw_source
 ):
     from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay import (  # noqa: E501
-        booked_transaction as module,
+        fee_source_repository as module,
     )
 
     rows, facts, expected = _fee_preparation_batch(fields, raw_source=raw_source)
-    constructor = MagicMock(wraps=module._correction_fee_hypotheses)
-    monkeypatch.setattr(module, "_correction_fee_hypotheses", constructor)
+    constructor = MagicMock(wraps=fee_authority._correction_fee_hypotheses)
+    monkeypatch.setattr(fee_authority, "_correction_fee_hypotheses", constructor)
     session = _fee_fact_session(facts)
     assert (
         await module.load_qualified_transaction_fee_sources(
@@ -120,7 +121,7 @@ async def test_fee_batch_requests_receipts_only_without_original_authority(
 )
 async def test_prepared_query_positive_fees_never_replace_cost_validation(damage):
     from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay import (  # noqa: E501
-        booked_transaction as module,
+        fee_source_repository as module,
     )
 
     rows, facts, _ = _fee_preparation_batch({"brokerage": Decimal(1)})
@@ -183,15 +184,15 @@ async def test_malformed_fee_authority_is_typed_before_any_replay_publication(mo
 @pytest.mark.parametrize("mutation", ["canonical", "cost"])
 async def test_fee_preparation_rechecks_changed_input_after_receipt_query(monkeypatch, mutation):
     from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay import (  # noqa: E501
-        booked_transaction as module,
+        fee_source_repository as module,
     )
 
     _, _, canonical, costs, ordinary, correction = _corrected_fee_fixture(
         fields={"brokerage": Decimal(1)}
     )
     rows, facts = [canonical], [costs, [], [ordinary], [correction]]
-    constructor = MagicMock(wraps=module._correction_fee_hypotheses)
-    monkeypatch.setattr(module, "_correction_fee_hypotheses", constructor)
+    constructor = MagicMock(wraps=fee_authority._correction_fee_hypotheses)
+    monkeypatch.setattr(fee_authority, "_correction_fee_hypotheses", constructor)
     session = _fee_fact_session(facts)
     execute = session.execute.side_effect
 
@@ -214,7 +215,7 @@ async def test_fee_preparation_rechecks_changed_input_after_receipt_query(monkey
 
 def test_prepared_hypotheses_are_defensive_immutable_and_input_specific(monkeypatch):
     from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay import (  # noqa: E501
-        booked_transaction as module,
+        fee_authority as module,
     )
 
     _, row, _, _ = _retained_fee_fixture({})
@@ -243,7 +244,7 @@ def test_prepared_hypotheses_are_defensive_immutable_and_input_specific(monkeypa
 
 def test_distinct_rows_with_same_transaction_id_do_not_share_preparation():
     from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay import (  # noqa: E501
-        booked_transaction as module,
+        fee_authority as module,
     )
 
     _, first, _, _ = _retained_fee_fixture({})
@@ -257,7 +258,7 @@ def test_distinct_rows_with_same_transaction_id_do_not_share_preparation():
 @pytest.mark.parametrize("presence_mask", range(32))
 async def test_original_source_batch_preserves_every_none_zero_mask_without_receipts(presence_mask):
     from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay import (  # noqa: E501
-        booked_transaction as module,
+        fee_source_repository as module,
     )
 
     fields = {
@@ -291,7 +292,7 @@ async def test_mixed_batch_receipt_scope_is_pending_only_and_original_exam_is_no
     from sqlalchemy.dialects import postgresql
 
     from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay import (  # noqa: E501
-        booked_transaction as module,
+        fee_source_repository as module,
     )
 
     rows, facts, expected = _fee_preparation_batch({}, raw_source=True)
@@ -348,7 +349,7 @@ async def test_mixed_batch_receipt_scope_is_pending_only_and_original_exam_is_no
 @pytest.mark.parametrize("mutation", ["canonical", "cost", "raw"])
 async def test_mixed_batch_rejects_changed_original_input_after_receipt_await(boundary, mutation):
     from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay import (  # noqa: E501
-        booked_transaction as module,
+        fee_source_repository as module,
     )
 
     rows, facts, _ = _fee_preparation_batch({"brokerage": Decimal(1)}, raw_source=True)
@@ -386,12 +387,12 @@ async def test_mixed_batch_rejects_changed_original_input_after_receipt_await(bo
 @pytest.mark.parametrize("retained,derived", [(False, False), (False, True), (True, False)])
 async def test_fee_modes_do_not_eagerly_prepare_corrections(monkeypatch, retained, derived):
     from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay import (  # noqa: E501
-        booked_transaction as module,
+        fee_source_repository as module,
     )
 
     rows, facts, expected = _fee_preparation_batch({}, raw_source=True)
-    constructor = MagicMock(wraps=module._correction_fee_hypotheses)
-    monkeypatch.setattr(module, "_correction_fee_hypotheses", constructor)
+    constructor = MagicMock(wraps=fee_authority._correction_fee_hypotheses)
+    monkeypatch.setattr(fee_authority, "_correction_fee_hypotheses", constructor)
     assert (
         await module.load_qualified_transaction_fee_sources(
             _fee_fact_session(facts[:3]),
@@ -407,11 +408,11 @@ async def test_fee_modes_do_not_eagerly_prepare_corrections(monkeypatch, retaine
 @pytest.mark.asyncio
 async def test_empty_fee_batch_needs_no_preparation_or_query(monkeypatch):
     from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay import (  # noqa: E501
-        booked_transaction as module,
+        fee_source_repository as module,
     )
 
-    constructor = MagicMock(wraps=module._correction_fee_hypotheses)
-    monkeypatch.setattr(module, "_correction_fee_hypotheses", constructor)
+    constructor = MagicMock(wraps=fee_authority._correction_fee_hypotheses)
+    monkeypatch.setattr(fee_authority, "_correction_fee_hypotheses", constructor)
     session = AsyncMock()
     assert (
         await module.load_qualified_transaction_fee_sources(
@@ -590,6 +591,107 @@ def test_qualified_fee_projection_refuses_lost_or_conflicting_authority(damage):
         )
     with pytest.raises(ValueError):
         qualify_transaction_fee_source(canonical, costs, sources)
+
+
+@pytest.mark.parametrize("derived", [False, True])
+@pytest.mark.parametrize("presence", range(32))
+def test_raw_authority_preserves_every_zero_presence_with_canonical_validation(
+    monkeypatch, presence, derived
+):
+    fields = {
+        name: Decimal(0) if presence & (1 << index) else None
+        for index, name in enumerate(TRANSACTION_FEE_COMPONENT_FIELDS)
+    }
+    original = TransactionEvent.model_validate(vars(_replay_transaction("TXN")) | fields)
+    payload = original.model_dump(mode="python")
+    canonical = {
+        key: value for key, value in payload.items() if key not in TRANSACTION_FEE_COMPONENT_FIELDS
+    } | {"payload_fingerprint": transaction_payload_fingerprint(payload)}
+    raw = {"aggregate_id": original.portfolio_id, "payload": original.model_dump(mode="json")}
+    validate = MagicMock(wraps=TransactionEvent.model_validate)
+    fingerprint = MagicMock(wraps=transaction_payload_fingerprint)
+    hypotheses = MagicMock(wraps=fee_authority._fee_presence_hypotheses)
+    monkeypatch.setattr(fee_authority, "TransactionEvent", SimpleNamespace(model_validate=validate))
+    monkeypatch.setattr(fee_authority, "transaction_payload_fingerprint", fingerprint)
+    monkeypatch.setattr(fee_authority, "_fee_presence_hypotheses", hypotheses)
+
+    projected = qualify_transaction_fee_source(canonical, [], [raw], derived_financial=derived)
+
+    assert projected == fields | {"trade_fee": original.trade_fee}
+    assert validate.call_count == (33 if derived else 3)
+    assert fingerprint.call_count == (33 if derived else 3)
+    assert hypotheses.call_count == int(derived)
+
+
+@pytest.mark.parametrize("derived", [False, True])
+@pytest.mark.parametrize("shape", ["complete", "sparse", "zero-only", "aggregate-only", "none"])
+def test_all_matching_raw_rows_preserve_fee_projection(monkeypatch, shape, derived):
+    original, canonical, costs, raw = _fee_source_fixture(shape)
+    hypotheses = MagicMock(wraps=fee_authority._fee_presence_hypotheses)
+    monkeypatch.setattr(fee_authority, "_fee_presence_hypotheses", hypotheses)
+
+    projected = qualify_transaction_fee_source(
+        canonical, costs, [raw, raw], derived_financial=derived
+    )
+
+    assert projected == {
+        name: getattr(original, name) for name in TRANSACTION_FEE_COMPONENT_FIELDS
+    } | {"trade_fee": original.trade_fee}
+    assert hypotheses.call_count == int(derived)
+
+
+@pytest.mark.parametrize("derived", [False, True])
+@pytest.mark.parametrize(
+    "damage", ["aggregate", "tenant", "transaction", "portfolio", "fee", "malformed", "missing"]
+)
+def test_matching_first_raw_row_never_hides_later_bad_authority(damage, derived):
+    _original, canonical, costs, raw = _fee_source_fixture("sparse")
+    later = raw | {"payload": dict(raw["payload"])}
+    if damage == "aggregate":
+        later["aggregate_id"] = "foreign"
+    elif damage == "missing":
+        later.pop("payload")
+    else:
+        field, value = {
+            "tenant": ("tenant_id", "foreign"),
+            "transaction": ("transaction_id", "foreign"),
+            "portfolio": ("portfolio_id", "foreign"),
+            "fee": ("brokerage", "2"),
+            "malformed": ("gross_transaction_amount", "not-a-number"),
+        }[damage]
+        later["payload"][field] = value
+    with pytest.raises((ValueError, KeyError)):
+        qualify_transaction_fee_source(canonical, costs, [raw, later], derived_financial=derived)
+
+
+@pytest.mark.parametrize("derived,models,hashes", [(False, 2, 2), (True, 32, 32)])
+def test_absent_raw_authority_keeps_exhaustive_fallback(monkeypatch, derived, models, hashes):
+    original, canonical, costs, _raw = _fee_source_fixture("none")
+    validate = MagicMock(wraps=TransactionEvent.model_validate)
+    fingerprint = MagicMock(wraps=transaction_payload_fingerprint)
+    monkeypatch.setattr(fee_authority, "TransactionEvent", SimpleNamespace(model_validate=validate))
+    monkeypatch.setattr(fee_authority, "transaction_payload_fingerprint", fingerprint)
+
+    projected = qualify_transaction_fee_source(canonical, costs, [], derived_financial=derived)
+
+    assert projected == dict.fromkeys(TRANSACTION_FEE_COMPONENT_FIELDS) | {
+        "trade_fee": original.trade_fee
+    }
+    assert validate.call_count == models
+    assert fingerprint.call_count == hashes
+
+
+def test_all_raw_rows_still_require_one_unique_projection(monkeypatch):
+    _original, canonical, costs, raw = _fee_source_fixture("none")
+    later = raw | {"payload": raw["payload"] | {"gst": "0"}}
+    # A substituted oracle exercises the ambiguity guard, not a real hash collision.
+    monkeypatch.setattr(
+        fee_authority,
+        "transaction_payload_fingerprint",
+        lambda _payload: canonical["payload_fingerprint"],
+    )
+    with pytest.raises(ValueError, match="Ambiguous original named fee presence"):
+        qualify_transaction_fee_source(canonical, costs, [raw, later], derived_financial=True)
 
 
 def _fee_source_fixture(shape):
@@ -926,7 +1028,7 @@ def test_historical_correction_cannot_widen_original_or_unrelated_authority(dama
 @pytest.mark.parametrize("row_count", [2, 5])
 async def test_exact_correction_receipts_use_one_constant_extra_batch(row_count):
     from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay import (  # noqa: E501
-        booked_transaction as module,
+        fee_source_repository as module,
     )
 
     rows, ordinary_receipts, corrections = [], [], []
@@ -1131,7 +1233,7 @@ async def test_source_batch_queries_each_fact_family_once_and_qualifies_before_p
     from portfolio_common.reprocessing_repository import ReprocessingRepository
 
     from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay import (  # noqa: E501
-        booked_transaction as module,
+        fee_source_repository as module,
     )
 
     _, first, _, first_receipt = _retained_fee_fixture()
@@ -1166,17 +1268,88 @@ async def test_source_batch_queries_each_fact_family_once_and_qualifies_before_p
     assert sum("transaction_costs" in stmt for stmt in statements) == 1
     assert sum("outbox_events" in stmt for stmt in statements) == 1
     assert sum("processed_events" in stmt for stmt in statements) == 1
+    # The repository owns fee facts; the reader/publication seam belongs to transport.
+    from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay import (  # noqa: E501
+        booked_transaction as transport,
+    )
+
     # A corrupt second member rejects the complete source batch before Kafka publication.
     session.execute.side_effect = result_sets
     second_receipt["payload_fingerprint"] = "sha256:" + "f" * 64
     monkeypatch.setattr(
-        module, "load_transaction_replay_rows", AsyncMock(return_value=[first, second])
+        transport, "load_transaction_replay_rows", AsyncMock(return_value=[first, second])
     )
     publisher = MagicMock()
     replayer = ReprocessingRepository.from_ports(
-        reader=module.SqlAlchemyQualifiedTransactionReplayReader(session), publisher=publisher
+        reader=transport.SqlAlchemyQualifiedTransactionReplayReader(session), publisher=publisher
     )
     with pytest.raises(ReprocessingReplayError) as failure:
         await replayer.reprocess_transactions_by_ids(["TXN", "TXN2"])
     assert failure.value.failed_transaction_ids == ["TXN2"]
     publisher.publish_replay_message.assert_not_called()
+
+
+@pytest.mark.parametrize("derived", [False, True])
+@pytest.mark.parametrize("later_bad", [False, True])
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "currency",
+        "trade_currency",
+        "quantity",
+        "price",
+        "gross",
+        "date",
+        "precision",
+        "fx",
+        "interest-net",
+        "interest-deductions",
+        "redemption",
+    ],
+)
+def test_valid_raw_authority_cannot_bypass_canonical_model_refusal(derived, later_bad, fault):
+    from portfolio_common.domain.transaction.type_registry import (
+        production_transaction_types_for_lifecycle_families,
+    )
+    from pydantic import ValidationError
+
+    _original, canonical, costs, raw = _fee_source_fixture("sparse")
+    if fault in {"currency", "trade_currency"}:
+        canonical.pop(fault)
+    elif fault in {"quantity", "price", "gross"}:
+        canonical["gross_transaction_amount" if fault == "gross" else fault] = Decimal(-1)
+    elif fault == "date":
+        canonical["transaction_date"] = "not-a-date"
+    elif fault == "precision":
+        canonical["quantity"] = Decimal("1.0000000000000000000000000001")
+    elif fault == "fx":
+        canonical["transaction_fx_rate"] = Decimal(0)
+    elif fault == "interest-net":
+        canonical.update(transaction_type="INTEREST", net_interest_amount=Decimal(-1))
+    elif fault == "interest-deductions":
+        canonical.update(
+            transaction_type="INTEREST",
+            gross_transaction_amount=Decimal(1),
+            withholding_tax_amount=Decimal(2),
+        )
+    else:
+        canonical.update(
+            transaction_type=sorted(
+                production_transaction_types_for_lifecycle_families("redemption")
+            )[0],
+            settlement_date=None,
+        )
+    sources = [raw]
+    if later_bad:
+        sources.append(
+            {"aggregate_id": "foreign"}
+        )  # Missing payload must not mask earlier canonical failure.
+    with pytest.raises(ValidationError):
+        qualify_transaction_fee_source(canonical, costs, sources, derived_financial=derived)
+
+
+def test_missing_canonical_identity_precedes_later_bad_raw():
+    _original, canonical, costs, raw = _fee_source_fixture("sparse")
+    canonical.pop("transaction_id")
+    with pytest.raises(KeyError, match="transaction_id"):
+        qualify_transaction_fee_source(canonical, costs, [raw, {"aggregate_id": "foreign"}])
