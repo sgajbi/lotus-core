@@ -199,6 +199,64 @@ def position_timeseries_scope_fingerprint(
     return fingerprint
 
 
+def position_timeseries_scopes(
+    *,
+    portfolio_id: str,
+    request: PositionAnalyticsTimeseriesRequest,
+    resolved_window: AnalyticsWindow,
+    reporting_currency: str,
+    expected_business_dates: list[date],
+    business_calendar_present: bool,
+    predecessor_business_date: date | None = None,
+) -> tuple[str, str]:
+    """Keep cursor compatibility while normalizing only SQL-IN selector semantics."""
+
+    scope = dict(
+        portfolio_id=portfolio_id,
+        resolved_window=resolved_window,
+        reporting_currency=reporting_currency,
+        expected_business_dates=expected_business_dates,
+        business_calendar_present=business_calendar_present,
+        predecessor_business_date=predecessor_business_date,
+    )
+    security_ids = sorted(
+        {
+            normalized
+            for value in request.filters.security_ids
+            if (normalized := normalize_security_id(value))
+        }
+    )
+    position_ids = sorted(
+        {
+            f"{portfolio_id}:{normalized}"
+            for value in request.filters.position_ids
+            if ":" in value
+            and value.split(":", 1)[0] == portfolio_id
+            and (normalized := normalize_security_id(value.split(":", 1)[1]))
+        }
+    )
+    economic_request = request.model_copy(
+        update={
+            "filters": request.filters.model_copy(
+                update={
+                    "security_ids": security_ids,
+                    "position_ids": position_ids,
+                }
+            )
+        }
+    )
+    economic_scope = request_fingerprint(
+        {
+            "identity_version": "position-economic-request-v1",
+            "basis": position_timeseries_scope_fingerprint(request=economic_request, **scope),
+            # An absent selector means all rows; a supplied invalid selector means none.
+            "security_filter_enabled": bool(request.filters.security_ids),
+            "position_filter_enabled": bool(request.filters.position_ids),
+        }
+    )
+    return position_timeseries_scope_fingerprint(request=request, **scope), economic_scope
+
+
 def business_dates_digest(expected_business_dates: list[date]) -> str:
     """Return deterministic identity for the governed calendar slice used by one page."""
 

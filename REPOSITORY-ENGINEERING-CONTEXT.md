@@ -988,6 +988,13 @@ and temporary blockers in GitHub.
 9. [Platform engineering context](https://github.com/sgajbi/lotus-platform/blob/main/context/LOTUS-ENGINEERING-CONTEXT.md)
 
 
+## Position economic identity practice
+
+Position response-page economic scope normalizes security/position selector membership according
+to the adapter's distinct SQL-IN semantics, separately from unchanged cursor/request scope.
+No filter and a supplied-but-invalid filter remain distinct. Do not canonicalize other order or
+multiplicity without proving its query semantics; returned duplicate economic rows remain counted.
+
 ## Fee replay authority ownership practice
 
 Transaction replay separates pure fee qualification (`fee_authority.py`), SQL and

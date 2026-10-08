@@ -69,6 +69,53 @@ def make_service() -> AnalyticsTimeseriesService:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("selector", ["security_ids", "position_ids"])
+@pytest.mark.parametrize("variant", ["reordered", "duplicate", "whitespace"])
+async def test_position_content_identity_uses_query_equivalent_selectors(selector, variant):
+    service = make_service()
+    _install_canonical_portfolio_timeseries_repo(service)
+    source_rows = service.repo.list_position_timeseries_rows_unpaged.return_value
+    service.repo.list_position_timeseries_rows = AsyncMock(return_value=source_rows)
+    portfolio_id = "PB_SG_GLOBAL_BAL_001"
+    securities = ["SEC_SG_BOND_001", "SEC_OTHER"]
+    selectors = (
+        securities
+        if selector == "security_ids"
+        else [f"{portfolio_id}:{security}" for security in securities]
+    )
+    request = PositionAnalyticsTimeseriesRequest(
+        as_of_date="2026-07-03",
+        window=AnalyticsWindow(start_date="2026-07-03", end_date="2026-07-03"),
+        filters={selector: selectors},
+    )
+    before = await service.get_position_timeseries(portfolio_id=portfolio_id, request=request)
+    if variant == "reordered":
+        changed = list(reversed(selectors))
+    elif variant == "duplicate":
+        changed = selectors + selectors[:1]
+    else:
+        changed = [
+            f" {value} " if selector == "security_ids" else f"{value} " for value in selectors
+        ]
+    revised = request.model_copy(
+        update={"filters": request.filters.model_copy(update={selector: changed})}
+    )
+    after = await service.get_position_timeseries(portfolio_id=portfolio_id, request=revised)
+    # Actual adapter selectors use distinct normalized SQL IN membership, not multiplicity.
+    normalize = (
+        AnalyticsTimeseriesRepository._normalized_security_ids
+        if selector == "security_ids"
+        else lambda values: AnalyticsTimeseriesRepository._security_ids_from_position_ids(
+            portfolio_id, values
+        )
+    )
+    assert set(normalize(selectors)) == set(normalize(changed))
+    assert before.rows == after.rows
+    assert before.page.request_scope_fingerprint != after.page.request_scope_fingerprint
+    assert before.content_hash == after.content_hash
+
+
+@pytest.mark.asyncio
 async def test_position_cashflow_epoch_evidence_failure_is_insufficient_data() -> None:
     service = make_service()
     service.repo = SimpleNamespace(

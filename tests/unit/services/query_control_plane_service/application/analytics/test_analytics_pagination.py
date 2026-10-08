@@ -17,12 +17,89 @@ from src.services.query_control_plane_service.app.application.analytics.analytic
     position_timeseries_diagnostics,
     position_timeseries_next_page_token,
     position_timeseries_scope_fingerprint,
+    position_timeseries_scopes,
 )
 from src.services.query_control_plane_service.app.contracts.analytics_inputs import (
     AnalyticsWindow,
     PortfolioAnalyticsTimeseriesRequest,
     PositionAnalyticsTimeseriesRequest,
 )
+
+
+def _position_identity_scopes(**changes):
+    window = AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31")
+    request = PositionAnalyticsTimeseriesRequest(as_of_date="2025-01-31", window=window)
+    basis = dict(
+        portfolio_id="P1",
+        request=request,
+        resolved_window=window,
+        reporting_currency="USD",
+        expected_business_dates=[date(2025, 1, 2)],
+        business_calendar_present=True,
+        predecessor_business_date=date(2024, 12, 31),
+    )
+    basis.update(changes)
+    cursor, economic = position_timeseries_scopes(**basis)
+    assert cursor == position_timeseries_scope_fingerprint(**basis)
+    return cursor, economic
+
+
+@pytest.mark.parametrize("selector", ["security_ids", "position_ids"])
+def test_economic_selector_membership_and_empty_vs_invalid_are_distinct(selector):
+    request = PositionAnalyticsTimeseriesRequest(
+        as_of_date="2025-01-31",
+        window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31"),
+    )
+
+    def identity(values):
+        return _position_identity_scopes(
+            request=request.model_copy(
+                update={"filters": request.filters.model_copy(update={selector: values})}
+            )
+        )[1]
+
+    valid_a = "A" if selector == "security_ids" else "P1:A"
+    valid_b = "B" if selector == "security_ids" else "P1:B"
+    invalid = " " if selector == "security_ids" else "FOREIGN:A"
+    assert identity([valid_a]) != identity([valid_b])
+    assert identity([]) != identity([invalid]) != identity([valid_a])
+    assert identity([valid_a, valid_a]) == identity([valid_a])
+    # The adapter ignores invalid members only when at least one valid member exists.
+    assert identity([valid_a, invalid]) == identity([valid_a])
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"portfolio_id": "P2"},
+        {"reporting_currency": "SGD"},
+        {"resolved_window": AnalyticsWindow(start_date="2025-01-02", end_date="2025-01-31")},
+        {"expected_business_dates": [date(2025, 1, 3)]},
+        {"business_calendar_present": False},
+        {"predecessor_business_date": None},
+    ],
+)
+def test_economic_scope_preserves_portfolio_currency_window_calendar_basis(change):
+    assert _position_identity_scopes()[1] != _position_identity_scopes(**change)[1]
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"as_of_date": date(2025, 2, 1)},
+        {"include_cash_flows": False},
+        {"dimensions": ["sector"]},
+    ],
+)
+def test_economic_scope_preserves_non_selector_request_semantics(change):
+    request = PositionAnalyticsTimeseriesRequest(
+        as_of_date="2025-01-31",
+        window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31"),
+    )
+    assert (
+        _position_identity_scopes(request=request)[1]
+        != _position_identity_scopes(request=request.model_copy(update=change))[1]
+    )
 
 
 @pytest.mark.asyncio

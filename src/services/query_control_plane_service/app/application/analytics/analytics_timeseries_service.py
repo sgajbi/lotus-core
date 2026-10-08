@@ -103,7 +103,7 @@ from .analytics_pagination import (
     position_timeseries_cursor,
     position_timeseries_diagnostics,
     position_timeseries_next_page_token,
-    position_timeseries_scope_fingerprint,
+    position_timeseries_scopes,
 )
 from .analytics_portfolio_pages import (
     AnalyticsPortfolioPageError,
@@ -809,7 +809,7 @@ class AnalyticsTimeseriesService:
         expected_dates, calendar_present, predecessor_date = await business_calendar_scope(
             self.repo, resolved_window
         )
-        request_scope_fingerprint = position_timeseries_scope_fingerprint(
+        request_scope_fingerprint, economic_scope_fingerprint = position_timeseries_scopes(
             portfolio_id=portfolio_id,
             request=request,
             resolved_window=resolved_window,
@@ -933,7 +933,7 @@ class AnalyticsTimeseriesService:
             rows=response_rows,
             **analytics_page_runtime_metadata(
                 product="PositionTimeseriesInput",
-                request_scope=request_scope_fingerprint,
+                request_scope=economic_scope_fingerprint,
                 rows=response_rows,
                 as_of_date=request.as_of_date,
                 generated_at=generated_at,

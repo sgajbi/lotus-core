@@ -46,6 +46,13 @@ rounding; dates and row ordering are deterministic. Serving timestamps and corre
 not economic revisions. Valuation, dated FX or cashflow corrections that change returned rows
 change their content identity even when the request fingerprint and selected epoch are unchanged.
 
+Position economic identity uses normalized distinct security/position selector membership, matching
+the repository's SQL inclusion filters: equivalent selector order, duplicates and security-ID
+whitespace do not represent economic revisions. An absent filter (all rows) remains distinct from
+a supplied filter with no valid members (no rows). Cursor/request fingerprints retain their
+existing order-sensitive compatibility; other request basis and response-row multiplicity remain
+bound to content identity.
+
 `source_lineage.content_identity_scope` is `response_page`. Each page has its own digest;
 `source_lineage.source_cut_status` remains `UNAVAILABLE` and `source_cut_id` remains null. Do not
 compare page digests as whole-window revisions, concatenate them into an official source cut, or
