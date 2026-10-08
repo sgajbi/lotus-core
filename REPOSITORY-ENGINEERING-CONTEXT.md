@@ -370,6 +370,15 @@ Financial locks, epochs, SQL atomicity, topology, pool sizes and SLOs retain the
 
 ## Current-State Summary
 
+Operational FX ingestion rejects unknown row and batch fields before job creation/publication;
+it does not silently discard caller custody claims. The existing four-field directed pair/date/exact
+rate input and native persisted-event identity algorithm remain unchanged. Persisted FX admission
+recomputes content and observation identities before correction-side database work; hashes prove
+consistency, not authenticated provider custody. Generation time remains processing time, not
+provider observation. Mutable pair/date storage is not retained fixing history. Genuine provider,
+revision, calendar and cut qualification remains outstanding under #458; #1227 diagnostic facts
+remain unqualified. See [FX source admission](docs/operations/fx-source-admission.md).
+
 Analytics export collection retains ordered source-page metadata through the existing job result
 JSON and both JSON/NDJSON result formats. Aggregate current evidence requires every page to be
 complete/current/non-degraded. Mixed known cuts fail before result completion; missing cuts remain

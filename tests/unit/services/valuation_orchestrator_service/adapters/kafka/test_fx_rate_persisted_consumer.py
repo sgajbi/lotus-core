@@ -1,14 +1,16 @@
 """Kafka adapter tests for persisted FX correction events."""
 
+import json
 from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from portfolio_common.event_mapping import EventContractValidationError
-from portfolio_common.events import GOVERNED_EVENT_SCHEMA_VERSION, FxRatePersistedEvent
+from portfolio_common.events import GOVERNED_EVENT_SCHEMA_VERSION, FxRateEvent, FxRatePersistedEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.valuation_job_contracts import ValuationJobUpsert
 from portfolio_common.valuation_job_repository import ValuationJobRepository
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.valuation_orchestrator_service.app.adapters.kafka import (
@@ -29,17 +31,37 @@ pytestmark = pytest.mark.asyncio
 
 @pytest.fixture
 def event() -> FxRatePersistedEvent:
-    return FxRatePersistedEvent(
-        from_currency="USD",
-        to_currency="SGD",
-        rate_date=date(2026, 4, 10),
-        rate="1.35",
+    persisted = FxRatePersistedEvent.from_observation(
+        FxRateEvent(
+            from_currency="USD", to_currency="SGD", rate_date=date(2026, 4, 10), rate="1.35"
+        ),
         generated_at=datetime(2026, 4, 10, 8, tzinfo=timezone.utc),
-        content_hash="sha256:" + ("a" * 64),
-        observation_id="sha256:" + ("b" * 64),
+    )
+    return FxRatePersistedEvent(
+        **persisted.model_dump(exclude={"event_type", "schema_version"}),
         event_type="FxRatePersisted",
         schema_version=GOVERNED_EVENT_SCHEMA_VERSION,
     )
+
+
+@pytest.mark.parametrize("field", ["rate", "content_hash", "observation_id"])
+async def test_mismatched_persisted_identity_refuses_before_database_access(
+    consumer,
+    message,
+    event,
+    field,
+    monkeypatch,
+) -> None:
+    payload = event.model_dump(mode="json")
+    payload[field] = "1.36" if field == "rate" else "sha256:" + "c" * 64
+    message.value.return_value = json.dumps(payload).encode("utf-8")
+    database_access = MagicMock(
+        side_effect=AssertionError("invalid event must not access database")
+    )
+    monkeypatch.setattr(fx_rate_persisted_consumer, "get_async_db_session", database_access)
+    with pytest.raises(ValidationError, match="persisted FX.*identity"):
+        await consumer.process_message(message)
+    database_access.assert_not_called()
 
 
 @pytest.fixture

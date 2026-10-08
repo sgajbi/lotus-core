@@ -321,6 +321,26 @@ class FxRatePersistedEvent(FxRateEvent):
         self.generated_at = self.generated_at.astimezone(timezone.utc)
         return self
 
+    @model_validator(mode="after")
+    def _require_consistent_persisted_identity(self) -> "FxRatePersistedEvent":
+        """Verify native content binding; this is not provider authentication."""
+        from .source_data_product_metadata import stable_content_hash
+
+        observation = FxRateEvent.model_validate(
+            self.model_dump(include=set(FxRateEvent.model_fields))
+        )
+        expected_content_hash = stable_content_hash(event_business_payload(observation))
+        if self.content_hash != expected_content_hash:
+            raise ValueError("persisted FX content identity does not match business content")
+        expected_observation_id = stable_content_hash(
+            {"content_hash": expected_content_hash, "generated_at": self.generated_at}
+        )
+        if self.observation_id != expected_observation_id:
+            raise ValueError(
+                "persisted FX observation identity does not match content and generation time"
+            )
+        return self
+
     @classmethod
     def from_observation(
         cls,

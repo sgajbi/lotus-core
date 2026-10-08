@@ -37,6 +37,29 @@ or downstream financial processing. Use the contract-specific evidence below whe
 - replay and operations control-plane contracts from `event_replay_service`
 - reconciliation control execution contracts
 
+## Operational FX Intake And Persisted Evidence
+
+`POST /ingest/fx-rates` accepts only the existing directed pair, business date and exact positive
+rate, inside `fx_rates`. Unknown record and batch fields return HTTP 422 before job creation or
+publication. Callers must not append provider, observation-time, revision, hash, calendar or cut
+claims: the operational input does not retain or qualify them. Valid ingestion remains asynchronous;
+HTTP 202 is queue acceptance, not provider approval or completed persistence.
+
+The native persistence path emits `FxRatePersistedEvent`. Its existing `content_hash` binds the
+canonical four business fields; `observation_id` also binds the actual `generated_at` processing
+time. The event model recomputes both identities on admission, and the correction consumer refuses
+a mismatched event before database access. Diagnostic correlation and tracing do not alter either
+identity. This consistency check is not a signature, provider authentication or immutable fixing
+history. A party that can rewrite content and both hashes has not established source authority.
+
+The operational pair/date store remains mutable. Provider-observed time, approved registry binding,
+retained fixing revision/supersession, fixing calendar and coherent source cut still require genuine
+canonical producer custody. Neither generated/database timestamps nor an unavailable envelope
+replace the qualified `MarketDataWindow` target. Preserve unqualified #1227 diagnostic semantics;
+Performance owns financial calculations and export contracts, and Report assembles authoritative Excel.
+See the [FX source admission guide](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/fx-source-admission.md)
+for a valid request, refusal handling and the remaining qualification boundary.
+
 ## Analytics Content Identity
 
 `PortfolioTimeseriesInput` and `PositionTimeseriesInput` publish a deterministic `content_hash`

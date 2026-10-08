@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 
 import pytest
 from portfolio_common.domain.currency import (
@@ -111,6 +112,59 @@ def test_fx_rate_persisted_event_replay_has_same_observation_identity() -> None:
     )
 
     assert first.observation_id == replay.observation_id
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("from_currency", "GBP"),
+        ("to_currency", "CHF"),
+        ("rate_date", "2026-05-27"),
+        ("rate", "1.0910000000"),
+        ("generated_at", "2026-05-28T11:00:00Z"),
+        ("content_hash", "sha256:" + "a" * 64),
+        ("observation_id", "sha256:" + "b" * 64),
+    ],
+)
+def test_fx_persisted_event_refuses_identity_content_mismatch(field, replacement) -> None:
+    event = FxRatePersistedEvent.from_observation(
+        FxRateEvent(from_currency="EUR", to_currency="USD", rate_date="2026-05-28", rate="1.0875"),
+        generated_at=datetime(2026, 5, 28, 10, tzinfo=timezone.utc),
+    )
+    payload = event.model_dump(mode="json")
+    payload[field] = replacement
+    with pytest.raises(ValueError, match="persisted FX.*identity"):
+        FxRatePersistedEvent.model_validate(payload)
+
+
+def test_fx_persisted_event_wire_replay_preserves_identity_without_diagnostic_lineage() -> None:
+    original = FxRatePersistedEvent.from_observation(
+        FxRateEvent(from_currency="EUR", to_currency="USD", rate_date="2026-05-28", rate="1.0875"),
+        generated_at=datetime(2026, 5, 28, 10, tzinfo=timezone.utc),
+    )
+    payload = original.model_dump(mode="json")
+    payload.update(
+        correlation_id="trace-new-replay", event_type="FxRatePersisted", schema_version="1.0.0"
+    )
+    replay = FxRatePersistedEvent.model_validate(payload)
+    assert replay.content_hash == original.content_hash
+    assert replay.observation_id == original.observation_id
+
+
+def test_fx_persisted_event_accepts_existing_canonical_wire_identity() -> None:
+    # Independent SHA-256 oracle over sorted compact JSON, not the production factory.
+    event = FxRatePersistedEvent.model_validate(
+        {
+            "from_currency": "EUR",
+            "to_currency": "USD",
+            "rate_date": "2026-05-28",
+            "rate": "1.0875",
+            "generated_at": "2026-05-28T10:00:00Z",
+            "content_hash": "sha256:bc4c86a5eaa8bbc698e2d75bcb312c87704a48bb6d7f80f9fac7745a299a2c42",
+            "observation_id": "sha256:e7b9034ad07a8bc82947096e736461888e99063177a4cc03c12187bd5c2aa9b2",
+        }
+    )
+    assert event.rate == Decimal("1.0875")
 
 
 @pytest.mark.parametrize("rate", ["0", "-0.0001"])
