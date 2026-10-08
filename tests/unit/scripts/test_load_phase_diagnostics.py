@@ -14,6 +14,7 @@ from prometheus_client import CollectorRegistry, Gauge, generate_latest
 
 from scripts.operations import performance_load_gate as gate
 from scripts.operations.performance import load_completion_diagnostics as support
+from scripts.operations.performance import load_phase_evidence as phase_evidence
 
 
 def response_body(monkeypatch, body):
@@ -128,7 +129,7 @@ def phase_snapshot(monkeypatch):
             "container_id": "e" * 64,
             "started_at": "container-birth",
         },
-        "database": {"runtime_db_waits": {"rows": [dict(backend)]}},
+        "database": {"runtime_db_waits": {"status": "observed", "rows": [dict(backend)]}},
     }
     run = MagicMock(
         side_effect=lambda *args, **kwargs: SimpleNamespace(stdout=json.dumps(payload).encode())
@@ -389,7 +390,7 @@ def test_phase_admission_invalid_counters_never_coerce_or_export(phase_snapshot,
 @pytest.mark.parametrize("value", [0, 2**31 - 1, None])
 def test_phase_admission_counter_boundaries_and_absence(value):
     expected = "missing" if value is None else "observed"
-    assert support._phase_counter(value) == {"status": expected, "value": value}
+    assert phase_evidence.phase_counter(value) == {"status": expected, "value": value}
 
 
 @pytest.mark.parametrize(
@@ -493,7 +494,7 @@ def test_phase_admission_contract_counts_reject_unknown_or_inconsistent_categori
     candidate, active, admitted, reasons
 ):
     with pytest.raises(ValueError):
-        support._phase_admission_counts(candidate, active, admitted, reasons)
+        phase_evidence.phase_admission_counts(candidate, active, admitted, reasons)
 
 
 def test_phase_admission_mixed_snapshot_counts_partition_all_candidates(phase_snapshot):
@@ -514,4 +515,180 @@ def test_phase_admission_mixed_snapshot_counts_partition_all_candidates(phase_sn
 
 def test_phase_admission_active_count_cannot_disagree_with_rejection_partition():
     with pytest.raises(ValueError, match="phase_admission_active_count_mismatch"):
-        support._phase_admission_counts(1, 1, 0, {"inactive": 1})
+        phase_evidence.phase_admission_counts(1, 1, 0, {"inactive": 1})
+
+
+def test_rejected_active_birth_key_and_snapshot_time_survive_without_admission(phase_snapshot):
+    scope, probes, payload, row, run = phase_snapshot
+    probes["database"]["runtime_db_waits"]["rows"][0]["backend_start"] = "2020-01-01T00:00:00Z"
+    result = support._load_processing_phases(scope, probes)
+    assert result["rows"] == [] and result["admission"]["admitted_count"] == 0
+    assert result["admission"]["rejected_by_reason"] == {"backend_not_in_observed_sample": 1}
+    rejected = result["admission"]["rejected_active"]["rows"][0]
+    assert rejected["backend"]["value"] == row["backend"]
+    assert rejected["generation"]["value"] == row["generation"] != payload["run_generation"]
+    assert rejected["match_diagnostics"]["same_pid_birth_mismatch_count"] == 1
+    assert rejected["authority"] == "not_admitted_not_causal"
+    timing = result["snapshot_timing"]
+    assert timing["captured_at"]["value"] == payload["captured_at"]
+    assert timing["captured_monotonic"]["value"] == payload["captured_monotonic"]
+    assert timing["clock_relation"] == "worker_monotonic_not_collector_clock"
+    assert result["snapshot_identity"]["worker_pid"]["value"] == payload["worker_pid"]
+    assert result["snapshot_identity"]["run_generation"]["value"] == scope["phase_generation"]
+    assert "do-not-export" not in json.dumps(result)
+
+
+@pytest.mark.parametrize("worker", [None, True, "private-worker", -1, 2**31])
+def test_snapshot_worker_identity_missing_or_invalid_is_safe_not_admission(phase_snapshot, worker):
+    scope, probes, payload, row, run = phase_snapshot
+    payload["worker_pid"] = worker
+    result = support._load_processing_phases(scope, probes)
+    assert result["snapshot_identity"]["worker_pid"] == {
+        "status": "missing" if worker is None else "invalid",
+        "value": None,
+    }
+    assert result["rows"] == [] and "private-worker" not in json.dumps(result)
+
+
+@pytest.mark.parametrize(
+    "mutation,reason,full,birth,database",
+    [
+        ("valid", None, None, None, None),
+        ("outside", "backend_not_in_observed_sample", 0, 0, 0),
+        ("reuse", "backend_not_in_observed_sample", 0, 1, 0),
+        ("database", "backend_not_in_observed_sample", 0, 0, 1),
+        ("ambiguous", "backend_identity_ambiguous", 2, 0, 0),
+        ("duplicate", "duplicate_pid", 1, 0, 0),
+        ("inactive", "inactive", None, None, None),
+    ],
+)
+def test_join_measurement_does_not_change_first_refusal_or_admission(
+    phase_snapshot, mutation, reason, full, birth, database
+):
+    scope, probes, payload, row, run = phase_snapshot
+    waits = probes["database"]["runtime_db_waits"]["rows"]
+    if mutation == "outside":
+        waits.clear()
+    elif mutation == "reuse":
+        waits[0]["backend_start"] = "2020-01-01T00:00:00Z"
+    elif mutation == "database":
+        waits[0]["database_oid"] = 9
+    elif mutation == "ambiguous":
+        waits.append(dict(waits[0]))
+    elif mutation == "duplicate":
+        payload["rows"].append(dict(row, generation="f" * 32))
+    elif mutation == "inactive":
+        row["active"] = False
+    result = support._load_processing_phases(scope, probes)
+    count = 2 if mutation == "duplicate" else 1
+    assert result["admission"]["rejected_by_reason"] == ({reason: count} if reason else {})
+    assert result["admission"]["admitted_count"] == (1 if reason is None else 0)
+    detail = result["admission"]["rejected_active"]
+    if mutation in {"valid", "inactive"}:
+        assert detail["rows"] == []
+    else:
+        assert len(detail["rows"]) == count
+        for record in detail["rows"]:
+            match = record["match_diagnostics"]
+            assert match["full_key_match_count"] == full
+            assert match["same_pid_birth_mismatch_count"] == birth
+            assert match["same_pid_database_mismatch_count"] == database
+            assert record["reason"] == reason and record["authority"] == "not_admitted_not_causal"
+
+
+@pytest.mark.parametrize(
+    "key,bad",
+    [
+        ("generation", "private-generation"),
+        ("delivery_hash", "private-business-id"),
+        ("repair_delivery_hash", "private-repair-id"),
+        ("worker_pid", "private-worker"),
+        ("task_identity", "private-task"),
+        ("phase", "private-phase"),
+        ("phase_started_monotonic", float("inf")),
+        ("updated_monotonic", float("nan")),
+        ("updated_monotonic", -1),
+        ("updated_monotonic", True),
+        ("backend", {"pid": True, "backend_start": "private-birth", "database_oid": 7}),
+    ],
+)
+def test_rejected_candidate_projection_refuses_sensitive_or_invalid_fields(
+    phase_snapshot, key, bad
+):
+    scope, probes, payload, row, run = phase_snapshot
+    probes["database"]["runtime_db_waits"]["rows"] = []
+    row[key] = bad
+    row["request_body"] = "private-body"
+    result = support._load_processing_phases(scope, probes)
+    projected = result["admission"]["rejected_active"]["rows"][0]
+    assert projected[key] == {"status": "invalid", "value": None}
+    assert "private-" not in json.dumps(result, allow_nan=False)
+    assert result["rows"] == []
+    assert result["admission"]["admitted_count"] == 0
+
+
+def test_rejected_metadata_missing_and_clock_domains_remain_unqualified(phase_snapshot):
+    scope, probes, payload, row, run = phase_snapshot
+    probes["database"]["runtime_db_waits"]["rows"] = []
+    for key in ("backend", "task_identity", "updated_monotonic"):
+        row.pop(key, None)
+    payload["captured_monotonic"] = 10**12  # Not the collector's monotonic epoch.
+    result = support._load_processing_phases(scope, probes)
+    record = result["admission"]["rejected_active"]["rows"][0]
+    assert all(
+        record[key] == {"status": "missing", "value": None}
+        for key in ("backend", "task_identity", "updated_monotonic")
+    )
+    assert record["match_diagnostics"]["full_key_match_count"] is None
+    assert result["snapshot_timing"]["captured_monotonic"]["value"] == 10**12
+    assert result["rows"] == [] and result["sample_status"] == "observed"
+
+
+def test_delayed_snapshot_and_collector_clock_regression_do_not_rewrite_admission(
+    phase_snapshot, monkeypatch
+):
+    scope, probes, payload, row, run = phase_snapshot
+    payload["captured_at"] = 100
+    wall = iter([110, 109, 110])
+    ticks = iter([1000, 1001])
+    monkeypatch.setattr(support.time, "time", lambda: next(wall))
+    monkeypatch.setattr(support.time, "monotonic", lambda: next(ticks))
+    result = support._load_processing_phases(scope, probes)
+    assert result["rows"][0]["backend"]["pid"] == 41
+    assert result["transport_interval"]["wall_order"] == "clock_regression"
+    assert result["transport_interval"]["elapsed_seconds"]["value"] == 1
+    assert result["snapshot_timing"]["captured_at"]["value"] == 100
+    assert result["snapshot_timing"]["clock_relation"] == "worker_monotonic_not_collector_clock"
+
+
+@pytest.mark.parametrize("outcome", ["valid", "rejected", "duplicate"])
+def test_pure_phase_evidence_preserves_raw_inputs_and_detaches_public_outputs(
+    phase_snapshot, outcome
+):
+    scope, probes, payload, row, run = phase_snapshot
+    waits = probes["database"]["runtime_db_waits"]["rows"]
+    if outcome == "rejected":
+        waits[0]["database_oid"] = 9
+    elif outcome == "duplicate":
+        payload["rows"].append(dict(row))
+    before = json.dumps([payload, waits], sort_keys=True)
+    admitted, admission = phase_evidence.processing_phase_admission(payload["rows"], payload, waits)
+    sample = phase_evidence.original_wait_sample(waits)
+    snapshot = phase_evidence.snapshot_measurements(payload, scope["phase_generation"], "observed")
+    assert admission["admitted_count"] == (1 if outcome == "valid" else 0)
+    assert admission["rejected_by_reason"] == (
+        {}
+        if outcome == "valid"
+        else {"backend_not_in_observed_sample": 1}
+        if outcome == "rejected"
+        else {"duplicate_pid": 2}
+    )
+    if admitted:
+        admitted[0]["backend"]["pid"] = -1
+    else:
+        rejected = admission["rejected_active"]["rows"][0]
+        assert rejected["authority"] == "not_admitted_not_causal"
+        rejected["backend"]["value"]["pid"] = -1
+    sample["rows"][0]["backend"]["value"]["pid"] = -1
+    snapshot["snapshot_identity"]["worker_pid"]["value"] = -1
+    assert json.dumps([payload, waits], sort_keys=True) == before

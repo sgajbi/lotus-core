@@ -362,6 +362,34 @@ explicit byte-budget refusals; unavailable evidence is not zero or successful co
 Compaction neither relaxes admission/redaction nor proves the financial timeout cause. The
 20-row, six-second collection and enforcing drain/SLO budgets remain unchanged.
 
+Phase join measurements preserve a safe rejected-active projection, not an alternate admission
+path. `processing_phases.admission.rejected_active` contains at most20 identity/phase records with
+the original first-refusal reason and `authority=not_admitted_not_causal`. Backend identity is
+the full PID, timezone-qualified backend birth and database OID. Run generation remains distinct
+from each delivery's row generation. Only validated worker/task identities, salted hashes,
+allowlisted phase names and finite nonnegative worker monotonic times are retained; missing or
+invalid values have explicit status and null value. Raw rejected input, SQL, bodies and business
+identifiers are never exported. Supporting same-PID birth/database mismatch and full-key match
+counts describe the original bounded sample, not database-wide absence or financial causes.
+
+`runtime_db_waits.original_sample` preserves the pre-compaction identity-only vector used by
+admission. The existing query is unchanged: current database, supported applications or their
+blockers, transaction-start ordering and SQL LIMIT20. Coverage beyond that SQL limit is unknown.
+`sampling_interval` measures that query's execute/fetch interval; `transport_interval` measures
+the later phase-file read. `snapshot_timing` retains the worker's capture wall and monotonic
+times; `snapshot_identity` retains its validated run generation and worker PID separately from
+rejected-row worker/task identities. Collector and worker monotonic clocks are not interchangeable;
+periodic snapshot publication and wall-clock uncertainty prevent an atomic active-at-query claim. Wall-clock
+regression is explicit. Snapshot timing never supplies a new admission rule or an exact await.
+
+Identity and rejected-candidate detail can itself be compacted. Inspect `detail_status` and
+`byte_budget_coverage` before attempting a join: partial detail is unavailable for omitted keys,
+not a negative match or authority to select by PID alone. Admission counts/refusals remain intact.
+The outer32768-byte cap, child30720-byte reserve,20-row collections, six-second capture and
+independent180-second full-profile SLO remain fixed. There are no extra queries, wider samples,
+emitter/cadence changes or financial lock, epoch, tenant or economic changes. These measurements
+do not retrospectively reconstruct identities missing from earlier receipts or qualify main.
+
 Fee-source qualification examines the complete original cost/raw authority before requesting
 retained processing receipts. Only an explicit absence of qualified original authority admits
 the scoped receipt lookup; conflicting raw sources, malformed fees and ambiguous authority still

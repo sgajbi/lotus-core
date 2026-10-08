@@ -17,6 +17,7 @@ import pytest
 from scripts.operations import performance_load_gate as gate
 from scripts.operations import transaction_processing_load_support as support
 from scripts.operations.performance import load_completion_diagnostics as collector
+from scripts.operations.performance import load_phase_evidence as phase_evidence
 from scripts.operations.performance.load_diagnostic_capture import (
     SCOPE_INPUT_MAX_BYTES,
     DiagnosticCapture,
@@ -1103,6 +1104,113 @@ def test_ordinary_public_payload_unchanged_and_irreducible_envelope_refused():
     assert len(json.dumps(result).encode()) <= 32768
     with pytest.raises(ValueError, match="diagnostic_envelope_cannot_fit"):
         bound_diagnostic_evidence(oversized, 8)
+
+
+def test_original_wait_identity_vector_is_safe_and_measures_existing_query_interval(monkeypatch):
+    backend = {"pid": 41, "backend_start": "2026-10-08T00:00:00Z", "database_oid": 7}
+    cursor = MagicMock()
+    cursor.__enter__.return_value = cursor
+    cursor.fetchmany.return_value = [dict(backend, private_statement="SELECT 'private-business'")]
+    connection = MagicMock()
+    connection.cursor.return_value = cursor
+    wall = iter(range(100, 140))
+    ticks = iter(range(1000, 1040))
+    monkeypatch.setattr(collector.time, "time", lambda: next(wall))
+    monkeypatch.setattr(collector.time, "monotonic", lambda: next(ticks))
+    result = collector._load_database_probes(
+        connection,
+        {"portfolio_id": "PERF_BALANCED_V1", "submitted_ids": [], "ingestion_job_ids": []},
+        object,
+    )
+    waits = result["runtime_db_waits"]
+    vector = waits["original_sample"]
+    assert vector["rows"][0]["backend"] == {
+        "status": "observed",
+        "value": {**backend, "backend_start": "2026-10-08T00:00:00+00:00"},
+    }
+    assert vector["rows"][0]["sample_index"] == 0
+    assert vector["original_rows"] == 1 and vector["row_limit"] == 20
+    assert vector["overflow"] == "unknown_beyond_sql_limit"
+    assert waits["sampling_interval"]["elapsed_seconds"]["value"] == 1
+    assert "private-business" not in json.dumps(vector)
+    queries = [call.args[0] for call in cursor.execute.call_args_list]
+    # No extra measurement SQL: the same two no-source probes, one waits query.
+    assert len(queries) == 2
+    assert sum("FROM pg_stat_activity" in query and "LIMIT 20" in query for query in queries) == 1
+    connection.rollback.assert_not_called()
+
+
+@pytest.mark.parametrize("limit", [30720, 6500])
+def test_join_details_compact_with_explicit_omissions_and_unchanged_admission(limit):
+    original = public_diagnostic_payload()
+    waits = original["probes"]["database"]["runtime_db_waits"]
+    waits["original_sample"] = {
+        "rows": [
+            {"sample_index": index, "backend": phase_evidence.backend_measurement(row)}
+            for index, row in enumerate(waits["rows"])
+        ],
+        "detail_status": "retained",
+        "original_rows": 20,
+        "row_limit": 20,
+        "scope": "pre_compaction_identity_only_not_whole_database",
+    }
+    rows = [
+        {
+            "active": True,
+            "generation": f"{index:032x}",
+            "worker_pid": 5,
+            "task_identity": "0xabc",
+            "phase": "position",
+            "backend": {
+                "pid": 500 + index,
+                "backend_start": "2026-10-08T01:15:39Z",
+                "database_oid": 1,
+            },
+            "phase_started_monotonic": 10,
+            "updated_monotonic": 11,
+            "delivery_hash": "c" * 64,
+            "repair_delivery_hash": None,
+        }
+        for index in range(20)
+    ]
+    admitted, summary = phase_evidence.processing_phase_admission(
+        rows, {"run_generation": "a" * 32, "worker_pid": 5}, waits["rows"]
+    )
+    assert admitted == []
+    original["probes"]["processing_phases"]["admission"] = summary
+    before = json.dumps(original)
+    result = bound_diagnostic_evidence(original, limit)
+    assert json.dumps(original) == before
+    assert len(json.dumps(result).encode()) <= limit
+    assert "probes" in result
+    admission = result["probes"]["processing_phases"]["admission"]
+    assert admission["admitted_count"] == 0 and admission["active_count"] == 20
+    assert admission["rejected_by_reason"] == {"backend_not_in_observed_sample": 20}
+    sample = result["probes"]["database"]["runtime_db_waits"]["original_sample"]
+    for owner in (admission["rejected_active"], sample):
+        assert owner["original_rows"] == 20
+        if coverage := owner.get("byte_budget_coverage", {}).get("rows"):
+            assert coverage["omitted_rows"] + len(owner["rows"]) == 20
+            assert coverage["retained_rows"] == len(owner["rows"])
+            assert owner["detail_status"] == "partial_due_to_byte_budget"
+    if limit == 6500:
+        rejected = admission["rejected_active"]
+        assert rejected["detail_status"] == "partial_due_to_byte_budget"
+        controls = rejected["byte_budget_coverage"]["rows"]["omitted_row_controls"]
+        assert all(record["authority"] == "not_admitted_not_causal" for record in controls)
+        assert sum(record["omitted_rows_with_controls"] for record in controls) == (
+            20 - len(rejected["rows"])
+        )
+        assert sample["detail_status"] == "partial_due_to_byte_budget"
+
+
+@pytest.mark.parametrize(
+    "bad", [None, True, "private-time", float("nan"), float("inf"), -1, 10**400]
+)
+def test_measurement_refuses_invalid_or_missing_clock_without_echoing(bad):
+    result = phase_evidence.measurement(bad, phase_evidence.finite_nonnegative(bad))
+    assert result == {"status": "missing" if bad is None else "invalid", "value": None}
+    assert "private" not in json.dumps(result, allow_nan=False)
 
 
 def test_unconfirmed_receiver_finalization_is_explicit_and_cached():
