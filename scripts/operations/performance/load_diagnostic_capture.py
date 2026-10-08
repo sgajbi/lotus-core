@@ -47,6 +47,7 @@ _ROW_CONTROLS = frozenset(
         "edge_identity_status",
         "exact_await",
         "scope",
+        "authority",
     }
 )
 
@@ -56,7 +57,7 @@ def _diagnostic_bytes(value: dict[str, Any]) -> bytes:
 
 
 def _diagnostic_row_collections(value: Any) -> list[tuple[dict[str, Any], str]]:
-    """Only sample collections are expendable; admission and refusal trees are not."""
+    """Sample/identity detail is expendable, never admission counts or refusal controls."""
     collections = []
     if isinstance(value, dict):
         for key, child in value.items():
@@ -125,7 +126,7 @@ def bound_diagnostic_evidence(evidence: dict[str, Any], max_bytes: int) -> dict[
     raw = _diagnostic_bytes(evidence)
     if len(raw) <= max_bytes:
         return evidence
-    result = json.loads(raw)
+    result: dict[str, Any] = json.loads(raw)
     probes = result.get("probes", {})
     if not isinstance(probes, dict) or probes.keys() - _PUBLIC_PROBES:
         return _diagnostic_budget_refusal(result, max_bytes)
@@ -174,6 +175,8 @@ def bound_diagnostic_evidence(evidence: dict[str, Any], max_bytes: int) -> dict[
             if controls:
                 _record_omitted_controls(coverage["omitted_row_controls"], controls)
         owner["truncated"] = True
+        if "detail_status" in owner:
+            owner["detail_status"] = "partial_due_to_byte_budget"
     return result
 
 

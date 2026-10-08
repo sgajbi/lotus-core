@@ -888,7 +888,13 @@ exception boundary. `transaction_processing_load_support.py` owns supported ackn
 lineage and the shared completion/fixture probes. The existing performance package owns
 `scripts/operations/performance/load_completion_diagnostics.py` for isolated bounded process,
 database, metric and Kafka diagnostics. Main imports it directly; shared support has no reverse
-import or compatibility alias. Keep
+import or compatibility alias.
+`scripts/operations/performance/load_phase_evidence.py` owns pure phase admission, the single
+backend identity validator and phase allowlist, and safe supporting identity/timing projections.
+The collector imports it directly and retains SQL, transport, clock acquisition and lifecycle;
+the evidence module has only standard-library imports and no reverse dependency. Supporting
+rejected measurements cannot admit a row or establish causality. Byte omission status stays
+with `load_diagnostic_capture.py`; no runtime or deployment split is introduced. Keep
 portfolio aggregate claims separate from prefix domain counts; replay not-run, missing evidence,
 budget exhaustion and unconfirmed child cleanup cannot become successful or zero observations.
 Never relax economics, input cardinality, financial admission, ordering or drain SLOs to collect

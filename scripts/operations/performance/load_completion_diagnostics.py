@@ -21,6 +21,7 @@ from portfolio_common.database_runtime_profile import DatabasePoolMode
 from portfolio_common.db import create_sync_database_engine
 from prometheus_client.parser import text_string_to_metric_families
 
+from scripts.operations.performance import load_phase_evidence as phase_evidence
 from scripts.operations.performance.load_diagnostic_capture import (
     DiagnosticCapture,
     DiagnosticScopeSlot,
@@ -32,7 +33,6 @@ from scripts.operations.transaction_processing_load_support import LOAD_TENANT_I
 DIAGNOSTIC_BUDGET_SECONDS = 6.0
 DIAGNOSTIC_MAX_BYTES = 32768
 DIAGNOSTIC_METRICS_INPUT_MAX_BYTES = 1024 * 1024
-DIAGNOSTIC_MAX_ROWS = 20
 DIAGNOSTIC_IO_SECONDS = 0.5
 _OFFSET_SCOPES = (
     ("transactions.raw.received", "persistence_group_transactions"),
@@ -493,8 +493,12 @@ def _load_database_probes(
             continue
         try:
             with connection.cursor(cursor_factory=cursor_factory) as cursor:
+                started = (time.time(), time.monotonic())
                 cursor.execute(query, params)
-                fetched = [dict(row) for row in cursor.fetchmany(DIAGNOSTIC_MAX_ROWS + 1)]
+                fetched = [dict(row) for row in cursor.fetchmany(phase_evidence.MAX_ROWS + 1)]
+                interval = phase_evidence.diagnostic_interval(
+                    started, (time.time(), time.monotonic())
+                )
             if name == "runtime_db_locks":
                 _qualify_lock_edges(fetched, result.get("runtime_db_waits", {}).get("rows", []))
                 fetched.sort(
@@ -504,7 +508,7 @@ def _load_database_probes(
                         row.get("blocking_role") != "blocker_head",
                     )
                 )
-            rows = fetched[:DIAGNOSTIC_MAX_ROWS]
+            rows = fetched[: phase_evidence.MAX_ROWS]
             totals = [row.pop("total_rows") for row in rows if "total_rows" in row]
             if name == "runtime_db_waits":
                 for row in rows:
@@ -518,12 +522,15 @@ def _load_database_probes(
             result[name] = {
                 "status": "observed",
                 "rows": rows,
-                "row_limit": DIAGNOSTIC_MAX_ROWS,
-                "truncated": len(fetched) > DIAGNOSTIC_MAX_ROWS
-                or any(total > DIAGNOSTIC_MAX_ROWS for total in totals),
+                "row_limit": phase_evidence.MAX_ROWS,
+                "truncated": len(fetched) > phase_evidence.MAX_ROWS
+                or any(total > phase_evidence.MAX_ROWS for total in totals),
                 "observed_total_rows": max(totals) if totals else None,
                 "scope": "isolated_runtime" if name.startswith("runtime_db_") else "submitted_ids",
             }
+            if name == "runtime_db_waits":
+                result[name]["sampling_interval"] = interval
+                result[name]["original_sample"] = phase_evidence.original_wait_sample(rows)
         except Exception as exc:
             connection.rollback()
             result[name] = {"status": "unavailable", "reason": type(exc).__name__}
@@ -653,7 +660,7 @@ def _load_consumer_metrics(metrics_url: str) -> dict[str, Any]:
                     return {"status": "unavailable", "reason": "private_or_unknown_metric_labels"}
                 if not math.isfinite(sample.value):
                     return {"status": "unavailable", "reason": "nonfinite_metric_value"}
-                if len(samples) == DIAGNOSTIC_MAX_ROWS:
+                if len(samples) == phase_evidence.MAX_ROWS:
                     truncated = True
                     continue
                 samples.append(
@@ -661,7 +668,7 @@ def _load_consumer_metrics(metrics_url: str) -> dict[str, Any]:
                 )
     except (ValueError, UnicodeError):
         return {"status": "unavailable", "reason": "malformed_metrics"}
-    result = {
+    result: dict[str, Any] = {
         "status": "observed" if samples else "unavailable",
         "scope": "runtime_aggregate_not_prefix",
         "lag_semantics": "cached_high_watermark_minus_committed",
@@ -782,6 +789,7 @@ def _load_processing_phases(scope: dict[str, Any], probes: dict[str, Any]) -> di
         or worker.get("started_at") != scope.get("phase_container_started_at")
     ):
         return {"status": "unavailable", "reason": "phase_container_generation_mismatch"}
+    started = (time.time(), time.monotonic())
     result = subprocess.run(
         [
             "docker",
@@ -795,6 +803,7 @@ def _load_processing_phases(scope: dict[str, Any], probes: dict[str, Any]) -> di
         capture_output=True,
         timeout=DIAGNOSTIC_IO_SECONDS,
     )
+    interval = phase_evidence.diagnostic_interval(started, (time.time(), time.monotonic()))
     if len(result.stdout) > 16384:
         return {"status": "unavailable", "reason": "phase_snapshot_byte_budget"}
     payload = json.loads(result.stdout)
@@ -803,10 +812,12 @@ def _load_processing_phases(scope: dict[str, Any], probes: dict[str, Any]) -> di
     if not 0 <= time.time() - payload.get("captured_at", 0) < 120:
         return {"status": "unavailable", "reason": "phase_snapshot_stale"}
     rows = payload.get("rows", [])
-    if not isinstance(rows, list) or len(rows) > DIAGNOSTIC_MAX_ROWS:
+    if not isinstance(rows, list) or len(rows) > phase_evidence.MAX_ROWS:
         return {"status": "unavailable", "reason": "phase_row_budget"}
-    waits = probes.get("database", {}).get("runtime_db_waits", {}).get("rows", [])
-    qualified, admission = _processing_phase_admission(rows, payload, waits)
+    wait_probe = probes.get("database", {}).get("runtime_db_waits", {})
+    waits = wait_probe.get("rows", [])
+    sample_status = wait_probe.get("status")
+    qualified, admission = phase_evidence.processing_phase_admission(rows, payload, waits)
     return {
         "status": "observed" if qualified else "unavailable",
         "reason": None if qualified else "no_birth_qualified_active_phase",
@@ -814,177 +825,9 @@ def _load_processing_phases(scope: dict[str, Any], probes: dict[str, Any]) -> di
         "admission": admission,
         "truncated": bool(payload.get("truncated")),
         "row_limit": 20,
+        "transport_interval": interval,
+        **phase_evidence.snapshot_measurements(payload, generation, sample_status),
     }
-
-
-_PHASE_REJECTION_REASONS = frozenset(
-    {
-        "invalid_row",
-        "inactive",
-        "backend_missing",
-        "backend_identity_invalid",
-        "backend_not_in_observed_sample",
-        "backend_identity_ambiguous",
-        "invalid_phase_metadata",
-        "duplicate_pid",
-    }
-)
-_PHASE_COUNTER_MAX = 2**31 - 1
-
-
-def _phase_counter(value: Any) -> dict[str, Any]:
-    """Missing or malformed supporting counters never become zero or row authority."""
-    if value is None:
-        return {"status": "missing", "value": None}
-    if type(value) is not int or not 0 <= value <= _PHASE_COUNTER_MAX:
-        return {"status": "invalid", "value": None}
-    return {"status": "observed", "value": value}
-
-
-def _phase_candidate_rejection(row: Any, waits: list[dict[str, Any]]) -> str | None:
-    if not isinstance(row, dict):
-        return "invalid_row"
-    if row.get("active") is not True:
-        return "inactive"
-    backend = row.get("backend")
-    if not isinstance(backend, dict):
-        return "backend_missing"
-    identity = _diagnostic_backend_identity(backend)
-    if identity is None:
-        return "backend_identity_invalid"
-    matches = sum(_diagnostic_backend_identity(w) == identity for w in waits)
-    if matches == 0:
-        return "backend_not_in_observed_sample"
-    return "backend_identity_ambiguous" if matches > 1 else None
-
-
-def _phase_admission_counts(
-    candidate: int, active: int, admitted: int, reasons: dict[str, int]
-) -> dict[str, Any]:
-    """Closed mutually exclusive first-rejection counts, not runtime failure causes."""
-    counts = (candidate, active, admitted, *reasons.values())
-    if any(type(n) is not int or not 0 <= n <= DIAGNOSTIC_MAX_ROWS for n in counts):
-        raise ValueError("phase_admission_count_invalid")
-    if set(reasons) - _PHASE_REJECTION_REASONS:
-        raise ValueError("phase_admission_category_invalid")
-    if not admitted <= active <= candidate or sum(reasons.values()) != candidate - admitted:
-        raise ValueError("phase_admission_count_mismatch")
-    if active != candidate - reasons.get("inactive", 0) - reasons.get("invalid_row", 0):
-        raise ValueError("phase_admission_active_count_mismatch")
-    return {
-        "schema_version": "processing-phase-admission.v1",
-        "candidate_count": candidate,
-        "active_count": active,
-        "admitted_count": admitted,
-        "rejected_count": candidate - admitted,
-        "rejected_by_reason": reasons,
-        "scope": "bounded_snapshot_rows_not_whole_worker",
-    }
-
-
-def _processing_phase_admission(
-    rows: list[Any], payload: dict[str, Any], waits: list[dict[str, Any]]
-) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    qualified = []
-    reasons: dict[str, int] = {}
-    for row in rows:
-        reason = _phase_candidate_rejection(row, waits)
-        projected = None if reason else _project_processing_phase(row, payload, waits)
-        if reason is None and projected is None:
-            reason = "invalid_phase_metadata"
-        if reason is not None:
-            reasons[reason] = reasons.get(reason, 0) + 1
-        elif projected is not None:
-            qualified.append(projected)
-    # Preserve the existing fail-closed ambiguity rule; never pick one by row order.
-    pids = [row["backend"]["pid"] for row in qualified]
-    admitted = [row for row in qualified if pids.count(row["backend"]["pid"]) == 1]
-    duplicate_count = len(qualified) - len(admitted)
-    if duplicate_count:
-        reasons["duplicate_pid"] = duplicate_count
-    active = sum(isinstance(row, dict) and row.get("active") is True for row in rows)
-    summary = _phase_admission_counts(len(rows), active, len(admitted), reasons)
-    summary["worker_counters"] = {
-        key: _phase_counter(payload.get(key)) for key in ("capture_errors", "callback_failures")
-    }
-    return admitted, summary
-
-
-def _diagnostic_backend_identity(value: Any) -> tuple[int, datetime, int] | None:
-    if not isinstance(value, dict):
-        return None
-    pid, oid, birth = value.get("pid"), value.get("database_oid"), value.get("backend_start")
-    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
-        return None
-    if not isinstance(oid, int) or isinstance(oid, bool) or oid <= 0 or not isinstance(birth, str):
-        return None
-    try:
-        parsed = datetime.fromisoformat(birth)
-        return (pid, parsed.astimezone(UTC), oid) if parsed.tzinfo is not None else None
-    except ValueError:
-        return None
-
-
-def _diagnostic_hex(value: Any, size: int) -> bool:
-    return isinstance(value, str) and re.fullmatch(rf"[a-f0-9]{{{size}}}", value) is not None
-
-
-def _project_processing_phase(
-    row: Any, payload: dict[str, Any], waits: list[dict[str, Any]]
-) -> dict[str, Any] | None:
-    if not isinstance(row, dict) or row.get("active") is not True:
-        return None
-    backend = row.get("backend")
-    if not isinstance(backend, dict):
-        return None
-    identity = _diagnostic_backend_identity(backend)
-    if identity is None or sum(_diagnostic_backend_identity(w) == identity for w in waits) != 1:
-        return None
-    if not _diagnostic_hex(row.get("generation"), 32) or not _diagnostic_hex(
-        row.get("delivery_hash"), 64
-    ):
-        return None
-    repair_hash = row.get("repair_delivery_hash")
-    if repair_hash is not None and not _diagnostic_hex(repair_hash, 64):
-        return None
-    if row.get("phase") not in {
-        "uow_enter",
-        "idempotency",
-        "repair_qualification",
-        "first_publication_qualification",
-        "cost",
-        "position",
-        "cashflow",
-        "readiness",
-        "commit",
-        "source_cut_flush",
-        "durable_commit",
-        "rollback",
-        "session_close",
-        "finished",
-    }:
-        return None
-    if type(row.get("worker_pid")) is not int or row["worker_pid"] != payload.get("worker_pid"):
-        return None
-    task = row.get("task_identity")
-    if not isinstance(task, str) or not re.fullmatch(r"0x[a-f0-9]{1,16}", task):
-        return None
-    elapsed = payload.get("captured_monotonic", 0) - row.get("phase_started_monotonic", 0)
-    if not math.isfinite(elapsed) or elapsed < 0:
-        return None
-    projected = {
-        k: row[k]
-        for k in ("generation", "worker_pid", "delivery_hash", "repair_delivery_hash", "phase")
-    }
-    projected.update(
-        backend={k: backend[k] for k in ("pid", "backend_start", "database_oid")},
-        task_identity=task,
-        phase_elapsed_seconds=elapsed,
-        correlation="backend_pid_birth_database_generation",
-        exact_await="MISSING",
-        boundary="phase_in_progress_not_python_await",
-    )
-    return projected
 
 
 def _public_consumer_labels(labels: dict[str, str]) -> bool:
@@ -1049,7 +892,7 @@ def _load_consumer_offsets(bootstrap_servers: str, deadline: float) -> dict[str,
                 pending.append((consumer, observation, iter(partition_ids)))
             except Exception as exc:
                 observation.update(status="unavailable", reason=type(exc).__name__)
-        while pending and len(result) < DIAGNOSTIC_MAX_ROWS:
+        while pending and len(result) < phase_evidence.MAX_ROWS:
             remaining: list[tuple[Consumer, dict[str, Any], Iterator[int]]] = []
             for consumer, observation, partitions in pending:
                 partition = next(partitions, None)
@@ -1062,7 +905,7 @@ def _load_consumer_offsets(bootstrap_servers: str, deadline: float) -> dict[str,
                         "groups": groups,
                         "group_joined": False,
                     }
-                if len(result) == DIAGNOSTIC_MAX_ROWS:
+                if len(result) == phase_evidence.MAX_ROWS:
                     remaining.append((consumer, observation, partitions))
                     break
                 key = TopicPartition(observation["topic"], partition)
@@ -1100,7 +943,7 @@ def _load_consumer_offsets(bootstrap_servers: str, deadline: float) -> dict[str,
         "partitions": result,
         "groups": groups,
         "group_joined": False,
-        "row_limit": DIAGNOSTIC_MAX_ROWS,
+        "row_limit": phase_evidence.MAX_ROWS,
         "truncated": sum(g.get("total_partitions", 0) for g in groups) > len(result),
         "sampling": "round_robin_across_three_groups",
     }

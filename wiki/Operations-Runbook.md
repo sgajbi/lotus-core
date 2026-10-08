@@ -937,7 +937,21 @@ not all worker deliveries: truncation can omit work. Missing or invalid capture/
 counters remain explicit missing/invalid with null values, never zero. Counters do not
 qualify rejected rows, and rejection reasons do not diagnose timeout causes. Backend-not-in-
 observed-sample differs from an absent backend; duplicate PID candidates remain refused.
-No raw rejected task, delivery or backend rows are exported. Exact await remains `MISSING`.
+No raw rejected task, delivery or backend rows are exported. A safe bounded rejected-active
+projection retains validated backend PID/birth/database keys, distinct row/run generations,
+worker/task identities, salted hashes and allowlisted phase/timing fields, with explicit
+missing/invalid values. These records are `not_admitted_not_causal`; same-PID mismatch counts
+cannot override the existing full-key admission or diagnose a financial wait.
+
+For a phase join, compare this projection with `runtime_db_waits.original_sample`, the original
+pre-compaction identity-only vector. Check `detail_status` and byte-budget omission coverage first:
+omitted keys mean unavailable attribution, never zero or PID-only authority. SQL selection and
+its20-row limit remain unchanged; coverage beyond the SQL limit is unknown. Collector query/read
+intervals and worker snapshot timestamps expose non-atomic sampling. Worker monotonic time is
+not the collector clock, and delayed publication or wall-clock uncertainty still prevents an
+active-at-query claim. No extra query or emitter change is introduced. The32KiB outer cap,
+30720-byte child reserve, six-second capture and180-second full-profile SLO are unchanged.
+Exact await remains `MISSING`.
 Replay-reader
 sessions and publisher confirmation outside the processing UOW remain unobserved. File/capture
 failures cannot replace a business exception; callback failures have a saturating process-local
