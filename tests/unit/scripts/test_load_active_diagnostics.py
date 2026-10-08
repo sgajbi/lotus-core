@@ -370,18 +370,22 @@ def test_total_setup_receipt_includes_delayed_factory_success_and_refusal(
     capture = MagicMock()
     capture.preparation_status = "ready"
     capture.finish.return_value = {"status": "unused", "capture_timing": {"requested_at": None}}
+    clock = Clock()
 
     def factory(**kwargs):
-        time.sleep(0.05)
+        clock.sleep(0.05)
         if failed:
             raise OSError("private factory path")
         return capture
 
     monkeypatch.setattr(gate, "start_load_completion_diagnostics", factory)
     report.boundary_capture = None
-    report.prepare_replay_capture([])
+    # This checks elapsed-time bookkeeping, not OS sleep accuracy or latency.
+    with monkeypatch.context() as timing:
+        timing.setattr(gate.time, "monotonic", lambda: clock.now)
+        report.prepare_replay_capture([])
     setup = dict(report.replay_preparation)
-    assert setup["setup_elapsed_seconds"] >= 0.05
+    assert setup["setup_elapsed_seconds"] == 0.05
     assert setup["status"] == ("unavailable" if failed else "ready")
     written = []
     monkeypatch.setattr(gate, "_write_report", lambda **kwargs: written.append(kwargs))
@@ -634,11 +638,73 @@ def test_partial_spawn_or_worker_failure_and_idle_expiry_retire_private_slot(mon
     )
     if failure == "idle":
         assert capture.done.wait(2)
+    # Completion retires the child/slot, but does not certify that the timer's
+    # return has been scheduled. This positive fixture observes actual worker
+    # termination before asking finish() for a stopped receipt. The held-live
+    # control below preserves the production bounded-join refusal.
+    assert capture.done.wait(2)
+    for worker in (capture.timer, capture.reader):
+        if worker is not None and worker.ident is not None:
+            worker.join(timeout=2)
+            assert not worker.is_alive()
     result = assert_custody_closed(capture)
     assert result["child_cleanup"]["scope_slot"] == "retired"
     assert not capture.bind_scope(bound_scope()) and not capture.request()
     with pytest.raises(FileNotFoundError):
         read_diagnostic_scope(descriptor, bound_scope())
+
+
+@pytest.mark.parametrize("hold_at_exit", [True, False])
+def test_partial_reader_start_failure_preserves_actual_timer_custody(monkeypatch, hold_at_exit):
+    """Supervisor completion is not thread termination or historical CI causality."""
+    returned, release = threading.Event(), threading.Event()
+    original_supervise = DiagnosticCapture._supervise
+    original_start = threading.Thread.start
+    slot = DiagnosticScopeSlot(bound_scope())
+    descriptor = slot.descriptor
+    capture = None
+
+    def supervise(instance):
+        original_supervise(instance)
+        returned.set()
+        assert release.wait(10), "fixture timer release missing"
+
+    def start(worker):
+        if getattr(worker._target, "__name__", None) == "_receive":
+            raise RuntimeError("private worker adapter")
+        original_start(worker)
+
+    monkeypatch.setattr(DiagnosticCapture, "_supervise", supervise)
+    monkeypatch.setattr(threading.Thread, "start", start)
+    try:
+        capture = actual_capture(request=False, scope_slot=slot)
+        assert returned.wait(2)
+        assert capture.done.is_set() and capture.timer.is_alive()
+        if not hold_at_exit:
+            release.set()
+            capture.timer.join(timeout=2)
+            assert not capture.timer.is_alive()
+        result = capture.finish()
+        assert result["custody_threads_cleanup"] == ("unconfirmed" if hold_at_exit else "stopped")
+        assert capture.timer.is_alive() is hold_at_exit
+        assert capture.reader.ident is None and not capture.reader.is_alive()
+        assert result["child_cleanup"]["status"] == "stopped"
+        assert result["child_cleanup"]["scope_slot"] == "retired"
+        assert capture.sender.closed and capture.receiver.closed and slot.closed
+        with pytest.raises(FileNotFoundError):
+            read_diagnostic_scope(descriptor, bound_scope())
+        release.set()
+        capture.timer.join(timeout=2)
+        assert not capture.timer.is_alive()
+        # Releasing later must not rewrite the original unconfirmed receipt.
+        assert capture.finish() is result
+        assert result["custody_threads_cleanup"] == ("unconfirmed" if hold_at_exit else "stopped")
+    finally:
+        release.set()
+        if capture is not None and capture.timer is not None:
+            capture.timer.join(timeout=2)
+            assert not capture.timer.is_alive()
+        slot.close()
 
 
 def test_request_header_is_constant_work_without_json_serialization_or_ack_wait(monkeypatch):
