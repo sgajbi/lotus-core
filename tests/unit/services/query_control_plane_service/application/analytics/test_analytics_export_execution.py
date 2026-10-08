@@ -24,15 +24,17 @@ async def test_collect_portfolio_timeseries_for_export_pages_until_token_exhaust
             SimpleNamespace(
                 observations=[SimpleNamespace(model_dump=lambda mode="json": {"d": "1"})],
                 page=SimpleNamespace(next_page_token="n1"),
+                model_dump=lambda **_kwargs: {},
             ),
             SimpleNamespace(
                 observations=[SimpleNamespace(model_dump=lambda mode="json": {"d": "2"})],
                 page=SimpleNamespace(next_page_token=None),
+                model_dump=lambda **_kwargs: {},
             ),
         ]
     )
 
-    rows, depth = await collect_portfolio_timeseries_for_export(
+    rows, depth, evidence = await collect_portfolio_timeseries_for_export(
         portfolio_id="P1",
         request=PortfolioAnalyticsTimeseriesRequest(as_of_date="2025-12-31", period="one_month"),
         get_portfolio_timeseries=get_portfolio_timeseries,
@@ -40,6 +42,7 @@ async def test_collect_portfolio_timeseries_for_export_pages_until_token_exhaust
 
     assert rows == [{"d": "1"}, {"d": "2"}]
     assert depth == 2
+    assert evidence.source_cut_status == "UNAVAILABLE"
     first_request = get_portfolio_timeseries.await_args_list[0].kwargs["request"]
     second_request = get_portfolio_timeseries.await_args_list[1].kwargs["request"]
     assert first_request.page.page_size == PORTFOLIO_EXPORT_PAGE_SIZE
@@ -54,15 +57,17 @@ async def test_collect_position_timeseries_for_export_pages_until_token_exhauste
             SimpleNamespace(
                 rows=[SimpleNamespace(model_dump=lambda mode="json": {"p": "1"})],
                 page=SimpleNamespace(next_page_token="n1"),
+                model_dump=lambda **_kwargs: {},
             ),
             SimpleNamespace(
                 rows=[SimpleNamespace(model_dump=lambda mode="json": {"p": "2"})],
                 page=SimpleNamespace(next_page_token=None),
+                model_dump=lambda **_kwargs: {},
             ),
         ]
     )
 
-    rows, depth = await collect_position_timeseries_for_export(
+    rows, depth, evidence = await collect_position_timeseries_for_export(
         portfolio_id="P1",
         request=PositionAnalyticsTimeseriesRequest(as_of_date="2025-12-31", period="one_month"),
         get_position_timeseries=get_position_timeseries,
@@ -70,6 +75,7 @@ async def test_collect_position_timeseries_for_export_pages_until_token_exhauste
 
     assert rows == [{"p": "1"}, {"p": "2"}]
     assert depth == 2
+    assert evidence.source_cut_status == "UNAVAILABLE"
     first_request = get_position_timeseries.await_args_list[0].kwargs["request"]
     second_request = get_position_timeseries.await_args_list[1].kwargs["request"]
     assert first_request.page.page_size == POSITION_EXPORT_PAGE_SIZE

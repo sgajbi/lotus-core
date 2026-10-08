@@ -351,7 +351,10 @@ async def get_analytics_export_job(
     description=(
         "What: Retrieve finalized export payload for a completed analytics export job.\n"
         "How: Returns JSON envelope or NDJSON stream with optional gzip encoding and "
-        "includes deterministic request/result provenance metadata.\n"
+        "includes the source-page evidence retained at completion. JSON and NDJSON expose "
+        "the same ordered evidence and conservative quality/cut availability; legacy exports "
+        "explicitly lack retained source evidence. Transport completion is not financial "
+        "supportability.\n"
         "When: Used by lotus-performance batch pipelines and similar downstream bulk retrieval "
         "flows after job completion instead of repeatedly replaying large paged windows."
     ),

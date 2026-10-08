@@ -15,6 +15,9 @@ from src.services.query_control_plane_service.app.application.analytics import a
 from src.services.query_control_plane_service.app.application.analytics.analytics_cashflow_evidence import (  # noqa: E501
     load_position_cashflow_rows,
 )
+from src.services.query_control_plane_service.app.application.analytics.analytics_export_execution import (  # noqa: E501
+    AnalyticsExportDataset,
+)
 from src.services.query_control_plane_service.app.application.analytics.analytics_export_jobs import (  # noqa: E501
     analytics_export_jsonable,
 )
@@ -25,6 +28,9 @@ from src.services.query_control_plane_service.app.application.analytics.analytic
     AnalyticsInputError,
     AnalyticsRuntimePolicy,
     AnalyticsTimeseriesService,
+)
+from src.services.query_control_plane_service.app.contracts.analytics_export_evidence import (
+    AnalyticsExportSourceEvidence,
 )
 from src.services.query_control_plane_service.app.contracts.analytics_inputs import (
     AnalyticsExportCreateRequest,
@@ -66,6 +72,59 @@ def make_service() -> AnalyticsTimeseriesService:
             export_execution_timeout_seconds=300,
         ),
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reject", [False, True])
+async def test_export_source_transaction_ends_before_lifecycle_transition(reject):
+    """Real session transaction state, no database provider or implicit lifecycle commit."""
+    async with AsyncSession() as session:
+        service = make_service()
+        service._unit_of_work = SqlAlchemyAnalyticsUnitOfWork(session)
+        evidence = AnalyticsExportSourceEvidence(availability="RETAINED")
+
+        async def collect(_request):
+            # Repository reads autobegin when the application has not opened a boundary.
+            if not session.in_transaction():
+                await session.begin()
+            if reject:
+                raise AnalyticsInputError("INSUFFICIENT_DATA", "Conflicting source cuts")
+            return AnalyticsExportDataset([{"amount": "123.45"}], 1, evidence)
+
+        async def complete(job_id, *, result_payload, result_row_count):
+            async with session.begin():
+                assert job_id == "aexp_txn"
+                assert result_payload["data"] == [{"amount": "123.45"}]
+                assert result_payload["source_evidence"] == evidence.model_dump(mode="json")
+                assert result_row_count == 1
+                return SimpleNamespace(status="completed")
+
+        service._collect_export_dataset = AsyncMock(side_effect=collect)
+        service._mark_export_job_completed = AsyncMock(side_effect=complete)
+        request = AnalyticsExportCreateRequest(
+            dataset_type="portfolio_timeseries",
+            portfolio_id="P1",
+            portfolio_timeseries_request={"as_of_date": "2025-12-31", "period": "one_month"},
+        )
+        if reject:
+            with pytest.raises(AnalyticsInputError, match="Conflicting source cuts"):
+                await service._execute_export_job(
+                    job_id="aexp_txn",
+                    request=request,
+                    request_fingerprint="scope1",
+                )
+            service._mark_export_job_completed.assert_not_awaited()
+            assert not session.in_transaction()
+            # Failure persistence must be free to open its own lifecycle boundary.
+            async with session.begin():
+                pass
+        else:
+            result = await service._execute_export_job(
+                job_id="aexp_txn",
+                request=request,
+                request_fingerprint="scope1",
+            )
+            assert result.status == "completed" and not session.in_transaction()
 
 
 @pytest.mark.asyncio
@@ -3788,7 +3847,9 @@ async def test_create_export_job_completed() -> None:
         mark_failed=AsyncMock(),
     )
     service._collect_portfolio_timeseries_for_export = AsyncMock(  # pylint: disable=protected-access
-        return_value=([{"valuation_date": "2025-01-01"}], 1)
+        return_value=AnalyticsExportDataset(
+            [{"valuation_date": "2025-01-01"}], 1, AnalyticsExportSourceEvidence()
+        )
     )
 
     response = await service.create_export_job(
@@ -4038,7 +4099,9 @@ async def test_create_export_job_replaces_stale_running_job() -> None:
         mark_completed=AsyncMock(side_effect=_mark_completed),
     )
     service._collect_portfolio_timeseries_for_export = AsyncMock(  # pylint: disable=protected-access
-        return_value=([{"valuation_date": "2025-01-01"}], 1)
+        return_value=AnalyticsExportDataset(
+            [{"valuation_date": "2025-01-01"}], 1, AnalyticsExportSourceEvidence()
+        )
     )
 
     response = await service.create_export_job(
@@ -4143,7 +4206,7 @@ async def test_create_export_job_marks_failed_on_execution_timeout() -> None:
 
     async def _slow_collect(_request):
         await asyncio.sleep(5)
-        return [], 0
+        return AnalyticsExportDataset([], 0, AnalyticsExportSourceEvidence())
 
     service._collect_export_dataset = AsyncMock(  # pylint: disable=protected-access
         side_effect=_slow_collect
@@ -4457,14 +4520,16 @@ async def test_collect_export_helpers_page_through_all_tokens() -> None:
             SimpleNamespace(
                 observations=[SimpleNamespace(model_dump=lambda mode="json": {"d": "1"})],
                 page=SimpleNamespace(next_page_token="n1"),
+                model_dump=lambda **_kwargs: {},
             ),
             SimpleNamespace(
                 observations=[SimpleNamespace(model_dump=lambda mode="json": {"d": "2"})],
                 page=SimpleNamespace(next_page_token=None),
+                model_dump=lambda **_kwargs: {},
             ),
         ]
     )
-    rows, depth = await service._collect_portfolio_timeseries_for_export(  # pylint: disable=protected-access
+    rows, depth, evidence = await service._collect_portfolio_timeseries_for_export(  # pylint: disable=protected-access
         portfolio_id="P1",
         request=PortfolioAnalyticsTimeseriesRequest(
             as_of_date="2025-12-31",
@@ -4473,20 +4538,23 @@ async def test_collect_export_helpers_page_through_all_tokens() -> None:
     )
     assert rows == [{"d": "1"}, {"d": "2"}]
     assert depth == 2
+    assert evidence.source_cut_status == "UNAVAILABLE"
 
     service.get_position_timeseries = AsyncMock(
         side_effect=[
             SimpleNamespace(
                 rows=[SimpleNamespace(model_dump=lambda mode="json": {"p": "1"})],
                 page=SimpleNamespace(next_page_token="n1"),
+                model_dump=lambda **_kwargs: {},
             ),
             SimpleNamespace(
                 rows=[SimpleNamespace(model_dump=lambda mode="json": {"p": "2"})],
                 page=SimpleNamespace(next_page_token=None),
+                model_dump=lambda **_kwargs: {},
             ),
         ]
     )
-    rows_pos, depth_pos = await service._collect_position_timeseries_for_export(  # pylint: disable=protected-access
+    rows_pos, depth_pos, evidence_pos = await service._collect_position_timeseries_for_export(  # pylint: disable=protected-access
         portfolio_id="P1",
         request=PositionAnalyticsTimeseriesRequest(
             as_of_date="2025-12-31",
@@ -4495,3 +4563,4 @@ async def test_collect_export_helpers_page_through_all_tokens() -> None:
     )
     assert rows_pos == [{"p": "1"}, {"p": "2"}]
     assert depth_pos == 2
+    assert evidence_pos.source_cut_status == "UNAVAILABLE"

@@ -11,6 +11,7 @@ from portfolio_common.monitoring import (
     ANALYTICS_EXPORT_RESULT_BYTES,
 )
 
+from ...contracts.analytics_export_evidence import AnalyticsExportSourceEvidence
 from ...contracts.analytics_inputs import AnalyticsExportJobResponse
 from ...domain.analytics import AnalyticsExportJobRecord
 
@@ -75,6 +76,7 @@ def analytics_export_result_payload(
     request_fingerprint: str,
     lifecycle_mode: str,
     data_rows: list[dict[str, object]],
+    source_evidence: AnalyticsExportSourceEvidence | None = None,
 ) -> dict[str, object]:
     return {
         "job_id": job_id,
@@ -85,6 +87,9 @@ def analytics_export_result_payload(
         "contract_version": "rfc_063_v1",
         "result_row_count": len(data_rows),
         "data": analytics_export_jsonable(data_rows),
+        "source_evidence": (source_evidence or AnalyticsExportSourceEvidence()).model_dump(
+            mode="json"
+        ),
     }
 
 

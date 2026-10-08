@@ -370,6 +370,22 @@ Financial locks, epochs, SQL atomicity, topology, pool sizes and SLOs retain the
 
 ## Current-State Summary
 
+Analytics export collection retains ordered source-page metadata through the existing job result
+JSON and both JSON/NDJSON result formats. Aggregate current evidence requires every page to be
+complete/current/non-degraded. Mixed known cuts fail before result completion; missing cuts remain
+unavailable, and legacy exports explicitly lack retained evidence. Never reconstruct prior export
+evidence from current source reads. The encoded-result byte metric includes the manifest; there
+is no new storage table, worker, runtime split or threshold waiver. See
+[consumer policy](wiki/Integrations.md#retained-analytics-export-evidence).
+
+Export lifecycle adapters explicitly refresh the server-generated `updated_at` value after
+transition flushes before creating detached records; synchronous record mapping must not trigger
+implicit async database I/O. Persistent export proof isolates only its own portfolio's jobs rather
+than assuming financial-table cleanup also removes export history.
+Export orchestration ends its source-read unit of work before opening the separate durable
+completion or failure transaction; read autobegin must not leak into lifecycle writes. This
+transaction ownership does not upgrade response-page evidence into an authoritative source cut.
+
 Analytics portfolio and position timeseries content identity is response-page scoped: the
 application hashes actual economic rows plus normalized request basis/product/quality, excluding
 serving timestamps. Decimal scale/signed zero normalize exactly without rounding. Content hash

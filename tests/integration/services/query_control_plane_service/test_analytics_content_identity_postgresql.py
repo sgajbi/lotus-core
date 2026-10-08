@@ -1,5 +1,6 @@
 """Actual PostgreSQL source corrections must reach both HTTP content identities."""
 
+import json
 import logging
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -10,6 +11,7 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from portfolio_common.database_models import (
+    AnalyticsExportJob,
     BusinessDate,
     Cashflow,
     FxRate,
@@ -21,7 +23,11 @@ from portfolio_common.database_models import (
     Transaction,
 )
 from sqlalchemy import delete, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_control_plane_service.app.application.analytics import (
+    analytics_export_execution,
+)
 from src.services.query_control_plane_service.app.application.analytics.analytics_timeseries_service import (  # noqa: E501
     AnalyticsRuntimePolicy,
     AnalyticsTimeseriesService,
@@ -65,6 +71,11 @@ async def content_identity_client(clean_db, async_db_session, monkeypatch):
         serving_clock,
     )
     session = async_db_session
+    # The governed financial-table cleanup does not include durable export jobs.
+    # Isolate only this suite's named portfolio; preserve all other retained jobs.
+    await session.execute(
+        delete(AnalyticsExportJob).where(AnalyticsExportJob.portfolio_id == PORTFOLIO_ID)
+    )
     session.add(
         Portfolio(
             tenant_id="tenant-content-identity",
@@ -167,7 +178,16 @@ async def content_identity_client(clean_db, async_db_session, monkeypatch):
         )
     )
     await session.commit()
-    service = AnalyticsTimeseriesService(
+    service = export_service(session)
+    app = export_app(service)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        yield client, session
+
+
+def export_service(session):
+    return AnalyticsTimeseriesService(
         reader=AnalyticsTimeseriesRepository(session),
         export_store=AnalyticsExportRepository(session),
         unit_of_work=SqlAlchemyAnalyticsUnitOfWork(session),
@@ -180,14 +200,14 @@ async def content_identity_client(clean_db, async_db_session, monkeypatch):
             export_execution_timeout_seconds=300,
         ),
     )
+
+
+def export_app(service):
     app = FastAPI()
     app.include_router(router)
     register_query_control_plane_exception_handlers(app, logger=logging.getLogger(__name__))
     app.dependency_overrides[get_analytics_timeseries_service] = lambda: service
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://testserver"
-    ) as client:
-        yield client, session
+    return app
 
 
 async def read_page(client, dataset, **page):
@@ -200,6 +220,117 @@ async def read_page(client, dataset, **page):
             "page": {"page_size": 10, **page},
         },
     )
+
+
+@pytest.mark.parametrize("dataset", ["portfolio", "position"])
+@pytest.mark.parametrize("source_case", ["consistent", "degraded", "mixed", "unknown", "empty"])
+async def test_export_retained_page_evidence_pg_http(
+    content_identity_client, dataset, source_case, monkeypatch
+):
+    """Real source rows, job storage and HTTP; controlled source metadata, not cut certification."""
+    client, session = content_identity_client
+    method_name = f"get_{dataset}_timeseries"
+    original_get = getattr(AnalyticsTimeseriesService, method_name)
+    acquired_pages = []
+
+    async def observed_get(self, **kwargs):
+        response = await original_get(self, **kwargs)
+        second = bool(acquired_pages)
+        # Only the evidence-policy inputs are controlled. Economics come from actual PostgreSQL.
+        updates = {
+            "source_cut_id": "cut-B" if second and source_case == "mixed" else "cut-A",
+            "data_quality_status": "COMPLETE",
+            "freshness_status": "CURRENT",
+            "source_evidence_current": True,
+        }
+        if second and source_case == "degraded":
+            updates.update(
+                data_quality_status="PARTIAL",
+                freshness_status="STALE",
+                source_evidence_current=False,
+            )
+        if source_case == "unknown":
+            updates["source_cut_id"] = None
+        if source_case == "empty":
+            updates["observations" if dataset == "portfolio" else "rows"] = []
+            updates["page"] = response.page.model_copy(update={"returned_row_count": 0})
+        response = response.model_copy(update=updates)
+        acquired_pages.append(response.model_dump(mode="json"))
+        return response
+
+    monkeypatch.setattr(AnalyticsTimeseriesService, method_name, observed_get)
+    monkeypatch.setattr(analytics_export_execution, "PORTFOLIO_EXPORT_PAGE_SIZE", 1)
+    monkeypatch.setattr(analytics_export_execution, "POSITION_EXPORT_PAGE_SIZE", 1)
+    created = await client.post(
+        "/integration/exports/analytics-timeseries/jobs",
+        json={
+            "dataset_type": f"{dataset}_timeseries",
+            "portfolio_id": PORTFOLIO_ID,
+            f"{dataset}_timeseries_request": {
+                "as_of_date": LAST_DAY.isoformat(),
+                "window": {"start_date": FIRST_DAY.isoformat(), "end_date": LAST_DAY.isoformat()},
+                "reporting_currency": "SGD",
+            },
+        },
+    )
+    assert created.status_code == 200, created.text
+    job = created.json()
+    job_id = job["job_id"]
+    status_response = await client.get(f"/integration/exports/analytics-timeseries/jobs/{job_id}")
+    assert status_response.status_code == 200, status_response.text
+    stored = await AnalyticsExportRepository(session).get_job(job_id)
+    assert stored is not None
+    if source_case == "mixed":
+        assert job["status"] == status_response.json()["status"] == "failed"
+        assert stored.result_payload is None
+        assert "source cuts" in job["error_message"]
+        refused = await client.get(job["result_endpoint"])
+        assert refused.status_code == 422, refused.text
+        return
+    assert job["status"] == status_response.json()["status"] == "completed"
+    stored_payload = json.loads(json.dumps(stored.result_payload))
+    expected_rows = [row for page in acquired_pages for row in economic_rows(page, dataset)]
+    evidence = stored_payload["source_evidence"]
+    assert len(acquired_pages) == 2
+    # Rehydrate through a fresh borrowed-engine session and service/client instance.
+    async with AsyncSession(bind=session.bind) as rehydrated_session:
+        restarted_app = export_app(export_service(rehydrated_session))
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=restarted_app), base_url="http://testserver"
+        ) as restarted_client:
+            reloaded = await restarted_client.get(job["result_endpoint"])
+            assert reloaded.status_code == 200, reloaded.text
+            assert reloaded.json()["source_evidence"] == evidence
+            assert reloaded.json()["data"] == expected_rows
+    assert len(acquired_pages) == 2
+    assert stored_payload["data"] == expected_rows
+    assert evidence["source_cut_id"] == (None if source_case == "unknown" else "cut-A")
+    assert evidence["source_cut_status"] == (
+        "UNAVAILABLE" if source_case == "unknown" else "AVAILABLE"
+    )
+    assert evidence["source_evidence_current"] is (source_case != "degraded")
+    assert len(evidence["pages"]) == 2
+    for captured, page in zip(acquired_pages, evidence["pages"], strict=True):
+        assert page["source_metadata"] == {
+            key: value for key, value in captured.items() if key not in {"observations", "rows"}
+        }
+    # Actual later source correction must not rewrite a retained job result.
+    await session.execute(
+        update(PositionTimeseries)
+        .where(PositionTimeseries.portfolio_id == PORTFOLIO_ID)
+        .values(eod_market_value=Decimal("999"))
+    )
+    await session.commit()
+    for _ in range(2):
+        result = await client.get(job["result_endpoint"])
+        ndjson = await client.get(job["result_endpoint"], params={"result_format": "ndjson"})
+        assert result.status_code == ndjson.status_code == 200
+        assert result.json()["data"] == expected_rows
+        assert result.json()["source_evidence"] == evidence
+        lines = [json.loads(line) for line in ndjson.content.splitlines()]
+        assert lines[0]["source_evidence"] == evidence
+        assert [line["record"] for line in lines[1:]] == expected_rows
+    assert len(acquired_pages) == 2
 
 
 def economic_rows(payload, dataset):

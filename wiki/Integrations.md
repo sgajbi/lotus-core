@@ -73,6 +73,32 @@ Implementation and regression evidence are in the
 and the
 [PostgreSQL/HTTP correction tests](https://github.com/sgajbi/lotus-core/blob/main/tests/integration/services/query_control_plane_service/test_analytics_content_identity_postgresql.py).
 
+## Retained Analytics Export Evidence
+
+Existing analytics export results include `source_evidence`, acquired once alongside the rows
+and retained in the existing job result JSON. JSON and NDJSON metadata return the same stored
+manifest; later source corrections do not reconstruct or rewrite a previous export's evidence.
+The manifest retains ordered pages, including empty pages, their exact source product/version,
+request scope, resolved window, actual row count, page diagnostics, content identity and scope,
+source cut, quality, freshness, timestamps, revisions and source-provided unavailable reasons.
+
+Consumers inspect all `quality_statuses` and `freshness_statuses`, not merely the last page.
+Aggregate `source_evidence_current` requires every page to report current, complete, non-degraded
+evidence. A degraded export can still finish transport delivery: `completed` is not a financial
+supportability or coherent-cut certification. Page metadata remains the source-owned truth.
+
+The policy refuses a traversal as soon as two distinct known source cuts are acquired; the job
+fails without a completed result. A common known cut is retained unchanged only if every page
+provides it. Any unknown/missing cut leaves aggregate cut status `UNAVAILABLE`, even when paging
+completes or hashes agree. Current Core timeseries cut availability remains unavailable; this
+export manifest does not create upstream FX/provider or historical-snapshot authority.
+
+Legacy stored exports lacking page evidence return an explicit unavailable manifest with reason
+`LEGACY_EXPORT_SOURCE_EVIDENCE_NOT_RETAINED` in both formats, without modifying stored history.
+The existing encoded-result byte metric includes the entire retained manifest; no new limit or
+threshold waiver is introduced. These contracts preserve Performance calculation/export ownership
+and Report's authoritative Excel assembly; they do not certify downstream financial correctness.
+
 ## Surface Selection
 
 Downstream consumers should use the correct family surface rather than treating `lotus-core` as one

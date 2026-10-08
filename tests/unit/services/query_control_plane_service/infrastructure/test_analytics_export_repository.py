@@ -44,6 +44,48 @@ def _export_model(job_id: str = "aexp_1") -> SimpleNamespace:
     )
 
 
+class _ExpiredTimestampModel(SimpleNamespace):
+    """Represent PostgreSQL's expired server-generated value after an update flush."""
+
+    def __getattribute__(self, name):
+        if name == "updated_at" and self.timestamp_expired:
+            raise RuntimeError("Implicit async IO during synchronous record projection")
+        return super().__getattribute__(name)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("transition", ["running", "completed", "failed"])
+async def test_export_transition_refreshes_server_timestamp_before_projection(transition):
+    db = AsyncMock(spec=AsyncSession)
+    model = _ExpiredTimestampModel(**vars(_export_model()), timestamp_expired=False)
+    db.execute.return_value = _FakeExecuteResult([model])
+    repo = AnalyticsExportRepository(db)
+    record = await repo.get_job(model.job_id)
+    refreshed_time = datetime(2026, 7, 12, tzinfo=UTC)
+
+    async def expire_timestamp():
+        model.timestamp_expired = True
+
+    async def refresh_timestamp(row, *, attribute_names):
+        assert row is model and attribute_names == ["updated_at"]
+        row.updated_at = refreshed_time
+        row.timestamp_expired = False
+
+    db.flush.side_effect = expire_timestamp
+    db.refresh.side_effect = refresh_timestamp
+    if transition == "running":
+        result = await repo.mark_running(record)
+    elif transition == "completed":
+        result = await repo.mark_completed(
+            record, result_payload={"evidence": "retained"}, result_row_count=1
+        )
+    else:
+        result = await repo.mark_failed(record, error_message="Conflicting source cuts")
+    assert result.status == transition
+    assert result.updated_at == refreshed_time
+    db.refresh.assert_awaited_once_with(model, attribute_names=["updated_at"])
+
+
 @pytest.mark.asyncio
 async def test_analytics_export_repository_create_get_and_markers() -> None:
     db = AsyncMock(spec=AsyncSession)

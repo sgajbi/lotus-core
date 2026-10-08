@@ -63,8 +63,7 @@ class AnalyticsExportRepository:
         model = await self._require_model(row.job_id)
         model.status = "running"
         model.started_at = datetime.now(UTC)
-        await self.db.flush()
-        return _export_job_record(model)
+        return await self._flush_transition(model)
 
     async def mark_completed(
         self,
@@ -78,8 +77,7 @@ class AnalyticsExportRepository:
         model.result_payload = result_payload
         model.result_row_count = result_row_count
         model.completed_at = datetime.now(UTC)
-        await self.db.flush()
-        return _export_job_record(model)
+        return await self._flush_transition(model)
 
     async def mark_failed(
         self, row: AnalyticsExportJobRecord, *, error_message: str
@@ -88,7 +86,13 @@ class AnalyticsExportRepository:
         model.status = "failed"
         model.error_message = error_message
         model.completed_at = datetime.now(UTC)
+        return await self._flush_transition(model)
+
+    async def _flush_transition(self, model: AnalyticsExportJobModel) -> AnalyticsExportJobRecord:
         await self.db.flush()
+        # Server-generated onupdate values are expired after flush. Load them explicitly
+        # inside the async adapter, never through implicit IO in the pure record mapper.
+        await self.db.refresh(model, attribute_names=["updated_at"])
         return _export_job_record(model)
 
     async def _get_model(self, job_id: str) -> AnalyticsExportJobModel | None:
