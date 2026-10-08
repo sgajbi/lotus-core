@@ -5,12 +5,17 @@ from __future__ import annotations
 import json
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Sequence
+from typing import Any, Protocol, Sequence
 
 from portfolio_common.source_data_product_metadata import stable_content_hash
-from pydantic import BaseModel
 
 from .analytics_quality import analytics_source_runtime_metadata, timeseries_source_evidence_current
+
+
+class EconomicContentRow(Protocol):
+    """Framework-neutral projection supplied by the response contract adapter."""
+
+    def model_dump(self, *, mode: str) -> dict[str, Any]: ...
 
 
 def canonical_economic_value(value: Any) -> Any:
@@ -43,7 +48,7 @@ def analytics_page_content_identity(
     *,
     product: str,
     request_scope: str,
-    rows: Sequence[BaseModel],
+    rows: Sequence[EconomicContentRow],
     data_quality_status: str,
 ) -> dict[str, object]:
     """Hash actual rows and requested economic basis, excluding transport timestamps.
@@ -73,7 +78,7 @@ def analytics_page_runtime_metadata(
     *,
     product: str,
     request_scope: str,
-    rows: Sequence[BaseModel],
+    rows: Sequence[EconomicContentRow],
     as_of_date: date,
     generated_at: datetime,
     data_quality_status: str,
