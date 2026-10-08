@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import portfolio_common.event_supportability as event_supportability
 import pytest
 from portfolio_common import event_contracts, events
@@ -73,19 +75,14 @@ def test_cataloged_event_models_accept_governed_outbox_envelope_metadata() -> No
             "price": "101.25",
             "currency": "USD",
         },
-        "FxRatePersistedEvent": {
-            "from_currency": "USD",
-            "to_currency": "SGD",
-            "rate_date": "2026-04-10",
-            "rate": "1.35",
-            "generated_at": "2026-04-10T10:00:00Z",
-            "content_hash": (
-                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        "FxRatePersistedEvent": events.FxRatePersistedEvent.from_observation(
+            events.FxRateEvent(
+                from_currency="USD", to_currency="SGD", rate_date="2026-04-10", rate="1.35"
             ),
-            "observation_id": (
-                "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-            ),
-        },
+            generated_at=datetime(2026, 4, 10, 10, tzinfo=timezone.utc),
+        ).model_dump(
+            mode="json", exclude={"event_type", "schema_version", "correlation_id", "traceparent"}
+        ),
         "InstrumentEvent": {
             "security_id": "S1",
             "name": "Instrument One",

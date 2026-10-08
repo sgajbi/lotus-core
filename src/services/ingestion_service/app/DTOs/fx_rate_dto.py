@@ -46,6 +46,7 @@ class FxRate(BaseModel):
         return BOUNDED_18_10_EXACT.require_exact(value, field_name="rate")
 
     model_config = ConfigDict(
+        extra="forbid",
         json_schema_extra={
             "example": {
                 "from_currency": "USD",
@@ -53,15 +54,19 @@ class FxRate(BaseModel):
                 "rate_date": "2026-03-10",
                 "rate": 1.35,
             }
-        }
+        },
     )
 
 
 class FxRateIngestionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     fx_rates: List[FxRate] = Field(
         ...,
         description=(
-            "FX reference-rate observations to publish into valuation and conversion workflows."
+            "Operational FX rates with directed pair, business date and exact numeric value. "
+            "Unknown batch or record fields are rejected. This input does not establish "
+            "provider, source observation time, immutable revision, calendar or cut authority."
         ),
         min_length=1,
         examples=[

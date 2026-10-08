@@ -5,6 +5,9 @@
 This runbook summarizes operator-facing posture for `lotus-core` quality, readiness, and validation.
 Detailed product and scenario-specific runbooks remain under `docs/operations/`.
 
+Use [FX source admission and evidence integrity](./fx-source-admission.md) for operational FX
+request refusals, persisted-event mismatches and the remaining provider-custody boundary.
+
 Runtime interruption procedures are indexed under
 [operations/recovery](./recovery/README.md), including the enforced
 [portfolio derived-state recovery gate](./recovery/portfolio-derived-state-interruption.md).

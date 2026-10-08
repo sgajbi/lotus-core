@@ -6495,6 +6495,67 @@ async def test_ingest_fx_rates_rejects_lossy_numeric_before_publish(
     mock_kafka_producer.publish_message.assert_not_called()
 
 
+@pytest.mark.parametrize("scope", ["record", "batch"])
+@pytest.mark.parametrize(
+    ("claim", "value"),
+    [
+        ("provider_id", "unregistered-provider"),
+        ("observed_at", "2026-07-28T09:00:00Z"),
+        ("source_revision", "caller-revision-7"),
+        ("content_hash", "sha256:" + "a" * 64),
+        ("source_cut_id", "caller-cut"),
+        ("calendar_version", "caller-calendar-v1"),
+    ],
+)
+async def test_ingest_fx_rates_refuses_unsupported_custody_before_publish(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+    ingestion_test_harness,
+    scope: str,
+    claim: str,
+    value: str,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = _fx_rate_batch_payload(("USD", "SGD"))
+    target = payload["fx_rates"][0] if scope == "record" else payload
+    target[claim] = value
+
+    response = await async_test_client.post("/ingest/fx-rates", json=payload)
+
+    assert response.status_code == 422
+    assert "extra_forbidden" in response.text
+    assert claim in response.text
+    mock_kafka_producer.publish_message.assert_not_called()
+    assert ingestion_test_harness["fake_job_service"].jobs == {}
+
+
+@pytest.mark.parametrize("invalid_index", [0, 1])
+async def test_fx_batch_custody_refusal_is_atomic_before_job_or_publish(
+    async_test_client,
+    mock_kafka_producer,
+    ingestion_test_harness,
+    invalid_index,
+):
+    payload = _fx_rate_batch_payload(("USD", "SGD"), ("EUR", "USD"))
+    payload["fx_rates"][invalid_index]["source_revision"] = "unsupported-caller-revision"
+    response = await async_test_client.post("/ingest/fx-rates", json=payload)
+    assert response.status_code == 422
+    mock_kafka_producer.publish_message.assert_not_called()
+    assert ingestion_test_harness["fake_job_service"].jobs == {}
+
+
+async def test_fx_ingestion_openapi_declares_closed_row_and_batch_contracts():
+    schema = app.openapi()
+    request = schema["paths"]["/ingest/fx-rates"]["post"]["requestBody"]["content"][
+        "application/json"
+    ]["schema"]
+    name = request["$ref"].rsplit("/", 1)[-1]
+    batch = schema["components"]["schemas"][name]
+    assert batch["additionalProperties"] is False
+    record_name = batch["properties"]["fx_rates"]["items"]["$ref"].rsplit("/", 1)[-1]
+    assert schema["components"]["schemas"][record_name]["additionalProperties"] is False
+
+
 async def test_ingest_fx_rates_replays_duplicate_idempotency_key(
     async_test_client: httpx.AsyncClient,
     mock_kafka_producer: MagicMock,

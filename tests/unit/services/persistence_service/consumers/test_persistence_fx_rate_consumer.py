@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from portfolio_common.config import KAFKA_FX_RATES_PERSISTED_TOPIC
 from portfolio_common.database_models import FxRate as DBFxRate
-from portfolio_common.events import FxRateEvent, event_business_payload
+from portfolio_common.events import FxRateEvent, FxRatePersistedEvent, event_business_payload
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.outbox_repository import OutboxRepository
 from pydantic import ValidationError
@@ -120,6 +120,11 @@ async def test_process_message_success(
     assert outbox_call["payload"]["generated_at"].endswith("Z")
     assert outbox_call["payload"]["content_hash"].startswith("sha256:")
     assert outbox_call["payload"]["observation_id"].startswith("sha256:")
+    persisted_event = FxRatePersistedEvent.model_validate(outbox_call["payload"])
+    assert persisted_event.rate == valid_fx_rate_event.rate
+    assert persisted_event.from_currency == valid_fx_rate_event.from_currency
+    assert persisted_event.to_currency == valid_fx_rate_event.to_currency
+    assert persisted_event.rate_date == valid_fx_rate_event.rate_date
     assert outbox_call["correlation_id"] == "test-corr-id"
     mock_send_to_dlq.assert_not_called()
 

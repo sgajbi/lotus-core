@@ -3,7 +3,7 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
-from src.services.ingestion_service.app.DTOs.fx_rate_dto import FxRate
+from src.services.ingestion_service.app.DTOs.fx_rate_dto import FxRate, FxRateIngestionRequest
 from src.services.ingestion_service.app.DTOs.market_price_dto import (
     AuthoritativeMarketPriceSourceFact,
     MarketPrice,
@@ -84,3 +84,57 @@ def test_authoritative_market_price_remains_exact_unbounded() -> None:
     )
 
     assert record.price == Decimal(price)
+
+
+@pytest.mark.parametrize("scope", ["record", "batch"])
+@pytest.mark.parametrize(
+    "claim",
+    [
+        "provider_id",
+        "observed_at",
+        "source_revision",
+        "content_hash",
+        "source_cut_id",
+        "calendar_version",
+    ],
+)
+def test_legacy_fx_intake_refuses_unsupported_custody_claims(scope: str, claim: str) -> None:
+    record = _fx_rate_payload("1.3500000000")
+    payload: dict[str, object] = {"fx_rates": [record]}
+    target = record if scope == "record" else payload
+    target[claim] = "caller-asserted-custody"
+
+    with pytest.raises(ValidationError) as rejected:
+        FxRateIngestionRequest.model_validate(payload)
+
+    assert any(
+        error["type"] == "extra_forbidden" and error["loc"][-1] == claim
+        for error in rejected.value.errors()
+    )
+
+
+def test_legacy_fx_intake_preserves_valid_business_content_for_native_event() -> None:
+    from portfolio_common.events import FxRateEvent, event_business_payload
+
+    accepted = FxRateIngestionRequest.model_validate(
+        {"fx_rates": [{**_fx_rate_payload("1.3500000000"), "from_currency": " usd "}]}
+    )
+    event = FxRateEvent.model_validate(accepted.fx_rates[0].model_dump())
+    assert event_business_payload(event) == {
+        "from_currency": "USD",
+        "to_currency": "SGD",
+        "rate_date": accepted.fx_rates[0].rate_date,
+        "rate": Decimal("1.3500000000"),
+    }
+
+
+def test_fx_intake_schema_declares_closed_record_and_batch_contracts() -> None:
+    schema = FxRateIngestionRequest.model_json_schema()
+    assert schema["additionalProperties"] is False
+    assert schema["$defs"]["FxRate"]["additionalProperties"] is False
+    assert set(schema["$defs"]["FxRate"]["properties"]) == {
+        "from_currency",
+        "to_currency",
+        "rate_date",
+        "rate",
+    }
