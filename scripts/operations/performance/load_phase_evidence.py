@@ -274,7 +274,11 @@ def project_processing_phase(
     task = row.get("task_identity")
     if not isinstance(task, str) or not re.fullmatch(r"0x[a-f0-9]{1,16}", task):
         return None
-    elapsed = payload.get("captured_monotonic", 0) - row.get("phase_started_monotonic", 0)
+    captured: Any = payload.get("captured_monotonic")
+    started: Any = row.get("phase_started_monotonic")
+    if not finite_nonnegative(captured) or not finite_nonnegative(started):
+        return None
+    elapsed = captured - started
     if not math.isfinite(elapsed) or elapsed < 0:
         return None
     projected = {
