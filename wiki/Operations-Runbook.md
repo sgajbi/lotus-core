@@ -977,3 +977,15 @@ Reduced preparation/query work is not a load-SLO or historical root-cause certif
 - [Support and Lineage](Support-and-Lineage)
 - [Query Control Plane](Query-Control-Plane)
 - [Architecture Index](https://github.com/sgajbi/lotus-core/blob/main/docs/architecture/README.md)
+
+
+## Fee-source replay qualification boundary
+
+Fee-source reconstruction validates canonical candidate facts before retained raw
+authority, examines every raw row, and refuses conflicting or ambiguous projections.
+Pure authority, database source custody and replay transport have separate owners.
+Carrying a validated event avoids duplicate model validation; it does not waive
+canonical validation, positive named-cost/currency checks, receipt scope, await-bound
+input custody, locks or atomic financial writes. Operation counts alone do not qualify
+full-load completion, live financial correctness or SLO. Those require separate governed
+producing evidence; absence of evidence is not zero.

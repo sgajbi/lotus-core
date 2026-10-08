@@ -975,3 +975,15 @@ and temporary blockers in GitHub.
 7. [Validation and CI](wiki/Validation-and-CI.md)
 8. [Platform context reference map](https://github.com/sgajbi/lotus-platform/blob/main/context/CONTEXT-REFERENCE-MAP.md)
 9. [Platform engineering context](https://github.com/sgajbi/lotus-platform/blob/main/context/LOTUS-ENGINEERING-CONTEXT.md)
+
+
+## Fee replay authority ownership practice
+
+Transaction replay separates pure fee qualification (`fee_authority.py`), SQL and
+await-bound source custody (`fee_source_repository.py`), and reader/publisher transport
+(`booked_transaction.py`). Cost-basis callers import the repository owner directly;
+no compatibility re-exports or global caches confer authority. Canonical candidate
+validation precedes raw authority checks, and all matching canonical/raw projections
+participate in uniqueness. Validated events may be carried to avoid repeated model
+validation; canonical hypotheses and fingerprint checks remain required. This is
+source qualification, not full-load, PostgreSQL lock or SLO certification.

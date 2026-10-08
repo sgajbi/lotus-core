@@ -56,7 +56,7 @@ from ..transaction_mapping.booked_transaction import (
     to_booked_transaction_from_record,
     to_transaction_event,
 )
-from ..transaction_replay.booked_transaction import load_qualified_transaction_fee_sources
+from ..transaction_replay.fee_source_repository import load_qualified_transaction_fee_sources
 
 TRANSACTION_METADATA_FIELDS = (
     "economic_event_id",
