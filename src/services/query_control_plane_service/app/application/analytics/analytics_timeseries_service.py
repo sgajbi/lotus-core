@@ -58,6 +58,7 @@ from .analytics_cash_flows import (
 from .analytics_cashflow_evidence import load_position_cashflow_rows
 from .analytics_content_identity import analytics_page_runtime_metadata
 from .analytics_export_execution import (
+    AnalyticsExportDataset,
     collect_portfolio_timeseries_for_export,
     collect_position_timeseries_for_export,
 )
@@ -1385,18 +1386,20 @@ class AnalyticsTimeseriesService:
         request: AnalyticsExportCreateRequest,
         request_fingerprint: str,
     ) -> AnalyticsExportJobRecord:
-        data_rows, page_depth = await self._collect_export_dataset(request)
+        # End the source-read transaction before durable completion/failure opens its
+        # own lifecycle boundary. This does not certify a coherent upstream source cut.
+        async with self._unit_of_work.transaction():
+            dataset = await self._collect_export_dataset(request)
         return await self._complete_export_job_with_result(
             job_id=job_id,
             request=request,
             request_fingerprint=request_fingerprint,
-            data_rows=data_rows,
-            page_depth=page_depth,
+            dataset=dataset,
         )
 
     async def _collect_export_dataset(
         self, request: AnalyticsExportCreateRequest
-    ) -> tuple[list[dict[str, object]], int]:
+    ) -> AnalyticsExportDataset:
         if request.dataset_type == "portfolio_timeseries":
             if request.portfolio_timeseries_request is None:
                 raise AnalyticsInputError(
@@ -1423,27 +1426,27 @@ class AnalyticsTimeseriesService:
         job_id: str,
         request: AnalyticsExportCreateRequest,
         request_fingerprint: str,
-        data_rows: list[dict[str, object]],
-        page_depth: int,
+        dataset: AnalyticsExportDataset,
     ) -> AnalyticsExportJobRecord:
         result_payload = analytics_export_result_payload(
             job_id=job_id,
             dataset_type=request.dataset_type,
             request_fingerprint=request_fingerprint,
             lifecycle_mode=self._EXPORT_LIFECYCLE_MODE,
-            data_rows=data_rows,
+            data_rows=dataset.data_rows,
+            source_evidence=dataset.source_evidence,
         )
         record_analytics_export_result_metrics(
             result_format=request.result_format,
             compression=request.compression,
             dataset_type=request.dataset_type,
             result_payload=result_payload,
-            page_depth=page_depth,
+            page_depth=dataset.page_depth,
         )
         return await self._mark_export_job_completed(
             job_id,
             result_payload=result_payload,
-            result_row_count=len(data_rows),
+            result_row_count=len(dataset.data_rows),
         )
 
     async def get_export_job(self, job_id: str) -> AnalyticsExportJobResponse:
@@ -1477,24 +1480,18 @@ class AnalyticsTimeseriesService:
 
     async def _collect_portfolio_timeseries_for_export(
         self, *, portfolio_id: str, request: PortfolioAnalyticsTimeseriesRequest
-    ) -> tuple[list[dict[str, object]], int]:
-        return cast(
-            tuple[list[dict[str, object]], int],
-            await collect_portfolio_timeseries_for_export(
-                portfolio_id=portfolio_id,
-                request=request,
-                get_portfolio_timeseries=self.get_portfolio_timeseries,
-            ),
+    ) -> AnalyticsExportDataset:
+        return await collect_portfolio_timeseries_for_export(
+            portfolio_id=portfolio_id,
+            request=request,
+            get_portfolio_timeseries=self.get_portfolio_timeseries,
         )
 
     async def _collect_position_timeseries_for_export(
         self, *, portfolio_id: str, request: PositionAnalyticsTimeseriesRequest
-    ) -> tuple[list[dict[str, object]], int]:
-        return cast(
-            tuple[list[dict[str, object]], int],
-            await collect_position_timeseries_for_export(
-                portfolio_id=portfolio_id,
-                request=request,
-                get_position_timeseries=self.get_position_timeseries,
-            ),
+    ) -> AnalyticsExportDataset:
+        return await collect_position_timeseries_for_export(
+            portfolio_id=portfolio_id,
+            request=request,
+            get_position_timeseries=self.get_position_timeseries,
         )

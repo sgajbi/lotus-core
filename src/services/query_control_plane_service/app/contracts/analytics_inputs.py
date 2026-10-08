@@ -13,6 +13,8 @@ from portfolio_common.source_data_product_metadata import (
 )
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .analytics_export_evidence import AnalyticsExportSourceEvidence
+
 
 class AnalyticsWindow(BaseModel):
     start_date: date = Field(
@@ -865,6 +867,10 @@ class AnalyticsExportJobResponse(BaseModel):
 
 
 class AnalyticsExportJsonResultResponse(BaseModel):
+    source_evidence: AnalyticsExportSourceEvidence = Field(
+        default_factory=AnalyticsExportSourceEvidence,
+        description="Retained completion evidence; legacy exports explicitly lack page evidence.",
+    )
     job_id: str = Field(
         ...,
         description="Export job identifier.",

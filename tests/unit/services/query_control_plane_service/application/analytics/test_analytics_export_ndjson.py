@@ -9,6 +9,9 @@ from src.services.query_control_plane_service.app.application.analytics.analytic
     AnalyticsExportNdjsonError,
     analytics_export_ndjson_result,
 )
+from src.services.query_control_plane_service.app.contracts.analytics_export_evidence import (
+    AnalyticsExportSourceEvidence,
+)
 
 
 def test_analytics_export_ndjson_result_renders_metadata_and_records() -> None:
@@ -28,6 +31,7 @@ def test_analytics_export_ndjson_result_renders_metadata_and_records() -> None:
     lines = result.content.decode("utf-8").splitlines()
     assert json.loads(lines[0]) == {
         "record_type": "metadata",
+        "source_evidence": AnalyticsExportSourceEvidence().model_dump(mode="json"),
         "job_id": "aexp_1",
         "dataset_type": "portfolio_timeseries",
         "generated_at": "2026-03-01T00:00:00Z",

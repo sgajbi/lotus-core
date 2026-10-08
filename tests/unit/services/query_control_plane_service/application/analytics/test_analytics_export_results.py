@@ -11,6 +11,9 @@ from src.services.query_control_plane_service.app.application.analytics.analytic
     analytics_export_ndjson_result_response,
     completed_analytics_export_result_payload,
 )
+from src.services.query_control_plane_service.app.contracts.analytics_export_evidence import (
+    AnalyticsExportSourceEvidence,
+)
 
 _DEFAULT_RESULT_PAYLOAD = object()
 
@@ -79,6 +82,7 @@ def test_analytics_export_ndjson_result_response_returns_transport_tuple() -> No
     first_line = content.decode("utf-8").splitlines()[0]
     assert json.loads(first_line) == {
         "record_type": "metadata",
+        "source_evidence": AnalyticsExportSourceEvidence().model_dump(mode="json"),
         "job_id": "aexp_1",
         "dataset_type": "position_timeseries",
         "generated_at": "2026-03-01T00:00:00Z",

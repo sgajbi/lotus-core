@@ -7,6 +7,8 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from ...contracts.analytics_export_evidence import AnalyticsExportSourceEvidence
+
 NDJSON_MEDIA_TYPE = "application/x-ndjson"
 
 
@@ -39,6 +41,9 @@ def analytics_export_ndjson_result(
             "dataset_type": dataset_type,
             "generated_at": result_payload.get("generated_at"),
             "contract_version": result_payload.get("contract_version"),
+            "source_evidence": result_payload.get(
+                "source_evidence", AnalyticsExportSourceEvidence().model_dump(mode="json")
+            ),
         },
         records=payload_data,
     )
