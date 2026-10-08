@@ -56,6 +56,7 @@ from .analytics_cash_flows import (
     position_cash_flows_for_keys,
 )
 from .analytics_cashflow_evidence import load_position_cashflow_rows
+from .analytics_content_identity import analytics_page_runtime_metadata
 from .analytics_export_execution import (
     collect_portfolio_timeseries_for_export,
     collect_position_timeseries_for_export,
@@ -131,7 +132,6 @@ from .analytics_quality import (
     portfolio_reference_evidence_timestamp,
     quality_status_from_epoch,
     timeseries_data_quality_status,
-    timeseries_source_evidence_current,
 )
 from .analytics_windows import AnalyticsWindowError, resolve_analytics_window
 
@@ -757,13 +757,13 @@ class AnalyticsTimeseriesService:
                 next_page_token=next_page_token,
             ),
             observations=observations,
-            **analytics_source_runtime_metadata(
+            **analytics_page_runtime_metadata(
+                product="PortfolioTimeseriesInput",
+                request_scope=request_scope_fingerprint,
+                rows=observations,
                 as_of_date=request.as_of_date,
                 generated_at=generated_at,
                 data_quality_status=data_quality_status,
-                source_evidence_current=timeseries_source_evidence_current(
-                    data_quality_status=data_quality_status
-                ),
             ),
         )
 
@@ -931,13 +931,13 @@ class AnalyticsTimeseriesService:
                 next_page_token=next_page_token,
             ),
             rows=response_rows,
-            **analytics_source_runtime_metadata(
+            **analytics_page_runtime_metadata(
+                product="PositionTimeseriesInput",
+                request_scope=request_scope_fingerprint,
+                rows=response_rows,
                 as_of_date=request.as_of_date,
                 generated_at=generated_at,
                 data_quality_status=data_quality_status,
-                source_evidence_current=timeseries_source_evidence_current(
-                    data_quality_status=data_quality_status
-                ),
             ),
         )
 

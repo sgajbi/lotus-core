@@ -370,6 +370,17 @@ Financial locks, epochs, SQL atomicity, topology, pool sizes and SLOs retain the
 
 ## Current-State Summary
 
+Analytics portfolio and position timeseries content identity is response-page scoped: the
+application hashes actual economic rows plus normalized request basis/product/quality, excluding
+serving timestamps. Decimal scale/signed zero normalize exactly without rounding. Content hash
+and source digest are equal; request fingerprint and epoch remain distinct. The source lineage
+explicitly reports response_page and unavailable source cut, with source_cut_id null. Neither
+paging nor a corrected digest proves a coherent full-window snapshot, qualified upstream FX
+lineage, retained historical cut, processing completion or downstream calculation correctness.
+Preserve existing degraded/missing-source refusals and consumer request semantics. See
+[consumer guidance](wiki/Integrations.md#analytics-content-identity) and the PostgreSQL/HTTP
+regression test `test_analytics_content_identity_postgresql.py` for both datasets.
+
 - `query_service` is the operational read plane.
 - `query_control_plane_service` owns governed analytics-input, source-product, lineage, policy,
   support, snapshot, simulation, and export contracts.

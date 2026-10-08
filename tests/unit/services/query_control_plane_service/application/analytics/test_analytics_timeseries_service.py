@@ -447,8 +447,153 @@ async def test_get_portfolio_timeseries_canonical_payload_keeps_single_response_
     assert response.lineage.generated_by == "integration.analytics_inputs"
     assert len(response.lineage.request_fingerprint) == 64
     assert response.generated_at == response.lineage.generated_at
-    assert response.source_lineage == {}
+    assert response.source_lineage == {
+        "content_identity_scope": "response_page",
+        "source_cut_status": "UNAVAILABLE",
+    }
+    assert response.source_cut_id is None
     assert response.source_digest == response.content_hash
+
+
+@pytest.fixture
+def content_identity_serving_clock(monkeypatch):
+    serving_clock = MagicMock(wraps=datetime)
+    serving_clock.now.side_effect = [
+        datetime(2026, 10, 8, 1, 0, second, tzinfo=UTC) for second in range(3)
+    ]
+    monkeypatch.setattr(
+        "src.services.query_control_plane_service.app.application.analytics."
+        "analytics_timeseries_service.datetime",
+        serving_clock,
+    )
+
+
+@pytest.mark.asyncio
+async def test_portfolio_content_identity_changes_with_economic_correction_not_generation(
+    content_identity_serving_clock,
+) -> None:
+    service = make_service()
+    _install_canonical_portfolio_timeseries_repo(service)
+    request = PortfolioAnalyticsTimeseriesRequest(
+        as_of_date="2026-07-05",
+        window=AnalyticsWindow(start_date="2026-01-01", end_date="2026-07-05"),
+        reporting_currency="SGD",
+        consumer_system="lotus-performance",
+        page=PageRequest(page_size=5000, page_token=None),
+    )
+    original = await service.get_portfolio_timeseries(
+        portfolio_id="PB_SG_GLOBAL_BAL_001", request=request
+    )
+    repeated = await service.get_portfolio_timeseries(
+        portfolio_id="PB_SG_GLOBAL_BAL_001", request=request
+    )
+    assert original.generated_at != repeated.generated_at
+    assert original.content_hash == repeated.content_hash
+    service.repo.list_position_timeseries_rows_unpaged.return_value = [
+        _position_observation(
+            security_id="SEC_SG_BOND_001",
+            valuation_date=date(2026, 7, 3),
+            bod_market_value=Decimal("1000"),
+            eod_market_value=Decimal("1010"),
+            position_currency="SGD",
+            asset_class="Fixed Income",
+        )
+    ]
+    corrected = await service.get_portfolio_timeseries(
+        portfolio_id="PB_SG_GLOBAL_BAL_001", request=request
+    )
+    assert corrected.observations[0].ending_market_value == Decimal("1010")
+    assert original.observations[0].ending_market_value == Decimal("1005")
+    assert original.lineage.request_fingerprint == corrected.lineage.request_fingerprint
+    assert original.content_hash != corrected.content_hash
+    assert corrected.source_digest == corrected.content_hash
+    assert corrected.source_cut_id is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("dataset", ["portfolio", "position"])
+@pytest.mark.parametrize("correction", ["valuation", "fx", "flow"])
+async def test_both_products_bind_content_identity_to_returned_economics(
+    dataset, correction, content_identity_serving_clock
+):
+    service = make_service()
+    _install_canonical_portfolio_timeseries_repo(service)
+    source_rows = service.repo.list_position_timeseries_rows_unpaged.return_value
+    service.repo.list_position_timeseries_rows = AsyncMock(return_value=source_rows)
+    service.repo.get_fx_rates_map.return_value = {date(2026, 7, 3): Decimal("1.5")}
+    flows = [
+        _cashflow_evidence(
+            security_id="SEC_SG_BOND_001",
+            valuation_date=date(2026, 7, 3),
+            amount=Decimal("2"),
+            currency="SGD",
+            timing="EOD",
+        )
+    ]
+    service.repo.list_portfolio_cashflow_rows.return_value = flows
+    service.repo.list_position_cashflow_rows.return_value = flows
+    request_basis = dict(
+        as_of_date="2026-07-03",
+        window=AnalyticsWindow(start_date="2026-07-03", end_date="2026-07-03"),
+        reporting_currency="USD",
+    )
+    if dataset == "portfolio":
+        request = PortfolioAnalyticsTimeseriesRequest(**request_basis)
+        read = service.get_portfolio_timeseries
+    else:
+        request = PositionAnalyticsTimeseriesRequest(**request_basis, include_cash_flows=True)
+        read = service.get_position_timeseries
+    before = await read(portfolio_id="PB_SG_GLOBAL_BAL_001", request=request)
+    repeat = await read(portfolio_id="PB_SG_GLOBAL_BAL_001", request=request)
+    assert before.generated_at != repeat.generated_at
+    assert before.content_hash == repeat.content_hash
+    if correction == "fx":
+        service.repo.get_fx_rates_map.return_value = {date(2026, 7, 3): Decimal("2")}
+    elif correction == "flow":
+        corrected_flows = [
+            _cashflow_evidence(
+                security_id="SEC_SG_BOND_001",
+                valuation_date=date(2026, 7, 3),
+                amount=Decimal("3"),
+                currency="SGD",
+                timing="EOD",
+            )
+        ]
+        service.repo.list_portfolio_cashflow_rows.return_value = corrected_flows
+        service.repo.list_position_cashflow_rows.return_value = corrected_flows
+    else:
+        corrected_rows = [
+            _position_observation(
+                security_id="SEC_SG_BOND_001",
+                valuation_date=date(2026, 7, 3),
+                bod_market_value=Decimal("1000"),
+                eod_market_value=Decimal("1010"),
+                position_currency="SGD",
+                asset_class="Fixed Income",
+            )
+        ]
+        service.repo.list_position_timeseries_rows.return_value = corrected_rows
+        service.repo.list_position_timeseries_rows_unpaged.return_value = corrected_rows
+    after = await read(portfolio_id="PB_SG_GLOBAL_BAL_001", request=request)
+    assert before.content_hash != after.content_hash == after.source_digest
+    assert before.lineage.request_fingerprint == after.lineage.request_fingerprint
+    assert before.page.snapshot_epoch == after.page.snapshot_epoch
+    assert after.source_cut_id is None
+    assert after.source_lineage["content_identity_scope"] == "response_page"
+    rows = after.observations if dataset == "portfolio" else after.rows
+    ending = (
+        rows[0].ending_market_value
+        if dataset == "portfolio"
+        else rows[0].ending_market_value_reporting_currency
+    )
+    assert (
+        ending
+        == {"valuation": Decimal("1515"), "fx": Decimal("2010"), "flow": Decimal("1507.5")}[
+            correction
+        ]
+    )
+    if correction == "flow":
+        assert rows[0].cash_flows[0].amount == Decimal("4.5" if dataset == "portfolio" else "3")
 
 
 @pytest.mark.asyncio

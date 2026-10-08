@@ -1,5 +1,15 @@
 # Integrations
 
+Current scope: Core's source-owned integration surfaces and consumer boundaries. Analytics
+content identity describes returned economic evidence; it does not certify a complete source cut
+or downstream financial processing. Use the contract-specific evidence below when comparing reads.
+
+| Reader | Start here | Decision boundary |
+| --- | --- | --- |
+| Analytics consumers | Analytics Content Identity | Compare returned pages without claiming a complete source cut. |
+| Operators | Primary integration relationships | Identify the source owner before investigating missing evidence. |
+| Engineers | Main integration surfaces | Select the supported contract without duplicating downstream calculations. |
+
 ## Primary integration relationships
 
 - `lotus-gateway`
@@ -27,7 +37,31 @@
 - replay and operations control-plane contracts from `event_replay_service`
 - reconciliation control execution contracts
 
-## Important rule
+## Analytics Content Identity
+
+`PortfolioTimeseriesInput` and `PositionTimeseriesInput` publish a deterministic `content_hash`
+(also exposed as `source_digest`) over the actual returned economic rows, normalized request
+basis, product and quality status. Equivalent Decimal scale and signed zero normalize without
+rounding; dates and row ordering are deterministic. Serving timestamps and correlation IDs are
+not economic revisions. Valuation, dated FX or cashflow corrections that change returned rows
+change their content identity even when the request fingerprint and selected epoch are unchanged.
+
+`source_lineage.content_identity_scope` is `response_page`. Each page has its own digest;
+`source_lineage.source_cut_status` remains `UNAVAILABLE` and `source_cut_id` remains null. Do not
+compare page digests as whole-window revisions, concatenate them into an official source cut, or
+infer cross-page snapshot isolation or upstream provider authority. Paging retains its existing
+request/cursor semantics and partial-quality posture. Missing required FX still refuses the read;
+an empty successful row set has a real content digest, not proof of financial completion.
+
+Consumers retain their independent input/calculation identity and must inspect quality and cut
+availability separately. This does not alter request fingerprints, certify historical snapshot
+retention, or close the broader source-cut, FX-lineage and retained-export evidence obligations.
+Implementation and regression evidence are in the
+[content identity helper](https://github.com/sgajbi/lotus-core/blob/main/src/services/query_control_plane_service/app/application/analytics/analytics_content_identity.py)
+and the
+[PostgreSQL/HTTP correction tests](https://github.com/sgajbi/lotus-core/blob/main/tests/integration/services/query_control_plane_service/test_analytics_content_identity_postgresql.py).
+
+## Surface Selection
 
 Downstream consumers should use the correct family surface rather than treating `lotus-core` as one
 undifferentiated API.
