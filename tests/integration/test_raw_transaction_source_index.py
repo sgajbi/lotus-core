@@ -1,21 +1,25 @@
 """Real PostgreSQL index cutover, full original-source lookup and row-lock proof."""
 
 import asyncio
+import hashlib
+import json
 import runpy
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from portfolio_common import reprocessing_repository
 from portfolio_common.database_models import OutboxEvent
 from portfolio_common.reprocessing_repository import (
     _transactions_to_replay_stmt,
     load_transaction_fee_facts,
 )
 from pydantic import ValidationError
-from sqlalchemy import select, text, update
+from sqlalchemy import literal, select, text, update
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.orm import Session
@@ -65,7 +69,7 @@ def test_concurrent_migration_preserves_legacy_rows_reuses_valid_and_repairs_inv
     _run_migration(db_engine, migration, "upgrade")
     state, oid = _catalog(db_engine, migration)
     assert state["valid"] and state["ready"]
-    assert migration["_matches_index"](state), dict(state)
+    assert migration["_matches_index"](state), json.dumps(dict(state))
     _run_migration(db_engine, migration, "upgrade")
     assert _catalog(db_engine, migration)[1] == oid
     _run_migration(db_engine, migration, "downgrade")
@@ -105,6 +109,128 @@ def _catalog(engine, migration):
         state = migration["_index_state"]()
         oid = connection.scalar(text(f"SELECT '{_INDEX}'::regclass::oid"))
         return state, oid
+
+
+def _long_identifier(prefix):
+    return "".join(hashlib.sha256(f"{prefix}-{i}".encode()).hexdigest() for i in range(24))
+
+
+def _create_old_shape(engine):
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
+        connection.execute(
+            text(
+                f"CREATE INDEX CONCURRENTLY {_INDEX} ON outbox_events "
+                "(aggregate_id, (CAST(payload ->> 'transaction_id' AS VARCHAR)), id) "
+                "WHERE aggregate_type = 'RawTransaction' "
+                "AND event_type = 'RawTransactionPersisted'"
+            )
+        )
+
+
+@pytest.mark.usefixtures("clean_db")
+def test_unbounded_composite_index_rejects_previously_valid_long_identifiers(db_engine):
+    """Retain the old-shape failure as a real PostgreSQL negative control."""
+    migration = runpy.run_path(str(_MIGRATION))
+    portfolio, transaction = _long_identifier("portfolio"), _long_identifier("transaction")
+    _run_migration(db_engine, migration, "downgrade")
+    try:
+        with Session(db_engine) as session:
+            row = _raw({"transaction_id": transaction}, portfolio=portfolio)
+            session.add(row)
+            session.commit()
+            row_id = row.id
+        with pytest.raises(DBAPIError, match="index row size.*exceeds.*maximum"):
+            _create_old_shape(db_engine)
+        assert not _catalog(db_engine, migration)[0]["valid"]
+        with Session(db_engine) as session:
+            assert session.get(OutboxEvent, row_id).payload["transaction_id"] == transaction
+            session.delete(session.get(OutboxEvent, row_id))
+            session.commit()
+        _run_migration(db_engine, migration, "downgrade")
+        _create_old_shape(db_engine)
+        with Session(db_engine) as session:
+            session.add(_raw({"transaction_id": transaction}, portfolio=portfolio))
+            with pytest.raises(DBAPIError, match="index row size.*exceeds.*maximum"):
+                session.commit()
+            session.rollback()
+    finally:
+        _run_migration(db_engine, migration, "downgrade")
+        _run_migration(db_engine, migration, "upgrade")
+
+
+@pytest.mark.asyncio
+async def test_bounded_index_upgrades_long_originals_and_preserves_loader_results(
+    clean_db, db_engine, async_db_session
+):
+    migration = runpy.run_path(str(_MIGRATION))
+    portfolio, transaction = _long_identifier("portfolio"), _long_identifier("transaction")
+    _run_migration(db_engine, migration, "downgrade")
+    originals = [
+        _raw({"transaction_id": transaction, "fee": "1"}, portfolio=portfolio),
+        _raw({"transaction_id": transaction, "fee": "99"}, portfolio=portfolio),
+    ]
+    async_db_session.add_all(originals)
+    await async_db_session.commit()
+    baseline = (
+        (
+            await async_db_session.execute(
+                select(OutboxEvent.id, OutboxEvent.aggregate_id, OutboxEvent.payload)
+                .where(OutboxEvent.aggregate_id == portfolio)
+                .order_by(OutboxEvent.id)
+            )
+        )
+        .mappings()
+        .all()
+    )
+    await async_db_session.rollback()
+    _run_migration(db_engine, migration, "upgrade")
+    state = _catalog(db_engine, migration)[0]
+    assert migration["_matches_index"](state), json.dumps(dict(state))
+    for lock in (False, True):
+        _, rows, _ = await load_transaction_fee_facts(
+            async_db_session,
+            [{"transaction_id": transaction, "portfolio_id": portfolio}],
+            lock_sources=lock,
+        )
+        assert rows == baseline
+        await async_db_session.rollback()
+    new_original = _raw({"transaction_id": transaction, "fee": "7"}, portfolio=portfolio)
+    async_db_session.add(new_original)
+    await async_db_session.commit()
+    _, rows, _ = await load_transaction_fee_facts(
+        async_db_session, [{"transaction_id": transaction, "portfolio_id": portfolio}]
+    )
+    assert [r["payload"]["fee"] for r in rows] == ["1", "99", "7"]
+
+
+@pytest.mark.asyncio
+async def test_exact_loader_rechecks_both_selectors_under_controlled_digest_collision(
+    clean_db, async_db_session, monkeypatch
+):
+    rows = [
+        _raw({"transaction_id": "TXN", "fee": "1"}),
+        _raw({"transaction_id": "TXN", "fee": "99"}),
+        _raw({"transaction_id": "TXN"}, portfolio="FOREIGN"),
+        _raw({"transaction_id": "FOREIGN"}),
+    ]
+    async_db_session.add_all(rows)
+    await async_db_session.commit()
+    # Inject equal narrowing expressions, not a claim of a native MD5 collision.
+    # PostgreSQL executes the actual loader's remaining exact predicates.
+    monkeypatch.setattr(
+        reprocessing_repository, "func", SimpleNamespace(md5=lambda _: literal("collision"))
+    )
+    for lock in (False, True):
+        _, selected, _ = await load_transaction_fee_facts(
+            async_db_session,
+            [{"transaction_id": "TXN", "portfolio_id": "RAW-SOURCE"}],
+            lock_sources=lock,
+        )
+        assert [r["id"] for r in selected] == [rows[0].id, rows[1].id]
+    _, absent, _ = await load_transaction_fee_facts(
+        async_db_session, [{"transaction_id": "ABSENT", "portfolio_id": "RAW-SOURCE"}]
+    )
+    assert absent == []
 
 
 @pytest.mark.asyncio

@@ -25,8 +25,8 @@ def _state(**changes):
         "unique": False,
         "valid": True,
         "ready": True,
-        "key_1": "aggregate_id",
-        "key_2": "((payload ->> 'transaction_id'::text)::character varying)",
+        "key_1": "md5(aggregate_id::text)",
+        "key_2": "md5(((payload ->> 'transaction_id'::text)::character varying)::text)",
         "key_3": "id",
         "options": "0 0 0",
         "predicate": (
@@ -75,7 +75,9 @@ def test_matching_valid_index_is_reused_without_ddl():
         {"total_count": 4},
         {"unique": True},
         {"key_1": "event_type"},
+        {"key_1": "aggregate_id"},
         {"key_2": "payload ->> 'transaction_id'::text"},
+        {"key_2": "((payload ->> 'transaction_id'::text)::character varying)"},
         {"key_3": "id DESC"},
         {"options": "0 0 1"},
         {"predicate": None},
@@ -108,7 +110,7 @@ def test_model_index_preserves_exact_json_cast_partial_family_and_all_originals(
     )
     sql = str(CreateIndex(index).compile(dialect=postgresql.dialect()))
     assert not index.unique
-    assert "(aggregate_id, (CAST(payload ->> 'transaction_id' AS VARCHAR)), id)" in sql
+    assert "(md5(aggregate_id), md5(CAST(payload ->> 'transaction_id' AS VARCHAR)), id)" in sql
     assert (
         "WHERE aggregate_type = 'RawTransaction' AND event_type = 'RawTransactionPersisted'" in sql
     )

@@ -701,6 +701,10 @@ async def test_raw_source_fixed_literals_leave_requested_identifiers_bound(lock_
     assert "aggregate_type = 'RawTransaction'" in sql
     assert "event_type = 'RawTransactionPersisted'" in sql
     assert "CAST((outbox_events.payload ->> 'transaction_id') AS VARCHAR)" in sql
+    assert "md5(outbox_events.aggregate_id) IN (md5(" in sql
+    assert "md5(CAST((outbox_events.payload ->> 'transaction_id') AS VARCHAR)) IN (md5(" in sql
+    assert "outbox_events.aggregate_id IN (" in sql
+    assert "AS VARCHAR) IN (" in sql
     assert set(compiled.params.values()) == {portfolio_id, transaction_id}
     assert transaction_id not in sql and portfolio_id not in sql
     assert "ORDER BY outbox_events.id" in sql

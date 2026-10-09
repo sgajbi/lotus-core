@@ -2,11 +2,11 @@
 
 from typing import Any
 
-from sqlalchemy import Index
+from sqlalchemy import Index, func
 
 
 def outbox_event_table_args(
-    *, status: Any, payload: Any, aggregate_type: Any, event_type: Any
+    status: Any, payload: Any, aggregate_type: Any, aggregate_id: Any, event_type: Any
 ) -> tuple[Index, ...]:
     """Build independent indexes from the owning model's column expressions."""
     return (
@@ -38,8 +38,8 @@ def outbox_event_table_args(
         Index("ix_outbox_events_alternate_lookup_key", "alternate_lookup_key"),
         Index(
             "ix_outbox_events_raw_transaction_source",
-            "aggregate_id",
-            payload["transaction_id"].as_string(),
+            func.md5(aggregate_id),
+            func.md5(payload["transaction_id"].as_string()),
             "id",
             postgresql_where=(aggregate_type == "RawTransaction")
             & (event_type == "RawTransactionPersisted"),

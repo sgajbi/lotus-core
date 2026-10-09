@@ -405,11 +405,14 @@ or establish the cause of a historical idle transaction or portfolio wait chain.
 
 The bounded raw-source query retains every original row, including duplicates and late
 contradictions, in outbox-ID order. Its non-unique partial index
-`ix_outbox_events_raw_transaction_source` covers `aggregate_id`,
-`CAST(payload ->> 'transaction_id' AS VARCHAR)` and `id`, restricted to
+`ix_outbox_events_raw_transaction_source` covers `md5(aggregate_id)`,
+`md5(CAST(payload ->> 'transaction_id' AS VARCHAR))` and `id`, restricted to
 `RawTransaction`/`RawTransactionPersisted`. Fixed code-owned family selectors and the JSON key
 are SQL literals; requested IDs and portfolio scopes remain bound parameters. There is no
 latest-row selection, deduplication, limit, forced planner path or financial-policy shortcut.
+The bounded digests avoid combining unbounded identifiers in one B-tree tuple. Exact original
+portfolio and JSON-text equality predicates always recheck digest candidates; collisions cannot
+admit another source. MD5 is an index-narrowing aid, not security or financial provenance.
 The existing optional source `FOR SHARE`, canonical currency/fee validation and complete-UOW
 rollback remain enforced.
 
