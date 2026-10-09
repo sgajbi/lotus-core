@@ -94,6 +94,8 @@ def setup_mwr_data(clean_db_module, db_engine, e2e_api_client: E2EApiClient, pol
     if all_dates:
         e2e_api_client.ingest("/ingest/business-dates", {"business_dates": all_dates})
 
+    e2e_api_client.wait_for_admitted_portfolio(portfolio_id)
+
     # --- Ingest transactions and prices ---
     e2e_api_client.ingest(
         "/ingest/transactions",
