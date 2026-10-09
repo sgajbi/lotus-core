@@ -7,6 +7,7 @@ import pytest
 import requests
 
 from tests.e2e.api_client import E2EApiClient
+from tests.e2e.test_mwr_pipeline import setup_mwr_data
 from tests.e2e.test_performance_pipeline import setup_performance_data
 from tests.e2e.test_timeseries_convergence import (
     test_cash_only_staged_external_flows_are_not_doubled as cash_seed,
@@ -86,12 +87,16 @@ def test_foreign_portfolio_stops_seed_before_transaction_publication(scenario):
 
 
 @pytest.mark.parametrize("authority", ["delayed-owned", "missing", "foreign"])
-def test_performance_fixture_requires_owned_visibility_before_publication(monkeypatch, authority):
+@pytest.mark.parametrize("scenario", ["performance", "mwr"])
+def test_financial_fixture_requires_owned_visibility_before_publication(
+    monkeypatch, authority, scenario
+):
     client = E2EApiClient("http://ingestion", "http://query", "http://control")
     events = []
     portfolio_id = None
     visible = False
     elapsed = 0
+    transactions = []
 
     def post(url, *, json, timeout):
         nonlocal portfolio_id
@@ -103,7 +108,8 @@ def test_performance_fixture_requires_owned_visibility_before_publication(monkey
             assert portfolio["tenant_id"] == client.tenant_id
         if url.endswith("/ingest/transactions"):
             assert visible, "transaction publication preceded tenant-owned portfolio visibility"
-            assert json["transactions"][0]["portfolio_id"] == portfolio_id
+            transactions.extend(json["transactions"])
+            assert all(transaction["portfolio_id"] == portfolio_id for transaction in transactions)
         return SimpleNamespace(raise_for_status=lambda: None)
 
     def query(endpoint):
@@ -127,26 +133,45 @@ def test_performance_fixture_requires_owned_visibility_before_publication(monkey
     monkeypatch.setattr("tests.e2e.api_client.time.time", lambda: elapsed)
     monkeypatch.setattr("tests.e2e.api_client.time.sleep", advance_clock)
     poll_db_until = Mock()
+
+    def run_fixture():
+        if scenario == "mwr":
+            return setup_mwr_data.__wrapped__(None, None, client, poll_db_until)
+        return setup_performance_data.__wrapped__(None, client, poll_db_until)
+
     try:
         if authority == "delayed-owned":
-            result = setup_performance_data.__wrapped__(None, client, poll_db_until)
-            assert result == {"portfolio_id": portfolio_id}
+            result = run_fixture()
+            assert result["portfolio_id"] == portfolio_id
             assert events.count("portfolio-query") == 2
             assert events.index("portfolio-query") < events.index(
                 "http://ingestion/ingest/transactions"
             )
             assert events.count("http://ingestion/ingest/transactions") == 1
             assert events.count("http://ingestion/ingest/market-prices") == 1
-            poll_db_until.assert_called_once()
-            assert poll_db_until.call_args.kwargs["params"] == {
+            assert len(transactions) == (5 if scenario == "mwr" else 1)
+            expected_poll_count = 2 if scenario == "mwr" else 1
+            assert poll_db_until.call_count == expected_poll_count
+            assert poll_db_until.call_args_list[0].kwargs["params"] == {
                 "pid": portfolio_id,
-                "date": "2025-03-11",
+                "date": "2025-08-31" if scenario == "mwr" else "2025-03-11",
             }
+            assert all(call.kwargs["timeout"] == 180 for call in poll_db_until.call_args_list)
+            if scenario == "mwr":
+                assert {transaction["transaction_id"] for transaction in transactions} == set(
+                    result["transaction_ids"].values()
+                )
+                assert poll_db_until.call_args_list[1].kwargs["params"] == {
+                    "portfolio_id": portfolio_id,
+                    "security_id": result["cash_security_id"],
+                }
+            else:
+                assert result == {"portfolio_id": portfolio_id}
         else:
             with pytest.raises(
                 pytest.fail.Exception, match="Tenant-owned portfolio did not materialize"
             ):
-                setup_performance_data.__wrapped__(None, client, poll_db_until)
+                run_fixture()
             assert events.count("portfolio-query") == 2
             assert "http://ingestion/ingest/transactions" not in events
             assert "http://ingestion/ingest/market-prices" not in events
