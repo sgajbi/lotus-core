@@ -19,6 +19,13 @@ the canonical ingestion job, failure, replay-audit, retained-payload, and consum
 Source-batch identity is nullable and appears only when retained payload evidence proves one
 unambiguous upstream batch.
 
+Transaction ingress also carries optional supplier record, batch and observation lineage through
+the existing event and immutable persisted transaction. Restricted jobs retain a bounded batch
+projection while their request body remains absent and replay-ineligible. Uniform, mixed and
+legacy-unknown transaction scopes are explicit; batch identity is never a response content hash.
+See the [transaction supplier lineage runbook](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/transaction-supplier-lineage.md)
+for fields, refusal codes, compatibility, retention and authority limits.
+
 ## Immutable Financial Source Admission
 
 The two portfolio cash-availability and funding-investment observation POST routes return a

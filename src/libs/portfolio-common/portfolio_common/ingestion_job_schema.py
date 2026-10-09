@@ -40,6 +40,7 @@ class IngestionJobColumns:
     # Keep this on the mapped type so every ingestion workflow receives the same
     # persistence semantics without adapter-specific coercion.
     request_payload = Column(JSON(none_as_null=True), nullable=True)
+    transaction_batch_lineage = Column(JSON(none_as_null=True), nullable=True)
     request_payload_fingerprint = Column(String, nullable=True)
     request_payload_policy_version = Column(String(64), nullable=False)
     request_payload_classification = Column(String(32), nullable=False)

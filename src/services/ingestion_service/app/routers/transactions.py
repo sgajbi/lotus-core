@@ -35,6 +35,22 @@ from .publish_errors import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+TRANSACTION_LINEAGE_SOURCE_SYSTEM_REQUIRED_EXAMPLE = {
+    "detail": {
+        "code": "TRANSACTION_LINEAGE_SOURCE_SYSTEM_REQUIRED",
+        "message": "Supplier lineage requires source_system",
+    }
+}
+TRANSACTION_LINEAGE_ERROR_RESPONSE = {
+    "description": (
+        "Supplier lineage is missing its source system, has an invalid identifier "
+        "or an unknown lineage field."
+    ),
+    "content": {
+        "application/json": {"example": TRANSACTION_LINEAGE_SOURCE_SYSTEM_REQUIRED_EXAMPLE}
+    },
+}
+
 TRANSACTION_MODE_BLOCKED_EXAMPLE = {
     "detail": {
         "code": "INGESTION_MODE_BLOCKS_WRITES",
@@ -64,6 +80,7 @@ TRANSACTION_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
     status_code=status.HTTP_202_ACCEPTED,
     response_model=IngestionAcceptedResponse,
     responses={
+        status.HTTP_400_BAD_REQUEST: TRANSACTION_LINEAGE_ERROR_RESPONSE,
         status.HTTP_429_TOO_MANY_REQUESTS: {
             "description": "Write-rate protection blocked the single-transaction request.",
             "content": {"application/json": {"example": TRANSACTION_RATE_LIMIT_EXCEEDED_EXAMPLE}},
@@ -80,7 +97,8 @@ TRANSACTION_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
         "How: Validate the portfolio against admitted tenant authority, enforce contract, "
         "mode, and rate controls, propagate any "
         "idempotency key as publish lineage, then publish asynchronously to Kafka.\n"
-        "When: Use for low-volume operational corrections or single-record onboarding."
+        "When: Use for single-record onboarding and exact resends. Changed economics require "
+        "the governed correction contract, never a silent overwrite."
     ),
 )
 async def ingest_transaction(
@@ -134,6 +152,7 @@ async def ingest_transaction(
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
     responses={
+        status.HTTP_400_BAD_REQUEST: TRANSACTION_LINEAGE_ERROR_RESPONSE,
         status.HTTP_409_CONFLICT: ingestion_idempotency_conflict_response(),
         status.HTTP_429_TOO_MANY_REQUESTS: {
             "description": "Write-rate protection blocked the transaction batch request.",

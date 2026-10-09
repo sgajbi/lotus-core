@@ -165,6 +165,8 @@ SUITES: dict[str, list[str]] = {
     ],
     "critical-lifecycle-db": ["tests/integration"],
     "query-authority-db-contract": [
+        "tests/integration/services/ingestion_service/test_transaction_supplier_lineage_migration.py",
+        "tests/integration/services/ingestion_service/test_transaction_supplier_lineage_postgresql.py",
         "tests/integration/services/query_control_plane_service/"
         "test_source_receipt_http_restart_postgresql.py",
         "tests/integration/test_immutable_source_test_cleanup.py",
@@ -184,6 +186,9 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/services/persistence_service/"
         "test_transaction_source_correction_postgresql.py::"
         "test_actual_pg_source_confirmation_qcp_ledger_cut",
+        "tests/integration/services/persistence_service/"
+        "test_transaction_source_correction_postgresql.py::"
+        "test_source_confirmation_retains_original_supplier_batch_lineage",
         "tests/integration/services/query_control_plane_service/"
         "test_historical_fx_evidence_postgresql.py",
         "tests/integration/services/query_control_plane_service/"

@@ -22,6 +22,13 @@ conventions to answer:
 
 ## Current Implementation Baseline
 
+Transaction supplier record/batch/observation lineage is additive to the existing ingress and
+immutable transaction. Restricted jobs retain only a bounded transaction-batch projection alongside
+their fingerprint, not the request body. Full-window ledger evidence distinguishes uniform,
+mixed, empty and legacy-unknown scopes. The
+[supplier lineage runbook](../operations/transaction-supplier-lineage.md) defines exact fields,
+compatibility and retained-evidence limits; provenance does not establish monetary authority.
+
 Current useful building blocks:
 
 1. `ingestion_service` owns canonical write ingress for transactions, portfolios, instruments, market

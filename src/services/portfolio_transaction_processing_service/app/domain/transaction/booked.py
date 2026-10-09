@@ -52,6 +52,9 @@ class BookedTransaction:
     calculation_policy_id: str | None = None
     calculation_policy_version: str | None = None
     source_system: str | None = None
+    source_record_id: str | None = None
+    source_batch_id: str | None = None
+    observed_at: datetime | None = None
     cash_entry_mode: str | None = None
     external_cash_transaction_id: str | None = None
     settlement_cash_account_id: str | None = None
