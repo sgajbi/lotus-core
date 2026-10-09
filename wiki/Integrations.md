@@ -60,6 +60,8 @@ history. A party that can rewrite content and both hashes has not established so
 
 Canonical custody retains append-only revisions and exact sealed membership in the existing
 persistence inbox/outbox transaction. Source observation and Core acceptance time are separate;
+its migration `c179b2c3d540` follows the existing raw-source index migration `c180b2c3d541`
+(from `c178b2c3d539`), preserving one deployment chain without altering that index migration.
 QCP's optional explicit provider/source selector applies both historical boundaries and can pin
 an immutable cut. An absent referenced predecessor retries only through the typed owning path,
 after complete transaction rollback, within eight attempts/sixty seconds or tighter configured limits.

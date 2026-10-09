@@ -678,3 +678,56 @@ async def test_fee_fact_queries_preserve_bounded_scope_order_and_requested_read_
             assert f"FOR SHARE OF {table}" in statement
         else:
             assert "FOR SHARE" not in statement and "FOR UPDATE" not in statement
+
+
+@pytest.mark.parametrize("lock_sources", [False, True])
+async def test_raw_source_fixed_literals_leave_requested_identifiers_bound(lock_sources):
+    transaction_id = "TXN'); DROP TABLE outbox_events; --"
+    portfolio_id = "PORT' OR TRUE --"
+    session = AsyncMock(spec=AsyncSession)
+    session.execute.side_effect = [_mapping_result([]), _mapping_result([])]
+
+    assert await load_transaction_fee_facts(
+        session,
+        [{"transaction_id": transaction_id, "portfolio_id": portfolio_id}],
+        lock_sources=lock_sources,
+    ) == ([], [], [])
+
+    statement = session.execute.await_args_list[1].args[0]
+    compiled = statement.compile(
+        dialect=postgresql.dialect(), compile_kwargs={"render_postcompile": True}
+    )
+    sql = str(compiled)
+    assert "aggregate_type = 'RawTransaction'" in sql
+    assert "event_type = 'RawTransactionPersisted'" in sql
+    assert "CAST((outbox_events.payload ->> 'transaction_id') AS VARCHAR)" in sql
+    assert "md5(outbox_events.aggregate_id) IN (md5(" in sql
+    assert "md5(CAST((outbox_events.payload ->> 'transaction_id') AS VARCHAR)) IN (md5(" in sql
+    assert "outbox_events.aggregate_id IN (" in sql
+    assert "AS VARCHAR) IN (" in sql
+    assert set(compiled.params.values()) == {portfolio_id, transaction_id}
+    assert transaction_id not in sql and portfolio_id not in sql
+    assert "ORDER BY outbox_events.id" in sql
+    assert "LIMIT" not in sql and "DISTINCT" not in sql
+    assert ("FOR SHARE OF outbox_events" in sql) == lock_sources
+
+
+@pytest.mark.asyncio
+async def test_raw_source_complete_history_reuses_asyncpg_selector_bindings():
+    history = [
+        {"transaction_id": f"HISTORY-{index}", "portfolio_id": "PORTFOLIO"}
+        for index in range(16383)
+    ]
+    session = AsyncMock(spec=AsyncSession)
+    session.execute.side_effect = [_mapping_result([]), _mapping_result([])]
+    assert await load_transaction_fee_facts(session, history) == ([], [], [])
+    statement = session.execute.await_args_list[1].args[0]
+    compiled = statement.compile(
+        dialect=postgresql.asyncpg.dialect(), compile_kwargs={"render_postcompile": True}
+    )
+    assert len(compiled.positiontup) == len(history) + 1
+    assert len(compiled.params) == len(history) + 1
+    assert set(compiled.params.values()) == {"PORTFOLIO"} | {
+        row["transaction_id"] for row in history
+    }
+    assert "HISTORY-" not in str(compiled) and "PORTFOLIO" not in str(compiled)

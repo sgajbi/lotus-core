@@ -34,7 +34,7 @@ def fx_source_migration(connection):
     path = Path(__file__).resolve().parents[2] / "alembic/versions"
     module = runpy.run_path(str(path / "c179b2c3d540_add_fx_source_revision_cuts.py"))
     assert module["revision"] == "c179b2c3d540"
-    assert module["down_revision"] == "c178b2c3d539"
+    assert module["down_revision"] == "c180b2c3d541"
     module["upgrade"].__globals__["op"] = Operations(MigrationContext.configure(connection))
     return module
 

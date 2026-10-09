@@ -1,7 +1,7 @@
 """Retain canonical FX source revisions and sealed membership without legacy backfill.
 
 Revision ID: c179b2c3d540
-Revises: c178b2c3d539
+Revises: c180b2c3d541
 """
 
 import sqlalchemy as sa
@@ -10,7 +10,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 revision = "c179b2c3d540"
-down_revision = "c178b2c3d539"
+down_revision = "c180b2c3d541"
 branch_labels = None
 depends_on = None
 

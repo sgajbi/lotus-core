@@ -120,7 +120,8 @@ read contract; the presence of a notification does not prove that adoption or fi
 
 ## Deployment And Rollback
 
-1. Apply migration `c179b2c3d540` after `c178b2c3d539`; legacy rates and pending v1 jobs are preserved,
+1. Apply migration `c179b2c3d540` after `c180b2c3d541` (which follows `c178b2c3d539`);
+   the existing raw-source index remains intact, and legacy rates and pending v1 jobs are preserved,
    not backfilled into qualified source history.
 2. Deploy explicit canonical variants at both existing FX consumers before admitting a canonical
    producer. Old consumers cannot safely interpret the new typed variant.

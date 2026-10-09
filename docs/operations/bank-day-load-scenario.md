@@ -401,6 +401,30 @@ Original preparation is batch-local and reused across receipt awaits only while 
 remain unchanged. This reduces unnecessary preparation/query work; it does not certify load SLOs
 or establish the cause of a historical idle transaction or portfolio wait chain.
 
+### Original Raw-Source Lookup Index
+
+The bounded raw-source query retains every original row, including duplicates and late
+contradictions, in outbox-ID order. Its non-unique partial index
+`ix_outbox_events_raw_transaction_source` covers `md5(aggregate_id)`,
+`md5(CAST(payload ->> 'transaction_id' AS VARCHAR))` and `id`, restricted to
+`RawTransaction`/`RawTransactionPersisted`. Fixed code-owned family selectors and the JSON key
+are SQL literals; requested IDs and portfolio scopes remain bound parameters. There is no
+latest-row selection, deduplication, limit, forced planner path or financial-policy shortcut.
+The bounded digests avoid combining unbounded identifiers in one B-tree tuple. Exact original
+portfolio and JSON-text equality predicates always recheck digest candidates; collisions cannot
+admit another source. Exact and digest comparisons share bound selector objects, preserving the
+prior driver-argument budget for complete histories. MD5 is an index-narrowing aid, not security
+or financial provenance.
+The existing optional source `FOR SHARE`, canonical currency/fee validation and complete-UOW
+rollback remain enforced.
+
+Migration `c180b2c3d541` builds and drops the index concurrently. A valid expected index is
+reused; an interrupted invalid/not-ready index on the owning table is rebuilt. A foreign-table
+or valid unexpected same-name catalog shape fails closed and requires owner disposition; do
+not drop foreign indexes or waive shape checks. Retain the migration exit and exact catalog
+evidence when diagnosing a cutover. Local lookup plans, timings and writer-cost observations
+do not qualify whole-loader capacity, ordering or the independent full-load SLOs in #795/#730.
+
 The separate `make test-performance-load-gate-full` gate retains JSON/Markdown reports in
 `output/task-runs/` when source completion raises, including profiles already evaluated and the
 active failure stage. `completion_evidence` records each HTTP202 batch's independently submitted

@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from types import SimpleNamespace
 from typing import Any, cast
 
-from sqlalchemy import and_, case, or_, select
+from sqlalchemy import and_, case, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import OutboxEvent, Portfolio, ProcessedEvent, TransactionCost
@@ -142,13 +142,22 @@ async def load_transaction_fee_facts(
         .where(TransactionCost.transaction_id.in_(ids))
         .order_by(TransactionCost.transaction_id, TransactionCost.id)
     )
+    raw_transaction_id = OutboxEvent.payload[
+        literal("transaction_id", literal_execute=True)
+    ].as_string()
+    portfolio_bindings = [literal(portfolio) for portfolio in portfolios]
+    transaction_bindings = [literal(transaction_id) for transaction_id in ids]
     raw_stmt = (
         select(OutboxEvent.id, OutboxEvent.aggregate_id, OutboxEvent.payload)
         .where(
-            OutboxEvent.aggregate_type == "RawTransaction",
-            OutboxEvent.event_type == "RawTransactionPersisted",
-            OutboxEvent.aggregate_id.in_(portfolios),
-            OutboxEvent.payload["transaction_id"].as_string().in_(ids),
+            OutboxEvent.aggregate_type == literal("RawTransaction", literal_execute=True),
+            OutboxEvent.event_type == literal("RawTransactionPersisted", literal_execute=True),
+            OutboxEvent.aggregate_id.in_(portfolio_bindings),
+            raw_transaction_id.in_(transaction_bindings),
+            # Digests only narrow the index scan; exact equality above rejects collisions.
+            # Reuse each bound value so complete histories do not double the driver arguments.
+            func.md5(OutboxEvent.aggregate_id).in_([func.md5(p) for p in portfolio_bindings]),
+            func.md5(raw_transaction_id).in_([func.md5(t) for t in transaction_bindings]),
         )
         .order_by(OutboxEvent.id)
     )

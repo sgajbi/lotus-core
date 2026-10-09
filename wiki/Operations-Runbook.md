@@ -972,6 +972,25 @@ leak from eager correction preparation. Tenant/source-FX, None/zero, ambiguity a
 checks remain enforced; batch-local preparation is refused if inputs change across receipt awaits.
 Reduced preparation/query work is not a load-SLO or historical root-cause certification.
 
+### Original Raw-Source Index Cutover
+
+Original lookup retains all duplicate and contradictory rows in outbox-ID order, with bound
+transaction/portfolio data and existing source read locks. The non-unique partial
+`ix_outbox_events_raw_transaction_source` index covers bounded MD5 digests of portfolio and the
+transaction-ID JSON cast, plus row ID for the fixed raw-transaction event family. Exact original
+portfolio and JSON-text equality recheck all digest candidates, preserving long identifiers
+without admitting collisions. Exact and digest comparisons reuse each bound selector rather than
+double complete-history driver arguments. Digests are not security or financial provenance. It does not select only the
+latest source, waive canonical currency/fee refusals or change financial writes.
+
+Concurrent migration `c180b2c3d541` reuses a valid expected index and repairs an interrupted
+invalid owned index. A foreign-table or valid unexpected same-name index requires owner
+disposition, not an operator drop or threshold waiver. Preserve native migration/catalog
+evidence and follow the
+[raw-source cutover guidance](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/bank-day-load-scenario.md#original-raw-source-lookup-index).
+Lookup measurements alone do not certify whole-loader capacity, ordering or load SLOs;
+#795/#730 remain separate acceptance work.
+
 ## Related references
 
 - [Support and Lineage](Support-and-Lineage)
