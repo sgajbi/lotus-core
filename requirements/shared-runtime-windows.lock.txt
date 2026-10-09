@@ -109,6 +109,8 @@ typing-inspection==0.4.2
     # via
     #   fastapi
     #   pydantic
+tzdata==2026.5
+    # via -r shared-runtime.in
 uvicorn==0.49.0
     # via -r shared-runtime.in
 watchfiles==1.1.1

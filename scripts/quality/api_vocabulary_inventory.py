@@ -295,6 +295,21 @@ def _extract_fields(
     location: str = "body",
 ) -> list[dict[str, Any]]:
     resolved = _resolve_schema(schema, components)
+    for composition in ("anyOf", "oneOf"):
+        alternatives = resolved.get(composition)
+        if isinstance(alternatives, list):
+            alternative_fields = []
+            for alternative in alternatives:
+                if not isinstance(alternative, dict) or alternative.get("type") == "null":
+                    continue
+                for field in _extract_fields(alternative, components, prefix, location):
+                    # Required within one valid body is not mandatory for every
+                    # other alternative. Preserve that distinction explicitly.
+                    field["schemaAlternative"] = _schema_type(alternative)
+                    field["requiredWithinAlternative"] = field["required"]
+                    field["required"] = False
+                    alternative_fields.append(field)
+            return alternative_fields
     properties = resolved.get("properties", {})
     required = set(resolved.get("required", []))
     if not isinstance(properties, dict):

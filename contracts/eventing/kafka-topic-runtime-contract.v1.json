@@ -110,13 +110,13 @@
       "topic": "fx_rates.raw.received",
       "partitions": 4,
       "producer_services": ["ingestion_service"],
-      "current_key": "from_currency|to_currency",
-      "ordering_scope": "currency_pair",
+      "current_key": "legacy:from_currency|to_currency;fx.source-cut.v1:cut_id",
+      "ordering_scope": "legacy_currency_pair_or_canonical_cut;source_chains_serialized_by_database",
       "consumer_groups": ["persistence_group_fx_rates"],
       "consumer_max_in_flight": 4,
       "state_owner": "persistence_service.fx_rates",
-      "duplicate_policy": "idempotency_claim_then_observation_upsert",
-      "replay_contract": "replay_with_original_currency_pair_key"
+      "duplicate_policy": "legacy_claim_then_upsert;canonical_tenant_cut_fence_and_atomic_append_only_membership",
+      "replay_contract": "legacy_original_pair_key;canonical_original_cut_and_attestation_with_durable_exact_replay"
     },
     {
       "topic": "business_dates.raw.received",
@@ -194,13 +194,13 @@
       "topic": "fx_rates.persisted",
       "partitions": 4,
       "producer_services": ["persistence_service"],
-      "current_key": "from_currency|to_currency",
-      "ordering_scope": "currency_pair",
+      "current_key": "legacy:from_currency|to_currency;fx.source-cut.v1:cut_id",
+      "ordering_scope": "legacy_currency_pair_or_canonical_cut",
       "consumer_groups": ["valuation_orchestrator_group_fx_events"],
       "consumer_max_in_flight": 4,
       "state_owner": "valuation_orchestrator_service.fx_reprocessing_queue",
-      "duplicate_policy": "source_observation_identity_and_bounded_reprocessing_upsert",
-      "replay_contract": "replay_preserves_currency_pair_key"
+      "duplicate_policy": "legacy_bounded_reprocessing;canonical_retained_cut_verification_and_tenant_notification_fence",
+      "replay_contract": "legacy_original_pair_key;canonical_original_cut_key_without_unscoped_valuation_jobs"
     },
     {
       "topic": "transactions.cost.processed",

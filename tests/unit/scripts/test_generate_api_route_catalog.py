@@ -1,6 +1,22 @@
 from scripts.generators import generate_api_route_catalog as catalog
 
 
+def test_request_schema_preserves_named_alternatives_over_generic_title() -> None:
+    assert (
+        catalog._schema_name(
+            {
+                "title": "Request",
+                "anyOf": [
+                    {"$ref": "#/components/schemas/LegacyFx"},
+                    {"$ref": "#/components/schemas/RetainedCut"},
+                ],
+            }
+        )
+        == "anyOf(LegacyFx, RetainedCut)"
+    )
+    assert catalog._schema_name({"oneOf": [None, {"type": "string"}]}) == "oneOf(string)"
+
+
 def _openapi_fixture() -> dict:
     return {
         "ingestion_service": {

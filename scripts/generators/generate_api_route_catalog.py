@@ -242,6 +242,12 @@ def _schema_name(schema: object) -> str | None:
     ref = schema.get("$ref")
     if isinstance(ref, str):
         return ref.rsplit("/", 1)[-1]
+    for composition in ("anyOf", "oneOf"):
+        alternatives = schema.get(composition)
+        if isinstance(alternatives, list):
+            names = [name for item in alternatives if (name := _schema_name(item))]
+            if names:
+                return f"{composition}({', '.join(names)})"
     title = schema.get("title")
     if isinstance(title, str):
         return title

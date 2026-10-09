@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import portfolio_common.event_supportability as event_supportability
 import pytest
-from portfolio_common import event_contracts, events
+from portfolio_common import event_contracts, events, fx_source_events
 from portfolio_common.api_contract.async_commands import SourceEvidenceConfirmationInput
 from portfolio_common.command_authorization import (
     CommandAuthorizationClaims,
@@ -33,7 +33,7 @@ from portfolio_common.source_data_security import SourceDataSecurityProfile
 def test_event_supportability_catalog_validates_against_existing_event_models() -> None:
     available_models = {
         name
-        for module in (events, event_contracts)
+        for module in (events, event_contracts, fx_source_events)
         for name in dir(module)
         if name.endswith("Event") or name.endswith("EventModel")
     }
@@ -235,9 +235,22 @@ def test_cataloged_event_models_accept_governed_outbox_envelope_metadata() -> No
         "idempotency_key": "revision",
         "source_system": "persistence_service",
     }
+    sample_payloads_by_schema_model["FxSourceCutPersistedEvent"] = {
+        "tenant_id": "SYNTHETIC_TENANT",
+        "provider_id": "SYNTHETIC_PROVIDER",
+        "source_id": "SYNTHETIC_FEED",
+        "cut_id": "a" * 64,
+        "content_hash": "b" * 64,
+        "member_count": 1,
+        "members": [{"revision_id": "c" * 64, "content_hash": "d" * 64}],
+        "source_observed_cutoff": "2026-10-08T16:00:00Z",
+        "accepted_at": "2026-10-08T16:01:00Z",
+    }
     for definition in EVENT_FAMILY_DEFINITIONS:
-        model_cls = getattr(events, definition.schema_model, None) or getattr(
-            event_contracts, definition.schema_model
+        model_cls = next(
+            getattr(module, definition.schema_model)
+            for module in (events, event_contracts, fx_source_events)
+            if hasattr(module, definition.schema_model)
         )
         payload = {
             **sample_payloads_by_schema_model[definition.schema_model],

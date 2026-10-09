@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-10-08T20:35:45.373559+00:00",
+  "generatedAt": "2026-10-08T23:31:25.271675+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -578,6 +578,20 @@
       ]
     },
     {
+      "semanticId": "lotus.annual_yield",
+      "canonicalTerm": "annual_yield",
+      "preferredName": "annual_yield",
+      "description": "effective yield authority contract field: annual yield.",
+      "example": "STANDARD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.app_version",
       "canonicalTerm": "app_version",
       "preferredName": "app_version",
@@ -779,8 +793,8 @@
       "semanticId": "lotus.assignment_reason",
       "canonicalTerm": "assignment_reason",
       "preferredName": "assignment_reason",
-      "description": "Auditable business rationale for the policy selection or correction, such as clean-price fixed-income treatment.",
-      "example": "Fixed-rate bond quoted clean as percentage of face amount.",
+      "description": "policy assignment authority contract field: assignment reason.",
+      "example": "example_assignment_reason",
       "type": "string",
       "locations": [
         "body"
@@ -928,6 +942,20 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.authority_type",
+      "canonicalTerm": "authority_type",
+      "preferredName": "authority_type",
+      "description": "policy assignment authority contract field: authority type.",
+      "example": "POLICY_ASSIGNMENT",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -1641,6 +1669,20 @@
       ]
     },
     {
+      "semanticId": "lotus.calendar_version",
+      "canonicalTerm": "calendar_version",
+      "preferredName": "calendar_version",
+      "description": "fx source member field: calendar version.",
+      "example": "example_calendar_version",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.capital_gains_tax_applicable",
       "canonicalTerm": "capital_gains_tax_applicable",
       "preferredName": "capital_gains_tax_applicable",
@@ -1742,6 +1784,20 @@
       "preferredName": "cash_balance_reporting_currency",
       "description": "Cash balance subtotal in reporting currency.",
       "example": 120000.0,
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.cash_coupon_local",
+      "canonicalTerm": "cash_coupon_local",
+      "preferredName": "cash_coupon_local",
+      "description": "amortization period contract field: cash coupon local.",
+      "example": "STANDARD",
       "type": "string",
       "locations": [
         "body"
@@ -2728,6 +2784,34 @@
       ]
     },
     {
+      "semanticId": "lotus.declared_member_count",
+      "canonicalTerm": "declared_member_count",
+      "preferredName": "declared_member_count",
+      "description": "fx source cut submission field: declared member count.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
+      ]
+    },
+    {
+      "semanticId": "lotus.declared_membership_hash",
+      "canonicalTerm": "declared_membership_hash",
+      "preferredName": "declared_membership_hash",
+      "description": "fx source cut submission field: declared membership hash.",
+      "example": "example_declared_membership_hash",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.decomposed_position_count",
       "canonicalTerm": "decomposed_position_count",
       "preferredName": "decomposed_position_count",
@@ -2974,6 +3058,20 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.discount_origin",
+      "canonicalTerm": "discount_origin",
+      "preferredName": "discount_origin",
+      "description": "clean cost basis authority contract field: discount origin.",
+      "example": "AT_PAR",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "FixedIncomeDiscountOrigin"
       ]
     },
     {
@@ -3633,6 +3731,20 @@
       ]
     },
     {
+      "semanticId": "lotus.fees_in_basis_local",
+      "canonicalTerm": "fees_in_basis_local",
+      "preferredName": "fees_in_basis_local",
+      "description": "clean cost basis authority contract field: fees in basis local.",
+      "example": "STANDARD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.field_path",
       "canonicalTerm": "field_path",
       "preferredName": "field_path",
@@ -3674,6 +3786,20 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.fixing_kind",
+      "canonicalTerm": "fixing_kind",
+      "preferredName": "fixing_kind",
+      "description": "fx source member field: fixing kind.",
+      "example": "example_fixing_kind",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -4000,6 +4126,38 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.header",
+      "canonicalTerm": "header",
+      "preferredName": "header",
+      "description": "policy assignment authority contract field: header.",
+      "example": {
+        "scope": {
+          "tenant_id": "TENANT_SG",
+          "legal_book_id": "LEGAL_BOOK_001",
+          "portfolio_id": "DEMO_DPM_EUR_001",
+          "security_id": "AAPL",
+          "lot_id": "LOT_001"
+        },
+        "source": {
+          "source_system": "OMS_PRIMARY",
+          "source_record_id": "SOURCE_RECORD_001",
+          "source_revision": "revision-1",
+          "source_version": 1,
+          "observed_at": "2026-02-27T10:30:00Z"
+        },
+        "status": "ACTIVE",
+        "valid_from": "2026-02-27",
+        "valid_to": "2026-02-27"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "FixedIncomeBookCostAuthorityHeader"
       ]
     },
     {
@@ -4389,6 +4547,20 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.initial_clean_cost_local",
+      "canonicalTerm": "initial_clean_cost_local",
+      "preferredName": "initial_clean_cost_local",
+      "description": "clean cost basis authority contract field: initial clean cost local.",
+      "example": "STANDARD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -5537,6 +5709,33 @@
       ]
     },
     {
+      "semanticId": "lotus.members",
+      "canonicalTerm": "members",
+      "preferredName": "members",
+      "description": "fx source cut submission field: members.",
+      "example": [
+        {
+          "source_record_id": "SOURCE_RECORD_001",
+          "source_revision": "revision-1",
+          "from_currency": "USD",
+          "to_currency": "SGD",
+          "rate_date": "2026-02-27",
+          "rate": "example_value",
+          "source_observed_at": "2026-02-27T10:30:00Z",
+          "fixing_kind": "example_fixing_kind",
+          "calendar_version": "example_calendar_version",
+          "predecessor_revision_id": "example_value"
+        }
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
+      ]
+    },
+    {
       "semanticId": "lotus.message",
       "canonicalTerm": "message",
       "preferredName": "message",
@@ -6539,6 +6738,56 @@
       ]
     },
     {
+      "semanticId": "lotus.period_end_date",
+      "canonicalTerm": "period_end_date",
+      "preferredName": "period_end_date",
+      "description": "Business date for period end date.",
+      "example": "2026-02-27",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.period_start_date",
+      "canonicalTerm": "period_start_date",
+      "preferredName": "period_start_date",
+      "description": "Business date for period start date.",
+      "example": "2026-02-27",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.periods",
+      "canonicalTerm": "periods",
+      "preferredName": "periods",
+      "description": "amortization schedule authority contract field: periods.",
+      "example": [
+        {
+          "period_start_date": "2026-02-27",
+          "period_end_date": "2026-02-27",
+          "year_fraction": "example_value",
+          "cash_coupon_local": "example_value",
+          "supplied_period_rate": "example_value"
+        }
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
+      ]
+    },
+    {
       "semanticId": "lotus.planned_withdrawal_schedules",
       "canonicalTerm": "planned_withdrawal_schedules",
       "preferredName": "planned_withdrawal_schedules",
@@ -6844,6 +7093,22 @@
       "canonicalTerm": "predecessor_id",
       "preferredName": "predecessor_id",
       "description": "Original immutable observation ID for correction.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.predecessor_revision_id",
+      "canonicalTerm": "predecessor_revision_id",
+      "preferredName": "predecessor_revision_id",
+      "description": "Unique predecessor revision identifier.",
       "example": {
         "id": "OBJ_001"
       },
@@ -7242,6 +7507,20 @@
       ],
       "observedTypes": [
         "integer"
+      ]
+    },
+    {
+      "semanticId": "lotus.provider_id",
+      "canonicalTerm": "provider_id",
+      "preferredName": "provider_id",
+      "description": "Unique provider identifier.",
+      "example": "PROVIDER_001",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -7900,12 +8179,13 @@
       "example": {
         "id": "OBJ_001"
       },
-      "type": "object",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "object"
+        "object",
+        "string"
       ]
     },
     {
@@ -8827,11 +9107,12 @@
       "preferredName": "schedule_version",
       "description": "fixed income book cost as of response field: schedule version.",
       "example": 10,
-      "type": "object",
+      "type": "integer",
       "locations": [
         "body"
       ],
       "observedTypes": [
+        "integer",
         "object"
       ]
     },
@@ -8881,6 +9162,7 @@
         "body"
       ],
       "observedTypes": [
+        "FixedIncomeBookCostAuthorityScope",
         "ReportingScope",
         "string"
       ]
@@ -9377,6 +9659,7 @@
       ],
       "observedTypes": [
         "CorporateActionManifestSourceContract",
+        "FixedIncomeBookCostAuthoritySource",
         "string"
       ]
     },
@@ -9541,6 +9824,34 @@
       ]
     },
     {
+      "semanticId": "lotus.source_cut_reference",
+      "canonicalTerm": "source_cut_reference",
+      "preferredName": "source_cut_reference",
+      "description": "fx source cut submission field: source cut reference.",
+      "example": "example_source_cut_reference",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.source_cut_revision",
+      "canonicalTerm": "source_cut_revision",
+      "preferredName": "source_cut_revision",
+      "description": "fx source cut submission field: source cut revision.",
+      "example": "example_source_cut_revision",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.source_cut_sha256",
       "canonicalTerm": "source_cut_sha256",
       "preferredName": "source_cut_sha256",
@@ -9599,6 +9910,20 @@
       ]
     },
     {
+      "semanticId": "lotus.source_id",
+      "canonicalTerm": "source_id",
+      "preferredName": "source_id",
+      "description": "Unique source identifier.",
+      "example": "SOURCE_001",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.source_instrument_id",
       "canonicalTerm": "source_instrument_id",
       "preferredName": "source_instrument_id",
@@ -9650,6 +9975,34 @@
       "preferredName": "source_lot_id",
       "description": "Unique source lot identifier.",
       "example": "SOURCE_LOT_001",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.source_observed_at",
+      "canonicalTerm": "source_observed_at",
+      "preferredName": "source_observed_at",
+      "description": "Timestamp for source observed at.",
+      "example": "2026-02-27T10:30:00Z",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.source_observed_cutoff",
+      "canonicalTerm": "source_observed_cutoff",
+      "preferredName": "source_observed_cutoff",
+      "description": "Timestamp for source observed cutoff.",
+      "example": "2026-02-27T10:30:00Z",
       "type": "string",
       "locations": [
         "body"
@@ -9913,7 +10266,7 @@
       "semanticId": "lotus.source_version",
       "canonicalTerm": "source_version",
       "preferredName": "source_version",
-      "description": "Contiguous producer revision, starting at 1.",
+      "description": "fixed income book cost authority source field: source version.",
       "example": 1,
       "type": "integer",
       "locations": [
@@ -10023,6 +10376,7 @@
         "body"
       ],
       "observedTypes": [
+        "FixedIncomeBookCostAuthorityStatus",
         "ReportingCurrencySupportStatus",
         "string"
       ]
@@ -10053,6 +10407,22 @@
       ],
       "observedTypes": [
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.supplied_period_rate",
+      "canonicalTerm": "supplied_period_rate",
+      "preferredName": "supplied_period_rate",
+      "description": "Rate/price value for supplied period rate.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -11514,7 +11884,7 @@
       "semanticId": "lotus.valid_from",
       "canonicalTerm": "valid_from",
       "preferredName": "valid_from",
-      "description": "Inclusive policy-assignment start date.",
+      "description": "fixed income book cost authority header field: valid from.",
       "example": "2026-02-27",
       "type": "string",
       "locations": [
@@ -11542,7 +11912,7 @@
       "semanticId": "lotus.valid_to",
       "canonicalTerm": "valid_to",
       "preferredName": "valid_to",
-      "description": "Inclusive policy-assignment end date, or null while open-ended.",
+      "description": "fixed income book cost authority header field: valid to.",
       "example": "2026-02-27",
       "type": "object",
       "locations": [
@@ -11898,6 +12268,62 @@
       ],
       "observedTypes": [
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.year_fraction",
+      "canonicalTerm": "year_fraction",
+      "preferredName": "year_fraction",
+      "description": "amortization period contract field: year fraction.",
+      "example": "STANDARD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.year_fraction_method_id",
+      "canonicalTerm": "year_fraction_method_id",
+      "preferredName": "year_fraction_method_id",
+      "description": "Unique year fraction method identifier.",
+      "example": "YEAR_FRACTION_METHOD_001",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.year_fraction_method_version",
+      "canonicalTerm": "year_fraction_method_version",
+      "preferredName": "year_fraction_method_version",
+      "description": "amortization schedule authority contract field: year fraction method version.",
+      "example": 1,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
+      ]
+    },
+    {
+      "semanticId": "lotus.yield_application",
+      "canonicalTerm": "yield_application",
+      "preferredName": "yield_application",
+      "description": "effective yield authority contract field: yield application.",
+      "example": "ANNUAL_EFFECTIVE",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "FixedIncomeYieldApplication"
       ]
     }
   ],
@@ -31657,21 +32083,36 @@
         "FX Rates"
       ],
       "summary": "Ingest FX rates",
-      "description": "What: Accept canonical foreign-exchange rate observations.\nHow: Validate FX rate contract, enforce ingestion controls, and publish asynchronous events for downstream valuation.\nWhen: Use for scheduled FX reference updates and approved manual corrections.",
+      "description": "What: Accept legacy FX rate batches or one complete fx.source-cut.v1 submission.\nHow: Legacy batches retain their unqualified global projection behavior. Canonical cuts require a verified service principal and server-owned provider/source enrollment and fixing calendar, then publish one signed bounded command for atomic retained custody. A canonical acknowledgement counts one cut, not its members, and is not persistence completion or an unscoped valuation correction.\nWhen: Use for enrolled source fixings and predecessor-bound source corrections.",
       "naming": {
         "boundedContext": "fx_rates",
         "canonicalTerms": [
           "accepted_count",
+          "calendar_version",
+          "contract_version",
           "correlation_id",
+          "declared_member_count",
+          "declared_membership_hash",
           "entity_type",
+          "fixing_kind",
           "from_currency",
           "fx_rates",
           "idempotency_key",
           "job_id",
+          "members",
           "message",
+          "predecessor_revision_id",
+          "provider_id",
           "rate",
           "rate_date",
           "request_id",
+          "source_cut_reference",
+          "source_cut_revision",
+          "source_id",
+          "source_observed_at",
+          "source_observed_cutoff",
+          "source_record_id",
+          "source_revision",
           "to_currency",
           "trace_id",
           "x_tenant_id"
@@ -31690,7 +32131,7 @@
           {
             "name": "fx_rates",
             "location": "body",
-            "required": true,
+            "required": false,
             "type": "array",
             "semanticId": "lotus.fx_rates",
             "attributeRef": "lotus.fx_rates"
@@ -31698,7 +32139,7 @@
           {
             "name": "fx_rates[].from_currency",
             "location": "body",
-            "required": true,
+            "required": false,
             "type": "string",
             "semanticId": "lotus.from_currency",
             "attributeRef": "lotus.from_currency"
@@ -31706,7 +32147,7 @@
           {
             "name": "fx_rates[].to_currency",
             "location": "body",
-            "required": true,
+            "required": false,
             "type": "string",
             "semanticId": "lotus.to_currency",
             "attributeRef": "lotus.to_currency"
@@ -31714,7 +32155,7 @@
           {
             "name": "fx_rates[].rate_date",
             "location": "body",
-            "required": true,
+            "required": false,
             "type": "string",
             "semanticId": "lotus.rate_date",
             "attributeRef": "lotus.rate_date"
@@ -31722,10 +32163,162 @@
           {
             "name": "fx_rates[].rate",
             "location": "body",
-            "required": true,
+            "required": false,
             "type": "object",
             "semanticId": "lotus.rate",
             "attributeRef": "lotus.rate"
+          },
+          {
+            "name": "contract_version",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.contract_version",
+            "attributeRef": "lotus.contract_version"
+          },
+          {
+            "name": "provider_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.provider_id",
+            "attributeRef": "lotus.provider_id"
+          },
+          {
+            "name": "source_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_id",
+            "attributeRef": "lotus.source_id"
+          },
+          {
+            "name": "source_cut_reference",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_cut_reference",
+            "attributeRef": "lotus.source_cut_reference"
+          },
+          {
+            "name": "source_cut_revision",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_cut_revision",
+            "attributeRef": "lotus.source_cut_revision"
+          },
+          {
+            "name": "source_observed_cutoff",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_observed_cutoff",
+            "attributeRef": "lotus.source_observed_cutoff"
+          },
+          {
+            "name": "declared_member_count",
+            "location": "body",
+            "required": false,
+            "type": "integer",
+            "semanticId": "lotus.declared_member_count",
+            "attributeRef": "lotus.declared_member_count"
+          },
+          {
+            "name": "declared_membership_hash",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.declared_membership_hash",
+            "attributeRef": "lotus.declared_membership_hash"
+          },
+          {
+            "name": "members",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.members",
+            "attributeRef": "lotus.members"
+          },
+          {
+            "name": "members[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "members[].source_revision",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_revision",
+            "attributeRef": "lotus.source_revision"
+          },
+          {
+            "name": "members[].from_currency",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.from_currency",
+            "attributeRef": "lotus.from_currency"
+          },
+          {
+            "name": "members[].to_currency",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.to_currency",
+            "attributeRef": "lotus.to_currency"
+          },
+          {
+            "name": "members[].rate_date",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.rate_date",
+            "attributeRef": "lotus.rate_date"
+          },
+          {
+            "name": "members[].rate",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.rate",
+            "attributeRef": "lotus.rate"
+          },
+          {
+            "name": "members[].source_observed_at",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_observed_at",
+            "attributeRef": "lotus.source_observed_at"
+          },
+          {
+            "name": "members[].fixing_kind",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.fixing_kind",
+            "attributeRef": "lotus.fixing_kind"
+          },
+          {
+            "name": "members[].calendar_version",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.calendar_version",
+            "attributeRef": "lotus.calendar_version"
+          },
+          {
+            "name": "members[].predecessor_revision_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.predecessor_revision_id",
+            "attributeRef": "lotus.predecessor_revision_id"
           }
         ]
       },
@@ -32328,15 +32921,51 @@
         "boundedContext": "fixed_income_book_cost",
         "canonicalTerms": [
           "accepted_count",
+          "annual_yield",
+          "assignment_reason",
           "authorities",
+          "authority_type",
+          "cash_coupon_local",
           "correlation_id",
+          "currency",
+          "discount_origin",
           "entity_type",
+          "fees_in_basis_local",
+          "header",
           "idempotency_key",
+          "initial_clean_cost_local",
           "job_id",
+          "legal_book_id",
+          "lot_id",
           "message",
+          "observed_at",
+          "period_end_date",
+          "period_start_date",
+          "periods",
+          "policy_id",
+          "policy_version",
+          "portfolio_id",
+          "redemption_value_local",
           "request_id",
+          "schedule_version",
+          "scope",
+          "security_id",
+          "source",
+          "source_record_id",
+          "source_revision",
+          "source_system",
+          "source_version",
+          "status",
+          "supplied_period_rate",
+          "tenant_id",
           "trace_id",
-          "x_tenant_id"
+          "valid_from",
+          "valid_to",
+          "x_tenant_id",
+          "year_fraction",
+          "year_fraction_method_id",
+          "year_fraction_method_version",
+          "yield_application"
         ]
       },
       "request": {
@@ -32356,6 +32985,702 @@
             "type": "array",
             "semanticId": "lotus.authorities",
             "attributeRef": "lotus.authorities"
+          },
+          {
+            "name": "authorities[].authority_type",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.authority_type",
+            "attributeRef": "lotus.authority_type"
+          },
+          {
+            "name": "authorities[].header",
+            "location": "body",
+            "required": false,
+            "type": "FixedIncomeBookCostAuthorityHeader",
+            "semanticId": "lotus.header",
+            "attributeRef": "lotus.header"
+          },
+          {
+            "name": "authorities[].header.scope",
+            "location": "body",
+            "required": false,
+            "type": "FixedIncomeBookCostAuthorityScope",
+            "semanticId": "lotus.scope",
+            "attributeRef": "lotus.scope"
+          },
+          {
+            "name": "authorities[].header.scope.tenant_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.tenant_id",
+            "attributeRef": "lotus.tenant_id"
+          },
+          {
+            "name": "authorities[].header.scope.legal_book_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.legal_book_id",
+            "attributeRef": "lotus.legal_book_id"
+          },
+          {
+            "name": "authorities[].header.scope.portfolio_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "authorities[].header.scope.security_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.security_id",
+            "attributeRef": "lotus.security_id"
+          },
+          {
+            "name": "authorities[].header.scope.lot_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.lot_id",
+            "attributeRef": "lotus.lot_id"
+          },
+          {
+            "name": "authorities[].header.source",
+            "location": "body",
+            "required": false,
+            "type": "FixedIncomeBookCostAuthoritySource",
+            "semanticId": "lotus.source",
+            "attributeRef": "lotus.source"
+          },
+          {
+            "name": "authorities[].header.source.source_system",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "authorities[].header.source.source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "authorities[].header.source.source_revision",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_revision",
+            "attributeRef": "lotus.source_revision"
+          },
+          {
+            "name": "authorities[].header.source.source_version",
+            "location": "body",
+            "required": false,
+            "type": "integer",
+            "semanticId": "lotus.source_version",
+            "attributeRef": "lotus.source_version"
+          },
+          {
+            "name": "authorities[].header.source.observed_at",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "authorities[].header.status",
+            "location": "body",
+            "required": false,
+            "type": "FixedIncomeBookCostAuthorityStatus",
+            "semanticId": "lotus.status",
+            "attributeRef": "lotus.status"
+          },
+          {
+            "name": "authorities[].header.valid_from",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.valid_from",
+            "attributeRef": "lotus.valid_from"
+          },
+          {
+            "name": "authorities[].header.valid_to",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.valid_to",
+            "attributeRef": "lotus.valid_to"
+          },
+          {
+            "name": "authorities[].policy_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.policy_id",
+            "attributeRef": "lotus.policy_id"
+          },
+          {
+            "name": "authorities[].policy_version",
+            "location": "body",
+            "required": false,
+            "type": "integer",
+            "semanticId": "lotus.policy_version",
+            "attributeRef": "lotus.policy_version"
+          },
+          {
+            "name": "authorities[].assignment_reason",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.assignment_reason",
+            "attributeRef": "lotus.assignment_reason"
+          },
+          {
+            "name": "authorities[].authority_type",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.authority_type",
+            "attributeRef": "lotus.authority_type"
+          },
+          {
+            "name": "authorities[].header",
+            "location": "body",
+            "required": false,
+            "type": "FixedIncomeBookCostAuthorityHeader",
+            "semanticId": "lotus.header",
+            "attributeRef": "lotus.header"
+          },
+          {
+            "name": "authorities[].header.scope",
+            "location": "body",
+            "required": false,
+            "type": "FixedIncomeBookCostAuthorityScope",
+            "semanticId": "lotus.scope",
+            "attributeRef": "lotus.scope"
+          },
+          {
+            "name": "authorities[].header.scope.tenant_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.tenant_id",
+            "attributeRef": "lotus.tenant_id"
+          },
+          {
+            "name": "authorities[].header.scope.legal_book_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.legal_book_id",
+            "attributeRef": "lotus.legal_book_id"
+          },
+          {
+            "name": "authorities[].header.scope.portfolio_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "authorities[].header.scope.security_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.security_id",
+            "attributeRef": "lotus.security_id"
+          },
+          {
+            "name": "authorities[].header.scope.lot_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.lot_id",
+            "attributeRef": "lotus.lot_id"
+          },
+          {
+            "name": "authorities[].header.source",
+            "location": "body",
+            "required": false,
+            "type": "FixedIncomeBookCostAuthoritySource",
+            "semanticId": "lotus.source",
+            "attributeRef": "lotus.source"
+          },
+          {
+            "name": "authorities[].header.source.source_system",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "authorities[].header.source.source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "authorities[].header.source.source_revision",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_revision",
+            "attributeRef": "lotus.source_revision"
+          },
+          {
+            "name": "authorities[].header.source.source_version",
+            "location": "body",
+            "required": false,
+            "type": "integer",
+            "semanticId": "lotus.source_version",
+            "attributeRef": "lotus.source_version"
+          },
+          {
+            "name": "authorities[].header.source.observed_at",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "authorities[].header.status",
+            "location": "body",
+            "required": false,
+            "type": "FixedIncomeBookCostAuthorityStatus",
+            "semanticId": "lotus.status",
+            "attributeRef": "lotus.status"
+          },
+          {
+            "name": "authorities[].header.valid_from",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.valid_from",
+            "attributeRef": "lotus.valid_from"
+          },
+          {
+            "name": "authorities[].header.valid_to",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.valid_to",
+            "attributeRef": "lotus.valid_to"
+          },
+          {
+            "name": "authorities[].currency",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.currency",
+            "attributeRef": "lotus.currency"
+          },
+          {
+            "name": "authorities[].initial_clean_cost_local",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.initial_clean_cost_local",
+            "attributeRef": "lotus.initial_clean_cost_local"
+          },
+          {
+            "name": "authorities[].fees_in_basis_local",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.fees_in_basis_local",
+            "attributeRef": "lotus.fees_in_basis_local"
+          },
+          {
+            "name": "authorities[].redemption_value_local",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.redemption_value_local",
+            "attributeRef": "lotus.redemption_value_local"
+          },
+          {
+            "name": "authorities[].discount_origin",
+            "location": "body",
+            "required": false,
+            "type": "FixedIncomeDiscountOrigin",
+            "semanticId": "lotus.discount_origin",
+            "attributeRef": "lotus.discount_origin"
+          },
+          {
+            "name": "authorities[].authority_type",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.authority_type",
+            "attributeRef": "lotus.authority_type"
+          },
+          {
+            "name": "authorities[].header",
+            "location": "body",
+            "required": false,
+            "type": "FixedIncomeBookCostAuthorityHeader",
+            "semanticId": "lotus.header",
+            "attributeRef": "lotus.header"
+          },
+          {
+            "name": "authorities[].header.scope",
+            "location": "body",
+            "required": false,
+            "type": "FixedIncomeBookCostAuthorityScope",
+            "semanticId": "lotus.scope",
+            "attributeRef": "lotus.scope"
+          },
+          {
+            "name": "authorities[].header.scope.tenant_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.tenant_id",
+            "attributeRef": "lotus.tenant_id"
+          },
+          {
+            "name": "authorities[].header.scope.legal_book_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.legal_book_id",
+            "attributeRef": "lotus.legal_book_id"
+          },
+          {
+            "name": "authorities[].header.scope.portfolio_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "authorities[].header.scope.security_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.security_id",
+            "attributeRef": "lotus.security_id"
+          },
+          {
+            "name": "authorities[].header.scope.lot_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.lot_id",
+            "attributeRef": "lotus.lot_id"
+          },
+          {
+            "name": "authorities[].header.source",
+            "location": "body",
+            "required": false,
+            "type": "FixedIncomeBookCostAuthoritySource",
+            "semanticId": "lotus.source",
+            "attributeRef": "lotus.source"
+          },
+          {
+            "name": "authorities[].header.source.source_system",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "authorities[].header.source.source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "authorities[].header.source.source_revision",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_revision",
+            "attributeRef": "lotus.source_revision"
+          },
+          {
+            "name": "authorities[].header.source.source_version",
+            "location": "body",
+            "required": false,
+            "type": "integer",
+            "semanticId": "lotus.source_version",
+            "attributeRef": "lotus.source_version"
+          },
+          {
+            "name": "authorities[].header.source.observed_at",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "authorities[].header.status",
+            "location": "body",
+            "required": false,
+            "type": "FixedIncomeBookCostAuthorityStatus",
+            "semanticId": "lotus.status",
+            "attributeRef": "lotus.status"
+          },
+          {
+            "name": "authorities[].header.valid_from",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.valid_from",
+            "attributeRef": "lotus.valid_from"
+          },
+          {
+            "name": "authorities[].header.valid_to",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.valid_to",
+            "attributeRef": "lotus.valid_to"
+          },
+          {
+            "name": "authorities[].schedule_version",
+            "location": "body",
+            "required": false,
+            "type": "integer",
+            "semanticId": "lotus.schedule_version",
+            "attributeRef": "lotus.schedule_version"
+          },
+          {
+            "name": "authorities[].year_fraction_method_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.year_fraction_method_id",
+            "attributeRef": "lotus.year_fraction_method_id"
+          },
+          {
+            "name": "authorities[].year_fraction_method_version",
+            "location": "body",
+            "required": false,
+            "type": "integer",
+            "semanticId": "lotus.year_fraction_method_version",
+            "attributeRef": "lotus.year_fraction_method_version"
+          },
+          {
+            "name": "authorities[].periods",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.periods",
+            "attributeRef": "lotus.periods"
+          },
+          {
+            "name": "authorities[].periods[].period_start_date",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.period_start_date",
+            "attributeRef": "lotus.period_start_date"
+          },
+          {
+            "name": "authorities[].periods[].period_end_date",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.period_end_date",
+            "attributeRef": "lotus.period_end_date"
+          },
+          {
+            "name": "authorities[].periods[].year_fraction",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.year_fraction",
+            "attributeRef": "lotus.year_fraction"
+          },
+          {
+            "name": "authorities[].periods[].cash_coupon_local",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.cash_coupon_local",
+            "attributeRef": "lotus.cash_coupon_local"
+          },
+          {
+            "name": "authorities[].periods[].supplied_period_rate",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.supplied_period_rate",
+            "attributeRef": "lotus.supplied_period_rate"
+          },
+          {
+            "name": "authorities[].authority_type",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.authority_type",
+            "attributeRef": "lotus.authority_type"
+          },
+          {
+            "name": "authorities[].header",
+            "location": "body",
+            "required": false,
+            "type": "FixedIncomeBookCostAuthorityHeader",
+            "semanticId": "lotus.header",
+            "attributeRef": "lotus.header"
+          },
+          {
+            "name": "authorities[].header.scope",
+            "location": "body",
+            "required": false,
+            "type": "FixedIncomeBookCostAuthorityScope",
+            "semanticId": "lotus.scope",
+            "attributeRef": "lotus.scope"
+          },
+          {
+            "name": "authorities[].header.scope.tenant_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.tenant_id",
+            "attributeRef": "lotus.tenant_id"
+          },
+          {
+            "name": "authorities[].header.scope.legal_book_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.legal_book_id",
+            "attributeRef": "lotus.legal_book_id"
+          },
+          {
+            "name": "authorities[].header.scope.portfolio_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "authorities[].header.scope.security_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.security_id",
+            "attributeRef": "lotus.security_id"
+          },
+          {
+            "name": "authorities[].header.scope.lot_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.lot_id",
+            "attributeRef": "lotus.lot_id"
+          },
+          {
+            "name": "authorities[].header.source",
+            "location": "body",
+            "required": false,
+            "type": "FixedIncomeBookCostAuthoritySource",
+            "semanticId": "lotus.source",
+            "attributeRef": "lotus.source"
+          },
+          {
+            "name": "authorities[].header.source.source_system",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "authorities[].header.source.source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "authorities[].header.source.source_revision",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_revision",
+            "attributeRef": "lotus.source_revision"
+          },
+          {
+            "name": "authorities[].header.source.source_version",
+            "location": "body",
+            "required": false,
+            "type": "integer",
+            "semanticId": "lotus.source_version",
+            "attributeRef": "lotus.source_version"
+          },
+          {
+            "name": "authorities[].header.source.observed_at",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "authorities[].header.status",
+            "location": "body",
+            "required": false,
+            "type": "FixedIncomeBookCostAuthorityStatus",
+            "semanticId": "lotus.status",
+            "attributeRef": "lotus.status"
+          },
+          {
+            "name": "authorities[].header.valid_from",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.valid_from",
+            "attributeRef": "lotus.valid_from"
+          },
+          {
+            "name": "authorities[].header.valid_to",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.valid_to",
+            "attributeRef": "lotus.valid_to"
+          },
+          {
+            "name": "authorities[].annual_yield",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.annual_yield",
+            "attributeRef": "lotus.annual_yield"
+          },
+          {
+            "name": "authorities[].yield_application",
+            "location": "body",
+            "required": false,
+            "type": "FixedIncomeYieldApplication",
+            "semanticId": "lotus.yield_application",
+            "attributeRef": "lotus.yield_application"
           }
         ]
       },

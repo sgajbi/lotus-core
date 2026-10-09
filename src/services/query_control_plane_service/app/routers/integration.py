@@ -167,7 +167,9 @@ from ..dependencies import (
     get_risk_free_series_service,
     get_sustainability_preference_profile_service,
 )
+from ..domain.market_fx import FxSourceSelectionRejected
 from .core_snapshot_http import core_snapshot_response_or_http_error
+from .fx_source_scope import verified_fx_source_context
 from .integration_source_route_descriptions import (
     CIO_MODEL_CHANGE_COHORT_DESCRIPTION,
     DPM_PORTFOLIO_UNIVERSE_DESCRIPTION,
@@ -177,6 +179,7 @@ from .response_helpers import (
     problem_example,
     problem_or_validation_response,
     problem_response,
+    raise_integration_source_bad_request,
     raise_problem,
     raise_source_evidence_invalid_request,
     raise_source_evidence_not_found,
@@ -516,27 +519,6 @@ def _raise_integration_source_invalid_request(
 ) -> NoReturn:
     raise_problem(
         status_code=HTTP_422_UNPROCESSABLE_CONTENT,
-        title="Integration source request is invalid",
-        detail=detail,
-        error_code="QCP_INTEGRATION_SOURCE_INVALID_REQUEST",
-        metadata={
-            "source_product": source_product,
-            "reason": exc.__class__.__name__,
-            **(metadata or {}),
-        },
-    )
-    raise AssertionError("raise_problem returned unexpectedly")
-
-
-def _raise_integration_source_bad_request(
-    *,
-    source_product: str,
-    detail: str,
-    exc: Exception,
-    metadata: dict[str, object] | None = None,
-) -> NoReturn:
-    raise_problem(
-        status_code=status.HTTP_400_BAD_REQUEST,
         title="Integration source request is invalid",
         detail=detail,
         error_code="QCP_INTEGRATION_SOURCE_INVALID_REQUEST",
@@ -2064,6 +2046,7 @@ async def fetch_index_catalog(
 )
 async def fetch_benchmark_market_series(
     request: BenchmarkMarketSeriesRequest,
+    http_request: Request,
     benchmark_id: str = Path(
         ...,
         description="Benchmark identifier for the requested market series input contract.",
@@ -2074,12 +2057,25 @@ async def fetch_benchmark_market_series(
     ),
 ) -> BenchmarkMarketSeriesResponse:
     try:
+        if request.fx_source is not None:
+            return await benchmark_market_series_service.get(
+                benchmark_id=benchmark_id,
+                request=request,
+                tenant_context=verified_fx_source_context(http_request),
+            )
         return await benchmark_market_series_service.get(
             benchmark_id=benchmark_id,
             request=request,
         )
+    except FxSourceSelectionRejected:
+        raise_problem(
+            status_code=status.HTTP_409_CONFLICT,
+            title="FX source selection unavailable",
+            detail="The requested retained FX selection is unavailable or conflicting.",
+            error_code="QCP_FX_SOURCE_SELECTION_CONFLICT",
+        )
     except ValueError as exc:
-        _raise_integration_source_bad_request(
+        raise_integration_source_bad_request(
             source_product="MarketDataWindow",
             detail=BENCHMARK_MARKET_SERIES_INVALID_REQUEST_DETAIL,
             exc=exc,

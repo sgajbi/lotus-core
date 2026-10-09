@@ -77,6 +77,27 @@ class QueryControlPlaneProblem(Exception):
         self.metadata = metadata or {}
 
 
+def raise_integration_source_bad_request(
+    *,
+    source_product: str,
+    detail: str,
+    exc: Exception,
+    metadata: dict[str, object] | None = None,
+) -> NoReturn:
+    """Map invalid source requests through the shared problem-details contract."""
+    raise_problem(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        title="Integration source request is invalid",
+        detail=detail,
+        error_code="QCP_INTEGRATION_SOURCE_INVALID_REQUEST",
+        metadata={
+            "source_product": source_product,
+            "reason": exc.__class__.__name__,
+            **(metadata or {}),
+        },
+    )
+
+
 def problem_example(
     *,
     status_code: int,

@@ -8,7 +8,8 @@ from portfolio_common.domain.currency import normalize_currency_code
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..domain.market_fx import FxRateEvidence
+from ..domain.market_fx import FxRateEvidence, FxSourceSelection
+from .retained_fx_sources import read_retained_fx_rates
 
 
 class SqlAlchemyMarketFxRateReader:
@@ -16,6 +17,24 @@ class SqlAlchemyMarketFxRateReader:
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def list_source_rates(
+        self,
+        *,
+        selection: FxSourceSelection,
+        from_currency: str,
+        to_currency: str,
+        start_date: date,
+        end_date: date,
+    ) -> list[FxRateEvidence]:
+        return await read_retained_fx_rates(
+            self._session,
+            selection=selection,
+            from_currency=from_currency,
+            to_currency=to_currency,
+            start_date=start_date,
+            end_date=end_date,
+        )
 
     async def list_rates(
         self,

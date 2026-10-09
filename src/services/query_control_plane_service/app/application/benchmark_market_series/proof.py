@@ -51,9 +51,12 @@ def data_quality_status(
         fx_rates=fx_rates,
         fx_context=fx_context,
     )
-    return classify_market_reference_product_quality(
-        quality_statuses,
-        evidence_complete=evidence_complete and not has_more,
+    return cast(
+        str,
+        classify_market_reference_product_quality(
+            quality_statuses,
+            evidence_complete=evidence_complete and not has_more,
+        ),
     )
 
 

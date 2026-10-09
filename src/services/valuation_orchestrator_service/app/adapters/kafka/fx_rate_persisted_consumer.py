@@ -13,6 +13,7 @@ from portfolio_common.event_mapping import (
     validate_kafka_event_payload,
 )
 from portfolio_common.events import FxRatePersistedEvent
+from portfolio_common.fx_source_events import FxSourceCutPersistedEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.retry_policy import CONSUMER_DB_SHORT_RETRY, tenacity_retry_kwargs
@@ -26,6 +27,7 @@ from ...domain.fx_revaluation import DirectCurrencyPair, FxRateCorrection
 from ...infrastructure.repositories.fx_revaluation_repository import (
     SqlAlchemyFxRevaluationRepository,
 )
+from ...infrastructure.repositories.fx_source_notification import acknowledge_retained_fx_cut
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,8 @@ SERVICE_NAME = "fx-rate-revaluation-trigger"
 
 
 def _fallback_correlation_id(event_data: dict[str, object]) -> str:
+    if event_data.get("event_type") == "FxSourceCutPersisted":
+        return f"FX_SOURCE_CUT_{str(event_data.get('cut_id', 'unknown'))[:16]}"
     observation_id = str(event_data.get("observation_id", "unknown"))
     return f"FX_RATE_EVENT_{observation_id.removeprefix('sha256:')[:16]}"
 
@@ -66,6 +70,19 @@ class FxRatePersistedConsumer(BaseConsumer):
                 msg,
                 fallback_correlation_id=_fallback_correlation_id(decoded_payload.data),
             ) as correlation_id:
+                if decoded_payload.data.get("event_type") == "FxSourceCutPersisted":
+                    retained_cut = validate_kafka_event_payload(
+                        decoded_payload,
+                        FxSourceCutPersistedEvent,
+                        expected_event_type="FxSourceCutPersisted",
+                    )
+                    async for db in get_async_db_session():
+                        async with db.begin():
+                            await acknowledge_retained_fx_cut(
+                                db, retained_cut, correlation_id=correlation_id
+                            )
+                    logger.info("Scoped FX cut retained; legacy valuation projection unchanged.")
+                    return
                 event = validate_kafka_event_payload(
                     decoded_payload,
                     FxRatePersistedEvent,

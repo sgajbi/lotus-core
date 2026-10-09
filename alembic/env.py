@@ -37,6 +37,7 @@ if config.config_file_name:
 database_models = importlib.import_module("portfolio_common.database_models")
 importlib.import_module("portfolio_common.cashflow_source_cut_models")
 importlib.import_module("portfolio_common.portfolio_source_observation_models")
+importlib.import_module("portfolio_common.fx_source_models")
 alembic_numeric = importlib.import_module("portfolio_common.alembic_numeric")
 database_runtime_profile = importlib.import_module("portfolio_common.database_runtime_profile")
 connection_security = importlib.import_module("portfolio_common.connection_security")

@@ -72,12 +72,21 @@ class IngestionEvidencePolicy:
 
 
 class IngestionEvidencePolicyRegistry:
-    def __init__(self, policies: tuple[IngestionEvidencePolicy, ...]) -> None:
+    def __init__(
+        self,
+        policies: tuple[IngestionEvidencePolicy, ...],
+        *,
+        variants: tuple[IngestionEvidencePolicy, ...] = (),
+    ) -> None:
         self._by_endpoint = {policy.endpoint: policy for policy in policies}
         if len(self._by_endpoint) != len(policies):
             raise ValueError("Ingestion evidence policy endpoints must be unique.")
-        identities = {(policy.endpoint, policy.entity_type) for policy in policies}
-        if len(identities) != len(policies):
+        if any(policy.endpoint not in self._by_endpoint for policy in variants):
+            raise ValueError("Ingestion evidence variants require an existing endpoint policy.")
+        self._by_identity = {
+            (policy.endpoint, policy.entity_type): policy for policy in (*policies, *variants)
+        }
+        if len(self._by_identity) != len(policies) + len(variants):
             raise ValueError("Ingestion evidence policy identities must be unique.")
 
     def require(self, endpoint: str, *, entity_type: str | None = None) -> IngestionEvidencePolicy:
@@ -86,6 +95,9 @@ class IngestionEvidencePolicyRegistry:
         except KeyError as exc:
             raise KeyError(f"Unclassified ingestion endpoint: {endpoint}") from exc
         if entity_type is not None and policy.entity_type != entity_type:
+            variant = self._by_identity.get((endpoint, entity_type))
+            if variant is not None:
+                return variant
             raise ValueError(
                 "Ingestion evidence policy entity mismatch: "
                 f"endpoint={endpoint}, expected={policy.entity_type}, actual={entity_type}."
@@ -93,7 +105,7 @@ class IngestionEvidencePolicyRegistry:
         return policy
 
     def all_policies(self) -> tuple[IngestionEvidencePolicy, ...]:
-        return tuple(self._by_endpoint.values())
+        return tuple(self._by_identity.values())
 
 
 _OPTIONAL_SOURCE_LINEAGE = SourceLineagePolicy(
@@ -348,5 +360,12 @@ INGESTION_EVIDENCE_POLICY_REGISTRY = IngestionEvidencePolicyRegistry(
         ),
         *_REFERENCE_POLICIES,
         *_OBSERVATION_POLICIES,
-    )
+    ),
+    variants=(
+        _fingerprint_policy(
+            "/ingest/fx-rates",
+            "fx_source_cut",
+            classification=PayloadClassification.RESTRICTED,
+        ),
+    ),
 )

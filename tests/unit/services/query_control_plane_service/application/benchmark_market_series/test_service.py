@@ -1,10 +1,13 @@
 """Tests for benchmark market-series use-case orchestration."""
 
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any, cast
 
 import pytest
+from portfolio_common.domain.market_data.fx_source import FxSourceScope
+from portfolio_common.domain.tenant import TenantContext, TenantId
 from portfolio_common.reference_data_paging import ReferencePageRequest
 
 from src.services.query_control_plane_service.app.application.benchmark_market_series.service import (  # noqa: E501
@@ -14,6 +17,9 @@ from src.services.query_control_plane_service.app.contracts.benchmark_market_ser
     BenchmarkMarketSeriesRequest,
 )
 from src.services.query_control_plane_service.app.contracts.common import IntegrationWindow
+from src.services.query_control_plane_service.app.contracts.market_fx import (
+    FxSourceSelectionRequest,
+)
 from src.services.query_control_plane_service.app.domain.benchmark_definition import (
     BenchmarkComponentEvidence,
     BenchmarkDefinitionEvidence,
@@ -25,7 +31,11 @@ from src.services.query_control_plane_service.app.domain.index_series import (
     IndexPriceEvidence,
     IndexReturnEvidence,
 )
-from src.services.query_control_plane_service.app.domain.market_fx import FxRateEvidence
+from src.services.query_control_plane_service.app.domain.market_fx import (
+    FxRateEvidence,
+    FxRateSourceEvidence,
+    FxSourceSelectionRejected,
+)
 from src.services.query_control_plane_service.app.ports.benchmark_definition import (
     BenchmarkDefinitionReader,
 )
@@ -114,6 +124,102 @@ class RecordingFxReader:
     async def list_rates(self, **_: object) -> list[FxRateEvidence]:
         self.calls.append("fx_rates")
         return [_fx_rate()]
+
+
+class RetainedFxReader:
+    def __init__(self, rows):
+        self.rows = rows
+        self.selection = None
+
+    async def list_source_rates(self, *, selection, **_):
+        self.selection = selection
+        return self.rows
+
+    async def list_rates(self, **_):
+        raise AssertionError("Canonical selection must never fall back to legacy FX")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "fault", [None, "legacy", "tenant", "observed", "known", "cut", "duplicate"]
+)
+async def test_retained_source_scope_and_provenance_are_applied_before_response(fault):
+    context = TenantContext(TenantId("SYNTHETIC_TENANT"), identity_verified=True)
+    request = _request().model_copy(
+        update={
+            "fx_source": FxSourceSelectionRequest(
+                provider_id="SYNTHETIC_PROVIDER",
+                source_id="SYNTHETIC_FEED",
+                source_as_of=EVIDENCE_TIME,
+                known_as_of=EVIDENCE_TIME,
+                cut_id="a" * 64,
+            )
+        }
+    )
+    source = FxRateSourceEvidence(
+        FxSourceScope(context.tenant_id_text, "SYNTHETIC_PROVIDER", "SYNTHETIC_FEED"),
+        "b" * 64,
+        "c" * 64,
+        EVIDENCE_TIME,
+        EVIDENCE_TIME,
+        "CLOSE",
+        "SYNTHETIC_V1",
+        "a" * 64,
+    )
+    if fault == "tenant":
+        source = replace(source, scope=replace(source.scope, tenant_id="FOREIGN_TENANT"))
+    elif fault == "observed":
+        request.fx_source = request.fx_source.model_copy(
+            update={"source_as_of": datetime(2026, 1, 31, 7, tzinfo=UTC)}
+        )
+    elif fault == "known":
+        request.fx_source = request.fx_source.model_copy(
+            update={"known_as_of": datetime(2026, 1, 31, 7, tzinfo=UTC)}
+        )
+    elif fault == "cut":
+        source = replace(source, cut_id="d" * 64)
+    row = replace(_fx_rate(), source=None if fault == "legacy" else source)
+    reader = RetainedFxReader([row, row] if fault == "duplicate" else [row])
+    calls = []
+    service = _service(
+        benchmark_reader=RecordingBenchmarkReader(candidate_ids=["IDX_1"], calls=calls),
+        calls=calls,
+        page_tokens=RecordingPageTokens(),
+    )
+    service._fx_rate_reader = reader
+    if fault:
+        with pytest.raises(ValueError, match="FX_SOURCE_"):
+            await service.get(benchmark_id="BMK_1", request=request, tenant_context=context)
+    else:
+        result = await service.get(benchmark_id="BMK_1", request=request, tenant_context=context)
+        assert result.fx_source_qualification == "RETAINED_SOURCE"
+        assert len(result.fx_source_evidence) == 1
+        assert result.fx_source_evidence[0].revision_id == "b" * 64
+        assert result.component_series[0].points[0].fx_rate == Decimal("1.35")
+        assert reader.selection.scope.tenant_id == context.tenant_id_text
+
+
+@pytest.mark.asyncio
+async def test_retained_source_requires_verified_context_before_any_source_read():
+    calls = []
+    service = _service(
+        benchmark_reader=RecordingBenchmarkReader(candidate_ids=["IDX_1"], calls=calls),
+        calls=calls,
+        page_tokens=RecordingPageTokens(),
+    )
+    request = _request().model_copy(
+        update={
+            "fx_source": FxSourceSelectionRequest(
+                provider_id="SYNTHETIC_PROVIDER",
+                source_id="SYNTHETIC_FEED",
+                source_as_of=EVIDENCE_TIME,
+                known_as_of=EVIDENCE_TIME,
+            )
+        }
+    )
+    with pytest.raises(FxSourceSelectionRejected, match="VERIFIED_TENANT_REQUIRED"):
+        await service.get(benchmark_id="BMK_1", request=request)
+    assert calls == []
 
 
 def _request(*, page_size: int = 1, page_token: str | None = None) -> BenchmarkMarketSeriesRequest:
