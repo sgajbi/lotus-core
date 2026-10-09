@@ -18,6 +18,43 @@ from scripts.quality.api_vocabulary_inventory import (
 )
 
 
+def test_request_alternatives_keep_fields_and_variant_requiredness() -> None:
+    components = {
+        "schemas": {
+            "LegacyFx": {
+                "type": "object",
+                "required": ["fx_rates"],
+                "properties": {"fx_rates": {"type": "array", "items": {"type": "string"}}},
+            },
+            "RetainedCut": {
+                "type": "object",
+                "required": ["provider_id"],
+                "properties": {"provider_id": {"type": "string"}},
+            },
+        }
+    }
+    operation = {
+        "requestBody": {
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "anyOf": [
+                            {"$ref": "#/components/schemas/LegacyFx"},
+                            {"$ref": "#/components/schemas/RetainedCut"},
+                            {"type": "null"},
+                        ]
+                    }
+                }
+            }
+        }
+    }
+    fields, controls = _extract_request_fields(operation, components)
+    assert [field["name"] for field in fields] == ["fx_rates", "provider_id"]
+    assert [field["schemaAlternative"] for field in fields] == ["LegacyFx", "RetainedCut"]
+    assert all(field["requiredWithinAlternative"] and not field["required"] for field in fields)
+    assert controls == []
+
+
 def test_composed_exact_decimal_schema_prefers_lexical_contract() -> None:
     schema = {
         "anyOf": [

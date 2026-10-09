@@ -39,11 +39,17 @@ or downstream financial processing. Use the contract-specific evidence below whe
 
 ## Operational FX Intake And Persisted Evidence
 
-`POST /ingest/fx-rates` accepts only the existing directed pair, business date and exact positive
-rate, inside `fx_rates`. Unknown record and batch fields return HTTP 422 before job creation or
-publication. Callers must not append provider, observation-time, revision, hash, calendar or cut
-claims: the operational input does not retain or qualify them. Valid ingestion remains asynchronous;
-HTTP 202 is queue acceptance, not provider approval or completed persistence.
+Explicit retained FX selection for benchmark market series requires an effective benchmark
+definition; absence returns the existing source-selection conflict before component or FX reads.
+The exact requested provider/source/time/cut cannot be replaced by assumed target-currency identity.
+No-selector missing-definition fallback remains legacy compatibility only, not proof of the actual
+benchmark currency or a qualified conversion; broader acceptance remains open.
+
+`POST /ingest/fx-rates` preserves legacy `fx_rates` batches and also accepts one bounded
+`fx.source-cut.v1` submission. Legacy records still reject unknown custody fields before a job or
+publish. Canonical submissions require verified tenant/service principal, active server-owned
+provider/source enrollment and fixing calendar; empty configuration denies them. HTTP 202 is queue
+acceptance, not provider approval, completed persistence or downstream financial completion.
 
 The native persistence path emits `FxRatePersistedEvent`. Its existing `content_hash` binds the
 canonical four business fields; `observation_id` also binds the actual `generated_at` processing
@@ -52,10 +58,27 @@ a mismatched event before database access. Diagnostic correlation and tracing do
 identity. This consistency check is not a signature, provider authentication or immutable fixing
 history. A party that can rewrite content and both hashes has not established source authority.
 
-The operational pair/date store remains mutable. Provider-observed time, approved registry binding,
-retained fixing revision/supersession, fixing calendar and coherent source cut still require genuine
-canonical producer custody. Neither generated/database timestamps nor an unavailable envelope
-replace the qualified `MarketDataWindow` target. Preserve unqualified #1227 diagnostic semantics;
+Canonical custody retains append-only revisions and exact sealed membership in the existing
+persistence inbox/outbox transaction. Source observation and Core acceptance time are separate;
+its migration `c179b2c3d540` follows the existing raw-source index migration `c180b2c3d541`
+(from `c178b2c3d539`), preserving one deployment chain without altering that index migration.
+QCP's optional explicit provider/source selector applies both historical boundaries and can pin
+an immutable cut. An absent referenced predecessor retries only through the typed owning path,
+after complete transaction rollback, within eight attempts/sixty seconds or tighter configured limits.
+Exhaustion preserves the exact economic cut and original payload fingerprint in confirmed,
+source-safe evidence. An attestation fingerprint is present only after cryptographic authentication;
+the per-message stage distinguishes authentication from completed admission, including transient
+database failures before and after admission. Unauthenticated and legacy retries never invent that
+fingerprint, and database support reasons omit SQL and credentials. Confirmed,
+source-safe DLQ evidence; redacted authorization requires genuinely permitted fresh operator admission,
+not raw signed-envelope replay. Retained stale predecessors and conflicting versions remain terminal.
+Conflicting versions, stale predecessors and ambiguous pair/date chains refuse
+instead of rewriting history. Canonical notifications do not mutate the legacy projection or
+create unscoped valuation work. The operational pair/date store remains mutable and unqualified.
+
+These are software controls, not real provider enrollment, complete fixing coverage, deployed Kafka
+qualification or financial certification. Neither generated/database timestamps nor an unavailable
+envelope replace genuine producer custody. Preserve unqualified #1227 diagnostic semantics;
 Performance owns financial calculations and export contracts, and Report assembles authoritative Excel.
 See the [FX source admission guide](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/fx-source-admission.md)
 for a valid request, refusal handling and the remaining qualification boundary.

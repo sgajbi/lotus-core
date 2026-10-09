@@ -98,6 +98,14 @@ class BatchPublishIngestionCommand:
     idempotency_key: str | None
     request_payload: dict[str, Any]
     accepted_message: str
+    admission_record_count: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.admission_record_count is not None and (
+            type(self.admission_record_count) is not int
+            or not 1 <= self.admission_record_count <= 512
+        ):
+            raise ValueError("bounded source admission record count required")
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,6 +165,11 @@ class IngestionPublishCommandHandler:
         self, command: BatchPublishIngestionCommand
     ) -> IngestionCommandResult:
         return await self.ingest_batch(command, self.publish_fx_rates)
+
+    async def ingest_fx_source_cut(
+        self, command: BatchPublishIngestionCommand
+    ) -> IngestionCommandResult:
+        return await self.ingest_batch(command, self.ingestion_service.publish_fx_source_cuts)
 
     async def ingest_transactions(
         self, command: BatchPublishIngestionCommand
@@ -314,7 +327,10 @@ class IngestionPublishCommandHandler:
             )
 
         await self._assert_ingestion_writable()
-        self._enforce_rate_limit(command.endpoint, len(command.records))
+        self._enforce_rate_limit(
+            command.endpoint,
+            command.admission_record_count or len(command.records),
+        )
         job_result = await self._create_job(command)
         if not job_result.created:
             return self._replay_result(

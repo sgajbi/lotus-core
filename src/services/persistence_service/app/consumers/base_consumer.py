@@ -55,6 +55,13 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
 
         return False
 
+    def resolve_event_model(self, payload: dict[str, Any]) -> Type[BaseModel]:
+        """Select an explicit typed variant when one owning topic has multiple contracts."""
+        return self.event_model
+
+    def is_event_tenant_scoped(self, event: BaseModel) -> bool:
+        return self.tenant_scoped_idempotency
+
     @abstractmethod
     async def handle_persistence(self, db_session, event: BaseModel) -> Any:
         """
@@ -111,7 +118,9 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
                 fallback_correlation_id=decoded_payload.fallback_correlation_id,
             ) as correlation_id:
                 message_correlation_id = correlation_id
-                envelope = validate_persistence_event_payload(decoded_payload, self.event_model)
+                envelope = validate_persistence_event_payload(
+                    decoded_payload, self.resolve_event_model(decoded_payload.data)
+                )
                 event = envelope.event
 
                 async for db in get_async_db_session():
@@ -119,7 +128,7 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
                         event = await self.prepare_event(db, event)
                         idempotency_repo = IdempotencyRepository(db)
                         tenant_scope: dict[str, str | None] = {}
-                        if self.tenant_scoped_idempotency:
+                        if self.is_event_tenant_scoped(event):
                             tenant_scope["tenant_id"] = getattr(event, "tenant_id", None)
                         semantic_identity = self.semantic_idempotency_identity(event)
                         if semantic_identity is None:
@@ -218,4 +227,10 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
             logger.warning(
                 f"DB error for {self.service_name}. Raising RetryableConsumerError.", exc_info=False
             )
-            raise RetryableConsumerError(f"Database error: {e}") from e
+            raise self.database_retry_error(e, event) from e
+
+    def database_retry_error(
+        self, error: DBAPIError, event: BaseModel | None
+    ) -> RetryableConsumerError:
+        """Owning consumers may carry safe evidence from this message only."""
+        return RetryableConsumerError(f"Database error: {error}")

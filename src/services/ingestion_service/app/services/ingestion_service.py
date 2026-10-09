@@ -1,4 +1,5 @@
 # services/ingestion_service/app/services/ingestion_service.py
+from collections.abc import Sequence
 from typing import List
 
 from portfolio_common.config import (
@@ -27,6 +28,7 @@ from portfolio_common.event_publisher import (
     EventPublisher,
     EventPublishRequest,
 )
+from portfolio_common.fx_source_events import FxSourceCutReceivedEvent
 from portfolio_common.ingestion_lineage import (
     INGESTION_JOB_ID_HEADER,
     ingestion_job_id_var,
@@ -536,6 +538,30 @@ class IngestionService:
                     )
                 except IngestionPublishError as publish_exc:
                     raise publish_exc from exc
+
+    async def publish_fx_source_cuts(
+        self, records: Sequence[FxSourceCutReceivedEvent], idempotency_key: str | None = None
+    ) -> None:
+        if len(records) != 1:
+            raise ValueError("FX_SOURCE_SINGLE_CUT_EVENT_REQUIRED")
+        event = records[0]
+        payload = event.bounded_payload()
+        key = event.source_cut().cut_id
+        try:
+            self._publish_event(
+                topic=KAFKA_FX_RATES_RAW_RECEIVED_TOPIC,
+                key=key,
+                value=payload,
+                headers=self._get_headers(idempotency_key),
+            )
+            KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(topic=KAFKA_FX_RATES_RAW_RECEIVED_TOPIC).inc()
+        except Exception as exc:
+            try:
+                self._raise_batch_publish_error(
+                    entity_label="FX source cut", failed_key=key, record_keys=[key], failure_index=0
+                )
+            except IngestionPublishError as publish_exc:
+                raise publish_exc from exc
 
     async def publish_portfolio_bundle(
         self,

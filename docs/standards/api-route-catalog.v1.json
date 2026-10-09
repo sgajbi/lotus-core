@@ -2801,7 +2801,7 @@
       "owner": "ingestion_service",
       "auth_requirement": "governed-enterprise-readiness",
       "audit_requirement": "audit-required",
-      "request_schema": "FxRateIngestionRequest",
+      "request_schema": "anyOf(FxRateIngestionRequest, FxSourceCutSubmission)",
       "response_schemas": [
         {
           "status_code": "202",
@@ -2811,9 +2811,19 @@
       ],
       "error_models": [
         {
+          "status_code": "403",
+          "schema": "none",
+          "description": "Canonical cuts require verified principal, enrollment and fixing calendar."
+        },
+        {
           "status_code": "409",
           "schema": "none",
           "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
+        },
+        {
+          "status_code": "413",
+          "schema": "none",
+          "description": "The encoded canonical cut exceeds its bounded admission size."
         },
         {
           "status_code": "422",

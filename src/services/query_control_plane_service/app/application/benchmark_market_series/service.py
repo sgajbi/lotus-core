@@ -4,6 +4,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from portfolio_common.domain.market_data.fx_source import FxSourceScope
+from portfolio_common.domain.tenant import TenantContext
+
 from ...contracts.benchmark_market_series import (
     BenchmarkMarketSeriesRequest,
     BenchmarkMarketSeriesResponse,
@@ -11,7 +14,7 @@ from ...contracts.benchmark_market_series import (
 from ...domain.benchmark_definition import BenchmarkComponentEvidence
 from ...domain.benchmark_return_series import BenchmarkReturnEvidence
 from ...domain.index_series import IndexPriceEvidence, IndexReturnEvidence
-from ...domain.market_fx import FxRateEvidence
+from ...domain.market_fx import FxRateEvidence, FxSourceSelection, FxSourceSelectionRejected
 from ...ports.benchmark_definition import BenchmarkDefinitionReader
 from ...ports.benchmark_return_series import BenchmarkReturnSeriesReader
 from ...ports.index_series import IndexSeriesReader
@@ -60,19 +63,39 @@ class BenchmarkMarketSeriesService:
         self._clock = clock
 
     async def get(
-        self, *, benchmark_id: str, request: BenchmarkMarketSeriesRequest
+        self,
+        *,
+        benchmark_id: str,
+        request: BenchmarkMarketSeriesRequest,
+        tenant_context: TenantContext | None = None,
     ) -> BenchmarkMarketSeriesResponse:
         """Resolve source evidence after validating continuation scope."""
 
+        selection = None
+        if request.fx_source is not None:
+            if tenant_context is None or not tenant_context.identity_verified:
+                raise FxSourceSelectionRejected("FX_SOURCE_VERIFIED_TENANT_REQUIRED")
+            source = request.fx_source
+            if source.source_as_of > self._clock() or source.known_as_of > self._clock():
+                raise FxSourceSelectionRejected("FX_SOURCE_SELECTION_FUTURE_INSTANT")
+            selection = FxSourceSelection(
+                FxSourceScope(tenant_context.tenant_id_text, source.provider_id, source.source_id),
+                source.source_as_of,
+                source.known_as_of,
+                source.cut_id,
+            )
         scope = resolve_request_scope(
             benchmark_id=benchmark_id,
             request=request,
             cursor=self._page_tokens.decode(request.page.page_token),
+            fx_tenant_id=selection.scope.tenant_id if selection is not None else None,
         )
         definition = await self._benchmark_reader.resolve_definition(
             benchmark_id=benchmark_id,
             as_of_date=request.as_of_date,
         )
+        if selection is not None and definition is None:
+            raise FxSourceSelectionRejected("FX_SOURCE_BENCHMARK_DEFINITION_REQUIRED")
         candidate_index_ids = await self._benchmark_reader.list_component_index_ids_page(
             benchmark_id=benchmark_id,
             start_date=request.window.start_date,
@@ -104,6 +127,7 @@ class BenchmarkMarketSeriesService:
             index_ids=index_page.index_ids,
             evidence_plan=evidence_plan,
             benchmark_currency=benchmark_currency,
+            fx_selection=selection,
         )
         token_payload = next_page_token_payload(
             request_scope=scope,
@@ -136,6 +160,7 @@ class BenchmarkMarketSeriesService:
         index_ids: tuple[str, ...],
         evidence_plan: BenchmarkMarketSeriesEvidencePlan,
         benchmark_currency: str,
+        fx_selection: FxSourceSelection | None = None,
     ) -> BenchmarkMarketSeriesEvidence:
         if not index_ids:
             return BenchmarkMarketSeriesEvidence()
@@ -169,12 +194,25 @@ class BenchmarkMarketSeriesService:
             )
         fx_rates: list[FxRateEvidence] = []
         if evidence_plan.include_fx_rates and request.target_currency is not None:
-            fx_rates = await self._fx_rate_reader.list_rates(
-                from_currency=benchmark_currency,
-                to_currency=request.target_currency,
-                start_date=request.window.start_date,
-                end_date=request.window.end_date,
-            )
+            if fx_selection is not None:
+                fx_rates = await self._fx_rate_reader.list_source_rates(
+                    selection=fx_selection,
+                    from_currency=benchmark_currency,
+                    to_currency=request.target_currency,
+                    start_date=request.window.start_date,
+                    end_date=request.window.end_date,
+                )
+                for row in fx_rates:
+                    if row.source is None:
+                        raise FxSourceSelectionRejected("FX_SOURCE_EVIDENCE_REQUIRED")
+                    row.source.require_selection(fx_selection)
+            else:
+                fx_rates = await self._fx_rate_reader.list_rates(
+                    from_currency=benchmark_currency,
+                    to_currency=request.target_currency,
+                    start_date=request.window.start_date,
+                    end_date=request.window.end_date,
+                )
         return BenchmarkMarketSeriesEvidence(
             components=components,
             index_prices=index_prices,

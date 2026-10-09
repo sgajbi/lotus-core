@@ -1048,3 +1048,29 @@ validation precedes raw authority checks, and all matching canonical/raw project
 participate in uniqueness. Validated events may be carried to avoid repeated model
 validation; canonical hypotheses and fingerprint checks remain required. This is
 source qualification, not full-load, PostgreSQL lock or SLO certification.
+
+## Canonical FX source custody practice
+
+The existing FX ingestion endpoint supports legacy global batches and the bounded
+`fx.source-cut.v1` alternative. Canonical writes require a verified tenant principal,
+server-owned provider/source enrollment and fixing calendar; empty configuration denies
+admission. One signed cut command is retained through the existing persistence inbox,
+revision/cut tables and outbox in one transaction. It never upgrades or mutates the legacy
+global FX projection. Physical replay and exact committed cut replay are separate controls.
+
+QCP retained selection requires explicit provider/source, source-observation and Core-known
+boundaries, with an optional immutable cut. Missing or ambiguous authority has no legacy
+fallback. A retained-cut notification does not stage legacy valuation work or prove financial
+completion. Apply the migration before deploying both canonical consumer variants, then enroll
+approved sources; populated authority cannot be downgraded away. See
+[FX source admission](docs/operations/fx-source-admission.md) and
+[Integrations](wiki/Integrations.md). Synthetic controls, captured transport and direct consumer
+execution do not establish supplier approval, live broker delivery or institutional acceptance.
+
+Canonical cut partitioning does not establish predecessor order. Only an exact missing
+referenced revision is typed pending; retained stale/non-head and authority conflicts remain
+terminal. The FX consumer uses the existing transaction rollback and retry/DLQ machinery,
+with finite ceilings of eight attempts/sixty seconds and tighter configured limits preserved.
+Exhaustion retains the unchanged economic cut and original payload/attestation fingerprints,
+not raw authorization credentials. Offset acknowledgement requires confirmed DLQ delivery;
+operator resubmission needs genuinely permitted fresh authorization for that same cut.

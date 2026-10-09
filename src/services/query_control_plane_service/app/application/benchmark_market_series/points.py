@@ -36,6 +36,8 @@ def build_component_series(
     prices_by_key = {(row.index_id, row.series_date): row for row in index_prices}
     returns_by_key = {(row.index_id, row.series_date): row for row in index_returns}
     benchmark_returns_by_date = {row.series_date: row for row in benchmark_returns}
+    if len({row.rate_date for row in fx_rates}) != len(fx_rates):
+        raise ValueError("FX_SOURCE_PAIR_DATE_AMBIGUOUS")
     fx_by_date = {row.rate_date: row.rate for row in fx_rates}
     segments_by_index: dict[str, list[BenchmarkComponentEvidence]] = {}
     for component in components:
