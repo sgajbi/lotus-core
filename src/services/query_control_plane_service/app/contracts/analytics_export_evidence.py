@@ -18,6 +18,16 @@ class AnalyticsExportPageEvidence(BaseModel):
 
 
 class AnalyticsExportSourceEvidence(BaseModel):
+    selection_digest: str | None = Field(
+        None,
+        pattern=r"^sha256:[0-9a-f]{64}$",
+        description=(
+            "Server-derived identity of acquired export rows and retained source facts, excluding "
+            "serving timestamps and continuation tokens. "
+            "Not source-cut, provider or approval authority. "
+            "Null for older exports without this identity."
+        ),
+    )
     manifest_version: Literal["analytics_export_source_evidence_v1"] = Field(
         "analytics_export_source_evidence_v1", description="Retained evidence manifest schema."
     )

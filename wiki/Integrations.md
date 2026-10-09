@@ -173,6 +173,28 @@ The existing encoded-result byte metric includes the entire retained manifest; n
 threshold waiver is introduced. These contracts preserve Performance calculation/export ownership
 and Report's authoritative Excel assembly; they do not certify downstream financial correctness.
 
+### Select Corrected Source Without Rewriting History
+
+An identical create request reuses its completed export; it does not silently acquire corrected
+source. To refresh, repeat the same request on
+`POST /integration/exports/analytics-timeseries/jobs` with `refresh_of_job_id` set to that completed
+export's ID. The portfolio, dataset, financial query, consumer and serialization options must match.
+Missing anchors return 404; incomplete or mismatched anchors return 400 before source acquisition.
+
+For example, if export A retained 100 and source is corrected to 120, the original request still
+returns A. Adding `refresh_of_job_id` with A's actual job ID creates B from corrected
+source. Repeating that anchored request returns B even after another source correction; to request
+C, anchor B instead. Retrieve A or B by its immutable result endpoint for audit/replay. A refresh
+can retain unchanged economics with changed quality evidence; completion still does not qualify it.
+
+New results expose `source_evidence.selection_digest` in JSON and NDJSON metadata, including gzip.
+This versioned server-derived digest binds acquired rows and retained source facts, excluding
+serving timestamps, request correlation and transport continuations. It is distinct from request
+fingerprint and never substitutes for `source_cut_id`, provider custody, approval or whole-assembly
+authority. Older results return a null selection digest without rewriting stored history. See the
+[correction policy](https://github.com/sgajbi/lotus-core/blob/main/src/services/query_control_plane_service/app/application/analytics/analytics_export_corrections.py)
+and [durable HTTP controls](https://github.com/sgajbi/lotus-core/blob/main/tests/integration/services/query_control_plane_service/test_analytics_content_identity_postgresql.py).
+
 ## Surface Selection
 
 Downstream consumers should use the correct family surface rather than treating `lotus-core` as one

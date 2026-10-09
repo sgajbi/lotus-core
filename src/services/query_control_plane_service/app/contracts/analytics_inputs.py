@@ -710,6 +710,18 @@ class PortfolioAnalyticsReferenceResponse(SourceDataProductRuntimeMetadata):
 
 
 class AnalyticsExportCreateRequest(BaseModel):
+    refresh_of_job_id: str | None = Field(
+        None,
+        min_length=1,
+        max_length=64,
+        pattern=r"^aexp_[a-zA-Z0-9_]+$",
+        description=(
+            "Completed export of the identical request to refresh from current source. "
+            "Repeating this anchor replays the same correction intent; a subsequent correction "
+            "must anchor the latest completed export. Omit to preserve original request reuse."
+        ),
+        examples=["aexp_7e8ad3e7bc6f4d3b97de66f1"],
+    )
     dataset_type: Literal["portfolio_timeseries", "position_timeseries"] = Field(
         ...,
         description="Dataset contract to export.",
