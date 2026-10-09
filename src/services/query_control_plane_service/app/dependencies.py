@@ -133,12 +133,18 @@ def get_analytics_timeseries_service(
 
 
 def get_portfolio_source_observations_service(db: AsyncSession = Depends(get_async_db_session)):
+    from portfolio_common.portfolio_source_verification_configuration import (
+        load_observation_verification_authority,
+    )
+
     from .application.portfolio_source_observations import PortfolioSourceObservationsService
     from .infrastructure.portfolio_source_observation_sources import (
         SqlAlchemyPortfolioSourceObservationReader,
     )
 
-    return PortfolioSourceObservationsService(SqlAlchemyPortfolioSourceObservationReader(db))
+    return PortfolioSourceObservationsService(
+        SqlAlchemyPortfolioSourceObservationReader(db), load_observation_verification_authority()
+    )
 
 
 def get_core_snapshot_service(

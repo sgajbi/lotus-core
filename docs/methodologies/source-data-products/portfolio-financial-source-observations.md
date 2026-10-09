@@ -137,6 +137,50 @@ attributed evidence, including observed zero and false values; null remains unkn
 does not replace those facts with defaults or qualify their use. Its details do not substitute
 the request date or serving timestamp for missing authoritative source-time evidence.
 
+## Per-Fact Verification Receipt
+
+The existing ingestion records optionally carry `verification_receipt`, a signed
+`PortfolioSourceFactVerificationReceipt` v1 with purpose `PORTFOLIO_FINANCIAL_SOURCE_FACT`.
+This is distinct from producer submission permission, FX custody and Manage's
+`COMPOSITE_MONTHLY_SOURCE_CUT` approval. An absent receipt preserves the original request
+serialization and idempotency fingerprint; it never upgrades old facts by backfill.
+
+Core registers trusted verifier keys and complete cut manifests independently of the caller.
+`LOTUS_PORTFOLIO_FACT_VERIFICATION_KEYS` and `LOTUS_PORTFOLIO_FACT_VERIFICATION_CUTS` are bounded
+JSON arrays, empty by default. Each key binds issuer/key identity, trusted consumer, tenant,
+portfolio, producer, family, currency, definition and coverage scope, with aware validity and
+optional revocation instants. Key material comes only from its named
+`LOTUS_PORTFOLIO_FACT_VERIFICATION_KEY_*` secret environment variable. Each cut registration
+binds that same scope, exact producer cut ID and independent manifest digest. A submitted
+signed digest cannot register its own authority. Invalid configuration refuses safely; never
+log registry secrets or signed payloads.
+
+Receipt verification binds the original typed fact hash and complete envelope, including revision,
+business interval, observed/generated time, coverage and cut; it also binds consumer, currency,
+business date and manifest digest. HMAC authentication, exact purpose, current expiry/revocation
+and complete coverage are required. The native supplied ingestion transaction writes the original
+fact, scoped head, append-only receipt linkage and terminal job together. Failed verification
+rolls everything back. `c181b2c3d542` follows `c179b2c3d540`; it adds only receipt storage with
+family-specific original-fact foreign keys. UPDATE, DELETE and TRUNCATE refuse, and downgrade
+refuses populated receipts. Existing original economic rows and B's index migration are unchanged.
+
+The existing QCP query returns a receipt only after re-verifying it for the authenticated
+service consumer at read time. When every requested family has a valid selected fact and current
+receipt, `fact_verification_status` is `FACT_VERIFIED`; otherwise all selected receipt projections
+are suppressed. Missing verification fields are omitted from the legacy wire representation.
+Original fact hashes, revisions and nullable amounts/flags are unchanged. Provider qualification,
+`authoritative_state`, joined-cut compatibility and generic availability metadata remain unavailable.
+Manage and Performance must independently verify the receipt and complete assembly; a single fact
+receipt is not a positive five-input monthly financial decision, retained-history proof or live
+processing-completion evidence.
+
+The owning `test_portfolio_source_verification_postgresql.py` controls use only the native
+DB-only `query-authority-db-contract` scope and a capability-validated owned schema. They exercise
+new-session receipt recovery/current revocation, native job/fact rollback, mutation barriers,
+populated downgrade refusal and empty downgrade/upgrade preserving original facts. Synthetic
+signing keys prove software behavior only; current issuer enrollment and genuine producer evidence
+remain independent acceptance requirements.
+
 ## Verification and evidence limits
 
 Focused tests cover exact DTOs, independent flags/amounts, default-deny admission, registered

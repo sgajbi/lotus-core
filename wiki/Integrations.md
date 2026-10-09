@@ -83,6 +83,23 @@ Performance owns financial calculations and export contracts, and Report assembl
 See the [FX source admission guide](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/fx-source-admission.md)
 for a valid request, refusal handling and the remaining qualification boundary.
 
+## Portfolio Financial Fact Receipts
+
+The existing source-observation ingestion and QCP query contracts optionally carry independent
+`PortfolioSourceFactVerificationReceipt` v1 evidence with purpose
+`PORTFOLIO_FINANCIAL_SOURCE_FACT`. Server-owned verifier and cut registrations default empty;
+caller hashes cannot enroll an issuer or register a cut. Original facts and append-only receipt
+links commit in the same local ingestion transaction, without another API, worker or ledger.
+
+QCP re-verifies the exact selected fact and authenticated consumer at read time, including current
+expiry/revocation. Every requested family must verify before any receipt is projected. Absent
+receipts preserve legacy serialization; amounts, flags, original hashes and revisions stay intact.
+`FACT_VERIFIED` describes that narrow check, not provider qualification or a complete monthly cut.
+Manage owns whole-month assembly approval, Performance owns calculations/export contracts and
+Report assembles authoritative Excel. Provider, financial, live and global acceptance remain open.
+See [the source-observation methodology](https://github.com/sgajbi/lotus-core/blob/main/docs/methodologies/source-data-products/portfolio-financial-source-observations.md)
+for trusted configuration, atomic persistence, refusal behavior and the owning PostgreSQL controls.
+
 ## Analytics Content Identity
 
 `PortfolioTimeseriesInput` and `PositionTimeseriesInput` publish a deterministic `content_hash`

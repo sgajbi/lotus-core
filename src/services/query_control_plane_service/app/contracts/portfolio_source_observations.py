@@ -6,6 +6,9 @@ from typing import Literal, Self
 
 from portfolio_common.domain.calculation_lineage import require_sha256_digest
 from portfolio_common.domain.portfolio_source_observations import require_observation_identity
+from portfolio_common.domain.portfolio_source_verification import (
+    SignedObservationVerificationReceipt,
+)
 from portfolio_common.source_data_product_metadata import (
     SourceDataProductRuntimeMetadata,
     product_name_field,
@@ -90,6 +93,11 @@ class SourceObservationEvidence(BaseModel):
     latest_restated: bool = Field(
         description="Whether explicit current-head selection was requested."
     )
+    verification_receipt: SignedObservationVerificationReceipt | None = Field(
+        None,
+        exclude_if=lambda value: value is None,
+        description="Current independently verified fact receipt; never monthly checker approval.",
+    )
 
 
 class CashObservationEvidence(SourceObservationEvidence):
@@ -113,6 +121,11 @@ class FundingInvestmentEvidence(SourceObservationEvidence):
 
 
 class PortfolioSourceObservationsResponse(SourceDataProductRuntimeMetadata):
+    fact_verification_status: Literal["FACT_VERIFIED", "UNAVAILABLE"] = Field(
+        "UNAVAILABLE",
+        exclude_if=lambda value: value == "UNAVAILABLE",
+        description="All selected fact receipts currently verify for the trusted consumer.",
+    )
     product_name: Literal["PortfolioFinancialSourceObservations"] = product_name_field(
         "PortfolioFinancialSourceObservations"
     )
