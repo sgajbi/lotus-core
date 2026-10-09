@@ -138,4 +138,6 @@ DEP002 = [
     "python-dateutil",
     "python-multipart",
     "structlog",
+    # zoneinfo loads IANA resources from tzdata when the host has no timezone database.
+    "tzdata",
 ]
