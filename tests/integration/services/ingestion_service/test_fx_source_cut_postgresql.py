@@ -22,10 +22,14 @@ from portfolio_common.event_publisher import (
     get_kafka_event_publisher,
 )
 from portfolio_common.exceptions import RetryableConsumerError
+from portfolio_common.fx_cut_authorization import authenticate_fx_cut_authorization
+from portfolio_common.fx_source_configuration import load_fx_source_policies
 from portfolio_common.fx_source_events import FxSourceCutPersistedEvent
+from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import DlqPublicationBudgetExhausted
 from portfolio_common.outbox_repository import OutboxRepository
 from sqlalchemy import func, select
+from sqlalchemy.exc import OperationalError
 
 from src.services.ingestion_service.app import dependencies
 from src.services.ingestion_service.app.main import app
@@ -33,7 +37,10 @@ from src.services.ingestion_service.app.services import ingestion_job_service
 from src.services.ingestion_service.app.services.ingestion_job_service import IngestionJobService
 from src.services.persistence_service.app.consumers import base_consumer
 from src.services.persistence_service.app.consumers.fx_rate_consumer import FxRateConsumer
-from src.services.persistence_service.app.repositories.fx_source_repository import FxSourceConflict
+from src.services.persistence_service.app.repositories.fx_source_repository import (
+    FxSourceConflict,
+    FxSourceRepository,
+)
 from src.services.query_control_plane_service.app.domain.market_fx import FxSourceSelection
 from src.services.query_control_plane_service.app.infrastructure.retained_fx_sources import (
     read_retained_fx_rates,
@@ -329,3 +336,158 @@ async def test_retained_stale_predecessor_refuses_without_partial_cut(fx_http):
             )
         )
     assert await database.counts() == (2, 2, 2, 2)
+
+
+def transient_database_failure():
+    return OperationalError(
+        "SYNTHETIC_PRIVATE_SQL",
+        {"secret": "SYNTHETIC_PRIVATE_PARAMETER"},
+        Exception("SYNTHETIC_PRIVATE_CREDENTIAL"),
+    )
+
+
+def inject_database_failure(monkeypatch, phase, *, recover=False):
+    owner, method = {
+        "find": (FxSourceRepository, "find_cut"),
+        "inbox": (IdempotencyRepository, "claim_semantic_event_processing"),
+        "retain": (FxSourceRepository, "retain_admitted_cut"),
+        "outbox": (OutboxRepository, "create_outbox_event"),
+    }[phase]
+    original = getattr(owner, method)
+    calls = 0
+
+    async def fault(self, *args, **kwargs):
+        nonlocal calls
+        calls += 1
+        # Later stages perform real writes before failure, exercising rollback.
+        if phase in {"inbox", "retain", "outbox"} or (recover and calls > 1):
+            result = await original(self, *args, **kwargs)
+        if not recover or calls == 1:
+            raise transient_database_failure()
+        return result
+
+    monkeypatch.setattr(owner, method, fault)
+
+
+@pytest.mark.parametrize(
+    "phase,confirmed",
+    [("find", True), ("inbox", True), ("retain", True), ("outbox", True), ("outbox", False)],
+)
+async def test_database_exhaustion_keeps_authenticated_evidence_after_rollback(
+    fx_http, monkeypatch, phase, confirmed
+):
+    database, _, _, consumer = fx_http
+    event = signed_event(synthetic_cut(synthetic_revision(scope=database.scope)))
+    message = transport_message(event.bounded_payload())
+    acknowledge_transport(consumer)
+    consumer._retryable_failure_max_attempts = 2
+    consumer._dlq_failure_max_attempts = 1
+    inject_database_failure(monkeypatch, phase)
+    publications = []
+
+    async def captured_dlq(msg, error):
+        assert await database.counts() == (0, 0, 0, 0)
+        consumer._consumer.commit.assert_not_called()
+        publications.append(
+            consumer._build_dlq_payload(
+                msg,
+                error,
+                error_reason_code="retryable_budget_exhausted",
+                correlation_id="synthetic",
+                traceparent=None,
+            )
+        )
+        return confirmed  # Captured broker acknowledgement, not live Kafka proof.
+
+    monkeypatch.setattr(consumer, "_send_to_dlq_async", captured_dlq)
+    if confirmed:
+        await consumer._process_polled_message(message, asyncio.get_running_loop())
+    else:
+        with pytest.raises(DlqPublicationBudgetExhausted):
+            await consumer._process_polled_message(message, asyncio.get_running_loop())
+    assert len(publications) == 1
+    payload = publications[0]
+    _, expected = authenticate_fx_cut_authorization(
+        event.authorization, event.source_cut(), relay_policy=load_fx_source_policies().relay
+    )
+    assert payload["attestation_sha256"] == expected
+    assert payload["original_payload_sha256"] == sha256(message.value()).hexdigest()
+    assert payload["authorization_stage"] == ("authenticated" if phase == "find" else "admitted")
+    assert json.loads(payload["original_value"])["authorization"] == "***REDACTED***"
+    assert "SYNTHETIC_PRIVATE" not in str(payload)
+    assert await database.counts() == (0, 0, 0, 0)
+    if confirmed:
+        consumer._consumer.commit.assert_called_once_with(message=message, asynchronous=False)
+    else:
+        consumer._consumer.commit.assert_not_called()
+
+
+async def test_database_retry_recovers_once_after_full_rollback(fx_http, monkeypatch):
+    database, _, _, consumer = fx_http
+    event = signed_event(synthetic_cut(synthetic_revision(scope=database.scope)))
+    message = transport_message(event.bounded_payload())
+    acknowledge_transport(consumer)
+    inject_database_failure(monkeypatch, "outbox", recover=True)
+    original_retry = consumer._handle_retryable_processing_error
+    retries = []
+
+    async def rolled_back_retry(msg, error):
+        assert await database.counts() == (0, 0, 0, 0)
+        consumer._consumer.commit.assert_not_called()
+        retries.append(error)
+        return await original_retry(msg, error)
+
+    monkeypatch.setattr(consumer, "_handle_retryable_processing_error", rolled_back_retry)
+    await consumer._process_polled_message(message, asyncio.get_running_loop())
+    assert len(retries) == 1
+    assert await database.counts() == (1, 1, 1, 1)
+    consumer._consumer.commit.assert_called_once_with(message=message, asynchronous=False)
+
+
+async def test_concurrent_database_failures_keep_distinct_cut_evidence(fx_http, monkeypatch):
+    database, _, _, consumer = fx_http
+    events = [
+        signed_event(
+            synthetic_cut(
+                synthetic_revision(scope=database.scope, source_record_id=f"SYNTHETIC_{n}"),
+                reference=f"SYNTHETIC_{n}",
+            )
+        )
+        for n in (1, 2)
+    ]
+    barrier = asyncio.Event()
+    waiting = 0
+    original = FxSourceRepository.find_cut
+
+    async def fail_after_read(self, cut):
+        nonlocal waiting
+        await original(self, cut)
+        waiting += 1
+        if waiting == 2:
+            barrier.set()
+        await asyncio.wait_for(barrier.wait(), timeout=5)
+        raise transient_database_failure()
+
+    monkeypatch.setattr(FxSourceRepository, "find_cut", fail_after_read)
+
+    async def attempt(event, offset):
+        message = transport_message(event.bounded_payload(), offset=offset)
+        with pytest.raises(RetryableConsumerError) as failure:
+            await consumer.process_message(message)
+        payload = consumer._build_dlq_payload(
+            message,
+            failure.value,
+            error_reason_code="retryable_budget_exhausted",
+            correlation_id="synthetic",
+            traceparent=None,
+        )
+        _, expected = authenticate_fx_cut_authorization(
+            event.authorization, event.source_cut(), relay_policy=load_fx_source_policies().relay
+        )
+        assert payload["original_payload_sha256"] == sha256(message.value()).hexdigest()
+        assert payload["attestation_sha256"] == expected
+        return payload
+
+    payloads = await asyncio.gather(*(attempt(event, n) for n, event in enumerate(events, 1)))
+    assert payloads[0]["attestation_sha256"] != payloads[1]["attestation_sha256"]
+    assert await database.counts() == (0, 0, 0, 0)

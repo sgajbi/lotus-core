@@ -63,7 +63,11 @@ persistence inbox/outbox transaction. Source observation and Core acceptance tim
 QCP's optional explicit provider/source selector applies both historical boundaries and can pin
 an immutable cut. An absent referenced predecessor retries only through the typed owning path,
 after complete transaction rollback, within eight attempts/sixty seconds or tighter configured limits.
-Exhaustion preserves the exact economic cut and payload/attestation fingerprints in confirmed,
+Exhaustion preserves the exact economic cut and original payload fingerprint in confirmed,
+source-safe evidence. An attestation fingerprint is present only after cryptographic authentication;
+the per-message stage distinguishes authentication from completed admission, including transient
+database failures before and after admission. Unauthenticated and legacy retries never invent that
+fingerprint, and database support reasons omit SQL and credentials. Confirmed,
 source-safe DLQ evidence; redacted authorization requires genuinely permitted fresh operator admission,
 not raw signed-envelope replay. Retained stale predecessors and conflicting versions remain terminal.
 Conflicting versions, stale predecessors and ambiguous pair/date chains refuse

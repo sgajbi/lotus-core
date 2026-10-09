@@ -1,7 +1,9 @@
 """Internal FX consumer variant: authenticate then retain within its existing UOW."""
 
 from datetime import UTC, datetime
+from typing import Literal
 
+from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.fx_cut_authorization import (
     CommittedFxCutVerification,
     VerifiedFxCutAuthorization,
@@ -11,9 +13,27 @@ from portfolio_common.fx_cut_authorization import (
 from portfolio_common.fx_source_configuration import load_fx_source_policies
 from portfolio_common.fx_source_events import FxSourceCutReceivedEvent
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..repositories.fx_source_repository import FxSourceConflict, FxSourceRepository
+
+
+class FxSourceCutRetryable(RetryableConsumerError):
+    """Per-message support evidence, never reusable authorization or admission."""
+
+    def __init__(
+        self,
+        reason: str,
+        *,
+        attestation_sha256: str | None = None,
+        authorization_stage: Literal[
+            "unauthenticated", "authenticated", "admitted"
+        ] = "unauthenticated",
+    ) -> None:
+        super().__init__(reason)
+        self.attestation_sha256 = attestation_sha256
+        self.authorization_stage = authorization_stage
 
 
 class PreparedFxSourceCut(BaseModel):
@@ -37,7 +57,16 @@ async def prepare_fx_source_cut(
     _, attestation_hash = authenticate_fx_cut_authorization(
         event.authorization, cut, relay_policy=policies.relay
     )
-    existing = await FxSourceRepository(db).find_cut(cut)
+    try:
+        existing = await FxSourceRepository(db).find_cut(cut)
+    except DBAPIError as error:
+        # Authentication has succeeded, but server admission has not completed.
+        # Never include SQL, parameters or credentials in the support reason.
+        raise FxSourceCutRetryable(
+            "FX_SOURCE_DATABASE_RETRY",
+            attestation_sha256=attestation_hash,
+            authorization_stage="authenticated",
+        ) from error
     committed = None
     if existing is not None:
         if existing.content_hash != cut.content_hash:

@@ -141,8 +141,13 @@ preserving tighter supplied limits; zero does not disable this owning bound. Oth
 and partitioning are unchanged. This also bounds FX transient database recovery.
 
 On exhaustion, the existing confirmed-DLQ boundary owns offset acknowledgement. Preserve the
-unchanged economic cut, exact original payload SHA256, attestation fingerprint and pending revision
-reason. Authorization remains source-safe redacted: this is not byte-replay of the original signed
+unchanged economic cut and exact original payload SHA256 for canonical-cut retries. The attestation
+fingerprint is included only after successful cryptographic authentication. `authorization_stage`
+distinguishes `authenticated` (including a failed retained-cut lookup before full admission) from
+`admitted` (including later inbox, retention or outbox database failures); `unauthenticated` carries
+no invented attestation fingerprint. These are per-message support facts, not renewed admission.
+Pending revision reasons and bounded database reason codes contain no raw SQL or credentials.
+Authorization remains source-safe redacted: this is not byte-replay of the original signed
 envelope. An operator must obtain genuine fresh permitted authorization bound to the unchanged cut
 through existing admission/recovery governance; never reconstruct credentials or weaken CAS.
 

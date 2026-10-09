@@ -15,6 +15,7 @@ from portfolio_common.events import FxRateEvent, FxRatePersistedEvent
 from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.fx_source_events import FxSourceCutPersistedEvent, FxSourceCutReceivedEvent
 from pydantic import BaseModel
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..repositories.fx_rate_repository import FxRateRepository
@@ -24,15 +25,16 @@ from ..repositories.fx_source_repository import (
     RetainedFxCutResult,
 )
 from .base_consumer import GenericPersistenceConsumer
-from .fx_source_cut import PreparedFxSourceCut, prepare_fx_source_cut
+from .fx_source_cut import FxSourceCutRetryable, PreparedFxSourceCut, prepare_fx_source_cut
 
 
-class FxSourcePredecessorRetryable(RetryableConsumerError):
+class FxSourcePredecessorRetryable(FxSourceCutRetryable):
     """Owning admitted dependency reason; never a blanket source-conflict retry."""
 
     def __init__(self, reason: str, *, attestation_sha256: str) -> None:
-        super().__init__(reason)
-        self.attestation_sha256 = attestation_sha256
+        super().__init__(
+            reason, attestation_sha256=attestation_sha256, authorization_stage="admitted"
+        )
 
 
 class FxRateConsumer(GenericPersistenceConsumer):
@@ -107,12 +109,30 @@ class FxRateConsumer(GenericPersistenceConsumer):
 
     def _build_dlq_payload(self, msg, error: Exception, **kwargs) -> dict[str, object]:
         payload = cast(dict[str, object], super()._build_dlq_payload(msg, error, **kwargs))
-        if isinstance(error, FxSourcePredecessorRetryable):
+        if isinstance(error, FxSourceCutRetryable):
             # Keep shared authorization redaction. Bind the exact original bytes
             # for operator reconciliation without inventing replay permission.
             payload["original_payload_sha256"] = sha256(msg.value()).hexdigest()
-            payload["attestation_sha256"] = error.attestation_sha256
+            payload["authorization_stage"] = error.authorization_stage
+            # The chained database exception may contain SQL/parameters. Only
+            # this bounded owning reason belongs in durable support evidence.
+            payload["error_traceback"] = f"{type(error).__name__}: {error}"
+            if error.attestation_sha256 is not None:
+                payload["attestation_sha256"] = error.attestation_sha256
         return payload
+
+    def database_retry_error(
+        self, error: DBAPIError, event: BaseModel | None
+    ) -> RetryableConsumerError:
+        if isinstance(event, PreparedFxSourceCut):
+            return FxSourceCutRetryable(
+                "FX_SOURCE_DATABASE_RETRY",
+                attestation_sha256=event.verified.attestation_sha256,
+                authorization_stage="admitted",
+            )
+        if isinstance(event, FxSourceCutReceivedEvent):
+            return FxSourceCutRetryable("FX_SOURCE_DATABASE_RETRY")
+        return super().database_retry_error(error, event)
 
     def get_outbox_event(self, persisted_object: Any) -> dict[str, Any] | None:
         """Build the source-owned persisted FX observation event."""

@@ -1,14 +1,19 @@
 """Actual signed consumer admission and safe retained replay, without PostgreSQL claims."""
 
+import asyncio
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from hashlib import sha256
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.exceptions import RetryableConsumerError
+from portfolio_common.events import FxRateEvent
 from portfolio_common.fx_cut_authorization import authenticate_fx_cut_authorization
 from portfolio_common.fx_source_admission import FxSourceAdmissionRejected
 from portfolio_common.fx_source_configuration import load_fx_source_policies
+from sqlalchemy.exc import OperationalError
 
 from src.services.persistence_service.app.consumers import fx_source_cut
 from src.services.persistence_service.app.consumers.fx_rate_consumer import FxRateConsumer
@@ -17,11 +22,127 @@ from src.services.persistence_service.app.repositories.fx_source_repository impo
 from tests.test_support.fx_source_fixtures import (
     configure_synthetic_fx_source,
     signed_event,
+    synthetic_cut,
     synthetic_revision,
 )
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract, pytest.mark.asyncio]
 NOW = datetime(2026, 10, 9, tzinfo=UTC)
+
+
+def database_failure():
+    return OperationalError(
+        "SENSITIVE_SQL", {"secret": "SENSITIVE_PARAMETER"}, Exception("DB_SECRET")
+    )
+
+
+def retry_payload(consumer, event, error):
+    raw = event.model_dump_json().encode()
+    message = MagicMock()
+    message.value.return_value = raw
+    message.key.return_value = b"synthetic"
+    message.topic.return_value = "fx_rates.raw.received"
+    message.headers.return_value = []
+    payload = consumer._build_dlq_payload(
+        message,
+        error,
+        error_reason_code="retryable_budget_exhausted",
+        correlation_id="synthetic",
+        traceparent=None,
+    )
+    assert payload["original_payload_sha256"] == sha256(raw).hexdigest()
+    assert "SENSITIVE" not in str(payload) and "DB_SECRET" not in str(payload)
+    assert "***REDACTED***" in payload["original_value"]
+    return payload
+
+
+async def test_authenticated_find_cut_database_failure_keeps_fingerprint_not_admission(monkeypatch):
+    configure_synthetic_fx_source(monkeypatch)
+    event = signed_event()
+    db = AsyncMock()
+    db.scalar.side_effect = database_failure()
+    consumer = FxRateConsumer(
+        bootstrap_servers="synthetic", topic="fx_rates.raw.received", group_id="synthetic"
+    )
+    with pytest.raises(RetryableConsumerError) as failure:
+        await consumer.prepare_event(db, event)
+    payload = retry_payload(consumer, event, failure.value)
+    _, expected = authenticate_fx_cut_authorization(
+        event.authorization, event.source_cut(), relay_policy=load_fx_source_policies().relay
+    )
+    assert payload["attestation_sha256"] == expected
+    assert payload["authorization_stage"] == "authenticated"
+
+
+@pytest.mark.parametrize("authenticated", [False, True])
+async def test_database_retry_context_distinguishes_received_and_admitted(
+    monkeypatch, authenticated
+):
+    configure_synthetic_fx_source(monkeypatch)
+    event = signed_event()
+    consumer = FxRateConsumer(
+        bootstrap_servers="synthetic", topic="fx_rates.raw.received", group_id="synthetic"
+    )
+    db = AsyncMock()
+    db.scalar.return_value = None
+    context = await consumer.prepare_event(db, event) if authenticated else event
+    error = consumer.database_retry_error(database_failure(), context)
+    payload = retry_payload(consumer, event, error)
+    assert payload["authorization_stage"] == ("admitted" if authenticated else "unauthenticated")
+    assert ("attestation_sha256" in payload) is authenticated
+
+
+async def test_concurrent_cut_failures_never_mix_authenticated_evidence(monkeypatch):
+    configure_synthetic_fx_source(monkeypatch)
+    consumer = FxRateConsumer(
+        bootstrap_servers="synthetic", topic="fx_rates.raw.received", group_id="synthetic"
+    )
+    events = [
+        signed_event(
+            synthetic_cut(
+                synthetic_revision(source_record_id=f"SYNTHETIC_{n}"), reference=f"SYNTHETIC_{n}"
+            ),
+            accepted_at=NOW + timedelta(seconds=n),
+        )
+        for n in (0, 1)
+    ]
+    ready = asyncio.Event()
+    waiting = 0
+
+    async def fail_read(*_args):
+        nonlocal waiting
+        waiting += 1
+        if waiting == 2:
+            ready.set()
+        await ready.wait()
+        raise database_failure()
+
+    async def attempt(event):
+        db = AsyncMock()
+        db.scalar.side_effect = fail_read
+        with pytest.raises(RetryableConsumerError) as failure:
+            await consumer.prepare_event(db, event)
+        return retry_payload(consumer, event, failure.value)
+
+    payloads = await asyncio.gather(*(attempt(event) for event in events))
+    for event, payload in zip(events, payloads, strict=True):
+        _, expected = authenticate_fx_cut_authorization(
+            event.authorization, event.source_cut(), relay_policy=load_fx_source_policies().relay
+        )
+        assert payload["attestation_sha256"] == expected
+    assert payloads[0]["attestation_sha256"] != payloads[1]["attestation_sha256"]
+
+
+async def test_legacy_database_retry_has_no_invented_cut_evidence():
+    consumer = FxRateConsumer(
+        bootstrap_servers="synthetic", topic="fx_rates.raw.received", group_id="synthetic"
+    )
+    legacy = FxRateEvent(
+        from_currency="USD", to_currency="SGD", rate_date=NOW.date(), rate=Decimal("1.35")
+    )
+    error = consumer.database_retry_error(database_failure(), legacy)
+    assert type(error) is RetryableConsumerError
+    assert not hasattr(error, "attestation_sha256")
 
 
 @pytest.mark.parametrize(

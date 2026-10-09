@@ -227,4 +227,10 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
             logger.warning(
                 f"DB error for {self.service_name}. Raising RetryableConsumerError.", exc_info=False
             )
-            raise RetryableConsumerError(f"Database error: {e}") from e
+            raise self.database_retry_error(e, event) from e
+
+    def database_retry_error(
+        self, error: DBAPIError, event: BaseModel | None
+    ) -> RetryableConsumerError:
+        """Owning consumers may carry safe evidence from this message only."""
+        return RetryableConsumerError(f"Database error: {error}")
