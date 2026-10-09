@@ -8,8 +8,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.events import FxRateEvent
+from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.fx_cut_authorization import authenticate_fx_cut_authorization
 from portfolio_common.fx_source_admission import FxSourceAdmissionRejected
 from portfolio_common.fx_source_configuration import load_fx_source_policies
