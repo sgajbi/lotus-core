@@ -1,7 +1,13 @@
 """Reference visibility must precede financial transaction admission."""
 
-import pytest
+from types import SimpleNamespace
+from unittest.mock import Mock
 
+import pytest
+import requests
+
+from tests.e2e.api_client import E2EApiClient
+from tests.e2e.test_performance_pipeline import setup_performance_data
 from tests.e2e.test_timeseries_convergence import (
     test_cash_only_staged_external_flows_are_not_doubled as cash_seed,
 )
@@ -77,3 +83,73 @@ def test_foreign_portfolio_stops_seed_before_transaction_publication(scenario):
     with pytest.raises(PermissionError, match="foreign portfolio"):
         run_seed(client, scenario)
     assert "/ingest/transactions" not in client.events
+
+
+@pytest.mark.parametrize("authority", ["delayed-owned", "missing", "foreign"])
+def test_performance_fixture_requires_owned_visibility_before_publication(monkeypatch, authority):
+    client = E2EApiClient("http://ingestion", "http://query", "http://control")
+    events = []
+    portfolio_id = None
+    visible = False
+    elapsed = 0
+
+    def post(url, *, json, timeout):
+        nonlocal portfolio_id
+        events.append(url)
+        assert timeout == 10
+        if url.endswith("/ingest/portfolios"):
+            portfolio = json["portfolios"][0]
+            portfolio_id = portfolio["portfolio_id"]
+            assert portfolio["tenant_id"] == client.tenant_id
+        if url.endswith("/ingest/transactions"):
+            assert visible, "transaction publication preceded tenant-owned portfolio visibility"
+            assert json["transactions"][0]["portfolio_id"] == portfolio_id
+        return SimpleNamespace(raise_for_status=lambda: None)
+
+    def query(endpoint):
+        nonlocal visible
+        assert portfolio_id is not None
+        assert endpoint == f"/portfolios?portfolio_id={portfolio_id}"
+        events.append("portfolio-query")
+        if authority == "foreign":
+            raise requests.HTTPError("foreign portfolio absent from tenant-scoped read")
+        visible = authority == "delayed-owned" and events.count("portfolio-query") == 2
+        data = {"portfolios": [{"portfolio_id": portfolio_id}] if visible else []}
+        return SimpleNamespace(status_code=200, json=lambda: data)
+
+    def advance_clock(interval):
+        nonlocal elapsed
+        assert interval == 2
+        elapsed += 31
+
+    monkeypatch.setattr(client.session, "post", post)
+    monkeypatch.setattr(client, "query", query)
+    monkeypatch.setattr("tests.e2e.api_client.time.time", lambda: elapsed)
+    monkeypatch.setattr("tests.e2e.api_client.time.sleep", advance_clock)
+    poll_db_until = Mock()
+    try:
+        if authority == "delayed-owned":
+            result = setup_performance_data.__wrapped__(None, client, poll_db_until)
+            assert result == {"portfolio_id": portfolio_id}
+            assert events.count("portfolio-query") == 2
+            assert events.index("portfolio-query") < events.index(
+                "http://ingestion/ingest/transactions"
+            )
+            assert events.count("http://ingestion/ingest/transactions") == 1
+            assert events.count("http://ingestion/ingest/market-prices") == 1
+            poll_db_until.assert_called_once()
+            assert poll_db_until.call_args.kwargs["params"] == {
+                "pid": portfolio_id,
+                "date": "2025-03-11",
+            }
+        else:
+            with pytest.raises(
+                pytest.fail.Exception, match="Tenant-owned portfolio did not materialize"
+            ):
+                setup_performance_data.__wrapped__(None, client, poll_db_until)
+            assert events.count("portfolio-query") == 2
+            assert "http://ingestion/ingest/transactions" not in events
+            assert "http://ingestion/ingest/market-prices" not in events
+            poll_db_until.assert_not_called()
+    finally:
+        client.session.close()
