@@ -1,5 +1,6 @@
 # tests/unit/services/calculators/position-valuation-calculator/consumers/test_valuation_consumer.py
 import asyncio
+import json
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -30,6 +31,7 @@ from portfolio_common.domain.valuation import (
     resolve_position_valuation_policy,
     resolve_valuation_policy_assignment,
 )
+from portfolio_common.event_mapping import EventContractValidationError
 from portfolio_common.events import (
     PortfolioValuationRequiredEvent,
 )
@@ -42,7 +44,9 @@ from portfolio_common.valuation_job_contracts import (
     ValuationJobTransitionOutcome,
 )
 from pydantic import ValidationError
+from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
+from tenacity import wait_none
 
 from src.services.calculators.position_valuation_calculator.app.consumers.valuation_consumer import (  # noqa: E501
     ValuationConsumer,
@@ -146,6 +150,110 @@ async def test_non_connection_errors_remain_terminal(consumer, mock_kafka_messag
     assert caught.value is terminal_error
     processor.mark_failed_after_unexpected_error.assert_awaited_once()
     assert processor.mark_failed_after_unexpected_error.await_args.kwargs["claim_token"] == "a" * 32
+
+
+@pytest.mark.parametrize("claim_token", ["b" * 32, bytearray(b"c" * 32)])
+async def test_valid_text_claim_is_forwarded_without_changing_delivery_identity(
+    consumer, mock_kafka_message, mock_event, claim_token
+):
+    processor = AsyncMock()
+    consumer._valuation_processor = processor
+    mock_kafka_message.key.return_value = None
+    mock_kafka_message.headers.return_value = [
+        ("correlation_id", b"test-corr-id-123"),
+        (VALUATION_CLAIM_HEADER, claim_token),
+    ]
+
+    await consumer.process_message(mock_kafka_message)
+
+    expected_token = claim_token if isinstance(claim_token, str) else claim_token.decode("ascii")
+    processor.process_valid_event.assert_awaited_once_with(
+        mock_event, "valuation.job.requested-0-1", "test-corr-id-123", claim_token=expected_token
+    )
+    processor.mark_failed_after_unexpected_error.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("claim_token", "reason"),
+    [(b"\xff" * 32, "must be ASCII"), (None, "must be text"), (32, "must be text")],
+    ids=["non-ascii", "null", "non-text"],
+)
+async def test_unusable_claim_header_refuses_before_processor_or_terminal_write(
+    consumer, mock_kafka_message, claim_token, reason
+):
+    processor = AsyncMock()
+    consumer._valuation_processor = processor
+    mock_kafka_message.headers.return_value = [(VALUATION_CLAIM_HEADER, claim_token)]
+
+    with pytest.raises(EventContractValidationError, match=reason) as caught:
+        await consumer.process_message(mock_kafka_message)
+
+    if isinstance(claim_token, bytes):
+        assert isinstance(caught.value.__cause__, UnicodeDecodeError)
+    processor.process_valid_event.assert_not_awaited()
+    processor.mark_failed_after_unexpected_error.assert_not_awaited()
+    consumer._send_to_dlq_async.assert_not_awaited()
+
+
+async def test_unreadable_claim_headers_refuse_with_original_cause():
+    message = MagicMock()
+    header_error = RuntimeError("headers unavailable")
+    message.headers.side_effect = header_error
+
+    with pytest.raises(EventContractValidationError, match="could not be inspected") as caught:
+        _valuation_claim_token(message)
+
+    assert caught.value.__cause__ is header_error
+
+
+@pytest.mark.parametrize("error_type", [DBAPIError, OperationalError])
+@pytest.mark.parametrize("restores", [True, False], ids=["restored", "exhausted"])
+async def test_database_retry_preserves_claim_and_never_marks_failed(
+    consumer, mock_kafka_message, error_type, restores
+):
+    processor = AsyncMock()
+    consumer._valuation_processor = processor
+    database_error = error_type("SELECT valuation", {}, RuntimeError("database unavailable"))
+    processor.process_valid_event.side_effect = (
+        [database_error, None] if restores else database_error
+    )
+    # Remove only wall-clock sleeps; retain the production retry predicate and five-attempt bound.
+    process_without_sleep = consumer.process_message.retry_with(wait=wait_none())
+
+    if restores:
+        await process_without_sleep(consumer, mock_kafka_message)
+    else:
+        with pytest.raises(error_type) as caught:
+            await process_without_sleep(consumer, mock_kafka_message)
+        assert caught.value is database_error
+
+    calls = processor.process_valid_event.await_args_list
+    assert len(calls) == (2 if restores else 5)
+    assert all(call == calls[0] for call in calls)
+    assert calls[0].args[1:] == ("valuation.job.requested-0-1", "test-corr-id-123")
+    assert calls[0].kwargs == {"claim_token": "a" * 32}
+    processor.mark_failed_after_unexpected_error.assert_not_awaited()
+    consumer._send_to_dlq_async.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("payload", "error_type"),
+    [(b"not-json", json.JSONDecodeError), (b"[]", AttributeError)],
+    ids=["invalid-json", "non-object-envelope"],
+)
+async def test_unvalidated_envelope_cannot_invent_a_terminal_job(
+    consumer, mock_kafka_message, payload, error_type
+):
+    processor = AsyncMock()
+    consumer._valuation_processor = processor
+    mock_kafka_message.value.return_value = payload
+
+    with pytest.raises(error_type):
+        await consumer.process_message(mock_kafka_message)
+
+    processor.process_valid_event.assert_not_awaited()
+    processor.mark_failed_after_unexpected_error.assert_not_awaited()
+    consumer._send_to_dlq_async.assert_not_awaited()
 
 
 @pytest.fixture
