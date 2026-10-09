@@ -276,6 +276,8 @@ def test_position_next_page_token_encodes_last_row_scope() -> None:
             "security_id": "SEC_B",
             "snapshot_epoch": 3,
             "scope_fingerprint": "scope-1",
+            "traversal_version": "analytics-selected-inputs-v1",
+            "selected_inputs_fingerprint": "",
         }
     ]
 

@@ -53,7 +53,7 @@ class AnalyticsTimeseriesReader(Protocol):
         portfolio_id: str,
         start_date: date,
         end_date: date,
-        page_size: int,
+        page_size: int | None,
         cursor_date: date | None,
         cursor_security_id: str | None,
         security_ids: list[str],

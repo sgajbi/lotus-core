@@ -124,8 +124,19 @@ bound to content identity.
 `source_lineage.content_identity_scope` is `response_page`. Each page has its own digest;
 `source_lineage.source_cut_status` remains `UNAVAILABLE` and `source_cut_id` remains null. Do not
 compare page digests as whole-window revisions, concatenate them into an official source cut, or
-infer cross-page snapshot isolation or upstream provider authority. Paging retains its existing
-request/cursor semantics and partial-quality posture. Missing required FX still refuses the read;
+infer cross-page snapshot isolation or upstream provider authority. Portfolio and Position continuation tokens
+now bind versioned selected-input drift evidence: epoch, selected valuation and flow records,
+dated FX, observed dates and predecessor values. A correction anywhere in the requested selected
+window, or a legacy token without this evidence, requires a restart with HTTP409
+`QCP_ANALYTICS_STALE_CONTINUATION`. Signature, expiry and request-scope checks remain separate.
+Both datasets acquire the complete selected window before slicing, so required FX missing on
+a later date also refuses an earlier page; this is not bounded page-only source acquisition.
+This witness detects between-request changes. Production HTTP acquisition uses a request-owned,
+read-only PostgreSQL repeatable-read transaction established before any source read, separate from
+the export job write session. All pages assembled within one inline export request share that read
+snapshot; a later HTTP request acquires a new snapshot and validates its continuation witness.
+This is SQL consistency, not retained provider revision, whole-cut authority or complete export
+assembly qualification. Missing required FX refuses the read;
 an empty successful row set has a real content digest, not proof of financial completion.
 
 Consumers retain their independent input/calculation identity and must inspect quality and cut

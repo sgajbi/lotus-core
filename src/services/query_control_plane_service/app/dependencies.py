@@ -55,6 +55,7 @@ from .application.simulation import SimulationService
 from .application.sustainability_preference_profile import SustainabilityPreferenceProfileService
 from .application.transaction_economics.service import TransactionEconomicsService
 from .infrastructure.analytics_export_repository import AnalyticsExportRepository
+from .infrastructure.analytics_read_snapshot import get_analytics_read_session
 from .infrastructure.analytics_timeseries_repository import AnalyticsTimeseriesRepository
 from .infrastructure.analytics_unit_of_work import SqlAlchemyAnalyticsUnitOfWork
 from .infrastructure.benchmark_assignment_sources import (
@@ -115,10 +116,11 @@ def get_security_audit_query_service() -> SecurityAuditQueryService:
 
 def get_analytics_timeseries_service(
     db: AsyncSession = Depends(get_async_db_session),
+    read_db: AsyncSession = Depends(get_analytics_read_session),
 ) -> AnalyticsTimeseriesService:
     settings = load_query_control_plane_settings()
     return AnalyticsTimeseriesService(
-        reader=AnalyticsTimeseriesRepository(db),
+        reader=AnalyticsTimeseriesRepository(read_db),
         export_store=AnalyticsExportRepository(db),
         unit_of_work=SqlAlchemyAnalyticsUnitOfWork(db),
         policy=AnalyticsRuntimePolicy(

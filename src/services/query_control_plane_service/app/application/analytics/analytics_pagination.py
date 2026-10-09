@@ -20,6 +20,7 @@ from ...contracts.analytics_inputs import (
 )
 from ...domain.analytics import PositionValuationObservation
 from ...ports.analytics import AnalyticsTimeseriesReader
+from .analytics_traversal import TRAVERSAL_VERSION
 
 
 class AnalyticsPaginationError(RuntimeError):
@@ -138,6 +139,8 @@ def portfolio_timeseries_cursor_date(
     token_scope = cursor.get("scope_fingerprint")
     if token_scope is not None and token_scope != request_scope_fingerprint:
         raise AnalyticsPaginationError("Page token does not match request scope.")
+    if page_token and not cursor.get("valuation_date"):
+        raise AnalyticsPaginationError("Page token is missing its continuation date.")
     if not cursor.get("valuation_date"):
         return None
     return date.fromisoformat(cursor["valuation_date"])
@@ -303,6 +306,7 @@ def position_timeseries_next_page_token(
     snapshot_epoch: int,
     request_scope_fingerprint: str,
     encode_page_token: Callable[[dict[str, Any]], str],
+    selected_inputs_fingerprint: str = "",
 ) -> str | None:
     if not has_more or not rows_page:
         return None
@@ -311,6 +315,8 @@ def position_timeseries_next_page_token(
         {
             "valuation_date": last.valuation_date.isoformat(),
             "security_id": normalize_security_id(last.security_id),
+            "traversal_version": TRAVERSAL_VERSION,
+            "selected_inputs_fingerprint": selected_inputs_fingerprint,
             "snapshot_epoch": snapshot_epoch,
             "scope_fingerprint": request_scope_fingerprint,
         }

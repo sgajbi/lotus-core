@@ -108,9 +108,9 @@ from .analytics_pagination import (
 )
 from .analytics_portfolio_pages import (
     AnalyticsPortfolioPageError,
-    PortfolioObservationPageScope,
     PortfolioObservationSupportInputs,
-    portfolio_observation_next_page_token,
+    empty_portfolio_traversal,
+    portfolio_observation_page_result,
     portfolio_observation_page_scope,
     portfolio_row_buckets,
     portfolio_to_reporting_observation_rate,
@@ -120,6 +120,7 @@ from .analytics_position_pages import (
     PositionPageSupportInputs,
     position_dimension_filters,
     position_page_scope,
+    position_traversal_page,
     previous_position_eod_by_security,
 )
 from .analytics_position_responses import position_response_rows
@@ -131,9 +132,9 @@ from .analytics_quality import (
     latest_position_horizon_with_observations,
     portfolio_reference_data_quality_status,
     portfolio_reference_evidence_timestamp,
-    quality_status_from_epoch,
     timeseries_data_quality_status,
 )
+from .analytics_traversal import selected_inputs_fingerprint, validate_traversal_continuation
 from .analytics_windows import AnalyticsWindowError, resolve_analytics_window
 
 logger = logging.getLogger(__name__)
@@ -276,10 +277,6 @@ class AnalyticsTimeseriesService:
         )
 
     @staticmethod
-    def _quality_status_from_epoch(epoch: int) -> str:
-        return cast(str, quality_status_from_epoch(epoch))
-
-    @staticmethod
     def _build_cash_flow_observation(
         row: AnalyticsCashflowEvidence,
         *,
@@ -354,6 +351,7 @@ class AnalyticsTimeseriesService:
         expected_business_dates: list[date] | None = None,
         business_calendar_present: bool | None = None,
         window_predecessor_date: date | None = None,
+        continuation: dict | None = None,
     ) -> tuple[list[PortfolioTimeseriesObservation], dict[str, int], list[date], int, str | None]:
         portfolio_currency = normalize_currency_code(portfolio_currency)
         reporting_currency = normalize_currency_code(reporting_currency)
@@ -380,34 +378,44 @@ class AnalyticsTimeseriesService:
             cursor_date=cursor_date,
             page_size=page_size,
         )
-        if not page_scope.page_dates:
-            return [], {}, observed_dates, snapshot_epoch, None
-
+        if not observed_dates:
+            return empty_portfolio_traversal(
+                cursor=continuation or {}, snapshot_epoch=snapshot_epoch
+            )
+        # Acquire the entire selected window so corrections behind the cursor participate.
         support_inputs = await self._portfolio_observation_support_inputs(
             portfolio_id=portfolio_id,
-            page_dates=page_scope.page_dates,
+            page_dates=observed_dates,
             snapshot_epoch=snapshot_epoch,
             portfolio_currency=portfolio_currency,
             reporting_currency=reporting_currency,
             governed_business_dates=(
-                page_scope.page_dates if expected_business_dates is not None else None
+                observed_dates if expected_business_dates is not None else None
             ),
             business_calendar_present=business_calendar_present,
             calendar_scope_dates=expected_business_dates,
             window_predecessor_date=window_predecessor_date,
         )
-        observations, quality_distribution = self._portfolio_observations_for_page(
-            page_dates=page_scope.page_dates,
+        validate_traversal_continuation(
+            cursor=continuation or {},
+            snapshot_epoch=snapshot_epoch,
+            fingerprint=support_inputs.selected_inputs_fingerprint,
+        )
+        observations, _ = self._portfolio_observations_for_page(
+            page_dates=observed_dates,
             support_inputs=support_inputs,
             portfolio_currency=portfolio_currency,
             reporting_currency=reporting_currency,
         )
-        next_page_token = self._portfolio_observation_next_page_token(
+        return portfolio_observation_page_result(
+            observations=observations,
+            observed_dates=observed_dates,
             page_scope=page_scope,
             snapshot_epoch=snapshot_epoch,
             request_scope_fingerprint=request_scope_fingerprint,
+            selected_inputs_fingerprint=support_inputs.selected_inputs_fingerprint,
+            encode_page_token=self._encode_page_token,
         )
-        return observations, quality_distribution, observed_dates, snapshot_epoch, next_page_token
 
     async def _portfolio_observation_support_inputs(
         self,
@@ -477,6 +485,16 @@ class AnalyticsTimeseriesService:
             business_calendar_present=business_calendar_present,
         )
         return PortfolioObservationSupportInputs(
+            selected_inputs_fingerprint=selected_inputs_fingerprint(
+                snapshot_epoch=snapshot_epoch,
+                dates=page_dates,
+                positions=position_rows,
+                portfolio_flows=portfolio_cashflow_rows,
+                position_flows=position_cashflow_rows,
+                previous=previous_rows,
+                position_fx=position_to_portfolio_rates,
+                reporting_fx=portfolio_to_reporting_rates,
+            ),
             position_rows=position_rows,
             portfolio_cashflows_by_date=self._portfolio_cash_flows_for_dates(
                 portfolio_cashflow_rows,
@@ -625,23 +643,6 @@ class AnalyticsTimeseriesService:
         except AnalyticsPortfolioPageError as exc:
             raise AnalyticsInputError("INSUFFICIENT_DATA", str(exc)) from exc
 
-    def _portfolio_observation_next_page_token(
-        self,
-        *,
-        page_scope: PortfolioObservationPageScope,
-        snapshot_epoch: int,
-        request_scope_fingerprint: str,
-    ) -> str | None:
-        return cast(
-            str | None,
-            portfolio_observation_next_page_token(
-                page_scope=page_scope,
-                snapshot_epoch=snapshot_epoch,
-                request_scope_fingerprint=request_scope_fingerprint,
-                encode_page_token=self._encode_page_token,
-            ),
-        )
-
     async def get_portfolio_timeseries(
         self,
         *,
@@ -699,6 +700,7 @@ class AnalyticsTimeseriesService:
             resolved_window=resolved_window,
             page_size=request.page.page_size,
             cursor_date=cursor_date,
+            continuation=self._decode_page_token(request.page.page_token),
             request_scope_fingerprint=request_scope_fingerprint,
             expected_business_dates=expected_dates,
             business_calendar_present=calendar_present,
@@ -838,9 +840,9 @@ class AnalyticsTimeseriesService:
             portfolio_id=portfolio_id,
             start_date=resolved_window.start_date,
             end_date=resolved_window.end_date,
-            page_size=request.page.page_size,
-            cursor_date=cursor.cursor_date,
-            cursor_security_id=cursor.cursor_security_id,
+            page_size=None,
+            cursor_date=None,
+            cursor_security_id=None,
             security_ids=request.filters.security_ids,
             position_ids=request.filters.position_ids,
             dimension_filters=dimension_filters,
@@ -848,11 +850,9 @@ class AnalyticsTimeseriesService:
             governed_business_dates=expected_dates,
             business_calendar_present=calendar_present,
         )
-        has_more = len(rows) > request.page.page_size
-        rows_page = rows[: request.page.page_size]
         support_inputs = await self._position_page_support_inputs(
             portfolio_id=portfolio_id,
-            rows_page=rows_page,
+            rows_page=rows,
             portfolio_currency=portfolio_currency,
             reporting_currency=reporting_currency,
             include_cash_flows=request.include_cash_flows,
@@ -862,21 +862,30 @@ class AnalyticsTimeseriesService:
             window_predecessor_date=predecessor_date,
             business_calendar_present=calendar_present,
         )
+        validate_traversal_continuation(
+            cursor=self._decode_page_token(request.page.page_token),
+            snapshot_epoch=snapshot_epoch,
+            fingerprint=support_inputs.selected_inputs_fingerprint,
+        )
         response_rows, quality_distribution = self._position_response_rows(
             portfolio_id=portfolio_id,
-            rows_page=rows_page,
+            rows_page=rows,
             portfolio_currency=portfolio_currency,
             reporting_currency=reporting_currency,
             dimensions=request.dimensions,
             include_cash_flows=request.include_cash_flows,
             support_inputs=support_inputs,
         )
-
-        next_page_token = self._position_timeseries_next_page_token(
+        rows_page, response_rows, quality_distribution, has_more = position_traversal_page(
+            rows=rows, response_rows=response_rows, cursor=cursor, page_size=request.page.page_size
+        )
+        next_page_token = position_timeseries_next_page_token(
             has_more=has_more,
             rows_page=rows_page,
             snapshot_epoch=snapshot_epoch,
             request_scope_fingerprint=request_scope_fingerprint,
+            selected_inputs_fingerprint=support_inputs.selected_inputs_fingerprint,
+            encode_page_token=self._encode_page_token,
         )
         expected_business_date_set = set(expected_dates)
         observed_business_dates = {
@@ -957,25 +966,6 @@ class AnalyticsTimeseriesService:
         except AnalyticsPaginationError as exc:
             raise AnalyticsInputError("INVALID_REQUEST", str(exc)) from exc
 
-    def _position_timeseries_next_page_token(
-        self,
-        *,
-        has_more: bool,
-        rows_page: list[PositionValuationObservation],
-        snapshot_epoch: int,
-        request_scope_fingerprint: str,
-    ) -> str | None:
-        return cast(
-            str | None,
-            position_timeseries_next_page_token(
-                has_more=has_more,
-                rows_page=rows_page,
-                snapshot_epoch=snapshot_epoch,
-                request_scope_fingerprint=request_scope_fingerprint,
-                encode_page_token=self._encode_page_token,
-            ),
-        )
-
     async def _position_page_support_inputs(
         self,
         *,
@@ -1030,15 +1020,28 @@ class AnalyticsTimeseriesService:
             ),
             business_calendar_present=business_calendar_present,
         )
-        position_cashflows_by_key = await self._position_page_cash_flows_by_key(
-            portfolio_id=portfolio_id,
-            security_ids=page_scope.security_ids,
-            page_dates=page_scope.page_dates,
-            snapshot_epoch=snapshot_epoch,
-            include_cash_flows=include_cash_flows,
+        position_cashflow_rows = (
+            await load_position_cashflow_rows(
+                self.repo,
+                portfolio_id=portfolio_id,
+                security_ids=page_scope.security_ids,
+                valuation_dates=page_scope.page_dates,
+                snapshot_epoch=snapshot_epoch,
+            )
+            if include_cash_flows
+            else []
         )
         return PositionPageSupportInputs(
-            position_cashflows_by_key=position_cashflows_by_key,
+            selected_inputs_fingerprint=selected_inputs_fingerprint(
+                snapshot_epoch=snapshot_epoch,
+                positions=rows_page,
+                portfolio_flows=portfolio_cashflow_rows,
+                position_flows=position_cashflow_rows,
+                previous=previous_rows,
+                position_fx=position_to_portfolio_rates,
+                reporting_fx=fx_rates,
+            ),
+            position_cashflows_by_key=self._position_cash_flows_for_keys(position_cashflow_rows),
             portfolio_cashflows_by_date=portfolio_cashflow_classifications_for_dates(
                 portfolio_cashflow_rows
             ),
@@ -1049,26 +1052,6 @@ class AnalyticsTimeseriesService:
                 first_page_date=page_scope.first_page_date,
             ),
         )
-
-    async def _position_page_cash_flows_by_key(
-        self,
-        *,
-        portfolio_id: str,
-        security_ids: list[str],
-        page_dates: list[date],
-        snapshot_epoch: int,
-        include_cash_flows: bool,
-    ) -> dict[tuple[str, date], list[CashFlowObservation]]:
-        if not include_cash_flows:
-            return {}
-        position_cashflow_rows = await load_position_cashflow_rows(
-            self.repo,
-            portfolio_id=portfolio_id,
-            security_ids=security_ids,
-            valuation_dates=page_dates,
-            snapshot_epoch=snapshot_epoch,
-        )
-        return self._position_cash_flows_for_keys(position_cashflow_rows)
 
     def _position_response_rows(
         self,
