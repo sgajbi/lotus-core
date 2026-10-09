@@ -159,6 +159,18 @@ events emitted by `from_observation` retain their original algorithm and valid w
 
 ## Remaining Original Acceptance
 
+Benchmark market-series requests with an explicit retained `fx_source` require an effective
+benchmark definition. If that definition is absent, the existing typed source-selection conflict
+returns HTTP 409 before component/retained FX reads or response assembly; the requested provider,
+source, temporal boundaries and cut are never silently discarded in favor of target-currency
+identity. A valid definition continues to bind the exact requested retained selection.
+
+Without a selector, the pre-existing missing-definition fallback still assumes the requested target
+currency as benchmark currency (or `UNKNOWN` without a target). That is compatibility, not evidence
+of the benchmark's actual base currency: an identity rate of one under this fallback does not
+establish supported conversion. The broader unknown-definition assumption remains an open owning
+issue/acceptance concern, not certified or expanded by this canonical FX slice.
+
 The legacy pair/date store remains mutable and unqualified. Canonical software retention and
 selection do not replace independent provider approval, genuine observations, complete enrolled
 fixing coverage, deployed producer/consumer qualification or full-window financial acceptance.

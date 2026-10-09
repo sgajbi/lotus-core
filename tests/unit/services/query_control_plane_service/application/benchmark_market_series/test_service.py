@@ -70,13 +70,16 @@ class RecordingPageTokens:
 class RecordingBenchmarkReader:
     """Test benchmark reader recording source-read order."""
 
-    def __init__(self, *, candidate_ids: list[str], calls: list[str]):
+    def __init__(
+        self, *, candidate_ids: list[str], calls: list[str], missing_definition: bool = False
+    ):
         self.candidate_ids = candidate_ids
         self.calls = calls
+        self.missing_definition = missing_definition
 
-    async def resolve_definition(self, **_: object) -> BenchmarkDefinitionEvidence:
+    async def resolve_definition(self, **_: object) -> BenchmarkDefinitionEvidence | None:
         self.calls.append("definition")
-        return _definition()
+        return None if self.missing_definition else _definition()
 
     async def list_component_index_ids_page(self, **_: object) -> list[str]:
         self.calls.append("index_ids")
@@ -197,6 +200,67 @@ async def test_retained_source_scope_and_provenance_are_applied_before_response(
         assert result.fx_source_evidence[0].revision_id == "b" * 64
         assert result.component_series[0].points[0].fx_rate == Decimal("1.35")
         assert reader.selection.scope.tenant_id == context.tenant_id_text
+        assert reader.selection.scope.provider_id == request.fx_source.provider_id
+        assert reader.selection.scope.source_id == request.fx_source.source_id
+        assert reader.selection.source_as_of == request.fx_source.source_as_of
+        assert reader.selection.known_as_of == request.fx_source.known_as_of
+        assert reader.selection.cut_id == request.fx_source.cut_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("target_currency", ["SGD", "USD"])
+async def test_explicit_fx_source_refuses_missing_definition_before_downstream_reads(
+    target_currency,
+):
+    calls = []
+    tokens = RecordingPageTokens()
+    service = _service(
+        benchmark_reader=RecordingBenchmarkReader(
+            candidate_ids=["IDX_1", "IDX_2"], calls=calls, missing_definition=True
+        ),
+        calls=calls,
+        page_tokens=tokens,
+    )
+    reader = RetainedFxReader([])
+    service._fx_rate_reader = reader
+    source_request = FxSourceSelectionRequest(
+        provider_id="NONEXISTENT_PROVIDER",
+        source_id="NONEXISTENT_FEED",
+        source_as_of=EVIDENCE_TIME,
+        known_as_of=EVIDENCE_TIME,
+        cut_id="a" * 64,
+    )
+    request = _request().model_copy(
+        update={"target_currency": target_currency, "fx_source": source_request}
+    )
+    with pytest.raises(FxSourceSelectionRejected, match="FX_SOURCE_BENCHMARK_DEFINITION_REQUIRED"):
+        await service.get(
+            benchmark_id="BMK_1",
+            request=request,
+            tenant_context=TenantContext(TenantId("SYNTHETIC_TENANT"), identity_verified=True),
+        )
+    assert calls == ["definition"]
+    assert reader.selection is None
+    assert tokens.encoded_payloads == []
+    assert request.fx_source == source_request
+
+
+@pytest.mark.asyncio
+async def test_missing_definition_without_selection_preserves_legacy_currency_assumption():
+    calls = []
+    service = _service(
+        benchmark_reader=RecordingBenchmarkReader(
+            candidate_ids=["IDX_1"], calls=calls, missing_definition=True
+        ),
+        calls=calls,
+        page_tokens=RecordingPageTokens(),
+    )
+    result = await service.get(benchmark_id="BMK_1", request=_request())
+    # Compatibility only: absent definition is not authority that SGD is the base currency.
+    assert result.benchmark_currency == "SGD"
+    assert result.fx_source_qualification == "IDENTITY"
+    assert result.component_series[0].points[0].fx_rate == Decimal("1")
+    assert "fx_rates" not in calls
 
 
 @pytest.mark.asyncio

@@ -94,6 +94,8 @@ class BenchmarkMarketSeriesService:
             benchmark_id=benchmark_id,
             as_of_date=request.as_of_date,
         )
+        if selection is not None and definition is None:
+            raise FxSourceSelectionRejected("FX_SOURCE_BENCHMARK_DEFINITION_REQUIRED")
         candidate_index_ids = await self._benchmark_reader.list_component_index_ids_page(
             benchmark_id=benchmark_id,
             start_date=request.window.start_date,

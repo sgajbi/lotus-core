@@ -39,6 +39,12 @@ or downstream financial processing. Use the contract-specific evidence below whe
 
 ## Operational FX Intake And Persisted Evidence
 
+Explicit retained FX selection for benchmark market series requires an effective benchmark
+definition; absence returns the existing source-selection conflict before component or FX reads.
+The exact requested provider/source/time/cut cannot be replaced by assumed target-currency identity.
+No-selector missing-definition fallback remains legacy compatibility only, not proof of the actual
+benchmark currency or a qualified conversion; broader acceptance remains open.
+
 `POST /ingest/fx-rates` preserves legacy `fx_rates` batches and also accepts one bounded
 `fx.source-cut.v1` submission. Legacy records still reject unknown custody fields before a job or
 publish. Canonical submissions require verified tenant/service principal, active server-owned
