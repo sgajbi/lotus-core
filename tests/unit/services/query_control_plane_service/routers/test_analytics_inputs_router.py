@@ -230,9 +230,22 @@ def test_raise_http_for_analytics_error_unknown_code_maps_to_500() -> None:
     )
 
 
+def test_stale_continuation_is_product_safe_restart_conflict() -> None:
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
+        _raise_http_for_analytics_error(AnalyticsInputError("STALE_CONTINUATION", "private source"))
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=409,
+        error_code="QCP_ANALYTICS_STALE_CONTINUATION",
+        detail="Analytics source changed; restart pagination.",
+    )
+
+
 def test_get_analytics_timeseries_service_factory() -> None:
-    service = get_analytics_timeseries_service(db=MagicMock())
-    assert service is not None
+    write_db, read_db = MagicMock(), MagicMock()
+    service = get_analytics_timeseries_service(db=write_db, read_db=read_db)
+    assert service.repo.db is read_db
+    assert service.export_repo.db is write_db
 
 
 @pytest.mark.asyncio

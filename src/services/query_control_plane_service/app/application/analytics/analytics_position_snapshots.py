@@ -18,10 +18,8 @@ async def position_snapshot_epoch(
     governed_business_dates: list[date],
     business_calendar_present: bool,
 ) -> int:
-    """Reuse a cursor epoch or bind a new one to the captured calendar scope."""
-
-    if cursor.snapshot_epoch is not None:
-        return cursor.snapshot_epoch
+    """Acquire the current epoch; a continuation witness must refuse changed state."""
+    del cursor
     return await reader.get_position_snapshot_epoch(
         portfolio_id=portfolio_id,
         start_date=resolved_window.start_date,

@@ -10,6 +10,7 @@ import httpx
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI
+from portfolio_common import db as database_provider
 from portfolio_common.database_models import (
     AnalyticsExportJob,
     BusinessDate,
@@ -23,7 +24,7 @@ from portfolio_common.database_models import (
     Transaction,
 )
 from sqlalchemy import delete, update
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.services.query_control_plane_service.app.application.analytics import (
     analytics_export_execution,
@@ -220,6 +221,103 @@ async def read_page(client, dataset, **page):
             "page": {"page_size": 10, **page},
         },
     )
+
+
+@pytest.mark.parametrize("dataset", ["portfolio", "position"])
+async def test_analytics_acquisition_keeps_pre_mutation_fx_snapshot(
+    content_identity_client, dataset, monkeypatch
+):
+    """A committed writer between epoch and FX reads must not mix one HTTP acquisition."""
+    _, seed_session = content_identity_client
+    session_factory = async_sessionmaker(bind=seed_session.bind, expire_on_commit=False)
+    monkeypatch.setattr(database_provider, "AsyncSessionLocal", session_factory)
+    original_epoch = AnalyticsTimeseriesRepository.get_position_snapshot_epoch
+    mutation_committed = False
+
+    async def epoch_then_commit_correction(self, **kwargs):
+        nonlocal mutation_committed
+        epoch = await original_epoch(self, **kwargs)
+        if not mutation_committed:
+            async with session_factory() as writer:
+                await writer.execute(
+                    update(FxRate)
+                    .where(FxRate.from_currency == "USD", FxRate.to_currency == "SGD")
+                    .values(rate=Decimal("4"))
+                )
+                await writer.commit()
+            mutation_committed = True
+        return epoch
+
+    monkeypatch.setattr(
+        AnalyticsTimeseriesRepository, "get_position_snapshot_epoch", epoch_then_commit_correction
+    )
+    app = export_app(None)
+    # Exercise the actual composition root, not the fixture's injected reader/export service.
+    app.dependency_overrides.clear()
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await read_page(client, dataset)
+    assert mutation_committed, "Writer must commit while the reader transaction remains open"
+    assert response.status_code == 200, response.text
+    assert ending_value(economic_rows(response.json(), dataset)[0], dataset) == Decimal("220")
+    # A later request must acquire the new committed value, not reuse an old reader snapshot.
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        corrected = await read_page(client, dataset)
+    assert corrected.status_code == 200, corrected.text
+    assert ending_value(economic_rows(corrected.json(), dataset)[0], dataset) == Decimal("440")
+
+
+@pytest.mark.parametrize("dataset", ["portfolio", "position"])
+@pytest.mark.parametrize("correction", ["fx", "valuation"])
+async def test_actual_http_continuation_refuses_prior_page_same_epoch_correction(
+    content_identity_client, dataset, correction, monkeypatch
+):
+    _, session = content_identity_client
+    monkeypatch.setattr(
+        database_provider,
+        "AsyncSessionLocal",
+        async_sessionmaker(bind=session.bind, expire_on_commit=False),
+    )
+    app = export_app(None)
+    app.dependency_overrides.clear()
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        first = await read_page(client, dataset, page_size=1)
+        assert first.status_code == 200, first.text
+        token = first.json()["page"]["next_page_token"]
+        assert token is not None
+        unchanged = await read_page(client, dataset, page_size=1, page_token=token)
+        assert unchanged.status_code == 200, unchanged.text
+        assert ending_value(economic_rows(unchanged.json(), dataset)[0], dataset) == Decimal("240")
+        if correction == "fx":
+            await session.execute(
+                update(FxRate)
+                .where(
+                    FxRate.from_currency == "USD",
+                    FxRate.to_currency == "SGD",
+                    FxRate.rate_date == FIRST_DAY,
+                )
+                .values(rate=Decimal("3"))
+            )
+        else:
+            await session.execute(
+                update(PositionTimeseries)
+                .where(
+                    PositionTimeseries.portfolio_id == PORTFOLIO_ID,
+                    PositionTimeseries.security_id == SECURITY_ID,
+                    PositionTimeseries.date == FIRST_DAY,
+                )
+                .values(eod_market_value=Decimal("115"))
+            )
+        await session.commit()
+        stale = await read_page(client, dataset, page_size=1, page_token=token)
+    assert stale.status_code == 409, stale.text
+    assert stale.json()["error_code"] == "QCP_ANALYTICS_STALE_CONTINUATION"
+    assert "rows" not in stale.json() and "observations" not in stale.json()
 
 
 @pytest.mark.parametrize("dataset", ["portfolio", "position"])

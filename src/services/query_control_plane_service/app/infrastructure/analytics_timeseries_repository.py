@@ -492,7 +492,7 @@ class AnalyticsTimeseriesRepository:
         portfolio_id: str,
         start_date: date,
         end_date: date,
-        page_size: int,
+        page_size: int | None,
         cursor_date: date | None,
         cursor_security_id: str | None,
         security_ids: list[str],
@@ -575,9 +575,9 @@ class AnalyticsTimeseriesRepository:
         for predicate in _position_dimension_filters(ranked, dimension_filters):
             stmt = stmt.where(predicate)
 
-        stmt = stmt.order_by(ranked.c.valuation_date.asc(), ranked.c.security_id.asc()).limit(
-            page_size + 1
-        )
+        stmt = stmt.order_by(ranked.c.valuation_date.asc(), ranked.c.security_id.asc())
+        if page_size is not None:
+            stmt = stmt.limit(page_size + 1)
         result = await self.db.execute(stmt)
         return [_position_valuation_observation(row) for row in result.all()]
 

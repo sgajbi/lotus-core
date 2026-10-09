@@ -9,8 +9,13 @@ from decimal import Decimal
 from portfolio_common.domain.decimal_amount import decimal_or_zero
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 
-from ...contracts.analytics_inputs import CashFlowObservation, PositionAnalyticsTimeseriesRequest
+from ...contracts.analytics_inputs import (
+    CashFlowObservation,
+    PositionAnalyticsTimeseriesRequest,
+    PositionTimeseriesRow,
+)
 from ...domain.analytics import PositionValuationObservation, PriorPositionValuation
+from .analytics_pagination import PositionTimeseriesCursor
 
 
 @dataclass(frozen=True)
@@ -29,6 +34,34 @@ class PositionPageSupportInputs:
     position_to_portfolio_rates: dict[str, dict[date, Decimal]]
     fx_rates: dict[date, Decimal]
     previous_eod_by_security: dict[str, Decimal]
+    selected_inputs_fingerprint: str = ""
+
+
+def position_traversal_page(
+    *,
+    rows: list[PositionValuationObservation],
+    response_rows: list[PositionTimeseriesRow],
+    cursor: PositionTimeseriesCursor,
+    page_size: int,
+) -> tuple[list[PositionValuationObservation], list[PositionTimeseriesRow], dict[str, int], bool]:
+    """Page an acquired window without discarding prior-row continuity during rendering."""
+    selected = [
+        (row, response)
+        for row, response in zip(rows, response_rows, strict=True)
+        if cursor.cursor_date is None
+        or (row.valuation_date, normalize_security_id(row.security_id))
+        > (cursor.cursor_date, cursor.cursor_security_id or "")
+    ]
+    page = selected[:page_size]
+    quality: dict[str, int] = {}
+    for _, response in page:
+        quality[response.valuation_status] = quality.get(response.valuation_status, 0) + 1
+    return (
+        [row for row, _ in page],
+        [response for _, response in page],
+        quality,
+        len(selected) > page_size,
+    )
 
 
 def position_dimension_filters(

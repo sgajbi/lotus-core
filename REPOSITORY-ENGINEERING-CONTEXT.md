@@ -421,6 +421,20 @@ Preserve existing degraded/missing-source refusals and consumer request semantic
 [consumer guidance](wiki/Integrations.md#analytics-content-identity) and the PostgreSQL/HTTP
 regression test `test_analytics_content_identity_postgresql.py` for both datasets.
 
+Analytics HTTP source acquisition owns a separate read-only repeatable-read session, established
+before the first source query and closed at request completion or failure. It borrows the existing
+application pool; export lifecycle writes retain their own injected session and commits do not
+end the source snapshot. Inline export pages share that request's read snapshot. Portfolio and
+Position continuations carry a versioned selected-input witness, reacquire the whole selected
+window and refuse changed or legacy evidence with HTTP409 `QCP_ANALYTICS_STALE_CONTINUATION`.
+Whole-window acquisition includes predecessor values, actual dated FX and flow identities; a
+required missing FX value later in the window can refuse an earlier page. This increases acquisition
+scope versus page-only reads; it is not bounded page-only resource or capacity proof. A SQL snapshot
+and traversal witness are not retained provider custody, revision history or authoritative source-cut
+qualification. Do not infer those authorities from an unchanged epoch, signed cursor or successful
+export. Directly constructed test services must explicitly own their transaction boundary; the
+production consistency boundary lives in dependency wiring, not a mutable repository flag.
+
 - `query_service` is the operational read plane.
 - `query_control_plane_service` owns governed analytics-input, source-product, lineage, policy,
   support, snapshot, simulation, and export contracts.

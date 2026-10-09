@@ -376,6 +376,173 @@ def _install_canonical_portfolio_timeseries_repo(service: AnalyticsTimeseriesSer
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["unchanged", "epoch", "valuation", "fx", "flow", "calendar"])
+async def test_portfolio_continuation_refuses_changed_prior_page_economics(change):
+    """A correction behind the cursor must not silently mix two observed revisions."""
+    service = make_service()
+    _install_canonical_portfolio_timeseries_repo(service)
+    days = [date(2026, 7, 2), date(2026, 7, 3)]
+    service.repo.list_business_dates.return_value = days
+    service.repo.list_position_observation_dates.return_value = days
+    source_rows = [
+        _position_observation(
+            security_id="SEC_SG_BOND_001",
+            valuation_date=day,
+            bod_market_value=Decimal("1000"),
+            eod_market_value=Decimal("1005"),
+            position_currency="SGD",
+        )
+        for day in days
+    ]
+    service.repo.list_position_timeseries_rows_unpaged.return_value = source_rows
+    service.repo.get_fx_rates_map.return_value = dict.fromkeys(days, Decimal("1.5"))
+    request = PortfolioAnalyticsTimeseriesRequest(
+        as_of_date=days[-1],
+        window=AnalyticsWindow(start_date=days[0], end_date=days[-1]),
+        reporting_currency="USD",
+        page=PageRequest(page_size=1),
+    )
+    first = await service.get_portfolio_timeseries(
+        portfolio_id="PB_SG_GLOBAL_BAL_001", request=request
+    )
+    assert first.observations[0].valuation_date == days[0]
+    assert first.observations[0].ending_market_value == Decimal("1507.5")
+    assert first.page.next_page_token is not None
+    if change == "epoch":
+        service.repo.get_position_snapshot_epoch.return_value = 1
+    elif change == "valuation":
+        source_rows[0] = _position_observation(
+            security_id="SEC_SG_BOND_001",
+            valuation_date=days[0],
+            eod_market_value=Decimal("1010"),
+            position_currency="SGD",
+        )
+    elif change == "fx":
+        service.repo.get_fx_rates_map.return_value[days[0]] = Decimal("2")
+    elif change == "calendar":
+        service.repo.list_business_dates.return_value = [days[-1]]
+    elif change == "flow":
+        service.repo.list_portfolio_cashflow_rows.return_value = [
+            _cashflow_evidence(
+                security_id="SEC_SG_BOND_001",
+                valuation_date=days[0],
+                amount=Decimal("3"),
+                currency="SGD",
+            )
+        ]
+    continuation = request.model_copy(
+        update={"page": PageRequest(page_size=1, page_token=first.page.next_page_token)}
+    )
+    if change == "unchanged":
+        second = await service.get_portfolio_timeseries(
+            portfolio_id="PB_SG_GLOBAL_BAL_001", request=continuation
+        )
+        assert second.observations[0].valuation_date == days[1]
+        assert second.observations[0].ending_market_value == Decimal("1507.5")
+        assert second.page.next_page_token is None
+    else:
+        with pytest.raises(
+            AnalyticsInputError, match="request scope" if change == "calendar" else "restart"
+        ) as refusal:
+            await service.get_portfolio_timeseries(
+                portfolio_id="PB_SG_GLOBAL_BAL_001", request=continuation
+            )
+        assert refusal.value.code == (
+            "INVALID_REQUEST" if change == "calendar" else "STALE_CONTINUATION"
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "change", ["unchanged", "epoch", "valuation", "fx", "flow", "deleted", "calendar"]
+)
+async def test_position_continuation_refuses_changed_prior_page_inputs(change):
+    service = make_service()
+    _install_canonical_portfolio_timeseries_repo(service)
+    days = [date(2026, 7, 2), date(2026, 7, 3)]
+    service.repo.list_business_dates.return_value = days
+    source_rows = [
+        _position_observation(
+            security_id="SEC_SG_BOND_001",
+            valuation_date=day,
+            bod_market_value=Decimal("1000"),
+            eod_market_value=Decimal("1005"),
+            position_currency="SGD",
+        )
+        for day in days
+    ]
+
+    async def selected_rows(**query):
+        rows = [
+            row
+            for row in source_rows
+            if query["cursor_date"] is None
+            or (row.valuation_date, row.security_id)
+            > (query["cursor_date"], query["cursor_security_id"])
+        ]
+        return rows if query["page_size"] is None else rows[: query["page_size"] + 1]
+
+    service.repo.list_position_timeseries_rows = AsyncMock(side_effect=selected_rows)
+    service.repo.get_fx_rates_map.return_value = dict.fromkeys(days, Decimal("1.5"))
+    request = PositionAnalyticsTimeseriesRequest(
+        as_of_date=days[-1],
+        window=AnalyticsWindow(start_date=days[0], end_date=days[-1]),
+        reporting_currency="USD",
+        page=PageRequest(page_size=1),
+        include_cash_flows=True,
+    )
+    first = await service.get_position_timeseries(
+        portfolio_id="PB_SG_GLOBAL_BAL_001", request=request
+    )
+    assert first.rows[0].ending_market_value_reporting_currency == Decimal("1507.5")
+    assert first.page.next_page_token is not None
+    if change == "epoch":
+        service.repo.get_position_snapshot_epoch.return_value = 1
+    elif change == "valuation":
+        source_rows[0] = _position_observation(
+            security_id="SEC_SG_BOND_001",
+            valuation_date=days[0],
+            eod_market_value=Decimal("1010"),
+            position_currency="SGD",
+        )
+    elif change == "fx":
+        service.repo.get_fx_rates_map.return_value[days[0]] = Decimal("2")
+    elif change == "flow":
+        service.repo.list_position_cashflow_rows.return_value = [
+            _cashflow_evidence(
+                security_id="SEC_SG_BOND_001",
+                valuation_date=days[0],
+                amount=Decimal("3"),
+                currency="SGD",
+            )
+        ]
+    elif change == "deleted":
+        source_rows.pop(0)
+    elif change == "calendar":
+        service.repo.list_business_dates.return_value = [days[-1]]
+    continuation = request.model_copy(
+        update={"page": PageRequest(page_size=1, page_token=first.page.next_page_token)}
+    )
+    if change == "unchanged":
+        second = await service.get_position_timeseries(
+            portfolio_id="PB_SG_GLOBAL_BAL_001", request=continuation
+        )
+        assert second.rows[0].valuation_date == days[1]
+        assert second.rows[0].ending_market_value_reporting_currency == Decimal("1507.5")
+        assert second.page.next_page_token is None
+    else:
+        with pytest.raises(
+            AnalyticsInputError, match="request scope" if change == "calendar" else "restart"
+        ) as refusal:
+            await service.get_position_timeseries(
+                portfolio_id="PB_SG_GLOBAL_BAL_001", request=continuation
+            )
+        assert refusal.value.code == (
+            "INVALID_REQUEST" if change == "calendar" else "STALE_CONTINUATION"
+        )
+
+
+@pytest.mark.asyncio
 async def test_analytics_service_normalizes_portfolio_to_reporting_fx_request() -> None:
     service = make_service()
     service.repo = SimpleNamespace(get_fx_rates_map=AsyncMock(return_value={}))
@@ -1140,10 +1307,10 @@ async def test_portfolio_rows_aggregate_position_rows_with_fx_and_page_token() -
         end_date: date,
     ) -> dict[date, Decimal]:
         assert start_date == date(2025, 1, 1)
-        assert end_date == date(2025, 1, 1)
+        assert end_date == date(2025, 1, 2)
         return {
             ("EUR", "USD"): {date(2025, 1, 1): Decimal("1.2")},
-            ("USD", "SGD"): {date(2025, 1, 1): Decimal("1.5")},
+            ("USD", "SGD"): dict.fromkeys([date(2025, 1, 1), date(2025, 1, 2)], Decimal("1.5")),
         }[(from_currency, to_currency)]
 
     service.repo = SimpleNamespace(
@@ -1222,6 +1389,12 @@ async def test_portfolio_rows_page_position_reads_by_observation_dates() -> None
         ),
         list_position_timeseries_rows_unpaged=AsyncMock(
             return_value=[
+                _position_observation(
+                    security_id="SEC_USD",
+                    valuation_date=date(2025, 1, 1),
+                    eod_market_value=Decimal("110"),
+                    position_currency="USD",
+                ),
                 SimpleNamespace(
                     security_id="SEC_USD",
                     valuation_date=date(2025, 1, 2),
@@ -1231,7 +1404,7 @@ async def test_portfolio_rows_page_position_reads_by_observation_dates() -> None
                     epoch=0,
                     position_currency="USD",
                     asset_class="equity",
-                )
+                ),
             ]
         ),
         list_latest_position_timeseries_before=AsyncMock(
@@ -1273,15 +1446,15 @@ async def test_portfolio_rows_page_position_reads_by_observation_dates() -> None
     )
     service.repo.list_position_timeseries_rows_unpaged.assert_awaited_once_with(
         portfolio_id="P1",
-        start_date=date(2025, 1, 2),
-        end_date=date(2025, 1, 2),
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 3),
         snapshot_epoch=4,
         governed_business_dates=None,
         business_calendar_present=None,
     )
     service.repo.list_latest_position_timeseries_before.assert_awaited_once_with(
         portfolio_id="P1",
-        before_date=date(2025, 1, 2),
+        before_date=date(2025, 1, 1),
         security_ids=["SEC_USD"],
         snapshot_epoch=4,
         governed_business_date=None,
@@ -2088,7 +2261,9 @@ async def test_get_position_timeseries_paging_token_generation() -> None:
             ]
         ),
         get_position_snapshot_epoch=AsyncMock(return_value=7),
-        get_fx_rates_map=AsyncMock(return_value={date(2025, 1, 1): Decimal("0.92")}),
+        get_fx_rates_map=AsyncMock(
+            return_value={date(2025, 1, 1): Decimal("0.92"), date(2025, 1, 2): Decimal("0.92")}
+        ),
         list_position_cashflow_rows=AsyncMock(return_value=[]),
         list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
         list_latest_position_timeseries_before=AsyncMock(return_value=[]),
@@ -2113,7 +2288,7 @@ async def test_get_position_timeseries_paging_token_generation() -> None:
         from_currency="USD",
         to_currency="EUR",
         start_date=date(2025, 1, 1),
-        end_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 2),
     )
     token_payload = service._decode_page_token(response.page.next_page_token)  # pylint: disable=protected-access
     assert token_payload["snapshot_epoch"] == 7
@@ -2290,7 +2465,7 @@ async def test_page_token_scope_mismatch_raises_invalid_request() -> None:
 
 
 @pytest.mark.asyncio
-async def test_position_timeseries_reuses_token_snapshot_epoch_under_concurrent_drift() -> None:
+async def test_position_timeseries_refuses_token_snapshot_epoch_under_concurrent_drift() -> None:
     service = make_service()
     list_rows = AsyncMock(
         side_effect=[
@@ -2344,7 +2519,9 @@ async def test_position_timeseries_reuses_token_snapshot_epoch_under_concurrent_
         ),
         list_position_timeseries_rows=list_rows,
         get_position_snapshot_epoch=AsyncMock(side_effect=[7, 99]),
-        get_fx_rates_map=AsyncMock(return_value={date(2025, 1, 1): Decimal("0.92")}),
+        get_fx_rates_map=AsyncMock(
+            return_value={date(2025, 1, 1): Decimal("0.92"), date(2025, 1, 2): Decimal("0.92")}
+        ),
         list_position_cashflow_rows=AsyncMock(return_value=[]),
         list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
         list_latest_position_timeseries_before=AsyncMock(return_value=[]),
@@ -2360,17 +2537,18 @@ async def test_position_timeseries_reuses_token_snapshot_epoch_under_concurrent_
     )
     assert first_page.page.next_page_token is not None
 
-    await service.get_position_timeseries(
-        portfolio_id="DEMO_DPM_EUR_001",
-        request=PositionAnalyticsTimeseriesRequest(
-            as_of_date="2025-12-31",
-            window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31"),
-            page=PageRequest(page_size=1, page_token=first_page.page.next_page_token),
-        ),
-    )
+    with pytest.raises(AnalyticsInputError, match="restart"):
+        await service.get_position_timeseries(
+            portfolio_id="DEMO_DPM_EUR_001",
+            request=PositionAnalyticsTimeseriesRequest(
+                as_of_date="2025-12-31",
+                window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31"),
+                page=PageRequest(page_size=1, page_token=first_page.page.next_page_token),
+            ),
+        )
 
     assert list_rows.await_count == 2
-    assert list_rows.await_args_list[1].kwargs["snapshot_epoch"] == 7
+    assert list_rows.await_args_list[1].kwargs["snapshot_epoch"] == 99
 
 
 @pytest.mark.asyncio
@@ -2752,7 +2930,7 @@ async def test_get_portfolio_timeseries_period_resolution_and_missing_fx() -> No
 
 
 @pytest.mark.asyncio
-async def test_get_position_timeseries_with_cash_flows_and_cursor() -> None:
+async def test_get_position_timeseries_cash_flows_and_legacy_cursor_refusal() -> None:
     service = make_service()
     service.repo = _position_repo(
         get_portfolio=AsyncMock(
@@ -2830,7 +3008,7 @@ async def test_get_position_timeseries_with_cash_flows_and_cursor() -> None:
             window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31"),
             reporting_currency="USD",
             include_cash_flows=True,
-            page=PageRequest(page_size=10, page_token=token),
+            page=PageRequest(page_size=10),
             dimensions=["asset_class", "sector", "country"],
         ),
     )
@@ -2850,6 +3028,18 @@ async def test_get_position_timeseries_with_cash_flows_and_cursor() -> None:
     assert response.freshness_status == "UNAVAILABLE"
     assert response.rows[0].cash_flow_currency == "USD"
     assert response.rows[0].portfolio_to_reporting_fx_rate == Decimal("1.2")
+    with pytest.raises(AnalyticsInputError, match="restart"):
+        await service.get_position_timeseries(
+            portfolio_id="P1",
+            request=PositionAnalyticsTimeseriesRequest(
+                as_of_date="2025-12-31",
+                window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-31"),
+                reporting_currency="USD",
+                include_cash_flows=True,
+                page=PageRequest(page_size=10, page_token=token),
+                dimensions=["asset_class", "sector", "country"],
+            ),
+        )
 
 
 @pytest.mark.asyncio

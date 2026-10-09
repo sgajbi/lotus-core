@@ -10,8 +10,9 @@ from decimal import Decimal
 
 from portfolio_common.domain.currency import normalize_currency_code
 
-from ...contracts.analytics_inputs import CashFlowObservation
+from ...contracts.analytics_inputs import CashFlowObservation, PortfolioTimeseriesObservation
 from ...domain.analytics import PositionValuationObservation
+from .analytics_traversal import TRAVERSAL_VERSION, validate_traversal_continuation
 
 
 class AnalyticsPortfolioPageError(RuntimeError):
@@ -32,6 +33,42 @@ class PortfolioObservationSupportInputs:
     position_to_portfolio_rates: dict[str, dict[date, Decimal]]
     portfolio_to_reporting_rates: dict[date, Decimal]
     previous_eod_by_security: dict[str, Decimal]
+    selected_inputs_fingerprint: str = ""
+
+
+def empty_portfolio_traversal(
+    *,
+    cursor: dict,
+    snapshot_epoch: int,
+) -> tuple[list[PortfolioTimeseriesObservation], dict[str, int], list[date], int, str | None]:
+    # An empty first page never issues a token; a previously populated cut must restart.
+    validate_traversal_continuation(cursor=cursor, snapshot_epoch=snapshot_epoch, fingerprint="")
+    return [], {}, [], snapshot_epoch, None
+
+
+def portfolio_observation_page_result(
+    *,
+    observations: list[PortfolioTimeseriesObservation],
+    page_scope: PortfolioObservationPageScope,
+    observed_dates: list[date],
+    snapshot_epoch: int,
+    request_scope_fingerprint: str,
+    selected_inputs_fingerprint: str,
+    encode_page_token: Callable[[dict], str],
+) -> tuple[list[PortfolioTimeseriesObservation], dict[str, int], list[date], int, str | None]:
+    rows = [row for row in observations if row.valuation_date in page_scope.page_dates]
+    distribution = {
+        status: sum(row.valuation_status == status for row in rows)
+        for status in {row.valuation_status for row in rows}
+    }
+    token = portfolio_observation_next_page_token(
+        page_scope=page_scope,
+        snapshot_epoch=snapshot_epoch,
+        request_scope_fingerprint=request_scope_fingerprint,
+        selected_inputs_fingerprint=selected_inputs_fingerprint,
+        encode_page_token=encode_page_token,
+    )
+    return rows, distribution, observed_dates, snapshot_epoch, token
 
 
 def portfolio_observation_page_scope(
@@ -102,6 +139,7 @@ def portfolio_observation_next_page_token(
     snapshot_epoch: int,
     request_scope_fingerprint: str,
     encode_page_token: Callable[[dict], str],
+    selected_inputs_fingerprint: str = "",
 ) -> str | None:
     if not page_scope.has_more:
         return None
@@ -110,5 +148,7 @@ def portfolio_observation_next_page_token(
             "valuation_date": page_scope.page_dates[-1].isoformat(),
             "snapshot_epoch": snapshot_epoch,
             "scope_fingerprint": request_scope_fingerprint,
+            "traversal_version": TRAVERSAL_VERSION,
+            "selected_inputs_fingerprint": selected_inputs_fingerprint,
         }
     )

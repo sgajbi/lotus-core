@@ -68,12 +68,18 @@ ANALYTICS_EXPORT_INCOMPLETE_EXAMPLE = problem_example(
 )
 HTTP_422_UNPROCESSABLE_CONTENT = 422
 ANALYTICS_ERROR_STATUS_MAP = {
+    "STALE_CONTINUATION": status.HTTP_409_CONFLICT,
     "RESOURCE_NOT_FOUND": status.HTTP_404_NOT_FOUND,
     "INVALID_REQUEST": status.HTTP_400_BAD_REQUEST,
     "INSUFFICIENT_DATA": HTTP_422_UNPROCESSABLE_CONTENT,
     "UNSUPPORTED_CONFIGURATION": HTTP_422_UNPROCESSABLE_CONTENT,
 }
 ANALYTICS_ERROR_CONTRACTS = {
+    "STALE_CONTINUATION": (
+        "Analytics continuation is stale",
+        "Analytics source changed; restart pagination.",
+        "QCP_ANALYTICS_STALE_CONTINUATION",
+    ),
     "RESOURCE_NOT_FOUND": (
         "Analytics source not found",
         "Requested analytics source was not found.",
@@ -123,6 +129,16 @@ def _raise_http_for_analytics_error(exc: AnalyticsInputError) -> NoReturn:
     "/portfolios/{portfolio_id}/analytics/portfolio-timeseries",
     response_model=PortfolioAnalyticsTimeseriesResponse,
     responses={
+        status.HTTP_409_CONFLICT: problem_response(
+            "Restart pagination after selected source inputs change.",
+            problem_example(
+                status_code=status.HTTP_409_CONFLICT,
+                title="Analytics continuation is stale",
+                detail="Analytics source changed; restart pagination.",
+                error_code="QCP_ANALYTICS_STALE_CONTINUATION",
+                metadata={"source_product": "PortfolioTimeseriesInput"},
+            ),
+        ),
         status.HTTP_400_BAD_REQUEST: problem_response(
             "Invalid request contract.",
             ANALYTICS_INVALID_REQUEST_EXAMPLE,
@@ -171,6 +187,16 @@ async def get_portfolio_analytics_timeseries(
     "/portfolios/{portfolio_id}/analytics/position-timeseries",
     response_model=PositionAnalyticsTimeseriesResponse,
     responses={
+        status.HTTP_409_CONFLICT: problem_response(
+            "Restart pagination after selected source inputs change.",
+            problem_example(
+                status_code=status.HTTP_409_CONFLICT,
+                title="Analytics continuation is stale",
+                detail="Analytics source changed; restart pagination.",
+                error_code="QCP_ANALYTICS_STALE_CONTINUATION",
+                metadata={"source_product": "PositionTimeseriesInput"},
+            ),
+        ),
         status.HTTP_400_BAD_REQUEST: problem_response(
             "Invalid request contract.",
             ANALYTICS_INVALID_REQUEST_EXAMPLE,

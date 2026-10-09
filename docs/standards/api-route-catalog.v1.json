@@ -6646,6 +6646,11 @@
           "description": "Portfolio not found."
         },
         {
+          "status_code": "409",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Restart pagination after selected source inputs change."
+        },
+        {
           "status_code": "422",
           "schema": "QueryControlPlaneProblemDetails",
           "description": "Insufficient data or unsupported configuration."
@@ -6701,6 +6706,11 @@
           "status_code": "404",
           "schema": "QueryControlPlaneProblemDetails",
           "description": "Portfolio not found."
+        },
+        {
+          "status_code": "409",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Restart pagination after selected source inputs change."
         },
         {
           "status_code": "422",

@@ -87,5 +87,7 @@ def test_portfolio_observation_next_page_token_encodes_last_page_date() -> None:
             "valuation_date": "2025-01-02",
             "snapshot_epoch": 7,
             "scope_fingerprint": "scope-1",
+            "traversal_version": "analytics-selected-inputs-v1",
+            "selected_inputs_fingerprint": "",
         }
     ]
