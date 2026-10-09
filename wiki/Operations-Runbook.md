@@ -976,8 +976,10 @@ Reduced preparation/query work is not a load-SLO or historical root-cause certif
 
 Original lookup retains all duplicate and contradictory rows in outbox-ID order, with bound
 transaction/portfolio data and existing source read locks. The non-unique partial
-`ix_outbox_events_raw_transaction_source` index covers portfolio, the exact transaction-ID
-JSON cast and row ID for the fixed raw-transaction event family. It does not select only the
+`ix_outbox_events_raw_transaction_source` index covers bounded MD5 digests of portfolio and the
+transaction-ID JSON cast, plus row ID for the fixed raw-transaction event family. Exact original
+portfolio and JSON-text equality recheck all digest candidates, preserving long identifiers
+without admitting collisions. Digests are not security or financial provenance. It does not select only the
 latest source, waive canonical currency/fee refusals or change financial writes.
 
 Concurrent migration `c180b2c3d541` reuses a valid expected index and repairs an interrupted

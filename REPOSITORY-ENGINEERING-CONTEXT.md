@@ -117,8 +117,11 @@ before publication. Native tests must demonstrate actual supported writers, drif
 rollback; read locks do not certify absent-row phantoms or global source concurrency.
 
 Original raw-transaction lookup uses the non-unique partial expression index
-`ix_outbox_events_raw_transaction_source` on portfolio (`aggregate_id`), the exact
-`CAST(payload ->> 'transaction_id' AS VARCHAR)` expression, and outbox row ID. Only the
+`ix_outbox_events_raw_transaction_source` on bounded `md5(aggregate_id)` and
+`md5(CAST(payload ->> 'transaction_id' AS VARCHAR))` expressions, and outbox row ID.
+Digests only narrow candidates; exact original portfolio and JSON-text comparisons remain
+mandatory collision rechecks. They impose no new public identifier bounds and confer no
+security or financial-source authority. Only the
 code-owned `RawTransaction`/`RawTransactionPersisted` selectors and JSON key are rendered
 as fixed SQLAlchemy `literal_execute` literals; requested transaction IDs and portfolio scopes
 remain bound data. Every matching original remains ordered by row ID, including duplicates and

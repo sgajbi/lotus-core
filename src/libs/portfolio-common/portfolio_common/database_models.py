@@ -4507,7 +4507,7 @@ class OutboxEvent(Base):
     created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
     processed_at = Column(DateTime(timezone=True), nullable=True)
     __table_args__ = outbox_event_table_args(
-        status=status, payload=payload, aggregate_type=aggregate_type, event_type=event_type
+        status, payload, aggregate_type, aggregate_id, event_type
     )
 
 

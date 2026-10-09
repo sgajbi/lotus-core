@@ -4,7 +4,8 @@ Revision ID: c180b2c3d541
 Revises: c178b2c3d539
 
 The non-unique partial expression index preserves every original source, including
-contradictions. Build and rollback are concurrent; interrupted builds may be
+contradictions. Bounded digest keys retain unbounded accepted identifiers; exact
+loader comparisons reject collisions. Build and rollback are concurrent; interrupted builds may be
 repaired, but a valid same-name index with a different shape is never overwritten.
 """
 
@@ -58,7 +59,11 @@ def _matches_index(state: sa.RowMapping) -> bool:
         and state["key_count"] == state["total_count"] == 3
         and not state["unique"]
         and (state["key_1"], state["key_2"], state["key_3"])
-        == ("aggregate_id", "((payload ->> 'transaction_id'::text)::character varying)", "id")
+        == (
+            "md5(aggregate_id::text)",
+            "md5(((payload ->> 'transaction_id'::text)::character varying)::text)",
+            "id",
+        )
         and state["options"] == "0 0 0"
         and state["predicate"]
         == (
@@ -85,7 +90,11 @@ def upgrade() -> None:
         op.create_index(
             _INDEX,
             "outbox_events",
-            ["aggregate_id", sa.text("CAST(payload ->> 'transaction_id' AS VARCHAR)"), "id"],
+            [
+                sa.text("md5(aggregate_id)"),
+                sa.text("md5(CAST(payload ->> 'transaction_id' AS VARCHAR))"),
+                "id",
+            ],
             unique=False,
             postgresql_where=sa.text(_PREDICATE),
             postgresql_concurrently=True,
