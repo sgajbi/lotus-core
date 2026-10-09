@@ -16,7 +16,7 @@ their owning services.
 Job evidence is consumed through `event_replay_service` at
 `GET /ingestion/jobs/{job_id}/evidence`. That aggregate reads, but does not duplicate ownership of,
 the canonical ingestion job, failure, replay-audit, retained-payload, and consumer-DLQ stores.
-Source-batch identity is nullable and appears only when retained payload evidence proves one
+Source-batch identity is nullable and appears only when retained source evidence proves one
 unambiguous upstream batch.
 
 Transaction ingress also carries optional supplier record, batch and observation lineage through

@@ -47,8 +47,8 @@ Current runtime posture:
 
 1. `IngestionEvidenceBundle:v1` is served by `event_replay_service` for one durable ingestion job,
 2. the bundle composes canonical job, failure, replay-audit, and correlated consumer-DLQ evidence,
-3. source-batch identity is emitted only when retained payload evidence proves one unambiguous source
-   system and batch,
+3. source-batch identity is emitted only when retained source evidence proves one unambiguous source
+   system and batch; restricted transaction jobs use their bounded batch projection,
 4. completeness is explicit and downstream gating fails closed when the evidence limit is exceeded,
 5. retention class and archival posture are explicit, while retention duration stays null until an
    authoritative records-management policy exists.
