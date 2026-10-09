@@ -23,6 +23,7 @@ from portfolio_common.portfolio_source_observation_qualification import (
     ProducerSubmissionGrant,
     UnqualifiedProducerAuthority,
 )
+from sqlalchemy import text
 
 from src.services.ingestion_service.app.dependencies import (
     get_portfolio_source_observation_commands,
@@ -39,9 +40,21 @@ from src.services.query_control_plane_service.app.main import app as read_app
 from tests.integration.services.ingestion_service import (
     test_portfolio_source_observation_admission_postgresql as admission_proof,
 )
+from tests.test_support.portfolio_source_test_schema import fact_verification_migration
 
 observation_lease = admission_proof.observation_lease
-observation_schema = admission_proof.observation_schema
+preverification_observation_schema = admission_proof.observation_schema
+
+
+@pytest.fixture
+def observation_schema(preverification_observation_schema):
+    """Current read adapters require the complete receipt dependency, even empty."""
+    engine, _, schema, _ = preverification_observation_schema
+    with engine.begin() as connection:
+        connection.execute(text(f'SET LOCAL search_path TO "{schema}", pg_temp'))
+        fact_verification_migration(connection)["upgrade"]()
+    return preverification_observation_schema
+
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db, pytest.mark.db_direct]
 WRITE_CAP = "ingestion.portfolio_cash_availability_observations.write"

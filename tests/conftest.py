@@ -43,6 +43,7 @@ from tests.test_support.pipeline_quiescence import (
     recover_reprocessing_activity_for_test_cleanup,
     wait_for_pipeline_quiescence,
 )
+from tests.test_support.portfolio_source_test_schema import recreate_source_test_dependencies
 from tests.test_support.runtime_env import infer_test_profile, prepare_test_runtime
 from tests.test_support.runtime_modes import detect_runtime_modes
 
@@ -516,7 +517,10 @@ def clean_db(db_engine):
                     cleanup_authorization,
                     engine=db_engine,
                 )
-                connection.execute(text(truncate_sql))
+                with recreate_source_test_dependencies(
+                    connection, authorization=cleanup_authorization
+                ):
+                    connection.execute(text(truncate_sql))
 
     truncate_with_deadlock_retry(
         _run,
@@ -563,7 +567,10 @@ def clean_db_module(db_engine):
                     cleanup_authorization,
                     engine=db_engine,
                 )
-                connection.execute(text(truncate_sql))
+                with recreate_source_test_dependencies(
+                    connection, authorization=cleanup_authorization
+                ):
+                    connection.execute(text(truncate_sql))
 
     truncate_with_deadlock_retry(
         _run,
