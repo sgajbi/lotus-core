@@ -3,8 +3,8 @@
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .api_contract.portfolio_source_verification import SignedObservationVerificationReceipt
 from .domain.portfolio_source_observations import CashAvailabilityObservation, ObservationConflict
-from .domain.portfolio_source_verification import SignedObservationVerificationReceipt
 from .portfolio_source_observation_models import (
     SOURCE_IDENTITY_COLUMNS,
     CashAvailabilityObservationRow,

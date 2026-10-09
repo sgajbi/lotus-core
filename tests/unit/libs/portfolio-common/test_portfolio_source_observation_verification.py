@@ -8,18 +8,18 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
+from portfolio_common.api_contract.portfolio_source_verification import (
+    ObservationVerificationClaims,
+    ObservationVerificationScope,
+    ObservationVerificationSubject,
+    SignedObservationVerificationReceipt,
+)
 from portfolio_common.domain.portfolio_source_observations import (
     CashAvailabilityObservation,
     FundingInvestmentObservation,
     ObservationConflict,
     ObservationCoverage,
     ObservationEnvelope,
-)
-from portfolio_common.domain.portfolio_source_verification import (
-    ObservationVerificationClaims,
-    ObservationVerificationScope,
-    ObservationVerificationSubject,
-    SignedObservationVerificationReceipt,
 )
 from portfolio_common.portfolio_source_observation_verification import (
     ObservationCutRegistration,

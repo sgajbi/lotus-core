@@ -8,16 +8,16 @@ from datetime import datetime
 
 from pydantic import ValidationError
 
-from .domain.portfolio_source_observations import (
-    ObservationConflict,
-    ObservationCoverage,
-    require_observation_identity,
-)
-from .domain.portfolio_source_verification import (
+from .api_contract.portfolio_source_verification import (
     ObservationVerificationClaims,
     ObservationVerificationScope,
     ObservationVerificationSubject,
     SignedObservationVerificationReceipt,
+)
+from .domain.portfolio_source_observations import (
+    ObservationConflict,
+    ObservationCoverage,
+    require_observation_identity,
 )
 
 

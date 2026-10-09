@@ -3,13 +3,13 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from portfolio_common.api_contract.portfolio_source_verification import (
+    SignedObservationVerificationReceipt,
+)
 from portfolio_common.database_models import IngestionJob
 from portfolio_common.domain.portfolio_source_observations import (
     CashAvailabilityObservation,
     PortfolioSourceObservation,
-)
-from portfolio_common.domain.portfolio_source_verification import (
-    SignedObservationVerificationReceipt,
 )
 from portfolio_common.portfolio_source_observation_qualification import UnqualifiedProducerAdmission
 from portfolio_common.portfolio_source_observation_verification import (

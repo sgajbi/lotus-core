@@ -4,15 +4,15 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Self
 
+from portfolio_common.api_contract.portfolio_source_verification import (
+    SignedObservationVerificationReceipt,
+)
 from portfolio_common.domain.portfolio_source_observations import (
     CashAvailabilityObservation,
     FundingInvestmentObservation,
     ObservationCoverage,
     ObservationEnvelope,
     require_observation_hash,
-)
-from portfolio_common.domain.portfolio_source_verification import (
-    SignedObservationVerificationReceipt,
 )
 from pydantic import (
     BaseModel,
