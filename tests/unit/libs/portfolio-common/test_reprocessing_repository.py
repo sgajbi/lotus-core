@@ -710,3 +710,24 @@ async def test_raw_source_fixed_literals_leave_requested_identifiers_bound(lock_
     assert "ORDER BY outbox_events.id" in sql
     assert "LIMIT" not in sql and "DISTINCT" not in sql
     assert ("FOR SHARE OF outbox_events" in sql) == lock_sources
+
+
+@pytest.mark.asyncio
+async def test_raw_source_complete_history_reuses_asyncpg_selector_bindings():
+    history = [
+        {"transaction_id": f"HISTORY-{index}", "portfolio_id": "PORTFOLIO"}
+        for index in range(16383)
+    ]
+    session = AsyncMock(spec=AsyncSession)
+    session.execute.side_effect = [_mapping_result([]), _mapping_result([])]
+    assert await load_transaction_fee_facts(session, history) == ([], [], [])
+    statement = session.execute.await_args_list[1].args[0]
+    compiled = statement.compile(
+        dialect=postgresql.asyncpg.dialect(), compile_kwargs={"render_postcompile": True}
+    )
+    assert len(compiled.positiontup) == len(history) + 1
+    assert len(compiled.params) == len(history) + 1
+    assert set(compiled.params.values()) == {"PORTFOLIO"} | {
+        row["transaction_id"] for row in history
+    }
+    assert "HISTORY-" not in str(compiled) and "PORTFOLIO" not in str(compiled)

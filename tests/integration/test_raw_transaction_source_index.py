@@ -204,6 +204,25 @@ async def test_bounded_index_upgrades_long_originals_and_preserves_loader_result
 
 
 @pytest.mark.asyncio
+async def test_loader_preserves_complete_large_history_with_one_binding_per_identifier(
+    clean_db, async_db_session
+):
+    originals = [
+        _raw({"transaction_id": "HISTORY-0", "fee": "1"}),
+        _raw({"transaction_id": "HISTORY-0", "fee": "99"}),
+    ]
+    async_db_session.add_all(originals)
+    await async_db_session.commit()
+    history = [
+        {"transaction_id": f"HISTORY-{index}", "portfolio_id": "RAW-SOURCE"}
+        for index in range(16383)
+    ]
+    _, selected, _ = await load_transaction_fee_facts(async_db_session, history, lock_sources=True)
+    assert [row["id"] for row in selected] == [row.id for row in originals]
+    assert [row["payload"]["fee"] for row in selected] == ["1", "99"]
+
+
+@pytest.mark.asyncio
 async def test_exact_loader_rechecks_both_selectors_under_controlled_digest_collision(
     clean_db, async_db_session, monkeypatch
 ):

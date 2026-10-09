@@ -979,7 +979,8 @@ transaction/portfolio data and existing source read locks. The non-unique partia
 `ix_outbox_events_raw_transaction_source` index covers bounded MD5 digests of portfolio and the
 transaction-ID JSON cast, plus row ID for the fixed raw-transaction event family. Exact original
 portfolio and JSON-text equality recheck all digest candidates, preserving long identifiers
-without admitting collisions. Digests are not security or financial provenance. It does not select only the
+without admitting collisions. Exact and digest comparisons reuse each bound selector rather than
+double complete-history driver arguments. Digests are not security or financial provenance. It does not select only the
 latest source, waive canonical currency/fee refusals or change financial writes.
 
 Concurrent migration `c180b2c3d541` reuses a valid expected index and repairs an interrupted
