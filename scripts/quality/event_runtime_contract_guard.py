@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from portfolio_common import config, event_contracts, events
+from portfolio_common import config, event_contracts, events, fx_source_events
 from portfolio_common.event_supportability import (
     DIRECT_KAFKA_TOPIC_DEFINITIONS,
     EVENT_FAMILY_DEFINITIONS,
@@ -476,7 +476,7 @@ def evaluate_outbox_event_contracts(
     errors: list[str] = []
     available_models = {
         name
-        for module in (events, event_contracts)
+        for module in (events, event_contracts, fx_source_events)
         for name in dir(module)
         if name.endswith("Event") or name.endswith("EventModel")
     }

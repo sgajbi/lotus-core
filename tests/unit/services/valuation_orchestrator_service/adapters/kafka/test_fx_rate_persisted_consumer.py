@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from portfolio_common.event_mapping import EventContractValidationError
 from portfolio_common.events import GOVERNED_EVENT_SCHEMA_VERSION, FxRateEvent, FxRatePersistedEvent
+from portfolio_common.fx_source_events import FxSourceCutPersistedEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.valuation_job_contracts import ValuationJobUpsert
 from portfolio_common.valuation_job_repository import ValuationJobRepository
@@ -209,3 +210,46 @@ async def test_missing_header_uses_source_observation_fallback_correlation(
     assert dependencies["idempotency"].claim_event_processing.await_args.args[3] == (
         f"FX_RATE_EVENT_{event.observation_id.removeprefix('sha256:')[:16]}"
     )
+
+
+@pytest.mark.parametrize("receipt_error", [False, True])
+async def test_retained_cut_receipt_never_stages_legacy_valuation(
+    consumer,
+    message,
+    dependencies,
+    monkeypatch,
+    receipt_error,
+) -> None:
+    retained = FxSourceCutPersistedEvent(
+        tenant_id="SYNTHETIC_TENANT",
+        provider_id="SYNTHETIC_PROVIDER",
+        source_id="SYNTHETIC_FEED",
+        cut_id="a" * 64,
+        content_hash="b" * 64,
+        member_count=1,
+        members=[{"revision_id": "c" * 64, "content_hash": "d" * 64}],
+        source_observed_cutoff=datetime(2026, 10, 8, 16, tzinfo=timezone.utc),
+        accepted_at=datetime(2026, 10, 8, 16, 1, tzinfo=timezone.utc),
+    )
+    message.value.return_value = retained.model_dump_json().encode("utf-8")
+    message.headers.return_value = []
+    acknowledgement = AsyncMock()
+    if receipt_error:
+        acknowledgement.side_effect = ValueError("retained cut evidence mismatch")
+    monkeypatch.setattr(fx_rate_persisted_consumer, "acknowledge_retained_fx_cut", acknowledgement)
+
+    if receipt_error:
+        with pytest.raises(ValueError, match="retained cut evidence mismatch"):
+            await consumer.process_message(message)
+    else:
+        await consumer.process_message(message)
+
+    acknowledgement.assert_awaited_once()
+    assert acknowledgement.await_args.args[1] == retained
+    assert acknowledgement.await_args.kwargs["correlation_id"] == (
+        f"FX_SOURCE_CUT_{retained.cut_id[:16]}"
+    )
+    dependencies["idempotency"].claim_event_processing.assert_not_awaited()
+    dependencies["repository"].find_position_keys_requiring_revaluation.assert_not_awaited()
+    dependencies["repository"].stage_durable_replay.assert_not_awaited()
+    dependencies["jobs"].upsert_jobs.assert_not_awaited()

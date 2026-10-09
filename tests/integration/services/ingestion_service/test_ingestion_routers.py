@@ -6544,15 +6544,32 @@ async def test_fx_batch_custody_refusal_is_atomic_before_job_or_publish(
     assert ingestion_test_harness["fake_job_service"].jobs == {}
 
 
-async def test_fx_ingestion_openapi_declares_closed_row_and_batch_contracts():
+@pytest.mark.parametrize(
+    ("batch_name", "record_field", "record_name"),
+    [
+        ("FxRateIngestionRequest", "fx_rates", "FxRate"),
+        ("FxSourceCutSubmission", "members", "FxSourceMember"),
+    ],
+)
+async def test_fx_ingestion_openapi_declares_closed_row_and_batch_contracts(
+    batch_name, record_field, record_name
+):
     schema = app.openapi()
     request = schema["paths"]["/ingest/fx-rates"]["post"]["requestBody"]["content"][
         "application/json"
     ]["schema"]
-    name = request["$ref"].rsplit("/", 1)[-1]
-    batch = schema["components"]["schemas"][name]
+    alternatives = {item["$ref"] for item in request["anyOf"]}
+    assert alternatives == {
+        "#/components/schemas/FxRateIngestionRequest",
+        "#/components/schemas/FxSourceCutSubmission",
+    }
+    batch = schema["components"]["schemas"][batch_name]
     assert batch["additionalProperties"] is False
-    record_name = batch["properties"]["fx_rates"]["items"]["$ref"].rsplit("/", 1)[-1]
+    assert record_field in batch["required"]
+    assert batch["properties"][record_field]["minItems"] == 1
+    assert batch["properties"][record_field]["items"]["$ref"] == (
+        f"#/components/schemas/{record_name}"
+    )
     assert schema["components"]["schemas"][record_name]["additionalProperties"] is False
 
 

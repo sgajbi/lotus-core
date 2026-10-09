@@ -65,6 +65,7 @@ def resolve_request_scope(
     benchmark_id: str,
     request: BenchmarkMarketSeriesRequest,
     cursor: Mapping[str, Any],
+    fx_tenant_id: str | None = None,
 ) -> BenchmarkMarketSeriesRequestScope:
     """Bind a decoded cursor to the exact market-series request identity."""
 
@@ -77,6 +78,14 @@ def resolve_request_scope(
             "target_currency": request.target_currency,
             "series_fields": sorted(request.series_fields),
             "page_size": request.page.page_size,
+            **(
+                {
+                    "fx_source": request.fx_source.model_dump(mode="json"),
+                    "fx_tenant_id": fx_tenant_id,
+                }
+                if request.fx_source is not None
+                else {}
+            ),
         }
     )
     token_scope = cursor.get("scope_fingerprint")

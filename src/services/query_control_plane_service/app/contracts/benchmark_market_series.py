@@ -15,6 +15,7 @@ from portfolio_common.source_data_product_metadata import (
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .common import IntegrationWindow
+from .market_fx import FxSourceEvidenceResponse, FxSourceSelectionRequest
 
 SUPPORTED_BENCHMARK_MARKET_SERIES_FIELDS = frozenset(
     {"index_price", "index_return", "benchmark_return", "component_weight", "fx_rate"}
@@ -68,12 +69,22 @@ class BenchmarkMarketSeriesRequest(BaseModel):
             "Optional deterministic paging controls for large benchmark component universes."
         ),
     )
+    fx_source: FxSourceSelectionRequest | None = Field(
+        default=None,
+        description=(
+            "Explicit scoped retained FX selection. Requires verified tenant authority and "
+            "fx_rate. Missing canonical facts never fall back to legacy global FX. Without "
+            "this selector, FX context is legacy-unqualified."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_series_fields(self) -> "BenchmarkMarketSeriesRequest":
         requested_fields = _normalize_series_fields(self.series_fields)
         if "fx_rate" in requested_fields and not self.target_currency:
             raise ValueError("target_currency is required when series_fields includes fx_rate.")
+        if self.fx_source is not None and "fx_rate" not in requested_fields:
+            raise ValueError("fx_rate is required when fx_source is supplied.")
         self.series_fields = requested_fields
         return self
 
@@ -139,6 +150,17 @@ class BenchmarkMarketSeriesResponse(SourceDataProductRuntimeMetadata):
 
     product_name: Literal["MarketDataWindow"] = product_name_field("MarketDataWindow")
     product_version: Literal["v1"] = product_version_field()
+    fx_source_qualification: Literal[
+        "NOT_REQUESTED", "IDENTITY", "LEGACY_UNQUALIFIED", "RETAINED_SOURCE", "UNAVAILABLE"
+    ] = Field(
+        default="NOT_REQUESTED",
+        description="Source posture for FX context; never a live or institutional certification.",
+        examples=["LEGACY_UNQUALIFIED"],
+    )
+    fx_source_evidence: list[FxSourceEvidenceResponse] = Field(
+        default_factory=list,
+        description="Exact retained provenance of the FX rows actually used by this page.",
+    )
     benchmark_id: str = Field(
         ..., description="Benchmark identifier.", examples=["BMK_GLOBAL_BALANCED_60_40"]
     )

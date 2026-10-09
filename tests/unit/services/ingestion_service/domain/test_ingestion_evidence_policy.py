@@ -90,6 +90,21 @@ def test_registry_covers_every_job_creating_endpoint_family() -> None:
     } == reference_endpoints | generic_job_endpoints
 
 
+def test_canonical_fx_cut_is_explicit_fingerprint_only_without_legacy_replay() -> None:
+    legacy = INGESTION_EVIDENCE_POLICY_REGISTRY.require("/ingest/fx-rates")
+    canonical = INGESTION_EVIDENCE_POLICY_REGISTRY.require(
+        "/ingest/fx-rates", entity_type="fx_source_cut"
+    )
+    assert legacy.entity_type == "fx_rate" and legacy.replay_eligible
+    assert canonical.entity_type == "fx_source_cut"
+    assert canonical.classification is PayloadClassification.RESTRICTED
+    assert canonical.durable_representation is DurablePayloadRepresentation.FINGERPRINT_ONLY
+    assert not canonical.replay_eligible and not canonical.partial_replay_eligible
+    assert canonical.replay_ttl is None
+    with pytest.raises(ValueError, match="entity mismatch"):
+        INGESTION_EVIDENCE_POLICY_REGISTRY.require("/ingest/fx-rates", entity_type="unknown_cut")
+
+
 def test_sensitive_payload_families_are_fingerprint_only() -> None:
     for endpoint in (
         "/ingest/transactions",

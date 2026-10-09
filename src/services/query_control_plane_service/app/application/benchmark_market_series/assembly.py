@@ -10,6 +10,7 @@ from ...contracts.benchmark_market_series import (
     BenchmarkMarketSeriesRequest,
     BenchmarkMarketSeriesResponse,
 )
+from ...contracts.market_fx import FxSourceEvidenceResponse
 from ...domain.benchmark_definition import (
     BenchmarkComponentEvidence,
     BenchmarkDefinitionEvidence,
@@ -126,6 +127,33 @@ def build_benchmark_market_series_response(
         ),
     )
     return BenchmarkMarketSeriesResponse(
+        fx_source_qualification=(
+            "NOT_REQUESTED"
+            if "fx_rate" not in request.series_fields
+            else "IDENTITY"
+            if fx_context.source_currency == fx_context.target_currency
+            else "RETAINED_SOURCE"
+            if fx_rates and request.fx_source is not None
+            else "LEGACY_UNQUALIFIED"
+            if fx_rates
+            else "UNAVAILABLE"
+        ),
+        fx_source_evidence=[
+            FxSourceEvidenceResponse(
+                rate_date=row.rate_date,
+                provider_id=row.source.scope.provider_id,
+                source_id=row.source.scope.source_id,
+                revision_id=row.source.revision_id,
+                content_hash=row.source.content_hash,
+                source_observed_at=row.source.source_observed_at,
+                accepted_at=row.source.accepted_at,
+                fixing_kind=row.source.fixing_kind,
+                calendar_version=row.source.calendar_version,
+                cut_id=row.source.cut_id,
+            )
+            for row in fx_rates
+            if row.source is not None
+        ],
         benchmark_id=benchmark_id,
         benchmark_currency=benchmark_currency,
         target_currency=request.target_currency,

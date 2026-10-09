@@ -3061,6 +3061,7 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
     risk_free_window = RiskFreeIntegrationWindow(start_date="2026-01-01", end_date="2026-01-31")
     benchmark_market_response = await fetch_benchmark_market_series(
         benchmark_id="B1",
+        http_request=Request({"type": "http", "headers": []}),
         request=BenchmarkMarketSeriesRequest(
             as_of_date="2026-01-31",
             window=request_window,
@@ -3177,6 +3178,7 @@ async def test_fetch_benchmark_market_series_maps_invalid_page_token_to_400() ->
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await fetch_benchmark_market_series(
             benchmark_id="B1",
+            http_request=Request({"type": "http", "headers": []}),
             request=BenchmarkMarketSeriesRequest(
                 as_of_date="2026-01-31",
                 window=IntegrationWindow(start_date="2026-01-01", end_date="2026-01-31"),

@@ -30,6 +30,33 @@ _FINGERPRINT_PREVIOUS_KEYS: dict[str, str] = {}
 _TENANT_ID = "tenant-test"
 
 
+def test_canonical_fx_cut_job_fingerprints_complete_content_without_replay_payload() -> None:
+    payload = {"source_cut_reference": "SYNTHETIC_CUT", "members": [{"rate": "1.35"}]}
+    evidence = _build_ingestion_payload_evidence(
+        endpoint="/ingest/fx-rates",
+        entity_type="fx_source_cut",
+        payload=payload,
+        observed_at=datetime(2026, 10, 8, 16, tzinfo=UTC),
+        fingerprint_key_id=_FINGERPRINT_KEY_ID,
+        fingerprint_hmac_secret=_FINGERPRINT_SECRET,
+    )
+    assert evidence.request_payload is None
+    assert evidence.classification == "restricted"
+    assert evidence.durable_representation == "fingerprint_only"
+    assert not evidence.replay_eligible and not evidence.partial_replay_eligible
+    assert evidence.replay_expires_at is None
+    assert ingestion_payload_fingerprint_matches(
+        stored_fingerprint=evidence.request_payload_fingerprint,
+        payload=payload,
+        secrets_by_key_id={_FINGERPRINT_KEY_ID: _FINGERPRINT_SECRET},
+    )
+    assert not ingestion_payload_fingerprint_matches(
+        stored_fingerprint=evidence.request_payload_fingerprint,
+        payload={**payload, "members": [{"rate": "1.36"}]},
+        secrets_by_key_id={_FINGERPRINT_KEY_ID: _FINGERPRINT_SECRET},
+    )
+
+
 def test_portfolio_bundle_fingerprint_preserves_only_original_calendar_spelling() -> None:
     validated_payload = {
         "source_system": "UI_UPLOAD",
