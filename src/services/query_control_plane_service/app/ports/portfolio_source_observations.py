@@ -5,6 +5,9 @@ from datetime import datetime
 from typing import Protocol
 
 from portfolio_common.domain.portfolio_source_observations import PortfolioSourceObservation
+from portfolio_common.domain.portfolio_source_verification import (
+    SignedObservationVerificationReceipt,
+)
 
 from ..contracts.portfolio_source_observations import PortfolioSourceObservationsRequest
 
@@ -16,6 +19,7 @@ class PersistedSourceObservation:
     received_at: datetime
     receipt_job_id: str
     qualification: str
+    verification_receipts: tuple[SignedObservationVerificationReceipt, ...] = ()
 
 
 class PortfolioSourceObservationReader(Protocol):

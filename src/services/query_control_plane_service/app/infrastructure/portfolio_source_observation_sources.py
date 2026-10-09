@@ -1,5 +1,8 @@
 """One PostgreSQL statement snapshot; original pins never join mutable heads."""
 
+from portfolio_common.domain.portfolio_source_verification import (
+    SignedObservationVerificationReceipt,
+)
 from portfolio_common.portfolio_source_observation_models import (
     SOURCE_IDENTITY_COLUMNS,
     CashAvailabilityObservationHead,
@@ -8,7 +11,8 @@ from portfolio_common.portfolio_source_observation_models import (
     FundingInvestmentObservationRow,
     observation_from_row,
 )
-from sqlalchemy import and_, false, literal, select, true
+from portfolio_common.portfolio_source_verification_models import PortfolioSourceVerificationRow
+from sqlalchemy import and_, false, func, literal, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -68,9 +72,28 @@ def observation_snapshot_statement(
         portfolio_id,
     )
     anchor = select(literal(1).label("snapshot_anchor")).subquery()
+
+    def receipts(fact):
+        row = PortfolioSourceVerificationRow
+        recent = (
+            select(row.receipt)
+            .where(
+                row.tenant_id == tenant_id,
+                row.portfolio_id == portfolio_id,
+                row.content_hash == fact.c.content_hash,
+            )
+            .order_by(row.received_at.desc(), row.attestation_sha256)
+            .limit(32)
+            .correlate(fact)
+            .subquery()
+        )
+        return select(func.jsonb_agg(recent.c.receipt)).scalar_subquery()
+
     return select(
         aliased(CashAvailabilityObservationRow, cash),
         aliased(FundingInvestmentObservationRow, funding),
+        receipts(cash),
+        receipts(funding),
     ).select_from(anchor.outerjoin(cash, true()).outerjoin(funding, true()))
 
 
@@ -86,11 +109,11 @@ class SqlAlchemyPortfolioSourceObservationReader:
                 tenant_id=tenant_id, portfolio_id=portfolio_id, request=request
             )
         )
-        cash, funding = result.one()
-        return self._persisted(cash), self._persisted(funding)
+        cash, funding, cash_receipts, funding_receipts = result.one()
+        return self._persisted(cash, cash_receipts), self._persisted(funding, funding_receipts)
 
     @staticmethod
-    def _persisted(row) -> PersistedSourceObservation | None:
+    def _persisted(row, receipts=None) -> PersistedSourceObservation | None:
         if row is None:
             return None
         return PersistedSourceObservation(
@@ -99,4 +122,8 @@ class SqlAlchemyPortfolioSourceObservationReader:
             received_at=row.received_at,
             receipt_job_id=row.receipt_job_id,
             qualification=row.qualification,
+            verification_receipts=tuple(
+                SignedObservationVerificationReceipt.model_validate(receipt)
+                for receipt in (receipts or ())
+            ),
         )

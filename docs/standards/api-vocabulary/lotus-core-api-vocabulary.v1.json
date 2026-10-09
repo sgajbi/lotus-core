@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-10-08T23:31:25.271675+00:00",
+  "generatedAt": "2026-10-09T06:19:00.866090+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -6284,6 +6284,44 @@
           "predecessor_id": "example_value",
           "expected_head_hash": "example_value",
           "content_hash": "example_content_hash",
+          "verification_receipt": {
+            "claims": {
+              "product_name": "PortfolioSourceFactVerificationReceipt",
+              "product_version": "v1",
+              "purpose": "PORTFOLIO_FINANCIAL_SOURCE_FACT",
+              "issuer_id": "ISSUER_001",
+              "key_id": "KEY_001",
+              "artifact_revision": "example_artifact_revision",
+              "subject": {
+                "family": "cash_availability",
+                "envelope": {
+                  "tenant_id": "TENANT_SG",
+                  "portfolio_id": "DEMO_DPM_EUR_001",
+                  "producer_id": "PRODUCER_001",
+                  "source_record_id": "SOURCE_RECORD_001",
+                  "source_revision": "revision-1",
+                  "source_cut_id": "SOURCE_CUT_001",
+                  "definition_version": "example_definition_version",
+                  "effective_from": "2026-02-27",
+                  "effective_to": "2026-02-27",
+                  "observed_at": "2026-02-27T10:30:00Z",
+                  "generated_at": "2026-02-27T10:30:00Z",
+                  "coverage": "complete",
+                  "coverage_scope": "example_coverage_scope",
+                  "predecessor_id": "example_value",
+                  "expected_head_hash": "example_value"
+                },
+                "content_hash": "example_content_hash",
+                "source_cut_manifest_hash": "example_source_cut_manifest_hash",
+                "consumer_id": "CONSUMER_001",
+                "currency": "example_value",
+                "as_of_date": "2026-02-27"
+              },
+              "issued_at": "2026-02-27T10:30:00Z",
+              "expires_at": "2026-02-27T10:30:00Z"
+            },
+            "signature": "example_signature"
+          },
           "currency": "USD",
           "settled_amount": 125000.5,
           "encumbered_amount": 125000.5,
@@ -12036,6 +12074,57 @@
       ],
       "observedTypes": [
         "integer"
+      ]
+    },
+    {
+      "semanticId": "lotus.verification_receipt",
+      "canonicalTerm": "verification_receipt",
+      "preferredName": "verification_receipt",
+      "description": "Independent fact-verification attestation, not producer or monthly approval.",
+      "example": {
+        "claims": {
+          "product_name": "PortfolioSourceFactVerificationReceipt",
+          "product_version": "v1",
+          "purpose": "PORTFOLIO_FINANCIAL_SOURCE_FACT",
+          "issuer_id": "ISSUER_001",
+          "key_id": "KEY_001",
+          "artifact_revision": "example_artifact_revision",
+          "subject": {
+            "family": "cash_availability",
+            "envelope": {
+              "tenant_id": "TENANT_SG",
+              "portfolio_id": "DEMO_DPM_EUR_001",
+              "producer_id": "PRODUCER_001",
+              "source_record_id": "SOURCE_RECORD_001",
+              "source_revision": "revision-1",
+              "source_cut_id": "SOURCE_CUT_001",
+              "definition_version": "example_definition_version",
+              "effective_from": "2026-02-27",
+              "effective_to": "2026-02-27",
+              "observed_at": "2026-02-27T10:30:00Z",
+              "generated_at": "2026-02-27T10:30:00Z",
+              "coverage": "complete",
+              "coverage_scope": "example_coverage_scope",
+              "predecessor_id": "example_value",
+              "expected_head_hash": "example_value"
+            },
+            "content_hash": "example_content_hash",
+            "source_cut_manifest_hash": "example_source_cut_manifest_hash",
+            "consumer_id": "CONSUMER_001",
+            "currency": "example_value",
+            "as_of_date": "2026-02-27"
+          },
+          "issued_at": "2026-02-27T10:30:00Z",
+          "expires_at": "2026-02-27T10:30:00Z"
+        },
+        "signature": "example_signature"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -35772,6 +35861,7 @@
           "submitted_at",
           "tenant_id",
           "trace_id",
+          "verification_receipt",
           "x_tenant_id"
         ]
       },
@@ -35912,6 +36002,14 @@
             "type": "string",
             "semanticId": "lotus.content_hash",
             "attributeRef": "lotus.content_hash"
+          },
+          {
+            "name": "observations[].verification_receipt",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.verification_receipt",
+            "attributeRef": "lotus.verification_receipt"
           },
           {
             "name": "observations[].currency",
@@ -36238,6 +36336,7 @@
           "submitted_at",
           "tenant_id",
           "trace_id",
+          "verification_receipt",
           "x_tenant_id"
         ]
       },
@@ -36378,6 +36477,14 @@
             "type": "string",
             "semanticId": "lotus.content_hash",
             "attributeRef": "lotus.content_hash"
+          },
+          {
+            "name": "observations[].verification_receipt",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.verification_receipt",
+            "attributeRef": "lotus.verification_receipt"
           },
           {
             "name": "observations[].funded",

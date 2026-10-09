@@ -59,6 +59,32 @@ def test_c178_critical_coverage_executes_bounded_actual_migration_guards():
     assert SUITE_RUNTIME_MODE["critical-db-coverage"] == "db_direct"
 
 
+def test_fact_receipt_persistence_has_both_owning_native_db_routes():
+    path = (
+        "tests/integration/services/ingestion_service/"
+        "test_portfolio_source_verification_postgresql.py"
+    )
+    for suite in ("query-authority-db-contract", "critical-db-coverage"):
+        assert get_suite(suite).count(path) == 1
+        assert SUITE_RUNTIME_MODE[suite] == "db_direct"
+        assert SUITE_ENV_PROFILE[suite] == "integration"
+
+
+@pytest.mark.parametrize("suite", ["query-authority-db-contract", "critical-db-coverage"])
+@pytest.mark.parametrize("mutation", ["missing", "duplicate"])
+def test_fact_receipt_manifest_refuses_lost_or_duplicate_native_proof(monkeypatch, suite, mutation):
+    path = (
+        "tests/integration/services/ingestion_service/"
+        "test_portfolio_source_verification_postgresql.py"
+    )
+    paths = [entry for entry in get_suite(suite) if entry != path]
+    if mutation == "duplicate":
+        paths.extend([path, path])
+    monkeypatch.setitem(SUITES, suite, paths)
+    with pytest.raises(AssertionError):
+        test_fact_receipt_persistence_has_both_owning_native_db_routes()
+
+
 @pytest.mark.parametrize("node", C178_CRITICAL_PROOF_NODES)
 @pytest.mark.parametrize("mutation", ["missing", "duplicate"])
 def test_c178_manifest_refuses_lost_or_duplicate_native_proof(monkeypatch, node, mutation):
@@ -459,6 +485,8 @@ def test_critical_lifecycle_suite_has_repository_native_make_target() -> None:
 
 def test_query_authority_db_contract_executes_tenant_and_service_regressions() -> None:
     assert get_suite("query-authority-db-contract") == [
+        "tests/integration/services/ingestion_service/"
+        "test_portfolio_source_verification_postgresql.py",
         "tests/integration/services/persistence_service/test_fx_rate_source_revision_postgresql.py",
         "tests/integration/services/ingestion_service/test_fx_source_cut_postgresql.py",
         "tests/integration/services/query_control_plane_service/"

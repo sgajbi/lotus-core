@@ -1009,6 +1009,17 @@ downgrade and TRUNCATE, including parent cascades. Empty truncate is supported o
 READ COMMITTED; stale transaction-fixed snapshots fail closed. Unit/collection evidence cannot
 replace the actual PostgreSQL rollback, correction-race and migration-barrier controls.
 
+Per-fact verification uses independent empty-by-default scoped verifier/cut registrations and
+purpose `PORTFOLIO_FINANCIAL_SOURCE_FACT`, not FX/submission or monthly approval authority.
+Optional signed receipts append through the original ingestion UOW alongside facts/heads/job
+completion; migration c181 follows c179 and never rewrites original facts. Existing QCP reads
+rehydrate receipts and re-verify trusted consumer, exact original envelope/hash/cut and current
+expiry/revocation before all-selected receipt projection. Legacy absent-receipt serialization
+and diagnostic hashes remain unchanged; provider and joined-cut qualification stay unavailable.
+Use the registered DB-only `query-authority-db-contract` scope for bounded new receipt controls;
+an invented scope name selects the full stack and is not the owning persistence proof workflow.
+See [per-fact receipt semantics](docs/methodologies/source-data-products/portfolio-financial-source-observations.md#per-fact-verification-receipt).
+
 ## Context Maintenance Rule
 
 Update this file only when current Core ownership, architecture, financial invariants, task routes,

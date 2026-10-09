@@ -4,7 +4,11 @@ from datetime import UTC, datetime
 
 from portfolio_common.domain.portfolio_source_observations import (
     CashAvailabilityObservation,
+    ObservationConflict,
     ObservationFamily,
+)
+from portfolio_common.portfolio_source_observation_verification import (
+    ObservationVerificationAuthority,
 )
 from portfolio_common.source_data_product_metadata import (
     SourceDataDegradationDetail,
@@ -27,16 +31,31 @@ from ..ports.portfolio_source_observations import (
 
 
 class PortfolioSourceObservationsService:
-    def __init__(self, reader: PortfolioSourceObservationReader):
+    def __init__(
+        self,
+        reader: PortfolioSourceObservationReader,
+        verification_authority: ObservationVerificationAuthority | None = None,
+    ):
         self.reader = reader
+        self.verification_authority = verification_authority or ObservationVerificationAuthority()
 
     async def query(
-        self, *, tenant_id: str, portfolio_id: str, request: PortfolioSourceObservationsRequest
+        self,
+        *,
+        tenant_id: str,
+        portfolio_id: str,
+        request: PortfolioSourceObservationsRequest,
+        consumer_id: str | None = None,
     ) -> PortfolioSourceObservationsResponse:
         cash, funding = await self.reader.read_snapshot(
             tenant_id=tenant_id, portfolio_id=portfolio_id, request=request
         )
         reasons = ["SOURCE_PRODUCER_UNQUALIFIED", "JOINED_SOURCE_CUT_COMPATIBILITY_UNPROVEN"]
+        verified = self._verified_selection(
+            ((cash, request.cash), (funding, request.funding_investment)),
+            consumer_id=consumer_id,
+            request=request,
+        )
         cash_evidence = self._project(
             cash,
             request.cash,
@@ -45,6 +64,7 @@ class PortfolioSourceObservationsService:
             portfolio_id,
             request,
             reasons,
+            verified.get(ObservationFamily.CASH_AVAILABILITY),
         )
         funding_evidence = self._project(
             funding,
@@ -54,7 +74,22 @@ class PortfolioSourceObservationsService:
             portfolio_id,
             request,
             reasons,
+            verified.get(ObservationFamily.FUNDING_INVESTMENT),
         )
+        if any(
+            selector is not None and (evidence is None or evidence.verification_receipt is None)
+            for selector, evidence in (
+                (request.cash, cash_evidence),
+                (request.funding_investment, funding_evidence),
+            )
+        ):
+            verified = {}
+            if cash_evidence is not None:
+                cash_evidence = cash_evidence.model_copy(update={"verification_receipt": None})
+            if funding_evidence is not None:
+                funding_evidence = funding_evidence.model_copy(
+                    update={"verification_receipt": None}
+                )
         payload = {
             "portfolio_id": portfolio_id,
             "as_of_date": request.as_of_date,
@@ -62,6 +97,8 @@ class PortfolioSourceObservationsService:
             "funding_investment": funding_evidence.model_dump() if funding_evidence else None,
             "reason_codes": reasons,
         }
+        if verified:
+            payload["fact_verification_status"] = "FACT_VERIFIED"
         metadata = source_data_product_runtime_metadata(
             as_of_date=request.as_of_date,
             generated_at=datetime.now(UTC),
@@ -86,6 +123,34 @@ class PortfolioSourceObservationsService:
             degradation=_unavailable_degradation(reasons),
         )
 
+    def _verified_selection(self, selection, *, consumer_id, request):
+        verified = {}
+        if consumer_id is None:
+            return verified
+        now = datetime.now(UTC)
+        for record, selector in selection:
+            if selector is None:
+                continue
+            if record is None:
+                return {}
+            for receipt in record.verification_receipts:
+                try:
+                    self.verification_authority.verify_fact(
+                        record.fact,
+                        receipt,
+                        consumer_id=consumer_id,
+                        as_of_date=request.as_of_date,
+                        now=now,
+                    )
+                except (ObservationConflict, ValueError):
+                    continue
+                verified[record.fact.family] = receipt
+                break
+            else:
+                # No partial publication: one invalid selected family removes every receipt.
+                return {}
+        return verified
+
     @staticmethod
     def _project(
         record: PersistedSourceObservation | None,
@@ -95,6 +160,7 @@ class PortfolioSourceObservationsService:
         portfolio_id: str,
         request: PortfolioSourceObservationsRequest,
         reasons: list[str],
+        verification_receipt=None,
     ):
         prefix = family.value.upper()
         if selector is None or record is None:
@@ -144,6 +210,7 @@ class PortfolioSourceObservationsService:
             coverage=envelope.coverage.value,
             coverage_scope=envelope.coverage_scope,
             latest_restated=selector.latest_restated,
+            verification_receipt=verification_receipt,
         )
         if isinstance(fact, CashAvailabilityObservation):
             return CashObservationEvidence(

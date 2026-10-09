@@ -2,12 +2,16 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from portfolio_common.domain.portfolio_source_observations import ObservationConflict
 from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.portfolio_source_observation_qualification import (
     ProducerObservationAuthority,
     ProducerSubmissionGrant,
+)
+from portfolio_common.portfolio_source_observation_verification import (
+    ObservationVerificationAuthority,
 )
 
 from ..application.reference_data_ingestion_registry import REFERENCE_DATA_INGESTION_REGISTRY
@@ -43,10 +47,12 @@ class PortfolioSourceObservationCommands:
         authority: ProducerObservationAuthority,
         service_factory: Callable[[PortfolioSourceObservationStager], IngestionJobService],
         idempotency_replay_reader: IngestionIdempotencyReplayReader,
+        verification_authority: ObservationVerificationAuthority | None = None,
     ):
         self.authority = authority
         self.service_factory = service_factory
         self.idempotency_replay_reader = idempotency_replay_reader
+        self.verification_authority = verification_authority or ObservationVerificationAuthority()
 
     async def submit(self, submission: ObservationSubmission) -> IngestionJobResponse:
         context = submission.tenant_context
@@ -70,7 +76,21 @@ class PortfolioSourceObservationCommands:
             else "portfolio_funding_investment_observation"
         )
         command = REFERENCE_DATA_INGESTION_REGISTRY.require(key)
-        service = self.service_factory(PortfolioSourceObservationStager(facts, admissions))
+        attestations = tuple(r.verification_receipt for r in submission.request.observations)
+        for fact, attestation in zip(facts, attestations, strict=True):
+            if attestation is not None:
+                self.verification_authority.verify_fact(
+                    fact,
+                    attestation,
+                    consumer_id=attestation.claims.subject.consumer_id,
+                    as_of_date=attestation.claims.subject.as_of_date,
+                    now=datetime.now(UTC),
+                )
+        service = self.service_factory(
+            PortfolioSourceObservationStager(
+                facts, admissions, attestations, self.verification_authority
+            )
+        )
         request_payload = command.request_payload(submission.request)
         replay = await self.idempotency_replay_reader.find_matching_job(
             tenant_id=context.tenant_id_text,

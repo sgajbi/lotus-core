@@ -51,5 +51,8 @@ async def query_portfolio_source_observations(
         )
     tenant_id = require_admitted_tenant_id(request=http_request, supplied_tenant_id=None)
     return await service.query(
-        tenant_id=tenant_id.value, portfolio_id=portfolio_id, request=request
+        tenant_id=tenant_id.value,
+        portfolio_id=portfolio_id,
+        request=request,
+        consumer_id=context.service_identity,
     )

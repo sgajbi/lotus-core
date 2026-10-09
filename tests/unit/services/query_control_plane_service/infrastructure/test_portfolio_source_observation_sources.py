@@ -48,8 +48,9 @@ def test_both_original_families_are_one_statement_without_mutable_head_join():
     assert "portfolio_cash_availability_observations" in sql
     assert "portfolio_funding_investment_observations" in sql
     assert "observation_heads" not in sql
-    assert list(compiled.params.values()).count("tenant-owned") == 2
-    assert list(compiled.params.values()).count("portfolio-owned") == 2
+    # Two original fact selections and two independently tenant-bound receipt selections.
+    assert list(compiled.params.values()).count("tenant-owned") == 4
+    assert list(compiled.params.values()).count("portfolio-owned") == 4
     assert list(compiled.params.values()).count("original-cut") == 2
     assert "UPDATE" not in sql and "INSERT" not in sql
 
@@ -59,4 +60,7 @@ def test_latest_joins_scoped_heads_only_when_explicitly_requested():
     assert "portfolio_cash_availability_observation_heads" in sql
     assert "portfolio_funding_investment_observation_heads" in sql
     assert "tenant_id =" in sql and "producer_id =" in sql and "source_record_id =" in sql
-    assert "ORDER BY" not in sql  # No best-effort latest version guessing.
+    # Ordering is allowed only for current verification receipts, never economic revisions.
+    assert sql.count("ORDER BY portfolio_source_fact_verifications.received_at") == 2
+    assert "ORDER BY portfolio_cash_availability_observations" not in sql
+    assert "ORDER BY portfolio_funding_investment_observations" not in sql

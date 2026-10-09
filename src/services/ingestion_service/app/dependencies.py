@@ -169,6 +169,10 @@ def get_portfolio_source_observation_commands(
         get_ingestion_idempotency_replay_reader
     ),
 ):
+    from portfolio_common.portfolio_source_verification_configuration import (
+        load_observation_verification_authority,
+    )
+
     from .infrastructure.workflow_stores import SqlAlchemyIngestionJobStore
     from .services.portfolio_source_observation_commands import PortfolioSourceObservationCommands
 
@@ -184,7 +188,12 @@ def get_portfolio_source_observation_commands(
             )
         )
 
-    return PortfolioSourceObservationCommands(authority, service_factory, idempotency_replay_reader)
+    return PortfolioSourceObservationCommands(
+        authority,
+        service_factory,
+        idempotency_replay_reader,
+        load_observation_verification_authority(),
+    )
 
 
 def get_transaction_source_correction_submitter():

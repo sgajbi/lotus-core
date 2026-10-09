@@ -11,6 +11,9 @@ from portfolio_common.domain.portfolio_source_observations import (
     ObservationEnvelope,
     require_observation_hash,
 )
+from portfolio_common.domain.portfolio_source_verification import (
+    SignedObservationVerificationReceipt,
+)
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -51,6 +54,11 @@ class SourceObservationRecord(BaseModel):
     )
     content_hash: str = Field(
         description="Verified canonical typed fact hash, 64 lower-case hex characters."
+    )
+    verification_receipt: SignedObservationVerificationReceipt | None = Field(
+        None,
+        exclude_if=lambda value: value is None,
+        description="Independent fact-verification attestation, not producer or monthly approval.",
     )
 
     def envelope(self, tenant_id: str) -> ObservationEnvelope:

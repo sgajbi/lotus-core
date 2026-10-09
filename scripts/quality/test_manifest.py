@@ -70,6 +70,8 @@ SUITES: dict[str, list[str]] = {
         "test_redemption_correction_clears_superseded_terms_and_interest_cash_link",
     ],
     "critical-db-coverage": [
+        "tests/integration/services/ingestion_service/"
+        "test_portfolio_source_verification_postgresql.py",
         "tests/integration/services/persistence_service/test_fx_rate_source_revision_postgresql.py",
         "tests/integration/services/ingestion_service/test_fx_source_cut_postgresql.py",
         "tests/integration/services/ingestion_service/"
@@ -163,6 +165,8 @@ SUITES: dict[str, list[str]] = {
     ],
     "critical-lifecycle-db": ["tests/integration"],
     "query-authority-db-contract": [
+        "tests/integration/services/ingestion_service/"
+        "test_portfolio_source_verification_postgresql.py",
         "tests/integration/services/persistence_service/test_fx_rate_source_revision_postgresql.py",
         "tests/integration/services/ingestion_service/test_fx_source_cut_postgresql.py",
         "tests/integration/services/query_control_plane_service/"
