@@ -132,6 +132,20 @@ read contract; the presence of a notification does not prove that adoption or fi
 
 ## Operator Response
 
+Canonical cuts can arrive out of order across cut-key partitions. A referenced revision that is
+not yet committed raises typed `FX_SOURCE_PREDECESSOR_PENDING`; the owning transaction rolls back
+all cut, revision, inbox and outbox effects before the existing consumer retry mechanism runs.
+A retained non-head predecessor, reused conflicting content or foreign authority remains terminal.
+The FX consumer bounds recovery to at most eight attempts or sixty seconds (whichever comes first),
+preserving tighter supplied limits; zero does not disable this owning bound. Other consumer defaults
+and partitioning are unchanged. This also bounds FX transient database recovery.
+
+On exhaustion, the existing confirmed-DLQ boundary owns offset acknowledgement. Preserve the
+unchanged economic cut, exact original payload SHA256, attestation fingerprint and pending revision
+reason. Authorization remains source-safe redacted: this is not byte-replay of the original signed
+envelope. An operator must obtain genuine fresh permitted authorization bound to the unchanged cut
+through existing admission/recovery governance; never reconstruct credentials or weaken CAS.
+
 | Observation | Response | Not established |
 | --- | --- | --- |
 | HTTP 422 unknown custody field | Correct the supported request contract; escalate required source custody to its owner. | Provider facts were retained or approved. |

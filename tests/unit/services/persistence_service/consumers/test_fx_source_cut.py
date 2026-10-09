@@ -2,16 +2,23 @@
 
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.fx_cut_authorization import authenticate_fx_cut_authorization
 from portfolio_common.fx_source_admission import FxSourceAdmissionRejected
 from portfolio_common.fx_source_configuration import load_fx_source_policies
 
 from src.services.persistence_service.app.consumers import fx_source_cut
+from src.services.persistence_service.app.consumers.fx_rate_consumer import FxRateConsumer
+from src.services.persistence_service.app.repositories import fx_source_repository
 from src.services.persistence_service.app.repositories.fx_source_repository import FxSourceConflict
-from tests.test_support.fx_source_fixtures import configure_synthetic_fx_source, signed_event
+from tests.test_support.fx_source_fixtures import (
+    configure_synthetic_fx_source,
+    signed_event,
+    synthetic_revision,
+)
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract, pytest.mark.asyncio]
 NOW = datetime(2026, 10, 9, tzinfo=UTC)
@@ -73,3 +80,69 @@ async def test_changed_content_never_reads_retained_authority_before_authenticat
     with pytest.raises(FxSourceAdmissionRejected, match="SIGNATURE_INVALID"):
         await fx_source_cut.prepare_fx_source_cut(db, event)
     db.scalar.assert_not_awaited()
+
+
+@pytest.mark.parametrize("existing_head", [False, True])
+async def test_exact_uncommitted_predecessor_is_typed_pending(existing_head):
+    member = synthetic_revision(source_revision="3", predecessor_revision_id="a" * 64)
+    db = AsyncMock()
+    db.scalars.return_value = SimpleNamespace(
+        all=lambda: [SimpleNamespace(revision_id="b" * 64)] if existing_head else []
+    )
+    db.get.return_value = None
+    with pytest.raises(FxSourceConflict, match="FX_SOURCE_PREDECESSOR_PENDING") as failure:
+        await fx_source_repository.FxSourceRepository(db)._require_predecessor(member)
+    assert type(failure.value).__name__ == "FxSourcePredecessorPending"
+    assert member.predecessor_revision_id in str(failure.value)
+    db.get.assert_awaited_once()
+
+
+async def test_retained_non_head_predecessor_is_terminal_not_pending():
+    member = synthetic_revision(source_revision="3", predecessor_revision_id="a" * 64)
+    db = AsyncMock()
+    db.scalars.return_value = SimpleNamespace(all=lambda: [SimpleNamespace(revision_id="b" * 64)])
+    db.get.return_value = SimpleNamespace(revision_id="a" * 64)
+    with pytest.raises(FxSourceConflict, match="STALE_PREDECESSOR") as failure:
+        await fx_source_repository.FxSourceRepository(db)._require_predecessor(member)
+    assert type(failure.value) is FxSourceConflict
+
+
+async def test_only_typed_pending_conflict_crosses_retry_boundary(monkeypatch):
+    configure_synthetic_fx_source(monkeypatch)
+    db = AsyncMock()
+    db.scalar.return_value = None
+    prepared = await fx_source_cut.prepare_fx_source_cut(db, signed_event())
+    consumer = FxRateConsumer(
+        bootstrap_servers="synthetic", topic="fx_rates.raw.received", group_id="synthetic"
+    )
+    repository = MagicMock()
+    repository.retain_admitted_cut = AsyncMock(
+        side_effect=fx_source_repository.FxSourcePredecessorPending("a" * 64)
+    )
+    monkeypatch.setattr(
+        "src.services.persistence_service.app.consumers.fx_rate_consumer.FxSourceRepository",
+        lambda _: repository,
+    )
+    with pytest.raises(RetryableConsumerError, match="PREDECESSOR_PENDING"):
+        await consumer.handle_persistence(db, prepared)
+    # A message with the same text but no owning typed distinction is terminal.
+    repository.retain_admitted_cut.side_effect = FxSourceConflict("FX_SOURCE_PREDECESSOR_PENDING")
+    with pytest.raises(FxSourceConflict):
+        await consumer.handle_persistence(db, prepared)
+
+
+@pytest.mark.parametrize(
+    "supplied,expected", [(None, (8, 60)), (0, (8, 60)), (2, (2, 2)), (90, (8, 60))]
+)
+async def test_fx_retry_budget_is_finite_and_never_weakens_tighter_limits(supplied, expected):
+    consumer = FxRateConsumer(
+        bootstrap_servers="synthetic",
+        topic="fx_rates.raw.received",
+        group_id="synthetic",
+        retryable_failure_max_attempts=supplied,
+        retryable_failure_max_elapsed_seconds=supplied,
+    )
+    assert (
+        consumer._retryable_failure_max_attempts,
+        consumer._retryable_failure_max_elapsed_seconds,
+    ) == expected

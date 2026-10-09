@@ -4,12 +4,16 @@ The existing publisher transport is captured and fed to the registered consumer;
 this proves actual PostgreSQL effects, not Kafka delivery or supplier approval.
 """
 
+import asyncio
 import json
+from dataclasses import replace
+from hashlib import sha256
 from unittest.mock import MagicMock
 
 import httpx
 import pytest
 import pytest_asyncio
+from confluent_kafka import TopicPartition
 from portfolio_common.database_models import FxRate, IngestionJob, OutboxEvent
 from portfolio_common.db import get_async_db_session
 from portfolio_common.event_publisher import (
@@ -17,7 +21,9 @@ from portfolio_common.event_publisher import (
     EventPublishStatus,
     get_kafka_event_publisher,
 )
+from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.fx_source_events import FxSourceCutPersistedEvent
+from portfolio_common.kafka_consumer import DlqPublicationBudgetExhausted
 from portfolio_common.outbox_repository import OutboxRepository
 from sqlalchemy import func, select
 
@@ -27,6 +33,7 @@ from src.services.ingestion_service.app.services import ingestion_job_service
 from src.services.ingestion_service.app.services.ingestion_job_service import IngestionJobService
 from src.services.persistence_service.app.consumers import base_consumer
 from src.services.persistence_service.app.consumers.fx_rate_consumer import FxRateConsumer
+from src.services.persistence_service.app.repositories.fx_source_repository import FxSourceConflict
 from src.services.query_control_plane_service.app.domain.market_fx import FxSourceSelection
 from src.services.query_control_plane_service.app.infrastructure.retained_fx_sources import (
     read_retained_fx_rates,
@@ -208,3 +215,117 @@ async def test_registered_refusal_before_job_publish_or_authority(fx_http, monke
     assert not publisher.events and await database.counts() == (0, 0, 0, 0)
     async with database.sessions() as session:
         assert await session.scalar(select(func.count()).select_from(IngestionJob)) == 0
+
+
+def acknowledge_transport(consumer):
+    consumer._consumer = MagicMock()
+    consumer._consumer.commit.side_effect = lambda *, message, asynchronous: [
+        TopicPartition(message.topic(), message.partition(), message.offset() + 1)
+    ]
+
+
+async def test_successor_first_retries_atomic_cut_then_commits_once(fx_http, monkeypatch):
+    database, _, _, consumer = fx_http
+    original = synthetic_revision(scope=database.scope)
+    successor = replace(original, source_revision="2", predecessor_revision_id=original.revision_id)
+    unrelated = synthetic_revision(scope=database.scope, source_record_id="SYNTHETIC_OTHER")
+    event = signed_event(synthetic_cut(unrelated, successor, version="2"))
+    message = transport_message(event.bounded_payload())
+    predecessor = signed_event(synthetic_cut(original))
+    acknowledge_transport(consumer)
+    actual_retry = consumer._handle_retryable_processing_error
+    attempts = []
+
+    async def commit_predecessor_after_rollback(msg, error):
+        assert isinstance(error, RetryableConsumerError)
+        assert original.revision_id in str(error)
+        assert await database.counts() == (0, 0, 0, 0)
+        consumer._consumer.commit.assert_not_called()
+        attempts.append(msg.value())
+        exhausted = await actual_retry(msg, error)
+        assert not exhausted
+        await consumer.process_message(transport_message(predecessor.bounded_payload(), offset=2))
+        return exhausted
+
+    monkeypatch.setattr(
+        consumer, "_handle_retryable_processing_error", commit_predecessor_after_rollback
+    )
+    await consumer._process_polled_message(message, asyncio.get_running_loop())
+    assert attempts == [message.value()]
+    assert await database.counts() == (2, 3, 2, 2)
+    consumer._consumer.commit.assert_called_once_with(message=message, asynchronous=False)
+    await consumer.process_message(transport_message(event.bounded_payload(), offset=3))
+    assert await database.counts() == (2, 3, 2, 2)
+
+
+@pytest.mark.parametrize("confirmed", [True, False])
+async def test_missing_predecessor_exhaustion_keeps_source_safe_evidence(
+    fx_http, monkeypatch, confirmed
+):
+    database, _, _, consumer = fx_http
+    original = synthetic_revision(scope=database.scope)
+    successor = replace(original, source_revision="2", predecessor_revision_id=original.revision_id)
+    event = signed_event(synthetic_cut(successor, version="2"))
+    message = transport_message(event.bounded_payload())
+    acknowledge_transport(consumer)
+    consumer._retryable_failure_max_attempts = 2  # Tighten the existing finite owning budget.
+    consumer._dlq_failure_max_attempts = 1
+    publications = []
+
+    async def confirmed_captured_dlq(msg, error):
+        assert await database.counts() == (0, 0, 0, 0)
+        consumer._consumer.commit.assert_not_called()
+        payload = consumer._build_dlq_payload(
+            msg,
+            error,
+            error_reason_code="retryable_budget_exhausted",
+            correlation_id="synthetic-fx-proof-correlation",
+            traceparent=None,
+        )
+        publications.append(payload)
+        return confirmed  # Captured transport, NOT live Kafka durability evidence.
+
+    monkeypatch.setattr(consumer, "_send_to_dlq_async", confirmed_captured_dlq)
+    if confirmed:
+        await consumer._process_polled_message(message, asyncio.get_running_loop())
+    else:
+        with pytest.raises(DlqPublicationBudgetExhausted, match="stopped without"):
+            await consumer._process_polled_message(message, asyncio.get_running_loop())
+    assert len(publications) == 1
+    payload = publications[0]
+    assert payload["original_payload_sha256"] == sha256(message.value()).hexdigest()
+    safe = json.loads(payload["original_value"])
+    assert safe["cut"] == event.bounded_payload()["cut"]
+    assert safe["authorization"] == "***REDACTED***"
+    assert len(payload["attestation_sha256"]) == 64
+    assert original.revision_id in payload["error_reason"]
+    assert "FX_SOURCE_PREDECESSOR_PENDING" in payload["error_reason"]
+    assert await database.counts() == (0, 0, 0, 0)
+    if confirmed:
+        consumer._consumer.commit.assert_called_once_with(message=message, asynchronous=False)
+    else:
+        consumer._consumer.commit.assert_not_called()
+        assert not consumer._running
+
+
+async def test_retained_stale_predecessor_refuses_without_partial_cut(fx_http):
+    database, _, _, consumer = fx_http
+    original = synthetic_revision(scope=database.scope)
+    for member, version in (
+        (original, "1"),
+        (replace(original, source_revision="2", predecessor_revision_id=original.revision_id), "2"),
+    ):
+        await consumer.process_message(
+            transport_message(
+                signed_event(synthetic_cut(member, version=version)).bounded_payload(),
+                offset=int(version),
+            )
+        )
+    stale = replace(original, source_revision="3", predecessor_revision_id=original.revision_id)
+    with pytest.raises(FxSourceConflict, match="STALE_PREDECESSOR"):
+        await consumer.process_message(
+            transport_message(
+                signed_event(synthetic_cut(stale, version="3")).bounded_payload(), offset=3
+            )
+        )
+    assert await database.counts() == (2, 2, 2, 2)

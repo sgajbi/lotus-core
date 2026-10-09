@@ -1,26 +1,63 @@
 # src/services/persistence_service/app/consumers/fx_rate_consumer.py
+from hashlib import sha256
 from typing import Any, cast
 
-from portfolio_common.config import KAFKA_FX_RATES_PERSISTED_TOPIC
+from portfolio_common.config import (
+    KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS,
+    KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS,
+    KAFKA_FX_RATES_PERSISTED_TOPIC,
+)
 from portfolio_common.database_models import FxRate as DBFxRate
 from portfolio_common.domain.eventing import currency_pair_partition_key
 from portfolio_common.domain.transaction import TransactionPayloadIdentity
 from portfolio_common.event_mapping import outbox_event_payload
 from portfolio_common.events import FxRateEvent, FxRatePersistedEvent
+from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.fx_source_events import FxSourceCutPersistedEvent, FxSourceCutReceivedEvent
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..repositories.fx_rate_repository import FxRateRepository
-from ..repositories.fx_source_repository import FxSourceRepository, RetainedFxCutResult
+from ..repositories.fx_source_repository import (
+    FxSourcePredecessorPending,
+    FxSourceRepository,
+    RetainedFxCutResult,
+)
 from .base_consumer import GenericPersistenceConsumer
 from .fx_source_cut import PreparedFxSourceCut, prepare_fx_source_cut
+
+
+class FxSourcePredecessorRetryable(RetryableConsumerError):
+    """Owning admitted dependency reason; never a blanket source-conflict retry."""
+
+    def __init__(self, reason: str, *, attestation_sha256: str) -> None:
+        super().__init__(reason)
+        self.attestation_sha256 = attestation_sha256
 
 
 class FxRateConsumer(GenericPersistenceConsumer):
     """
     Consumes, validates, and persists FX rate events idempotently.
     """
+
+    def __init__(self, *args, **kwargs) -> None:
+        # The shared zero budgets request restart, not eventual dependency DLQ.
+        # Bound this owning consumer through the existing recovery mechanism;
+        # explicit tighter limits remain tighter and no generic defaults change.
+        for name, configured, ceiling in (
+            ("retryable_failure_max_attempts", KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS, 8),
+            (
+                "retryable_failure_max_elapsed_seconds",
+                KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS,
+                60,
+            ),
+        ):
+            supplied = kwargs.get(name, configured)
+            if supplied is None:
+                supplied = configured
+            if isinstance(supplied, int) and not isinstance(supplied, bool) and supplied >= 0:
+                kwargs[name] = min(supplied, ceiling) if supplied else ceiling
+        super().__init__(*args, **kwargs)
 
     @property
     def event_model(self) -> type[FxRateEvent]:
@@ -54,12 +91,28 @@ class FxRateConsumer(GenericPersistenceConsumer):
     ) -> DBFxRate | RetainedFxCutResult:
         """Persists the FX rate event using its specific repository."""
         if isinstance(event, PreparedFxSourceCut):
-            return await FxSourceRepository(db_session).retain_admitted_cut(
-                event.verified.admission, attestation_sha256=event.verified.attestation_sha256
-            )
+            try:
+                return await FxSourceRepository(db_session).retain_admitted_cut(
+                    event.verified.admission, attestation_sha256=event.verified.attestation_sha256
+                )
+            except FxSourcePredecessorPending as error:
+                # Propagate through the owning transaction so its inbox claim and
+                # every cut/revision/outbox write roll back before bounded retry.
+                raise FxSourcePredecessorRetryable(
+                    str(error), attestation_sha256=event.verified.attestation_sha256
+                ) from error
         if not isinstance(event, FxRateEvent):
             raise TypeError("FX_SOURCE_EVENT_CONTRACT_INVALID")
         return await FxRateRepository(db_session).upsert_fx_rate(event)
+
+    def _build_dlq_payload(self, msg, error: Exception, **kwargs) -> dict[str, object]:
+        payload = cast(dict[str, object], super()._build_dlq_payload(msg, error, **kwargs))
+        if isinstance(error, FxSourcePredecessorRetryable):
+            # Keep shared authorization redaction. Bind the exact original bytes
+            # for operator reconciliation without inventing replay permission.
+            payload["original_payload_sha256"] = sha256(msg.value()).hexdigest()
+            payload["attestation_sha256"] = error.attestation_sha256
+        return payload
 
     def get_outbox_event(self, persisted_object: Any) -> dict[str, Any] | None:
         """Build the source-owned persisted FX observation event."""

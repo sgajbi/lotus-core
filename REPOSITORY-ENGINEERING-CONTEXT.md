@@ -1051,3 +1051,11 @@ approved sources; populated authority cannot be downgraded away. See
 [FX source admission](docs/operations/fx-source-admission.md) and
 [Integrations](wiki/Integrations.md). Synthetic controls, captured transport and direct consumer
 execution do not establish supplier approval, live broker delivery or institutional acceptance.
+
+Canonical cut partitioning does not establish predecessor order. Only an exact missing
+referenced revision is typed pending; retained stale/non-head and authority conflicts remain
+terminal. The FX consumer uses the existing transaction rollback and retry/DLQ machinery,
+with finite ceilings of eight attempts/sixty seconds and tighter configured limits preserved.
+Exhaustion retains the unchanged economic cut and original payload/attestation fingerprints,
+not raw authorization credentials. Offset acknowledgement requires confirmed DLQ delivery;
+operator resubmission needs genuinely permitted fresh authorization for that same cut.

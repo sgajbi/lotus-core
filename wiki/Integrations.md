@@ -55,7 +55,12 @@ history. A party that can rewrite content and both hashes has not established so
 Canonical custody retains append-only revisions and exact sealed membership in the existing
 persistence inbox/outbox transaction. Source observation and Core acceptance time are separate;
 QCP's optional explicit provider/source selector applies both historical boundaries and can pin
-an immutable cut. Conflicting versions, stale predecessors and ambiguous pair/date chains refuse
+an immutable cut. An absent referenced predecessor retries only through the typed owning path,
+after complete transaction rollback, within eight attempts/sixty seconds or tighter configured limits.
+Exhaustion preserves the exact economic cut and payload/attestation fingerprints in confirmed,
+source-safe DLQ evidence; redacted authorization requires genuinely permitted fresh operator admission,
+not raw signed-envelope replay. Retained stale predecessors and conflicting versions remain terminal.
+Conflicting versions, stale predecessors and ambiguous pair/date chains refuse
 instead of rewriting history. Canonical notifications do not mutate the legacy projection or
 create unscoped valuation work. The operational pair/date store remains mutable and unqualified.
 

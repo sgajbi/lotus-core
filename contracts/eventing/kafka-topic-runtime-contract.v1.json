@@ -111,7 +111,7 @@
       "partitions": 4,
       "producer_services": ["ingestion_service"],
       "current_key": "legacy:from_currency|to_currency;fx.source-cut.v1:cut_id",
-      "ordering_scope": "legacy_currency_pair_or_canonical_cut;source_chains_serialized_by_database",
+      "ordering_scope": "legacy_currency_pair_or_canonical_cut;source_chains_serialized_by_database;missing_predecessor_bounded_retry",
       "consumer_groups": ["persistence_group_fx_rates"],
       "consumer_max_in_flight": 4,
       "state_owner": "persistence_service.fx_rates",

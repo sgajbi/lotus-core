@@ -24,6 +24,13 @@ class FxSourceConflict(ValueError):
     """Bounded source conflict; caller facts never overwrite retained authority."""
 
 
+class FxSourcePredecessorPending(FxSourceConflict):
+    """Exact dependency absent under the chain lock, not a retained-head CAS failure."""
+
+    def __init__(self, predecessor_revision_id: str) -> None:
+        super().__init__(f"FX_SOURCE_PREDECESSOR_PENDING:{predecessor_revision_id}")
+
+
 @dataclass(frozen=True)
 class RetainedFxCutResult:
     row: FxRateSourceCut
@@ -160,6 +167,11 @@ class FxSourceRepository:
             raise FxSourceConflict("FX_SOURCE_CHAIN_CONFLICT")
         expected = heads[0].revision_id if heads else None
         if member.predecessor_revision_id != expected:
+            if (
+                member.predecessor_revision_id is not None
+                and await self.db.get(FxRateSourceRevision, member.predecessor_revision_id) is None
+            ):
+                raise FxSourcePredecessorPending(member.predecessor_revision_id)
             raise FxSourceConflict("FX_SOURCE_STALE_PREDECESSOR")
         if heads and (
             heads[0].from_currency != member.from_currency
