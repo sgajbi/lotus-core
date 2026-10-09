@@ -57,6 +57,8 @@ def setup_performance_data(clean_db_module, e2e_api_client: E2EApiClient, poll_d
         {"business_dates": [{"businessDate": day1}, {"businessDate": day2}]},
     )
 
+    e2e_api_client.wait_for_admitted_portfolio(portfolio_id)
+
     # Seed a canonical cash position so valuation/timeseries materialize under
     # the current position-level modeling rules.
     e2e_api_client.ingest(
