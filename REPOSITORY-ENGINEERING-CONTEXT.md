@@ -121,7 +121,8 @@ Original raw-transaction lookup uses the non-unique partial expression index
 `md5(CAST(payload ->> 'transaction_id' AS VARCHAR))` expressions, and outbox row ID.
 Digests only narrow candidates; exact original portfolio and JSON-text comparisons remain
 mandatory collision rechecks. They impose no new public identifier bounds and confer no
-security or financial-source authority. Only the
+security or financial-source authority. Exact and digest comparisons reuse each bound selector
+so complete histories do not double the database-driver argument count. Only the
 code-owned `RawTransaction`/`RawTransactionPersisted` selectors and JSON key are rendered
 as fixed SQLAlchemy `literal_execute` literals; requested transaction IDs and portfolio scopes
 remain bound data. Every matching original remains ordered by row ID, including duplicates and

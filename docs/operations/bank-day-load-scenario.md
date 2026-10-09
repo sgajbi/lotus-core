@@ -412,7 +412,9 @@ are SQL literals; requested IDs and portfolio scopes remain bound parameters. Th
 latest-row selection, deduplication, limit, forced planner path or financial-policy shortcut.
 The bounded digests avoid combining unbounded identifiers in one B-tree tuple. Exact original
 portfolio and JSON-text equality predicates always recheck digest candidates; collisions cannot
-admit another source. MD5 is an index-narrowing aid, not security or financial provenance.
+admit another source. Exact and digest comparisons share bound selector objects, preserving the
+prior driver-argument budget for complete histories. MD5 is an index-narrowing aid, not security
+or financial provenance.
 The existing optional source `FOR SHARE`, canonical currency/fee validation and complete-UOW
 rollback remain enforced.
 
