@@ -1,5 +1,6 @@
 """Actual PostgreSQL source corrections must reach both HTTP content identities."""
 
+import gzip
 import json
 import logging
 from datetime import UTC, date, datetime
@@ -429,6 +430,80 @@ async def test_export_retained_page_evidence_pg_http(
         assert lines[0]["source_evidence"] == evidence
         assert [line["record"] for line in lines[1:]] == expected_rows
     assert len(acquired_pages) == 2
+
+
+@pytest.mark.parametrize("dataset", ["portfolio", "position"])
+async def test_export_correction_intent_preserves_original_pg_http(
+    content_identity_client, dataset
+):
+    """Real durable correction; not supported ingestion or provider qualification."""
+    client, session = content_identity_client
+    endpoint = "/integration/exports/analytics-timeseries/jobs"
+    request = {
+        "dataset_type": f"{dataset}_timeseries",
+        "portfolio_id": PORTFOLIO_ID,
+        f"{dataset}_timeseries_request": {
+            "as_of_date": LAST_DAY.isoformat(),
+            "window": {"start_date": FIRST_DAY.isoformat(), "end_date": LAST_DAY.isoformat()},
+            "reporting_currency": "SGD",
+        },
+    }
+    original = await client.post(endpoint, json=request)
+    assert original.status_code == 200, original.text
+    assert original.json()["status"] == "completed"
+    original_result = await client.get(original.json()["result_endpoint"])
+    assert original_result.status_code == 200
+    retained = original_result.json()
+    await session.execute(
+        update(PositionTimeseries)
+        .where(PositionTimeseries.portfolio_id == PORTFOLIO_ID, PositionTimeseries.date == LAST_DAY)
+        .values(eod_market_value=Decimal("125"))
+    )
+    await session.commit()
+    replay = await client.post(endpoint, json=request)
+    assert replay.json()["job_id"] == original.json()["job_id"]
+    correction = {**request, "refresh_of_job_id": original.json()["job_id"]}
+    refreshed = await client.post(endpoint, json=correction)
+    assert refreshed.status_code == 200, refreshed.text
+    assert refreshed.json()["status"] == "completed"
+    assert refreshed.json()["job_id"] != original.json()["job_id"]
+    retry = await client.post(endpoint, json=correction)
+    assert retry.json()["job_id"] == refreshed.json()["job_id"]
+    result = await client.get(refreshed.json()["result_endpoint"])
+    assert result.status_code == 200
+    corrected = result.json()
+    assert ending_value(retained["data"][-1], dataset) == Decimal("240")
+    assert ending_value(corrected["data"][-1], dataset) == Decimal("250")
+    assert (
+        retained["source_evidence"]["selection_digest"]
+        != corrected["source_evidence"]["selection_digest"]
+    )
+    assert corrected["source_evidence"]["source_cut_status"] == "UNAVAILABLE"
+    assert corrected["source_evidence"]["source_cut_id"] is None
+    await session.rollback()  # End result-read autobegin before fresh-session rehydration.
+    async with AsyncSession(bind=session.bind) as fresh_session:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=export_app(export_service(fresh_session))),
+            base_url="http://testserver",
+        ) as fresh_client:
+            for job, expected in ((original.json(), retained), (refreshed.json(), corrected)):
+                stored = await AnalyticsExportRepository(fresh_session).get_job(job["job_id"])
+                assert stored is not None and stored.result_payload["data"] == expected["data"]
+                for compression in ("none", "gzip"):
+                    response = await fresh_client.get(
+                        job["result_endpoint"],
+                        params={"result_format": "ndjson", "compression": compression},
+                    )
+                    assert response.status_code == 200
+                    # HTTPX decodes Content-Encoding, independently of NDJSON framing.
+                    payload = response.content
+                    if payload.startswith(b"\x1f\x8b"):
+                        payload = gzip.decompress(payload)
+                    lines = [json.loads(line) for line in payload.splitlines()]
+                    assert lines[0]["source_evidence"] == expected["source_evidence"]
+                    assert [line["record"] for line in lines[1:]] == expected["data"]
+                reread = await fresh_client.get(job["result_endpoint"])
+                assert reread.json() == expected
 
 
 def economic_rows(payload, dataset):

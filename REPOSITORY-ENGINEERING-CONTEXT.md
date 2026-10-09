@@ -410,6 +410,14 @@ Export orchestration ends its source-read unit of work before opening the separa
 completion or failure transaction; read autobegin must not leak into lifecycle writes. This
 transaction ownership does not upgrade response-page evidence into an authoritative source cut.
 
+Corrected analytics exports use `refresh_of_job_id` on the existing create contract. The anchor
+must be a completed export of the identical request (including consumer and format); absent
+anchors preserve legacy fingerprint/reuse semantics. Repeating an anchor replays its correction
+intent; a subsequent correction anchors the latest completed result. Original stored results are
+never overwritten. `source_evidence.selection_digest` identifies acquired rows and retained facts,
+excluding serving time, correlation and continuation noise; it is not source-cut/provider authority.
+Older results lack this digest and remain unchanged. No new persistence or runtime boundary exists.
+
 Analytics portfolio and position timeseries content identity is response-page scoped: the
 application hashes actual economic rows plus normalized request basis/product/quality, excluding
 serving timestamps. Decimal scale/signed zero normalize exactly without rounding. Content hash

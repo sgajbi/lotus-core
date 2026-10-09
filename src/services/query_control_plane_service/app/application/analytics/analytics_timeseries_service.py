@@ -57,6 +57,11 @@ from .analytics_cash_flows import (
 )
 from .analytics_cashflow_evidence import load_position_cashflow_rows
 from .analytics_content_identity import analytics_page_runtime_metadata
+from .analytics_export_corrections import (
+    export_request_payload,
+    export_selection_digest,
+    validate_export_refresh,
+)
 from .analytics_export_execution import (
     AnalyticsExportDataset,
     collect_portfolio_timeseries_for_export,
@@ -1221,6 +1226,10 @@ class AnalyticsTimeseriesService:
         request_fingerprint: str,
     ) -> tuple[AnalyticsExportJobRecord, bool]:
         async with self._unit_of_work.transaction():
+            if request.refresh_of_job_id is not None:
+                validate_export_refresh(
+                    await self.export_repo.get_job(request.refresh_of_job_id), request_payload
+                )
             existing = await self.export_repo.get_latest_by_fingerprint(
                 request_fingerprint=request_fingerprint,
                 dataset_type=request.dataset_type,
@@ -1286,7 +1295,7 @@ class AnalyticsTimeseriesService:
     async def create_export_job(
         self, request: AnalyticsExportCreateRequest
     ) -> AnalyticsExportJobResponse:
-        request_payload = request.model_dump(mode="json")
+        request_payload = export_request_payload(request)
         request_fingerprint = self._request_fingerprint(request_payload)
         row, reused = await self._reserve_export_job(
             request=request,
@@ -1417,7 +1426,9 @@ class AnalyticsTimeseriesService:
             request_fingerprint=request_fingerprint,
             lifecycle_mode=self._EXPORT_LIFECYCLE_MODE,
             data_rows=dataset.data_rows,
-            source_evidence=dataset.source_evidence,
+            source_evidence=dataset.source_evidence.model_copy(
+                update={"selection_digest": export_selection_digest(dataset)}
+            ),
         )
         record_analytics_export_result_metrics(
             result_format=request.result_format,

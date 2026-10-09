@@ -310,7 +310,9 @@ async def get_portfolio_analytics_reference(
         "When: Used for large horizon extractions that should be retrieved "
         "through the export job contract rather than direct paged polling.\n"
         "Contract note: current lifecycle_mode is inline_job_execution, so jobs may "
-        "complete within the create request."
+        "complete within the create request. Omit refresh_of_job_id for original request reuse. "
+        "To acquire corrected source for the identical request, supply its completed export ID; "
+        "repeating that anchor reuses the same correction intent, without rewriting the original."
     ),
 )
 async def create_analytics_export_job(

@@ -492,6 +492,9 @@ def test_query_authority_db_contract_executes_tenant_and_service_regressions() -
         "tests/integration/services/ingestion_service/test_fx_source_cut_postgresql.py",
         "tests/integration/services/query_control_plane_service/"
         "test_analytics_content_identity_postgresql.py::test_export_retained_page_evidence_pg_http",
+        "tests/integration/services/query_control_plane_service/"
+        "test_analytics_content_identity_postgresql.py::"
+        "test_export_correction_intent_preserves_original_pg_http",
         "tests/integration/services/ingestion_service/"
         "test_portfolio_source_observation_admission_postgresql.py",
         "tests/integration/services/query_control_plane_service/"

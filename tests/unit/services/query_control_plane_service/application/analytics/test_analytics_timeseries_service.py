@@ -95,7 +95,9 @@ async def test_export_source_transaction_ends_before_lifecycle_transition(reject
             async with session.begin():
                 assert job_id == "aexp_txn"
                 assert result_payload["data"] == [{"amount": "123.45"}]
-                assert result_payload["source_evidence"] == evidence.model_dump(mode="json")
+                retained = dict(result_payload["source_evidence"])
+                assert retained.pop("selection_digest").startswith("sha256:")
+                assert retained == evidence.model_dump(mode="json", exclude={"selection_digest"})
                 assert result_row_count == 1
                 return SimpleNamespace(status="completed")
 
