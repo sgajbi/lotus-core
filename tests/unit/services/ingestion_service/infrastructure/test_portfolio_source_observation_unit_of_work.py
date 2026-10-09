@@ -17,6 +17,9 @@ from portfolio_common.portfolio_source_observation_qualification import (
     ProducerSubmissionGrant,
     UnqualifiedProducerAdmission,
 )
+from portfolio_common.portfolio_source_observation_verification import (
+    ObservationVerificationAuthority,
+)
 
 from src.services.ingestion_service.app.infrastructure import (
     portfolio_source_observation_unit_of_work as module,
@@ -174,3 +177,87 @@ async def test_creation_effect_preserves_append_then_completion_transaction_owne
     other.assert_not_awaited()
     session.commit.assert_not_awaited()
     assert receipt.status == "accepted" and receipt.completed_at is None
+
+
+@pytest.mark.parametrize("mismatch", ["batch-length", "missing-authority"])
+async def test_invalid_verification_batch_never_completes_or_commits_receipt(
+    mismatch, effects, monkeypatch
+):
+    session, factory, writer, completion = effects
+    fact = _fact("cash")
+    receipt = _receipt("cash")
+    authority = ObservationVerificationAuthority()
+    verifications = (None, None) if mismatch == "batch-length" else (None,)
+    store_factory = Mock()
+    monkeypatch.setattr(module, "PortfolioSourceVerificationStore", store_factory)
+    stage = module.PortfolioSourceObservationStager(
+        (fact,), (), verifications, authority if mismatch == "batch-length" else None
+    )
+
+    with pytest.raises(ValueError, match="verification must match the atomic fact batch"):
+        await stage.stage(session, receipt)
+
+    factory.assert_called_once_with(session)
+    writer.append_cash_availability_observations.assert_awaited_once_with(
+        (fact,), (), receipt_job_id=receipt.job_id, received_at=receipt.submitted_at
+    )
+    store_factory.assert_not_called()
+    completion.assert_not_awaited()
+    session.commit.assert_not_awaited()
+    assert receipt.status == "accepted" and receipt.completed_at is None
+
+
+@pytest.mark.parametrize("family", ["cash", "funding"])
+async def test_absent_attestations_preserve_unqualified_batch_and_complete_after_append(
+    family, effects, monkeypatch
+):
+    session, factory, writer, completion = effects
+    first = _fact(family)
+    second = replace(first, envelope=replace(first.envelope, source_record_id="second-record"))
+    facts = (first, second)
+    receipt = _receipt(family, count=2)
+    admissions = tuple(
+        UnqualifiedProducerAdmission(
+            ProducerSubmissionGrant(
+                fact.envelope.tenant_id,
+                fact.envelope.portfolio_id,
+                fact.envelope.producer_id,
+                fact.family,
+            )
+        )
+        for fact in facts
+    )
+    store = SimpleNamespace(append=AsyncMock())
+    store_factory = Mock(return_value=store)
+    monkeypatch.setattr(module, "PortfolioSourceVerificationStore", store_factory)
+    events = []
+    selected = (
+        writer.append_cash_availability_observations
+        if family == "cash"
+        else writer.append_funding_investment_observations
+    )
+
+    async def append(observations, admitted, **kwargs):
+        events.append("facts")
+        assert observations == facts and admitted == admissions
+        assert all(item.qualification == "unqualified" for item in admitted)
+        assert kwargs == {"receipt_job_id": receipt.job_id, "received_at": receipt.submitted_at}
+
+    async def complete(db, row, **kwargs):
+        events.append("complete")
+        assert db is session and row is receipt
+        assert kwargs == {"tenant_id": receipt.tenant_id, "job_id": receipt.job_id}
+        store.append.assert_not_awaited()
+
+    selected.side_effect = append
+    completion.side_effect = complete
+    await module.PortfolioSourceObservationStager(
+        facts, admissions, (None, None), ObservationVerificationAuthority()
+    ).stage(session, receipt)
+
+    assert events == ["facts", "complete"]
+    factory.assert_called_once_with(session)
+    store_factory.assert_called_once_with(session)
+    store.append.assert_not_awaited()
+    completion.assert_awaited_once()
+    session.commit.assert_not_awaited()
