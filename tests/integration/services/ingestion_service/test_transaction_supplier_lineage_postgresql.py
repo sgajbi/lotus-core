@@ -201,6 +201,18 @@ async def test_registered_supplier_lineage_persists_without_changing_booking_fen
                     for record in records
                     if record.get("source_batch_id") == "BATCH-1"
                 }
+                for row in filtered.json()["transactions"]:
+                    supplied = next(
+                        record
+                        for record in records
+                        if record["transaction_id"] == row["transaction_id"]
+                    )
+                    assert row["source_system"] == supplied["source_system"]
+                    assert row["source_record_id"] == supplied["source_record_id"]
+                    assert row["source_batch_id"] == supplied["source_batch_id"]
+                    assert datetime.fromisoformat(row["observed_at"]) == datetime.fromisoformat(
+                        supplied["observed_at"]
+                    )
             bundle = await evidence.get(f"/ingestion/jobs/{job_id}/evidence")
             assert bundle.status_code == 200, bundle.text
             assert bundle.json()["source_lineage"]["batch_lineage_reason"] == reason
@@ -223,6 +235,12 @@ async def test_registered_supplier_lineage_persists_without_changing_booking_fen
                 )
                 assert persisted.source_batch_id == batches[0]
                 assert persisted.source_record_id == records[0].get("source_record_id")
+                assert persisted.source_system == records[0]["source_system"]
+                assert persisted.observed_at == (
+                    datetime.fromisoformat(records[0]["observed_at"])
+                    if records[0].get("observed_at")
+                    else None
+                )
                 assert persisted.quantity == 2
             async with factory() as session:
                 for mutation in (
