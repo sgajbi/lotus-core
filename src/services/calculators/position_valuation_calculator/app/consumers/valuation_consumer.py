@@ -2,10 +2,13 @@
 import json
 import logging
 import re
+from socket import gaierror
 
+from asyncpg import CannotConnectNowError
 from confluent_kafka import Message
 from portfolio_common.event_mapping import EventContractValidationError
 from portfolio_common.events import PortfolioValuationRequiredEvent
+from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.valuation_job_contracts import VALUATION_CLAIM_HEADER
 from pydantic import ValidationError
@@ -107,6 +110,10 @@ class ValuationConsumer(BaseConsumer):
                 exc_info=True,
             )
             raise
+        except (CannotConnectNowError, ConnectionRefusedError, gaierror) as exc:
+            # A failed connection cannot persist a terminal job transition. Keep the
+            # delivery retryable so restoration can settle its existing fenced claim.
+            raise RetryableConsumerError("Valuation database connection unavailable") from exc
         except (DBAPIError, OperationalError) as exc:
             logger.warning(
                 "DB or data availability error for event %s: %s. Retrying...",
