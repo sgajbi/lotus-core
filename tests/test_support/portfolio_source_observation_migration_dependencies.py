@@ -11,6 +11,12 @@ from alembic.operations import Operations
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Connection
 
+from tests.test_support.db_cleanup import (
+    authorize_database_cleanup,
+    require_database_cleanup_authorization,
+)
+from tests.test_support.portfolio_source_test_schema import fact_verification_migration
+
 _MIGRATION = (
     Path(__file__).resolve().parents[2]
     / "alembic/versions/c178b2c3d539_add_portfolio_source_observations.py"
@@ -110,15 +116,42 @@ def observation_schema_semantics(connection: Connection) -> tuple:
 
 def downgrade_observation_schema(connection: Connection) -> dict[str, Any]:
     """Descend through the real isolation/lock/empty-history refusal, never drop FKs."""
+    from tests import conftest as harness
+
+    authorization = authorize_database_cleanup(
+        runtime=harness._test_runtime, engine=connection.engine
+    )
+    require_database_cleanup_authorization(authorization, engine=connection.engine)
+    receipts = fact_verification_migration(connection)
+    # Historical fixtures start at current head: the latest dependent revision
+    # must descend first, with its real empty-only downgrade guard intact.
+    receipts["downgrade"]()
     migration = runpy.run_path(str(_MIGRATION))
     operations = Operations(MigrationContext.configure(connection))
     migration["upgrade"].__globals__["op"] = operations
     migration["downgrade"].__globals__["op"] = operations
     migration["downgrade"]()
+    migration["_test_observation_upgrade"] = migration["upgrade"]
+    migration["_test_receipt_upgrade"] = receipts["upgrade"]
+    migration["_test_cleanup_authorization"] = authorization
+
+    def restore_dependencies() -> None:
+        # Adapters restoring in place retain their existing module-style API.
+        restore_observation_schema(migration, connection)
+
+    migration["upgrade"] = restore_dependencies
     return migration
 
 
 def restore_observation_schema(migration: dict[str, Any], connection: Connection) -> None:
     """Restore the real latest revision after its historical dependencies are upgraded."""
-    migration["upgrade"].__globals__["op"] = Operations(MigrationContext.configure(connection))
-    migration["upgrade"]()
+    require_database_cleanup_authorization(
+        migration["_test_cleanup_authorization"], engine=connection.engine
+    )
+    # Some lock/cutover proofs commit the historical state, then restore through
+    # a new connection to the SAME currently authorized owned runtime.
+    operations = Operations(MigrationContext.configure(connection))
+    for key in ("_test_observation_upgrade", "_test_receipt_upgrade"):
+        upgrade = migration[key]
+        upgrade.__globals__["op"] = operations
+        upgrade()
