@@ -4,11 +4,11 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal, Self
 
-from portfolio_common.domain.calculation_lineage import require_sha256_digest
-from portfolio_common.domain.portfolio_source_observations import require_observation_identity
-from portfolio_common.domain.portfolio_source_verification import (
+from portfolio_common.api_contract.portfolio_source_verification import (
     SignedObservationVerificationReceipt,
 )
+from portfolio_common.domain.calculation_lineage import require_sha256_digest
+from portfolio_common.domain.portfolio_source_observations import require_observation_identity
 from portfolio_common.source_data_product_metadata import (
     SourceDataProductRuntimeMetadata,
     product_name_field,

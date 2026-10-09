@@ -4,10 +4,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from portfolio_common.domain.portfolio_source_observations import PortfolioSourceObservation
-from portfolio_common.domain.portfolio_source_verification import (
+from portfolio_common.api_contract.portfolio_source_verification import (
     SignedObservationVerificationReceipt,
 )
+from portfolio_common.domain.portfolio_source_observations import PortfolioSourceObservation
 
 from ..contracts.portfolio_source_observations import PortfolioSourceObservationsRequest
 

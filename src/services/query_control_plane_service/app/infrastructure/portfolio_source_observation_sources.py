@@ -1,6 +1,6 @@
 """One PostgreSQL statement snapshot; original pins never join mutable heads."""
 
-from portfolio_common.domain.portfolio_source_verification import (
+from portfolio_common.api_contract.portfolio_source_verification import (
     SignedObservationVerificationReceipt,
 )
 from portfolio_common.portfolio_source_observation_models import (

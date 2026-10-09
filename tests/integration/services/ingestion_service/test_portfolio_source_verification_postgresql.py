@@ -10,13 +10,13 @@ from pathlib import Path
 import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from portfolio_common.domain.portfolio_source_observations import ObservationConflict
-from portfolio_common.domain.portfolio_source_verification import (
+from portfolio_common.api_contract.portfolio_source_verification import (
     ObservationVerificationClaims,
     ObservationVerificationScope,
     ObservationVerificationSubject,
     SignedObservationVerificationReceipt,
 )
+from portfolio_common.domain.portfolio_source_observations import ObservationConflict
 from portfolio_common.portfolio_source_observation_qualification import (
     ProducerSubmissionGrant,
     UnqualifiedProducerAdmission,

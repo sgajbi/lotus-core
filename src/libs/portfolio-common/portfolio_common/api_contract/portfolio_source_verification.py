@@ -5,8 +5,8 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
-from .calculation_lineage import require_sha256_digest
-from .portfolio_source_observations import (
+from ..domain.calculation_lineage import require_sha256_digest
+from ..domain.portfolio_source_observations import (
     CashAvailabilityObservation,
     ObservationEnvelope,
     ObservationFamily,

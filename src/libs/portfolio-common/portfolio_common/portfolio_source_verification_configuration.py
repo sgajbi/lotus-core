@@ -2,7 +2,7 @@
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, TypeAdapter
 
-from .domain.portfolio_source_verification import ObservationVerificationScope
+from .api_contract.portfolio_source_verification import ObservationVerificationScope
 from .portfolio_source_observation_verification import (
     ObservationCutRegistration,
     ObservationReceiptVerifier,
