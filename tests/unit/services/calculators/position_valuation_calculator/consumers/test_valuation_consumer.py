@@ -1,10 +1,13 @@
 # tests/unit/services/calculators/position-valuation-calculator/consumers/test_valuation_consumer.py
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from socket import gaierror
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from asyncpg import CannotConnectNowError, InvalidPasswordError
 from portfolio_common.database_models import (
     DailyPositionSnapshot,
     FxRate,
@@ -30,6 +33,7 @@ from portfolio_common.domain.valuation import (
 from portfolio_common.events import (
     PortfolioValuationRequiredEvent,
 )
+from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
@@ -59,6 +63,89 @@ from tests.test_support.tenant import TEST_TENANT_ID
 from tests.unit.test_support.async_session_iter import make_single_session_getter
 
 pytestmark = pytest.mark.asyncio
+
+
+@pytest.mark.parametrize(
+    "connection_error",
+    [CannotConnectNowError("database is shutting down"), ConnectionRefusedError(), gaierror(-3)],
+    ids=["postgres-shutdown", "connection-refused", "dns-unavailable"],
+)
+async def test_connection_establishment_failure_preserves_claim_for_redelivery(
+    consumer, mock_kafka_message, connection_error
+):
+    processor = AsyncMock()
+    processor.process_valid_event.side_effect = connection_error
+    consumer._valuation_processor = processor
+
+    with pytest.raises(RetryableConsumerError) as caught:
+        await consumer.process_message(mock_kafka_message)
+
+    assert caught.value.__cause__ is connection_error
+    processor.process_valid_event.assert_awaited_once()
+    processor.mark_failed_after_unexpected_error.assert_not_awaited()
+    consumer._send_to_dlq_async.assert_not_awaited()
+    original_call = processor.process_valid_event.await_args
+    assert original_call.kwargs["claim_token"] == "a" * 32
+
+    processor.process_valid_event.side_effect = None
+    await consumer.process_message(mock_kafka_message)
+    assert processor.process_valid_event.await_count == 2
+    assert processor.process_valid_event.await_args == original_call
+    processor.mark_failed_after_unexpected_error.assert_not_awaited()
+
+
+async def test_connection_failure_uses_shared_uncommitted_redelivery_boundary(
+    consumer, mock_kafka_message
+):
+    processor = AsyncMock()
+    processor.process_valid_event.side_effect = ConnectionRefusedError()
+    consumer._valuation_processor = processor
+    consumer._retryable_failure_max_attempts = 0
+    consumer._retryable_failure_max_elapsed_seconds = 0
+    consumer._running = True
+    consumer._commit_after_successful_processing = AsyncMock(return_value=True)
+    consumer._handle_terminal_processing_error = AsyncMock()
+
+    await consumer._process_polled_message(mock_kafka_message, asyncio.get_running_loop())
+
+    assert consumer._running is False
+    consumer._commit_after_successful_processing.assert_not_awaited()
+    consumer._handle_terminal_processing_error.assert_not_awaited()
+    consumer._send_to_dlq_async.assert_not_awaited()
+    processor.mark_failed_after_unexpected_error.assert_not_awaited()
+
+    processor.process_valid_event.side_effect = None
+    consumer._running = True
+    await consumer._process_polled_message(mock_kafka_message, asyncio.get_running_loop())
+
+    consumer._commit_after_successful_processing.assert_awaited_once()
+    assert processor.process_valid_event.await_count == 2
+    assert (
+        processor.process_valid_event.await_args_list[0]
+        == processor.process_valid_event.await_args_list[1]
+    )
+    processor.mark_failed_after_unexpected_error.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "terminal_error",
+    [
+        ValueError("invalid financial input"),
+        PermissionError("permission denied"),
+        InvalidPasswordError("invalid credentials"),
+    ],
+)
+async def test_non_connection_errors_remain_terminal(consumer, mock_kafka_message, terminal_error):
+    processor = AsyncMock()
+    processor.process_valid_event.side_effect = terminal_error
+    consumer._valuation_processor = processor
+
+    with pytest.raises(type(terminal_error)) as caught:
+        await consumer.process_message(mock_kafka_message)
+
+    assert caught.value is terminal_error
+    processor.mark_failed_after_unexpected_error.assert_awaited_once()
+    assert processor.mark_failed_after_unexpected_error.await_args.kwargs["claim_token"] == "a" * 32
 
 
 @pytest.fixture

@@ -112,6 +112,20 @@ consumer integration.
 
 ## Operational hints
 
+### Database outage recovery
+
+PostgreSQL connection-not-ready, connection refusal, and DNS resolution failures remain retryable
+deliveries rather than terminal FAILED job writes. Authentication, permission, and financial
+validation errors retain terminal handling. Recovery preserves the event and fenced claim; it does
+not relax leases, retry budgets, or settlement limits.
+
+Database health is not settlement evidence. Check the exact durable job, snapshot, processed-event
+receipt, and staged outbox record. With default disabled retry budgets, broker redelivery requires
+consumer restart or rebalance. Outbox staging is not publication, and controlled application
+redelivery does not certify broker recovery. Follow the
+[valuation database outage recovery runbook](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/runbook.md#valuation-database-outage-recovery)
+for the operational boundary and evidence to retain.
+
 Check this service when:
 
 - positions exist but `daily_position_snapshots` are stale or missing

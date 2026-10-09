@@ -599,6 +599,27 @@ only when source lag returns to baseline, the valid position and portfolio rows 
 once, durable queues close, and timeseries reconciliation remains clean. See
 [Portfolio Derived-State Poison-Message Recovery](./recovery/portfolio-derived-state-poison-message.md).
 
+## Valuation Database Outage Recovery
+
+The valuation consumer classifies PostgreSQL connection-not-ready (`CannotConnectNowError`),
+connection refusal (`ConnectionRefusedError`), and DNS resolution (`socket.gaierror`) as retryable
+delivery failures. It does not attempt to write a terminal FAILED job transition for these errors.
+Authentication, permission, and financial-validation failures retain their terminal handling; do
+not treat every database or operating-system exception as transient.
+
+Restore database availability and follow the shared consumer's existing retry disposition below.
+With the default disabled budgets, restart or rebalance is required for broker redelivery; healthy
+database and service checks alone do not prove that the durable valuation work has settled. Keep
+the original event and fenced claim headers intact. Do not delete jobs, shorten claim leases, or
+increase settlement timeouts to hide outstanding work. An expired or replaced claim remains subject
+to the existing repository fencing and scheduler recovery rules.
+
+Verify the exact portfolio, security, valuation date, epoch, job ID, claim token, owner, and
+database-clock lease against the recovery evidence. Completion requires the durable job outcome,
+corresponding `daily_position_snapshots`, processed-event receipt, and staged outbox record—not
+merely a successful connection. Outbox staging is not publication, and controlled application
+redelivery is not evidence of broker offset, DLQ, or automatic restart recovery.
+
 ## Kafka Consumer Retryable Failure Budgets
 
 With a positive attempt or elapsed budget, `RetryableConsumerError` keeps the offset uncommitted and
