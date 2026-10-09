@@ -618,9 +618,9 @@ def test_raw_authority_preserves_every_zero_presence_with_canonical_validation(
     projected = qualify_transaction_fee_source(canonical, [], [raw], derived_financial=derived)
 
     assert projected == fields | {"trade_fee": original.trade_fee}
-    assert validate.call_count == (33 if derived else 3)
-    assert fingerprint.call_count == (33 if derived else 3)
-    assert hypotheses.call_count == int(derived)
+    assert validate.call_count == 3
+    assert fingerprint.call_count == 3
+    assert hypotheses.call_count == 0
 
 
 @pytest.mark.parametrize("derived", [False, True])
@@ -637,7 +637,7 @@ def test_all_matching_raw_rows_preserve_fee_projection(monkeypatch, shape, deriv
     assert projected == {
         name: getattr(original, name) for name in TRANSACTION_FEE_COMPONENT_FIELDS
     } | {"trade_fee": original.trade_fee}
-    assert hypotheses.call_count == int(derived)
+    assert hypotheses.call_count == 0
 
 
 @pytest.mark.parametrize("derived", [False, True])

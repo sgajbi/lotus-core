@@ -173,7 +173,9 @@ def _qualify_original_fee_source(
         payload
         | {name: positive.get(name, Decimal(0)) for name in TRANSACTION_FEE_COMPONENT_FIELDS},
     ]
-    if derived_financial:
+    # Retained raw facts decide exact presence; keep canonical validation and every raw
+    # conflict check, but enumerate historical hypotheses only when raw is absent.
+    if derived_financial and not raw_sources:
         candidates = [
             payload | fees
             for fees in _fee_presence_hypotheses(positive, canonical.get("trade_fee"))
