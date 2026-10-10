@@ -7,6 +7,7 @@ from subprocess import CompletedProcess
 
 import pytest
 
+from tests.e2e.test_booked_fx_cash_acceptance import admit_scenario_instruments
 from tests.test_support.booked_fx_cash_oracle import (
     FIRST_DAY,
     LAST_DAY,
@@ -19,7 +20,8 @@ from tests.test_support.booked_fx_cash_restart import restart_owned_query
 from tests.test_support.booked_fx_cash_scenario import seed_scenario
 
 
-def test_synthetic_http_scenario_respects_registered_ingestion_schemas():
+@pytest.mark.parametrize("admission_mode", ["valid", "omitted", "unsettled"])
+def test_synthetic_http_scenario_respects_registered_ingestion_schemas(admission_mode):
     """DTO validation only: never HTTP, worker execution or runtime acceptance."""
     models = {
         "/ingest/portfolios": ("portfolio_dto", "PortfolioIngestionRequest"),
@@ -49,10 +51,22 @@ def test_synthetic_http_scenario_respects_registered_ingestion_schemas():
     class SchemaOnlyClient:
         tenant_id = "tenant_e2e"
 
+        def __init__(self):
+            self.portfolio_ready = False
+            self.admitted, self.settled = set(), set()
+
         def ingest(self, endpoint, body):
             if endpoint == "/ingest/portfolios":
                 for row in body["portfolios"]:
                     row["tenant_id"] = self.tenant_id  # Existing E2E client admission behavior.
+            elif endpoint == "/ingest/instruments":
+                assert self.portfolio_ready
+                self.admitted = {row["security_id"] for row in body["instruments"]}
+            else:
+                assert self.portfolio_ready and len(self.admitted) == 2
+                assert (
+                    self.settled == self.admitted
+                )  # Facts/transactions cannot overtake references.
             module, model = models[endpoint]
             getattr(import_module(f"src.services.ingestion_service.app.DTOs.{module}"), model)(
                 **body
@@ -67,14 +81,33 @@ def test_synthetic_http_scenario_respects_registered_ingestion_schemas():
 
         def wait_for_admitted_portfolio(self, portfolio):
             assert portfolio.startswith("FX1158_P_")
+            assert calls == ["/ingest/portfolios"]
+            self.portfolio_ready = True
 
         def poll_for_data(self, url, predicate):
+            assert url.startswith("/instruments/?security_id=")
             security = url.split("security_id=", 1)[1]
+            assert security in self.admitted
+            assert not predicate({"instruments": []})
+            assert not predicate({"instruments": [{"security_id": "FOREIGN"}]})
             assert predicate({"instruments": [{"security_id": security}]})
+            if admission_mode != "unsettled":
+                self.settled.add(security)
 
-    scenario = seed_scenario(SchemaOnlyClient(), "DTO_ONLY")
+    admission = (lambda *_: None) if admission_mode == "omitted" else admit_scenario_instruments
+    if admission_mode != "valid":
+        with pytest.raises(AssertionError):
+            seed_scenario(SchemaOnlyClient(), "DTO_ONLY", admit_instruments=admission)
+        assert "/ingest/transactions" not in calls
+        return
+    scenario = seed_scenario(SchemaOnlyClient(), "DTO_ONLY", admit_instruments=admission)
     assert set(calls) == set(models)
     assert scenario["transaction"]["transaction_fx_rate"] == "2"
+
+
+def test_scenario_requires_explicit_instrument_admission_owner():
+    with pytest.raises(TypeError, match="admit_instruments"):
+        seed_scenario(object(), "NO_OWNER")
 
 
 SCOPE = {"portfolio": "P", "equity": "EQ", "cash": "CASH"}

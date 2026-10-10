@@ -6,7 +6,7 @@ import json
 from tests.test_support.booked_fx_cash_oracle import FIRST_DAY, LAST_DAY
 
 
-def seed_scenario(client, suffix):
+def seed_scenario(client, suffix, *, admit_instruments):
     portfolio, equity, cash = (f"FX1158_{name}_{suffix}" for name in ("P", "EQ", "CASH"))
     book = f"SYNTHETIC_FX_BOOK_{suffix}"
     client.ingest(
@@ -30,29 +30,7 @@ def seed_scenario(client, suffix):
         },
     )
     client.wait_for_admitted_portfolio(portfolio)
-    client.ingest(
-        "/ingest/instruments",
-        {
-            "instruments": [
-                {
-                    "security_id": security,
-                    "name": f"Synthetic {kind}",
-                    "isin": security,
-                    "currency": "XTS",
-                    "product_type": kind,
-                    "asset_class": kind,
-                }
-                for security, kind in ((equity, "Equity"), (cash, "Cash"))
-            ]
-        },
-    )
-    for security in (equity, cash):
-        client.poll_for_data(
-            f"/instruments?security_id={security}",
-            lambda body, expected=security: any(
-                row["security_id"] == expected for row in body.get("instruments", [])
-            ),
-        )
+    admit_instruments(client, equity, cash)
     client.ingest(
         "/ingest/reference/cash-accounts",
         {
