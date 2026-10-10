@@ -173,6 +173,10 @@ uses settlement date and preserves source-booked FX2 even though that date's val
 The source commands, actual settlement builder and adverse literal-oracle controls have focused
 unit coverage. Actual HTTP/worker/PostgreSQL execution of these added stages requires fresh
 hosted evidence for this source revision; collection or older fixture execution is insufficient.
+After final funded replay, the scenario restarts only its already-owned query process, then uses
+a fresh HTTP client to require identical final holdings/content hash and all11 linked source/cash
+rows, including SELL realized48 XTS/96 USD. It retains process-generation and HTTP response
+receipts. This is query-process durability evidence, not a PostgreSQL restart claim.
 
 An independent USD-base/USD-instrument/USD-cash control uses booked identity1 and admits no FX
 rate rows. After funding2000 USD and BUY10 at100 USD, both bases are1000 USD; day-two equity
