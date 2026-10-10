@@ -104,7 +104,7 @@ repeatability.
 | Simulation state | `simulation_sessions`, `simulation_changes` | Present; must remain snapshot/simulation, not advisory decisioning |
 | Position state | `position_history`, `daily_position_snapshots`, `position_lot_state`, `accrued_income_offset_state`, `position_state` | Strong baseline; reconstruction and restatement semantics need hardening |
 | Market and FX | `market_prices`, `fx_rates` | Present; observed/source timestamp semantics need alignment with RFC-0083 |
-| Instrument and reference | `instruments`, `classification_taxonomy`, `instrument_lookthrough_components`, `cash_account_masters` | Present; needs source-product packaging and supportability metadata |
+| Instrument and reference | `instruments`, `classification_taxonomy`, `instrument_classification_cuts`, `instrument_lookthrough_components`, `cash_account_masters` | Historical security-to-group assignment cuts retain original and correction provenance; broader reference packaging and source qualification remain partial |
 | Benchmark and series | `portfolio_benchmark_assignments`, `benchmark_definitions`, `index_definitions`, `benchmark_composition_series`, `index_price_series`, `index_return_series`, `benchmark_return_series`, `risk_free_series` | Present; needs stable source-data product rules |
 | Transactions and cashflows | `transactions`, `transaction_costs`, `cashflows` | Strong baseline; booking/correction/restatement command model is the main gap |
 | Time series | `position_timeseries`, `portfolio_timeseries` | Present; analytics-input products need uniform provenance and completeness semantics |
@@ -147,7 +147,7 @@ date parameters should be reviewed before they become public contract precedent.
 | `PortfolioTimeseriesInput` | `/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries`, `portfolio_timeseries` | Strong baseline | Normalize product metadata and export semantics |
 | `PortfolioAnalyticsReference` | `/integration/portfolios/{portfolio_id}/analytics/reference`, portfolio reference state | Strong baseline | Keep aligned with analytics input product identity, freshness, and evidence metadata |
 | `MarketDataWindow` | prices, FX, market/reference integration routes | Partial | Separate operational raw reads from analytics-safe windows |
-| `InstrumentReferenceBundle` | instruments, enrichment bulk, taxonomy, lookthrough | Partial | Package reference primitives as a stable bundle contract |
+| `InstrumentReferenceBundle` | instruments, enrichment bulk, taxonomy, retained historical classification cuts, lookthrough | Partial | Exact historical assignment selection and append-only correction custody are implemented; qualify source producers and joined source-cut compatibility before downstream use, and complete remaining reference bundle coverage |
 | `BenchmarkAssignment` | benchmark assignment route and table | Strong baseline | Add product-level provenance and version/deprecation rules |
 | `BenchmarkConstituentWindow` | benchmark composition window route and table | Strong baseline | Add completeness and observed/ingested timestamp semantics |
 | `IndexSeriesWindow` | index price and return series routes and tables | Strong baseline | Standardize freshness, paging, and source lineage |

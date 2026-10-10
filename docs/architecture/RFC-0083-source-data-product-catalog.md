@@ -75,6 +75,22 @@ evidence reference rather than omitting the concept.
 | `DataQualityCoverageReport` | Control-plane and policy | `query_control_plane_service` | performance, risk, gateway, manage | `/integration/benchmarks/{benchmark_id}/coverage`, `/integration/reference/risk-free-series/coverage` |
 | `IngestionEvidenceBundle` | Control-plane and policy | `event_replay_service` | gateway, manage, report | `/ingestion/jobs/{job_id}/evidence` |
 
+## Historical Instrument Classification Custody
+
+`InstrumentReferenceBundle:v1` includes retained security-to-group assignment cuts through the
+existing classification-taxonomy ingestion and integration routes. Historical selection requires
+the exact producer, classification set, source record/version, cut/content pins, business interval,
+source and Core knowledge cutoffs, and expected security/group universe. Original cuts remain
+selectable after separately admitted corrections; current instrument labels never fill historical
+gaps. Missing coverage is explicit `PARTIAL`, and invalid or mismatched custody is `UNAVAILABLE`.
+
+This is reference custody, not a qualified joined analytics input. Retained cuts remain
+`RETAINED_UNQUALIFIED`; compatibility and freshness remain unavailable, including when declared
+security coverage is complete. Producer qualification, compatible joins with other source cuts,
+and remaining reference bundle coverage keep issue #458 open. See the
+[historical classification contract](../integration/historical-instrument-classifications.md)
+for interval, revision, replay, correction, limits, and validation semantics.
+
 ## External Treasury Source Products
 
 RFC39-WTBD-008 now has a governed source-product boundary for bank-owned treasury data.
