@@ -165,6 +165,9 @@ SUITES: dict[str, list[str]] = {
     ],
     "critical-lifecycle-db": ["tests/integration"],
     "query-authority-db-contract": [
+        "tests/integration/services/ingestion_service/"
+        "test_model_portfolio_effective_windows_postgresql.py",
+        "tests/integration/test_model_portfolio_effective_window_migration.py",
         "tests/integration/services/query_control_plane_service/"
         "test_benchmark_market_currency_postgresql.py",
         "tests/integration/services/query_control_plane_service/"

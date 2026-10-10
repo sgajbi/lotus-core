@@ -51,6 +51,10 @@ from .financial_reconciliation_schema import (
     financial_reconciliation_run_table_args,
 )
 from .ingestion_job_schema import IngestionJobColumns, ingestion_job_table_args
+from .model_portfolio_schema import (
+    ModelPortfolioDefinition,  # noqa: F401
+    model_portfolio_target_window_constraint,
+)
 from .outbox_event_schema import outbox_event_table_args
 from .processed_event_schema import processed_event_table_args
 from .reference_classification_schema import (
@@ -1429,55 +1433,6 @@ class InstrumentEligibilityProfile(Base):
     )
 
 
-class ModelPortfolioDefinition(Base):
-    __tablename__ = "model_portfolio_definitions"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    model_portfolio_id = Column(String, nullable=False, index=True)
-    model_portfolio_version = Column(String, nullable=False, index=True)
-    display_name = Column(String, nullable=False)
-    base_currency = Column(String(3), nullable=False)
-    risk_profile = Column(String, nullable=False)
-    mandate_type = Column(String, nullable=False)
-    rebalance_frequency = Column(String, nullable=True)
-    approval_status = Column(String, nullable=False, server_default="approved", index=True)
-    approved_at = Column(DateTime(timezone=True), nullable=True)
-    effective_from = Column(Date, nullable=False, index=True)
-    effective_to = Column(Date, nullable=True, index=True)
-    source_system = Column(String, nullable=True)
-    source_record_id = Column(String, nullable=True)
-    observed_at = Column(DateTime(timezone=True), nullable=True)
-    quality_status = Column(String, nullable=False, server_default="accepted", index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
-    )
-
-    __table_args__ = (
-        UniqueConstraint(
-            "model_portfolio_id",
-            "model_portfolio_version",
-            "effective_from",
-            name="_model_portfolio_definition_version_effective_uc",
-        ),
-        Index(
-            "ix_model_portfolio_definition_effective_window",
-            "model_portfolio_id",
-            "effective_from",
-            "effective_to",
-        ),
-        Index(
-            "ix_model_port_def_approved_eff_order",
-            "model_portfolio_id",
-            effective_from.desc(),
-            "effective_to",
-            approved_at.desc(),
-            updated_at.desc(),
-            postgresql_where=text("approval_status = 'approved'"),
-        ),
-    )
-
-
 class ModelPortfolioTarget(Base):
     __tablename__ = "model_portfolio_targets"
 
@@ -1501,6 +1456,7 @@ class ModelPortfolioTarget(Base):
     )
 
     __table_args__ = (
+        model_portfolio_target_window_constraint(),
         _finite_numeric_check_constraint(
             "ck_model_portfolio_weights_finite",
             "target_weight",

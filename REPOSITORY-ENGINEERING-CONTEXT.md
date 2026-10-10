@@ -10,6 +10,22 @@ and this file first. Then use the Platform
 [skill routing map](https://github.com/sgajbi/lotus-platform/blob/main/context/LOTUS-SKILL-ROUTING-MAP.md)
 and the task routes below to load only relevant specialist context.
 
+## Imported model effective-window practice
+
+Both imported model definitions and targets use inclusive date windows: equal dates are valid,
+null ends remain open, and historical/future observations are admitted without wall-clock checks.
+Reuse the ingestion `validate_effective_window` taxonomy; reversed windows return HTTP 422
+`INVALID_EFFECTIVE_WINDOW` with `effective_to` context before dispatch. The owning classes live
+in `portfolio_common/database_models.py` with the definition and target window constraint owned by
+`portfolio_common/model_portfolio_schema.py`; public model imports and the numeric inventory remain intact.
+Migration `c184b2c3d545` locks both tables and refuses retained invalid rows without rewriting
+source evidence. See [the model-window contract and recovery runbook](docs/integration/model-portfolio-effective-windows.md).
+The native query-authority DB lane owns registered HTTP, fresh-session selection and actual
+Alembic refusal/upgrade proof. Job/replay doubles are explicit; model approval and tenant authority
+remain separate controls.
+When changing a native test lane's membership, synchronize its exact-list regression in
+`tests/unit/services/query_service/test_test_manifest.py` and run that full test file before push.
+
 ## Operational market contract guard practice
 
 From the repository root, `make endpoint-consolidation-watchlist-guard` rejects `Analytics Input`

@@ -7,7 +7,7 @@ from sqlalchemy import and_, func, or_, select
 
 
 def effective_on(effective_from: Any, effective_to: Any, as_of_date: date) -> Any:
-    """Match a closed-open nullable effective window on a business date."""
+    """Match an inclusive effective window, with a nullable unbounded end date."""
 
     return and_(
         effective_from <= as_of_date,

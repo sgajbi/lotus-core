@@ -37,6 +37,17 @@ or downstream financial processing. Use the contract-specific evidence below whe
 - replay and operations control-plane contracts from `event_replay_service`
 - reconciliation control execution contracts
 
+## Imported Model Effective Windows
+
+Imported model definitions and targets reject reversed effective dates with HTTP 422 before job
+creation or source writes. Both date boundaries are inclusive: equal-day, open-ended, historical
+and future windows remain supported. Migration preflight refuses retained invalid rows without
+deleting or rewriting their evidence. Operators must preserve the original evidence and obtain
+source-owner disposition before retrying deployment. This date invariant does not grant model
+approval or certify tenant isolation. Use the
+[model-window contract and recovery runbook](https://github.com/sgajbi/lotus-core/blob/main/docs/integration/model-portfolio-effective-windows.md)
+for examples, named constraints, rollback and native PostgreSQL proof boundaries.
+
 ## Operational FX Intake And Persisted Evidence
 
 Every benchmark market-series request requires a definition effective on its requested as-of date,

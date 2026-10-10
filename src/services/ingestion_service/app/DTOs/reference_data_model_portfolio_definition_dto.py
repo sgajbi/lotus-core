@@ -6,7 +6,7 @@ from typing import Literal, cast
 from portfolio_common.domain.currency import normalize_currency_code
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .ingestion_validation_errors import validate_unique_records
+from .ingestion_validation_errors import validate_effective_window, validate_unique_records
 from .reference_data_source_observation_dto import SourceObservationLineage
 
 
@@ -66,14 +66,24 @@ class ModelPortfolioDefinitionRecord(SourceObservationLineage):
     )
     effective_to: date | None = Field(
         None,
-        description="Model version effective end date, null when open-ended.",
-        examples=["2026-12-31"],
+        description=(
+            "Inclusive model version end date, null when open-ended. Must be on or after "
+            "effective_from; equal dates form a valid one-day window."
+        ),
+        examples=["2026-12-31", "2026-03-25", None],
     )
 
     @field_validator("base_currency", mode="before")
     @classmethod
     def _normalize_base_currency(cls, value: object) -> str:
         return cast(str, normalize_currency_code(value))
+
+    @model_validator(mode="after")
+    def validate_window(self) -> "ModelPortfolioDefinitionRecord":
+        validate_effective_window(
+            effective_from=self.effective_from, effective_to=self.effective_to
+        )
+        return self
 
     model_config = ConfigDict()
 
