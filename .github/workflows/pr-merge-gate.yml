@@ -282,8 +282,8 @@ jobs:
       - name: Classify changed source
         id: classify
         run: make change-classification
-      - name: Install CI tooling
-        run: make install-ci-tooling
+      - name: Install CI application and tooling dependencies
+        run: make install-ci
       - name: Restore Docker build cache
         uses: actions/cache@v5
         with:

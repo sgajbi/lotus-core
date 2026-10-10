@@ -163,15 +163,29 @@ def test_committed_workflow_contract_has_all_required_owners(workflows):
     contract.validate_workflows(*workflows)
 
 
-@pytest.mark.parametrize("damage", [False, True])
+@pytest.mark.parametrize(
+    "damage",
+    [None, "skip-job", "tooling-only", "conditional-install", "late-install", "missing-install"],
+)
 def test_guard_entrypoint_preserves_valid_and_bad_native_exit(
     workflows, tmp_path, monkeypatch, damage
 ):
     directory = tmp_path / ".github/workflows"
     directory.mkdir(parents=True)
     pr, main, feature = copy.deepcopy(workflows)
-    if damage:
+    if damage == "skip-job":
         pr["jobs"]["coverage-gate"]["if"] = "false"
+    elif damage:
+        steps = pr["jobs"]["docker-build"]["steps"]
+        installer = next(step for step in steps if step.get("run") == "make install-ci")
+        if damage == "tooling-only":
+            installer["run"] = "make install-ci-tooling"
+        elif damage == "conditional-install":
+            installer["if"] = "false"
+        else:
+            steps.remove(installer)
+            if damage == "late-install":
+                steps.append(installer)
     for name, workflow in zip(
         ("pr-merge-gate.yml", "main-releasability.yml", "feature-lane.yml"),
         (pr, main, feature),
@@ -179,7 +193,7 @@ def test_guard_entrypoint_preserves_valid_and_bad_native_exit(
     ):
         (directory / name).write_text(yaml.safe_dump(workflow), encoding="utf-8")
     monkeypatch.setattr(contract, "ROOT", tmp_path)
-    assert contract.main() == int(damage)
+    assert contract.main() == int(damage is not None)
 
 
 @pytest.mark.parametrize(
