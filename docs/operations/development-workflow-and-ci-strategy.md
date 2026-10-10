@@ -101,6 +101,11 @@ The static security/dependency checks and Quality Baseline governance jobs remai
 selected commands and native exits. Conditional downloads only omit artifacts that this same
 classification intentionally did not create; no required enforcement step is conditional.
 
+Every selecting PR job installs application and tooling dependencies with `make install-ci`
+before enforcement, including the Docker-build job. The documentation pack imports application
+schemas for its API vocabulary and route-catalog checks; tooling-only installation cannot prove
+those checks. The workflow contract rejects missing, conditional, tooling-only or late installation.
+
 Merge/Main full-unit execution and the zero-warning budget have one owner, `coverage-shard-unit`;
 combined coverage still enforces its unchanged thresholds. The redundant serial static warning
 execution is removed. Original local Make targets and all main/scheduled/release/security,

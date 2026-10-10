@@ -119,6 +119,11 @@ Per-run/head/job `output/pr-validation/*.json` artifacts and summaries report so
 workflow/run/attempt, reasons, commands and native exits. Only narrowly audited auxiliary downloads
 may be conditional on the same verified classification; required enforcement never is.
 
+Each selecting PR job, including Docker build, runs unconditional `make install-ci` before
+enforcement. Native documentation API catalog checks import application schemas, so tooling-only
+dependencies are insufficient. The workflow contract rejects omitted, conditional or late
+application installation as well as a tooling-only replacement.
+
 Full unit execution with its zero-warning budget has one Merge/Main owner, `coverage-shard-unit`;
 combined coverage retains its unchanged thresholds. The serial duplicate static warning execution
 is removed. Feature push validation delegates only when an open main-targeting PR and canonical

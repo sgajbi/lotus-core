@@ -1155,6 +1155,14 @@ participate in uniqueness. Validated events may be carried to avoid repeated mod
 validation; canonical hypotheses and fingerprint checks remain required. This is
 source qualification, not full-load, PostgreSQL lock or SLO certification.
 
+## PR documentation proof dependency practice
+
+Every PR job using change-aware native selection must run unconditional `make install-ci` before
+its enforcement step. This includes Docker build: documentation evidence imports the application
+for API vocabulary and route-catalog checks. `make install-ci-tooling` alone cannot support that
+producer. The native PR validation workflow contract rejects absent, conditional or late full
+installation. Required contexts and native documentation producers remain unchanged.
+
 ## Canonical FX source custody practice
 
 The existing FX ingestion endpoint supports legacy global batches and the bounded

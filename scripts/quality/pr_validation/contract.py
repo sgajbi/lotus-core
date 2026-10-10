@@ -48,6 +48,14 @@ def validate_workflows(pr: dict, main: dict, feature: dict) -> None:
             len(enforcement) == 1 and "if" not in enforcement[0],
             f"missing unconditional enforcement: {name}",
         )
+        installers = [step for step in job["steps"] if step.get("run") == "make install-ci"]
+        require(
+            len(installers) == 1
+            and "if" not in installers[0]
+            and job["steps"].index(installers[0]) < job["steps"].index(enforcement[0]),
+            "native documentation proof requires CI application dependencies "
+            f"before enforcement: {name}",
+        )
         target = enforcement[0]["run"].removeprefix("make ")
         require(
             target == "${{ matrix.target }}" or target in {f"pr-{item}" for item in TARGETS},
