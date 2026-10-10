@@ -2,10 +2,15 @@
 
 import argparse
 import ast
+import hashlib
+import importlib
 import json
 import re
+import subprocess  # nosec B404 - fixed Git executable, never a shell
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+import yaml
 
 KEYWORDS = (
     "amount",
@@ -34,9 +39,127 @@ def is_candidate(path: Path) -> bool:
     return path.suffix == ".py"
 
 
+def _git(root: Path, *arguments: str) -> str:
+    return subprocess.run(  # nosec B603 - fixed executable and argument vector
+        ["git", "-C", str(root), *arguments],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    ).stdout.strip()
+
+
+def _acquisition_commit(repo_root: Path) -> str:
+    """Consume the existing acquisition action/binding, not another pin registry."""
+    action = yaml.safe_load(
+        (repo_root / ".github/actions/acquire-images/action.yml").read_text(encoding="utf-8")
+    )
+    # The acquisition owner already validates the complete action and qualified pin.
+    # This repair can land independently: no acquisition directory means no dependency.
+    validator = importlib.import_module(
+        "scripts.quality.required_status_checks.image_acquisition_action"
+    )
+    validator.validate_action_payload(action)
+    steps = action["runs"]["steps"]
+    checkouts = [step for step in steps if step.get("uses") == "actions/checkout@v6"]
+    if len(checkouts) != 1:
+        raise ValueError("Acquisition must declare one governed checkout")
+    checkout = checkouts[0]["with"]
+    pin = checkout["ref"]
+    if (
+        checkout.get("repository") != "sgajbi/lotus-platform"
+        or checkout.get("path") != ".lotus-platform"
+        or checkout.get("persist-credentials") is not False
+        or not isinstance(pin, str)
+        or re.fullmatch(r"[0-9a-f]{40}", pin) is None
+    ):
+        raise ValueError("Acquisition ownership declaration is invalid")
+    binding = ast.parse(
+        (repo_root / "scripts/release/image_acquisition_bindings.py").read_text(encoding="utf-8")
+    )
+    pins = [
+        ast.literal_eval(node.value)
+        for node in binding.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "GOVERNANCE_SHA"
+            for target in node.targets
+        )
+    ]
+    if pins != [pin]:
+        raise ValueError("Acquisition action and native binding pins differ")
+    return pin
+
+
+def _foreign_python_files(repo_root: Path) -> set[Path]:
+    """Exclude only immutable acquired Python, never arbitrary hidden Core code."""
+    foreign = repo_root / ".lotus-platform"
+    if not foreign.exists() and not foreign.is_symlink():
+        return set()
+    try:
+        pin = _acquisition_commit(repo_root)
+        if foreign.is_symlink() or not foreign.is_dir():
+            raise ValueError("Acquired source is not a real checkout directory")
+        if _git(repo_root, "ls-files", "--", ".lotus-platform"):
+            raise ValueError("Core-tracked content cannot be classified as foreign")
+        if Path(_git(foreign, "rev-parse", "--show-toplevel")).resolve() != foreign.resolve():
+            raise ValueError("Acquired source has no independent Git ownership")
+        if _git(foreign, "remote", "get-url", "origin") not in {
+            "https://github.com/sgajbi/lotus-platform",
+            "https://github.com/sgajbi/lotus-platform.git",
+            "git@github.com:sgajbi/lotus-platform.git",
+        }:
+            raise ValueError("Acquired source origin is not Platform")
+        if _git(foreign, "rev-parse", "HEAD") != pin:
+            raise ValueError("Acquired source is not the native acquisition pin")
+        if _git(foreign, "status", "--porcelain", "--untracked-files=all"):
+            raise ValueError("Acquired source contains modified or injected files")
+        tracked: dict[Path, str] = {}
+        for entry in _git(foreign, "ls-tree", "-rz", "HEAD").split("\0"):
+            if not entry:
+                continue
+            metadata, name = entry.split("\t", 1)
+            if name.endswith(".py"):
+                mode, kind, blob = metadata.split()
+                if mode not in {"100644", "100755"} or kind != "blob":
+                    raise ValueError("Acquired Python is not a regular committed file")
+                tracked[foreign / name] = blob
+        actual = set(foreign.rglob("*.py"))
+        if (
+            not tracked
+            or actual != set(tracked)
+            or any(path.is_symlink() for path in foreign.rglob("*"))
+        ):
+            raise ValueError("Acquired Python inventory is empty, injected or redirected")
+        for path, blob in tracked.items():
+            content = path.read_bytes()
+            # Git blob identity, not a cryptographic approval or a new trust registry.
+            actual_blob = hashlib.sha1(
+                f"blob {len(content)}\0".encode() + content, usedforsecurity=False
+            ).hexdigest()
+            if actual_blob != blob:
+                raise ValueError("Acquired Python bytes differ from the pinned committed blob")
+        return actual
+    except (
+        OSError,
+        ImportError,
+        RuntimeError,
+        ValueError,
+        KeyError,
+        TypeError,
+        SyntaxError,
+        yaml.YAMLError,
+        subprocess.SubprocessError,
+    ) as exc:
+        raise ValueError(f"Foreign source ownership verification failed: {exc}") from exc
+
+
 def scan_repo(repo_root: Path) -> list[str]:
+    foreign_files = _foreign_python_files(repo_root)
     findings: list[str] = []
     for file_path in repo_root.rglob("*.py"):
+        if file_path in foreign_files:
+            continue
         if not is_candidate(file_path.relative_to(repo_root)):
             continue
         rel = file_path.relative_to(repo_root).as_posix()
@@ -227,7 +350,11 @@ def main() -> int:
 
     repo_root = Path(args.repo_root).resolve()
     allowlist_path = (repo_root / args.allowlist).resolve()
-    findings = scan_repo(repo_root)
+    try:
+        findings = scan_repo(repo_root)
+    except ValueError as exc:
+        print(str(exc))
+        return 1
     allowlist_entries, allowlist_errors, stale_entries = load_allowlist(allowlist_path)
 
     if args.update_allowlist:
