@@ -21,8 +21,9 @@ from portfolio_common.enterprise_readiness import (
     _enterprise_auth_context_signature,
     _normalize_headers,
 )
+from portfolio_common.reference_classification_schema import InstrumentClassificationCutRecord
 from sqlalchemy import event, text
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.orm import Session
 
@@ -428,3 +429,52 @@ async def test_waiting_truncate_observes_newly_committed_custody(classification_
             await truncator.rollback()
     async with classification_sessions() as session:
         assert await session.scalar(text(f"SELECT count(*) FROM {TABLE}")) == 1
+
+
+async def test_database_refuses_foreign_predecessor_duplicate_revision_and_fork(
+    classification_sessions,
+):
+    from src.services.ingestion_service.app.services.classification_history_writer import (
+        ClassificationHistoryWriter,
+    )
+
+    async with classification_sessions.begin() as session:
+        writer = ClassificationHistoryWriter(session)
+        original = await writer.append(source_cut())
+        corrected = await writer.append(
+            source_cut(source_version=2, predecessor_cut_id=original.cut_id)
+        )
+    rows = [row.model_dump(mode="json") for row in original.source.assignments]
+    rows[0]["group_id"] = "FINANCE"
+    attempts = (
+        (
+            source_cut(
+                producer_id="FOREIGN", source_version=2, predecessor_cut_id=corrected.cut_id
+            ),
+            "23503",
+        ),
+        (source_cut(source_version=3, predecessor_cut_id=original.cut_id), "23505"),
+        (source_cut(assignments=rows), "23505"),
+    )
+    for source, sqlstate in attempts:
+        retained = retained_cut(source, received_at=original.received_at)
+        async with classification_sessions() as session:
+            session.add(
+                InstrumentClassificationCutRecord(
+                    cut_id=retained.cut_id,
+                    content_hash=retained.content_hash,
+                    producer_id=source.producer_id,
+                    classification_set_id=source.classification_set_id,
+                    source_record_id=source.source_record_id,
+                    source_version=source.source_version,
+                    predecessor_cut_id=source.predecessor_cut_id,
+                    payload=source.model_dump(mode="json"),
+                    received_at=retained.received_at,
+                )
+            )
+            with pytest.raises(IntegrityError) as error:
+                await session.flush()
+            assert error.value.orig.sqlstate == sqlstate
+            await session.rollback()
+    async with classification_sessions() as session:
+        assert await session.scalar(text(f"SELECT count(*) FROM {TABLE}")) == 2
