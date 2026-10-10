@@ -17,6 +17,21 @@ Use these endpoints as the canonical operational surfaces:
 
 ## Core Troubleshooting Flows
 
+### Analytics portfolio ownership
+
+For `POST /integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries`,
+`position-timeseries` and `reference`, use the admitted tenant context. The request-owned
+read snapshot filters portfolio ownership by persisted tenant before observations or continuation
+processing. A foreign portfolio and a missing portfolio both return `QCP_ANALYTICS_NOT_FOUND`
+(404); missing admission retains the existing 401. Do not diagnose ownership from nullable response
+`tenant_id`: it is optional source provenance, independently of request authority.
+
+From the `lotus-core` repository root, run `make test-query-authority-db-contract` on a host with
+the governed Make/Python/Docker toolchain (PowerShell or Bash). Its registered
+`test_analytics_tenant_postgresql.py` uses the actual QCP HTTP application, canonical admission and
+PostgreSQL to check owner values, foreign/missing refusals, pagination and historical selectors.
+This source proof does not certify an independently deployed runtime or durable export ownership.
+
 ### Reprocessing or stale position concerns
 
 1. Call `/support/portfolios/{portfolio_id}/overview` to validate queue pressure and freshness markers.

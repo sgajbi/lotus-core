@@ -23,6 +23,7 @@ from portfolio_common.database_models import (
     Transaction,
     TransactionCost,
 )
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.domain.transaction import build_transaction_payload_identity
 from portfolio_common.events import TransactionEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository, SemanticEventClaimOutcome
@@ -1758,7 +1759,7 @@ async def test_canonical_unversioned_repair_materializes_cashflow_history_cohere
             )
         )
         await session.commit()
-        qcp = AnalyticsTimeseriesRepository(session)
+        qcp = AnalyticsTimeseriesRepository(session, tenant_id=TenantId(TEST_TENANT_ID))
         qcp_snapshot_epoch = await qcp.get_position_snapshot_epoch(
             portfolio_id=portfolio_id,
             start_date=target.transaction_date.date(),
@@ -2028,7 +2029,7 @@ async def test_canonical_unversioned_repair_materializes_cashflow_history_cohere
                 original_flow.cashflow_date,
             )
         if qcp_snapshot_epoch is not None:
-            qcp = AnalyticsTimeseriesRepository(verification)
+            qcp = AnalyticsTimeseriesRepository(verification, tenant_id=TenantId(TEST_TENANT_ID))
             selected = await qcp.list_position_cashflow_rows(
                 portfolio_id=portfolio_id,
                 security_ids=[security_id],

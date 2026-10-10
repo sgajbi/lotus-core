@@ -21,6 +21,7 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.domain.decimal_amount import decimal_or_none
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 from sqlalchemy import Date, and_, case, false, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -196,8 +197,13 @@ def _captured_business_date_predicate(
 
 
 class AnalyticsTimeseriesRepository:
-    def __init__(self, db: AsyncSession):
+    """Request-scoped reader; portfolio admission precedes dependent source reads."""
+
+    def __init__(self, db: AsyncSession, *, tenant_id: TenantId):
+        if not isinstance(tenant_id, TenantId):
+            raise TypeError("Analytics reader requires typed admitted tenant authority.")
         self.db = db
+        self.tenant_id = tenant_id
 
     @staticmethod
     def _normalized_security_ids(security_ids: list[str]) -> list[str]:
@@ -347,7 +353,10 @@ class AnalyticsTimeseriesRepository:
         return stmt.order_by(*ordering)
 
     async def get_portfolio(self, portfolio_id: str) -> PortfolioAnalyticsSource | None:
-        stmt = select(Portfolio).where(Portfolio.portfolio_id == portfolio_id)
+        stmt = select(Portfolio).where(
+            Portfolio.portfolio_id == portfolio_id,
+            Portfolio.tenant_id == self.tenant_id.value,
+        )
         result = await self.db.execute(stmt)
         row = result.scalars().first()
         if row is None:

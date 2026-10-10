@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,7 +61,7 @@ from src.services.query_control_plane_service.app.infrastructure.analytics_unit_
 def make_service() -> AnalyticsTimeseriesService:
     session = MagicMock(spec=AsyncSession)
     return AnalyticsTimeseriesService(
-        reader=AnalyticsTimeseriesRepository(session),
+        reader=AnalyticsTimeseriesRepository(session, tenant_id=TenantId("tenant-test")),
         export_store=AnalyticsExportRepository(session),
         unit_of_work=SqlAlchemyAnalyticsUnitOfWork(session),
         policy=AnalyticsRuntimePolicy(

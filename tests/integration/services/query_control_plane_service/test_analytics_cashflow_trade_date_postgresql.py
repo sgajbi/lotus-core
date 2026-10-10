@@ -16,6 +16,7 @@ from portfolio_common.database_models import (
     PositionTimeseries,
     Transaction,
 )
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy import delete, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -288,7 +289,9 @@ async def test_paired_internal_open_is_selected_from_postgresql_for_both_source_
     )
     await session.commit()
 
-    reader = analytics_timeseries_repository.AnalyticsTimeseriesRepository(session)
+    reader = analytics_timeseries_repository.AnalyticsTimeseriesRepository(
+        session, tenant_id=TenantId("tenant-cash-income")
+    )
     service = AnalyticsTimeseriesService(
         reader=reader,
         export_store=AnalyticsExportRepository(session),
@@ -488,7 +491,9 @@ async def test_trade_date_position_flows_preserve_settlement_and_replay_truth(
     )
     await session.commit()
 
-    reader = analytics_timeseries_repository.AnalyticsTimeseriesRepository(session)
+    reader = analytics_timeseries_repository.AnalyticsTimeseriesRepository(
+        session, tenant_id=TenantId("tenant-trade-date-analytics")
+    )
     for zone in ("UTC", "Asia/Singapore", "America/Los_Angeles"):
         await session.execute(text("SELECT set_config('TimeZone', :zone, true)"), {"zone": zone})
         trade_rows = await reader.list_position_cashflow_rows(

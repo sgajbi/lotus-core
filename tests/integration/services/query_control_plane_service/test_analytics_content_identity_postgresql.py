@@ -24,6 +24,7 @@ from portfolio_common.database_models import (
     PositionTimeseries,
     Transaction,
 )
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy import delete, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -36,6 +37,9 @@ from src.services.query_control_plane_service.app.application.analytics.analytic
 )
 from src.services.query_control_plane_service.app.dependencies import (
     get_analytics_timeseries_service,
+)
+from src.services.query_control_plane_service.app.enterprise_readiness import (
+    build_enterprise_audit_middleware,
 )
 from src.services.query_control_plane_service.app.exception_mappers import (
     register_query_control_plane_exception_handlers,
@@ -190,7 +194,9 @@ async def content_identity_client(clean_db, async_db_session, monkeypatch):
 
 def export_service(session):
     return AnalyticsTimeseriesService(
-        reader=AnalyticsTimeseriesRepository(session),
+        reader=AnalyticsTimeseriesRepository(
+            session, tenant_id=TenantId("tenant-content-identity")
+        ),
         export_store=AnalyticsExportRepository(session),
         unit_of_work=SqlAlchemyAnalyticsUnitOfWork(session),
         policy=AnalyticsRuntimePolicy(
@@ -208,13 +214,18 @@ def export_app(service):
     app = FastAPI()
     app.include_router(router)
     register_query_control_plane_exception_handlers(app, logger=logging.getLogger(__name__))
-    app.dependency_overrides[get_analytics_timeseries_service] = lambda: service
+    if service is None:
+        # Every real composition-root acquisition requires canonical admission.
+        app.middleware("http")(build_enterprise_audit_middleware())
+    else:
+        app.dependency_overrides[get_analytics_timeseries_service] = lambda: service
     return app
 
 
 async def read_page(client, dataset, **page):
     return await client.post(
         f"/integration/portfolios/{PORTFOLIO_ID}/analytics/{dataset}-timeseries",
+        headers={"X-Tenant-Id": "tenant-content-identity"},
         json={
             "as_of_date": LAST_DAY.isoformat(),
             "window": {"start_date": FIRST_DAY.isoformat(), "end_date": LAST_DAY.isoformat()},
@@ -254,7 +265,6 @@ async def test_analytics_acquisition_keeps_pre_mutation_fx_snapshot(
     )
     app = export_app(None)
     # Exercise the actual composition root, not the fixture's injected reader/export service.
-    app.dependency_overrides.clear()
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://testserver"
     ) as client:
@@ -283,7 +293,6 @@ async def test_actual_http_continuation_refuses_prior_page_same_epoch_correction
         async_sessionmaker(bind=session.bind, expire_on_commit=False),
     )
     app = export_app(None)
-    app.dependency_overrides.clear()
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://testserver"
     ) as client:

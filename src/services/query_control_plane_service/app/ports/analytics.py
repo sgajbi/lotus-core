@@ -16,7 +16,13 @@ from ..domain.analytics import (
 
 
 class AnalyticsTimeseriesReader(Protocol):
-    """Read source portfolio, timeseries, cashflow, calendar, and FX evidence."""
+    """Read evidence after tenant-scoped portfolio admission in one snapshot.
+
+    Concrete readers bind trusted tenant authority at construction. get_portfolio
+    returns None for missing and foreign owners; callers must admit the portfolio
+    before any dependent observations, selectors or content identities are read.
+    Global calendar, instrument and FX reference data retain their shared scope.
+    """
 
     async def get_portfolio(self, portfolio_id: str) -> PortfolioAnalyticsSource | None: ...
 

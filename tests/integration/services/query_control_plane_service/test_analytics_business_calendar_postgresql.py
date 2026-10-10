@@ -16,6 +16,7 @@ from portfolio_common.database_models import (
     PositionTimeseries,
     Transaction,
 )
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -225,7 +226,7 @@ async def test_business_calendar_excludes_durable_weekend_rows_from_both_source_
     )
     await session.commit()
 
-    reader = AnalyticsTimeseriesRepository(session)
+    reader = AnalyticsTimeseriesRepository(session, tenant_id=TenantId("tenant-analytics-calendar"))
     service = AnalyticsTimeseriesService(
         reader=reader,
         export_store=AnalyticsExportRepository(session),

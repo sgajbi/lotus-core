@@ -37,6 +37,20 @@ This makes it a contract and operations plane, not a generic duplicate of the re
 
 ## Current scope and evidence
 
+### Analytics portfolio ownership
+
+Portfolio and position timeseries, and portfolio analytics reference, admit the portfolio through
+the persisted `Portfolio.tenant_id` using the canonical request tenant before reading source rows,
+calendar selections, continuation tokens or fingerprints. Missing and foreign portfolios return
+the same safe `QCP_ANALYTICS_NOT_FOUND` 404. Missing tenant admission retains the existing 401.
+Owner calculations and content identities are unchanged. Response `tenant_id` remains nullable
+source provenance; it is not an echo of the request header or proof of authorization.
+
+The registered PostgreSQL HTTP proof is `test_analytics_tenant_postgresql.py` in
+`query-authority-db-contract`. This is a bounded #798 source-read correction. Durable analytics
+export ownership, other isolation families, and independent deployment validation remain separate
+acceptance work; #798, #540 and #417 remain open.
+
 The route modules, DTO contracts, source-data product declarations, and query-control-plane tests
 under `src/services/query_control_plane_service/` define the supported surface. Analytics inputs and
 support evidence are governed Core outputs; downstream services remain authoritative for their own
