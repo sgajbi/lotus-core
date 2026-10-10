@@ -2071,6 +2071,13 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
     assert market_series_invalid["error_code"] == "QCP_INTEGRATION_SOURCE_INVALID_REQUEST"
     assert market_series_invalid["metadata"]["source_product"] == "MarketDataWindow"
     assert market_series_invalid["detail"] == "Benchmark market series request is invalid."
+    market_series_unavailable = benchmark_market_series["responses"]["409"]["content"][
+        "application/problem+json"
+    ]["example"]
+    assert market_series_unavailable["error_code"] == "QCP_FX_SOURCE_SELECTION_CONFLICT"
+    assert market_series_unavailable["metadata"]["source_product"] == "MarketDataWindow"
+    assert market_series_unavailable["status"] == 409
+    assert "effective benchmark definition" in market_series_unavailable["detail"]
     assert (
         "lotus-performance and other downstream benchmark sourcing workflows"
         in benchmark_market_series["description"]

@@ -75,6 +75,16 @@ evidence reference rather than omitting the concept.
 | `DataQualityCoverageReport` | Control-plane and policy | `query_control_plane_service` | performance, risk, gateway, manage | `/integration/benchmarks/{benchmark_id}/coverage`, `/integration/reference/risk-free-series/coverage` |
 | `IngestionEvidenceBundle` | Control-plane and policy | `event_replay_service` | gateway, manage, report | `/ingestion/jobs/{job_id}/evidence` |
 
+## Benchmark Market-Window Currency Authority
+
+`MarketDataWindow:v1` requires an effective benchmark definition for native-only and FX requests.
+Missing or ineffective definitions refuse with the existing HTTP 409 source-selection problem
+before component or FX reads; target currency never supplies base currency or identity conversion.
+Valid exact Decimal FX context remains distinct from Performance-owned component normalization.
+This resolves the missing-definition fallback under #458, while full temporal selection, consumer
+adoption, compatible financial cuts and original product acceptance remain open. See the
+[FX source guide](../operations/fx-source-admission.md#remaining-original-acceptance).
+
 ## Historical Instrument Classification Custody
 
 `InstrumentReferenceBundle:v1` includes retained security-to-group assignment cuts through the

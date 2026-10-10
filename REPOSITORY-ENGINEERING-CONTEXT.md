@@ -10,6 +10,17 @@ and this file first. Then use the Platform
 [skill routing map](https://github.com/sgajbi/lotus-platform/blob/main/context/LOTUS-SKILL-ROUTING-MAP.md)
 and the task routes below to load only relevant specialist context.
 
+## Benchmark market-window currency authority practice
+
+The existing QCP benchmark market-series service requires an effective benchmark definition before
+component or FX reads, even without a retained selector or requested FX. Source-owned definition
+currency is mandatory at response assembly; caller target currency never supplies it. Missing or
+ineffective definitions use the existing typed HTTP 409 source-selection conflict. Preserve valid
+same-currency identity and exact directed Decimal context, and keep component normalization with
+Performance. Registered HTTP/PostgreSQL controls live in
+`test_benchmark_market_currency_postgresql.py` on the query-authority DB lane. This bounded refusal
+does not establish whole-window source qualification, compatible financial cuts or provider approval.
+
 ## Historical classification reference practice
 
 The existing classification ingestion/reference routes accept `assignment_cut` and select

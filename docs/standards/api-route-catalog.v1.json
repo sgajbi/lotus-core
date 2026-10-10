@@ -5751,6 +5751,11 @@
           "description": "Benchmark market series request is invalid."
         },
         {
+          "status_code": "409",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "The effective benchmark definition or requested FX source selection is unavailable or conflicting."
+        },
+        {
           "status_code": "422",
           "schema": "HTTPValidationError",
           "description": "Validation Error"
