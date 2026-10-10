@@ -242,6 +242,42 @@ def test_booked_fx_cash_reference_correction_replay_and_process_restart(
     )
     funded_transactions_after_replay = client.query(transactions_url).json()
     assert_funded_cash_transactions(funded_transactions_after_replay, scenario)
+    funded_restart = restart_owned_query(
+        project=os.environ["COMPOSE_PROJECT_NAME"],
+        compose_file=resolve_compose_file(str(Path(__file__).resolve().parents[2])),
+        ready=lambda: wait_for_http_health(
+            "query_service", f"{client.query_url}/health/ready", timeout_seconds=60
+        ),
+    )
+    funded_fresh = E2EApiClient(
+        client.ingestion_url, client.query_url, client.query_control_plane_url, client.tenant_id
+    )
+    try:
+        funded_positions_response = funded_fresh.query(f"{positions_url}?as_of_date={LAST_DAY}")
+        assert funded_positions_response.status_code == 200
+        funded_after_restart = funded_positions_response.json()
+        assert has_funded_cash_holdings(funded_after_restart, **scope, stage="funded_interest")
+        assert funded_after_restart["positions"] == funded_after_replay["positions"]
+        assert funded_after_restart["content_hash"] == funded_after_replay["content_hash"]
+        funded_transactions_response = funded_fresh.query(transactions_url)
+        assert funded_transactions_response.status_code == 200
+        funded_transactions_after_restart = funded_transactions_response.json()
+        # Includes SELL realized48 local/96 base and exactly11 rows/one child per source.
+        assert_funded_cash_transactions(funded_transactions_after_restart, scenario)
+        funded_restart_http = {
+            "positions": {
+                "path": f"{positions_url}?as_of_date={LAST_DAY}",
+                "status_code": funded_positions_response.status_code,
+                "body": funded_after_restart,
+            },
+            "transactions": {
+                "path": transactions_url,
+                "status_code": funded_transactions_response.status_code,
+                "body": funded_transactions_after_restart,
+            },
+        }
+    finally:
+        funded_fresh.session.close()
     # A separate USD book is admitted through the same real routes, with no FX-rate input.
     same_currency = seed_scenario(
         client, unique_suffix(), admit_instruments=admit_scenario_instruments, same_currency=True
@@ -302,6 +338,8 @@ def test_booked_fx_cash_reference_correction_replay_and_process_restart(
                     "funded_quiescence": funded_idle,
                     "funded_after_replay": funded_after_replay,
                     "funded_transactions_after_replay": funded_transactions_after_replay,
+                    "funded_restart": funded_restart,
+                    "funded_restart_http": funded_restart_http,
                     "same_currency_scenario": same_currency,
                     "same_currency_funding": funding,
                     "same_currency_funding_acceptance": funding_response.json(),
