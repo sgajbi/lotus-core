@@ -12,6 +12,18 @@ and the task routes below to load only relevant specialist context.
 
 ## Repository Role
 
+### CI image acquisition practice
+
+Use `.github/actions/acquire-images` with qualified Platform revision
+`0c96dd9ea00d1222e35d3e7d14de6a540a222104` before Docker acquisition. The existing native
+Platform validator alone owns admission; Core's fixed bindings transport successful outputs into
+Linux lock replay, base metadata inspection, Compose preparation/startup, all build commands and
+Trivy scan/SBOM commands. Keep all seven explicit inputs and ten fixed Bookworm Python bases.
+Compose requires operator-owned DockerHub read credentials for Kafka, ZooKeeper and Grafana;
+missing configuration fails closed. Never reuse branch-protection/GitHub credentials or invent
+an operator-copy distribution. See `docs/operations/ci-image-acquisition.md` for exact references,
+credential ownership, source/distribution evidence boundaries and focused checks.
+
 ### Transaction supplier lineage practice
 
 Optional `source_record_id`, `source_batch_id` and aware `observed_at` retain upstream provenance

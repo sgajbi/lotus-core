@@ -108,6 +108,10 @@ def _external_compose_images(root: Path) -> set[str]:
         content = compose_file.read_text(encoding="utf-8")
         for match in COMPOSE_IMAGE_RE.finditer(content):
             image = match.group("image")
+            if image.startswith("${LOTUS_CORE_POSTGRES_IMAGE:-") or image.startswith(
+                "${LOTUS_CORE_PROMETHEUS_IMAGE:-"
+            ):
+                image = image.split(":-", 1)[1].removesuffix("}")
             if image.startswith("lotus-core/") or "LOTUS_" in image:
                 continue
             images.add(image)

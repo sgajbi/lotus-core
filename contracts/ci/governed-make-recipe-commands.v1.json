@@ -252,7 +252,7 @@
       "$(REPOSITORY_PYTHON) scripts/quality/wiki_validation_guard.py"
     ],
     "quality-workflow-governance-gate": [
-      "$(REPOSITORY_PYTHON) -m pytest tests/unit/test_ci_workflow_action_versions.py tests/unit/scripts/quality/test_required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_fail_closed.py --cov=scripts.quality.required_status_checks --cov=scripts.quality.required_status_checks_guard --cov-branch --cov-report=term-missing --cov-fail-under=90 -q"
+      "$(REPOSITORY_PYTHON) -m pytest tests/unit/test_ci_workflow_action_versions.py tests/unit/scripts/quality/test_required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_fail_closed.py tests/unit/scripts/quality/test_image_acquisition_action.py --cov=scripts.quality.required_status_checks --cov=scripts.quality.required_status_checks_guard --cov-branch --cov-report=term-missing --cov-fail-under=90 -q"
     ],
     "repository-output-shape-guard": [
       "$(REPOSITORY_PYTHON) scripts/quality/repository_output_shape_guard.py"

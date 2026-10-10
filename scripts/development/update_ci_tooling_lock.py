@@ -12,6 +12,10 @@ import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+from scripts.release.image_acquisition_bindings import acquired_image  # noqa: E402
+
 TOOLING_INPUT = REPO_ROOT / "requirements" / "ci-tooling.in"
 TEST_INPUT = REPO_ROOT / "tests" / "requirements.txt"
 LINUX_TOOLING_LOCK = REPO_ROOT / "requirements" / "ci-tooling.lock.txt"
@@ -205,7 +209,7 @@ def _compile_linux_in_exact_base(*, replay_lock: Path | None = None) -> str:
             output_mount,
             "--workdir",
             "/repo",
-            LINUX_COMPILE_IMAGE,
+            acquired_image(LINUX_COMPILE_IMAGE),
             "sh",
             "-ec",
             (

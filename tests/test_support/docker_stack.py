@@ -18,6 +18,7 @@ import yaml
 from confluent_kafka import KafkaException
 from confluent_kafka.admin import AdminClient
 
+from scripts.release.image_acquisition_bindings import compose_image, validate_bindings
 from scripts.release.local_image_build import discover_local_build_metadata
 from tests.test_support.runtime_env import PreparedTestRuntime
 
@@ -200,7 +201,9 @@ def ensure_docker_engine_available(
         ) from exc
 
 
-def _load_compose_pull_images(compose_file: str) -> list[str]:
+def _load_compose_pull_images(
+    compose_file: str, environment: dict[str, str] | None = None
+) -> list[str]:
     compose_path = Path(compose_file)
     data = yaml.safe_load(compose_path.read_text(encoding="utf-8")) or {}
     services = data.get("services", {})
@@ -209,6 +212,8 @@ def _load_compose_pull_images(compose_file: str) -> list[str]:
         if service.get("build"):
             continue
         image = service.get("image")
+        if image:
+            image = compose_image(image, os.environ if environment is None else environment)
         if image and image not in images:
             images.append(image)
     return images
@@ -223,6 +228,7 @@ def ensure_required_images_available(
     jitter: Callable[[float, float], float] = random.uniform,
     clock: Callable[[], float] = time.monotonic,
     deadline: _LifecycleDeadline | None = None,
+    environment: dict[str, str] | None = None,
 ) -> None:
     if os.getenv("LOTUS_TESTS_PULL_BASE_IMAGES", "true").strip().lower() not in {
         "1",
@@ -233,7 +239,7 @@ def ensure_required_images_available(
         return
 
     missing_images: list[str] = []
-    for image in _load_compose_pull_images(compose_file):
+    for image in _load_compose_pull_images(compose_file, environment):
         if deadline is None:
             result = runner(
                 ["docker", "image", "inspect", image],
@@ -435,6 +441,7 @@ def compose_up(
     deadline = _LifecycleDeadline.start(timeout_seconds, clock=clock)
     project_name = runtime.endpoints.compose_project_name if runtime is not None else None
     compose_environment = runtime.values if runtime is not None else None
+    validate_bindings(os.environ if compose_environment is None else compose_environment)
     build_environment: dict[str, str] | None = None
     if build:
         build_environment = (
@@ -450,6 +457,7 @@ def compose_up(
         runner,
         clock=clock,
         deadline=deadline,
+        environment=compose_environment,
     )
     _remove_stale_project_containers(
         compose_file,

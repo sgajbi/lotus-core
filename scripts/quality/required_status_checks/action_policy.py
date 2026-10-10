@@ -2,9 +2,18 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from scripts.quality.required_status_checks.image_acquisition_action import (
+    ACTION as IMAGE_ACQUISITION_ACTION,
+)
+from scripts.quality.required_status_checks.image_acquisition_action import (
+    validate_action_inputs as validate_image_acquisition_inputs,
+)
 from scripts.quality.required_status_checks.model import RequiredStatusChecksError
 
 _ACTION_INPUT_KEYS = {
+    IMAGE_ACQUISITION_ACTION: frozenset(
+        {"scope", "dockerhub-username", "dockerhub-read-token", "evidence-id"}
+    ),
     "actions/cache@v5": frozenset({"key", "path", "restore-keys"}),
     "actions/cache/restore@v5": frozenset({"key", "path", "restore-keys"}),
     "actions/cache/save@v5": frozenset({"key", "path"}),
@@ -22,7 +31,12 @@ _AUDITED_ACTIONS = frozenset(_ACTION_INPUT_KEYS)
 _ENFORCEMENT_ACTIONS = frozenset({"reviewdog/action-actionlint@v1"})
 _AUXILIARY_ACTIONS = _AUDITED_ACTIONS - _ENFORCEMENT_ACTIONS
 _CONDITIONAL_AUXILIARY_ACTIONS = frozenset(
-    {"actions/cache/save@v5", "actions/checkout@v6", "actions/upload-artifact@v7"}
+    {
+        "actions/cache/save@v5",
+        "actions/checkout@v6",
+        "actions/upload-artifact@v7",
+        IMAGE_ACQUISITION_ACTION,
+    }
 )
 
 
@@ -161,7 +175,9 @@ def _action_inputs(step: Mapping[str, Any], *, action: str) -> Mapping[str, Any]
 
 def _validate_action_inputs(action: str, step: Mapping[str, Any], *, runner: str) -> None:
     inputs = _action_inputs(step, action=action)
-    if action == "actions/checkout@v6":
+    if action == IMAGE_ACQUISITION_ACTION:
+        validate_image_acquisition_inputs(step, inputs)
+    elif action == "actions/checkout@v6":
         _validate_checkout_inputs(inputs)
     elif action in {"actions/cache@v5", "actions/cache/restore@v5", "actions/cache/save@v5"}:
         _validate_cache_inputs(inputs)

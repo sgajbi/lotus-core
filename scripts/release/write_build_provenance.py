@@ -6,14 +6,15 @@ import argparse
 import hashlib
 import json
 import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-try:
-    from scripts.release.prebuild_ci_images import resolve_build_metadata
-except ModuleNotFoundError:  # pragma: no cover - direct script execution
-    from prebuild_ci_images import resolve_build_metadata
+sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.release.image_acquisition_bindings import acquired_image  # noqa: E402
+from scripts.release.prebuild_ci_images import resolve_build_metadata  # noqa: E402
 
 
 def _sha256(path: Path) -> str:
@@ -51,6 +52,7 @@ def main() -> int:
         "dockerfile": str(dockerfile.relative_to(REPO_ROOT)),
         "dockerfile_sha256": _sha256(dockerfile),
         "base_image": _extract_base_image(dockerfile),
+        "acquired_base_image": acquired_image(_extract_base_image(dockerfile)),
         "runtime_lock": str(runtime_lock.relative_to(REPO_ROOT)),
         "runtime_lock_sha256": _sha256(runtime_lock),
     }

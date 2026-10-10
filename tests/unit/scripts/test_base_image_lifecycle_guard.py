@@ -73,6 +73,30 @@ def test_guard_accepts_deterministic_replay(tmp_path: Path) -> None:
     assert first == second == []
 
 
+def test_compose_distribution_bindings_do_not_hide_external_inventory(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, _inventory())
+    compose = tmp_path / "docker-compose.yml"
+    original = compose.read_text(encoding="utf-8")
+    compose.write_text(
+        original.replace(
+            "postgres:16-alpine", "${LOTUS_CORE_POSTGRES_IMAGE:-postgres:16-alpine}"
+        ).replace(
+            "prom/prometheus:v2.47.2", "${LOTUS_CORE_PROMETHEUS_IMAGE:-prom/prometheus:v2.47.2}"
+        ),
+        encoding="utf-8",
+    )
+    assert _details(tmp_path) == []
+    inventory_path = tmp_path / INVENTORY_PATH
+    inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+    inventory["outside_release_boundary"]["local_compose_dependency_images"].remove(
+        "postgres:16-alpine"
+    )
+    inventory_path.write_text(json.dumps(inventory), encoding="utf-8")
+    assert any(
+        "exactly classify external Compose images" in detail for detail in _details(tmp_path)
+    )
+
+
 def test_guard_rejects_dockerfile_digest_drift(tmp_path: Path) -> None:
     _write_fixture(tmp_path, _inventory())
     dockerfile = tmp_path / "src/services/query_service/Dockerfile"

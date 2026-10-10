@@ -19,6 +19,7 @@ from scripts.quality.base_image_lifecycle_guard import (
     image_tag,
     official_image_source_annotation,
 )
+from scripts.release.image_acquisition_bindings import acquired_image
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LIFECYCLE_INVENTORY = (
@@ -111,7 +112,8 @@ def build_evidence() -> dict[str, Any]:
             "governed base image must remain Docker Official library/python:3.11-slim-bookworm"
         )
 
-    index_bytes = _inspect_raw(image)
+    acquisition_reference = acquired_image(image)
+    index_bytes = _inspect_raw(acquisition_reference)
     if f"sha256:{_sha256(index_bytes)}" != parent_digest:
         raise ManifestEvidenceRefreshError(
             "registry index bytes do not match governed image digest"
@@ -131,7 +133,7 @@ def build_evidence() -> dict[str, Any]:
         )
     child_digest = str(child_descriptor.get("digest", ""))
 
-    repository = image.split("@", maxsplit=1)[0]
+    repository = acquisition_reference.split("@", maxsplit=1)[0]
     child_reference = f"{repository}@{child_digest}"
     child_bytes = _inspect_raw(child_reference)
     if f"sha256:{_sha256(child_bytes)}" != child_digest:
@@ -151,7 +153,7 @@ def build_evidence() -> dict[str, Any]:
         "inspection": {
             "tool": "docker buildx imagetools inspect --raw",
             "parent_reference": image,
-            "child_reference": child_reference,
+            "child_reference": image.split("@", maxsplit=1)[0] + "@" + child_digest,
         },
         "authority": {
             "registry": registry_authority,
@@ -181,6 +183,7 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     expected = _serialized(build_evidence())
+    print("Acquired base-image metadata from: " + acquired_image(json.loads(expected)["image"]))
     if args.check:
         if not EVIDENCE_PATH.exists() or EVIDENCE_PATH.read_text(encoding="utf-8") != expected:
             raise SystemExit(

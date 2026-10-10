@@ -79,7 +79,7 @@ quality-integration-lite-collection-gate:
 	$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite integration-lite --collect-only --quiet
 
 quality-workflow-governance-gate: required-status-checks-code-quality-gate
-	$(REPOSITORY_PYTHON) -m pytest tests/unit/test_ci_workflow_action_versions.py tests/unit/scripts/quality/test_required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_fail_closed.py --cov=scripts.quality.required_status_checks --cov=scripts.quality.required_status_checks_guard --cov-branch --cov-report=term-missing --cov-fail-under=90 -q
+	$(REPOSITORY_PYTHON) -m pytest tests/unit/test_ci_workflow_action_versions.py tests/unit/scripts/quality/test_required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_fail_closed.py tests/unit/scripts/quality/test_image_acquisition_action.py --cov=scripts.quality.required_status_checks --cov=scripts.quality.required_status_checks_guard --cov-branch --cov-report=term-missing --cov-fail-under=90 -q
 
 required-status-checks-code-quality-gate:
 	$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run ruff check scripts/quality/required_status_checks scripts/quality/required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_fail_closed.py

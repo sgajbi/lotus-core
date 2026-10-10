@@ -51,6 +51,10 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+      - name: Bind qualified image acquisition
+        uses: ./.github/actions/acquire-images
+        with:
+          scope: python
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -134,6 +138,13 @@ jobs:
             target: test-integration-lite
     steps:
       - uses: actions/checkout@v6
+      - name: Bind qualified image acquisition
+        uses: ./.github/actions/acquire-images
+        with:
+          scope: compose
+          evidence-id: ${{ strategy.job-index }}
+          dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub-read-token: ${{ secrets.DOCKERHUB_READ_TOKEN }}
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}

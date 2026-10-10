@@ -63,6 +63,10 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+      - name: Bind qualified image acquisition
+        uses: ./.github/actions/acquire-images
+        with:
+          scope: python
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -181,6 +185,14 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+      - name: Bind qualified image acquisition
+        if: contains(fromJSON('["unit-db","critical-db-coverage","critical-lifecycle-db","query-authority-db-contract","integration-lite"]'), matrix.suite)
+        uses: ./.github/actions/acquire-images
+        with:
+          scope: compose
+          evidence-id: ${{ strategy.job-index }}
+          dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub-read-token: ${{ secrets.DOCKERHUB_READ_TOKEN }}
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -237,6 +249,10 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
+      - name: Bind qualified image acquisition
+        uses: ./.github/actions/acquire-images
+        with:
+          scope: python
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
       - uses: actions/setup-python@v6
@@ -291,6 +307,12 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
+      - name: Bind qualified image acquisition
+        uses: ./.github/actions/acquire-images
+        with:
+          scope: compose
+          dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub-read-token: ${{ secrets.DOCKERHUB_READ_TOKEN }}
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -329,6 +351,12 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
+      - name: Bind qualified image acquisition
+        uses: ./.github/actions/acquire-images
+        with:
+          scope: compose
+          dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub-read-token: ${{ secrets.DOCKERHUB_READ_TOKEN }}
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -365,6 +393,12 @@ jobs:
       LOTUS_PLATFORM_ROOT: ${{ github.workspace }}/lotus-platform
     steps:
       - uses: actions/checkout@v6
+      - name: Bind qualified image acquisition
+        uses: ./.github/actions/acquire-images
+        with:
+          scope: compose
+          dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub-read-token: ${{ secrets.DOCKERHUB_READ_TOKEN }}
       - name: Check out lotus-platform validation contracts
         uses: actions/checkout@v6
         with:
@@ -405,6 +439,12 @@ jobs:
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v6
+      - name: Bind qualified image acquisition
+        uses: ./.github/actions/acquire-images
+        with:
+          scope: compose
+          dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub-read-token: ${{ secrets.DOCKERHUB_READ_TOKEN }}
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -443,6 +483,12 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
+      - name: Bind qualified image acquisition
+        uses: ./.github/actions/acquire-images
+        with:
+          scope: compose
+          dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub-read-token: ${{ secrets.DOCKERHUB_READ_TOKEN }}
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -477,6 +523,12 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v6
+      - name: Bind qualified image acquisition
+        uses: ./.github/actions/acquire-images
+        with:
+          scope: compose
+          dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub-read-token: ${{ secrets.DOCKERHUB_READ_TOKEN }}
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}

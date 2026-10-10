@@ -347,7 +347,7 @@ def test_compose_up_fails_closed_when_lifecycle_command_times_out(
 ) -> None:
     monkeypatch.setattr(
         "tests.test_support.docker_stack._load_compose_pull_images",
-        lambda _: [],
+        lambda _, _environment=None: [],
     )
 
     def runner(args, **kwargs):  # noqa: ANN001
@@ -373,7 +373,7 @@ def test_ensure_required_images_available_pulls_missing_image(
     compose_file = "docker-compose.yml"
     monkeypatch.setattr(
         "tests.test_support.docker_stack._load_compose_pull_images",
-        lambda _: ["postgres:16-alpine", "confluentinc/cp-zookeeper:7.5.0"],
+        lambda _, _environment=None: ["postgres:16-alpine", "confluentinc/cp-zookeeper:7.5.0"],
     )
 
     calls: list[list[str]] = []
@@ -405,7 +405,7 @@ def test_ensure_required_images_available_raises_on_pull_failure(
     compose_file = "docker-compose.yml"
     monkeypatch.setattr(
         "tests.test_support.docker_stack._load_compose_pull_images",
-        lambda _: ["confluentinc/cp-zookeeper:7.5.0"],
+        lambda _, _environment=None: ["confluentinc/cp-zookeeper:7.5.0"],
     )
 
     pull_calls: list[list[str]] = []
@@ -445,7 +445,7 @@ def test_ensure_required_images_available_recovers_from_transient_timeout(
 ) -> None:
     monkeypatch.setattr(
         "tests.test_support.docker_stack._load_compose_pull_images",
-        lambda _: ["prom/prometheus:v2.47.2"],
+        lambda _, _environment=None: ["prom/prometheus:v2.47.2"],
     )
     pull_timeouts: list[float] = []
     sleep_delays: list[float] = []
@@ -486,7 +486,7 @@ def test_ensure_required_images_available_classifies_stdout_pull_failure(
 ) -> None:
     monkeypatch.setattr(
         "tests.test_support.docker_stack._load_compose_pull_images",
-        lambda _: ["prom/prometheus:v2.47.2"],
+        lambda _, _environment=None: ["prom/prometheus:v2.47.2"],
     )
     pull_attempts = 0
 
@@ -520,7 +520,7 @@ def test_ensure_required_images_available_bounds_timeout_retries(
 ) -> None:
     monkeypatch.setattr(
         "tests.test_support.docker_stack._load_compose_pull_images",
-        lambda _: ["postgres:16-alpine"],
+        lambda _, _environment=None: ["postgres:16-alpine"],
     )
     pull_attempts = 0
 
@@ -556,7 +556,7 @@ def test_ensure_required_images_available_recovers_from_unknown_pull_failure(
 ) -> None:
     monkeypatch.setattr(
         "tests.test_support.docker_stack._load_compose_pull_images",
-        lambda _: ["grafana/grafana:10.1.5"],
+        lambda _, _environment=None: ["grafana/grafana:10.1.5"],
     )
     pull_attempts = 0
     sleep_delays: list[float] = []
@@ -592,7 +592,7 @@ def test_ensure_required_images_available_bounds_unknown_failure_retries(
 ) -> None:
     monkeypatch.setattr(
         "tests.test_support.docker_stack._load_compose_pull_images",
-        lambda _: ["grafana/grafana:10.1.5"],
+        lambda _, _environment=None: ["grafana/grafana:10.1.5"],
     )
     pull_attempts = 0
 
@@ -637,7 +637,7 @@ def test_image_pull_failure_classification_is_bounded_and_source_safe(
 ) -> None:
     monkeypatch.setattr(
         "tests.test_support.docker_stack._load_compose_pull_images",
-        lambda _: ["registry.example.test/platform/base:1"],
+        lambda _, _environment=None: ["registry.example.test/platform/base:1"],
     )
 
     def runner(args, **kwargs):  # noqa: ANN001, ARG001
