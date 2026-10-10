@@ -6,7 +6,9 @@ import asyncio
 from datetime import date
 
 import pytest
+import pytest_asyncio
 from portfolio_common.database_models import OutboxEvent, PortfolioValuationJob
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.valuation_job_repository import ValuationJobRepository
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -19,12 +21,19 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.po
     _position_history_replay_lock_key,
 )
 from tests.test_support.postgres_query_plan import plan_index_names, plan_node_types
+from tests.test_support.valuation_job_roots import seed_valuation_portfolios
 
 pytestmark = pytest.mark.asyncio
 
 PORTFOLIO_ID = "P-READINESS-SEQUENCE"
 SECURITY_ID = "S-READINESS-SEQUENCE"
 VALUATION_DATE = date(2026, 8, 9)
+TENANT = TenantId("readiness-sequence-owner")
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def readiness_portfolio_owner(clean_db, async_db_session: AsyncSession) -> None:
+    await seed_valuation_portfolios(async_db_session, [PORTFOLIO_ID], tenant_id=TENANT)
 
 
 def _aggregate_id(*, valuation_date: date = VALUATION_DATE, epoch: int = 0) -> str:
@@ -59,6 +68,7 @@ async def _stage_readiness(
 async def _seed_pending_job(session: AsyncSession) -> None:
     session.add(
         PortfolioValuationJob(
+            tenant_id=TENANT.value,
             portfolio_id=PORTFOLIO_ID,
             security_id=SECURITY_ID,
             valuation_date=VALUATION_DATE,
@@ -370,6 +380,7 @@ async def test_payload_identity_rejects_colon_delimited_aggregate_collision(
     async_db_session: AsyncSession,
     clean_db,
 ) -> None:
+    await seed_valuation_portfolios(async_db_session, ["A:B"], tenant_id=TENANT)
     colliding_aggregate = f"A:B:C:{VALUATION_DATE.isoformat()}:0"
     async_db_session.add_all(
         [
@@ -388,6 +399,7 @@ async def test_payload_identity_rejects_colon_delimited_aggregate_collision(
                 status="PENDING",
             ),
             PortfolioValuationJob(
+                tenant_id=TENANT.value,
                 portfolio_id="A:B",
                 security_id="C",
                 valuation_date=VALUATION_DATE,

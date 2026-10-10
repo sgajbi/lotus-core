@@ -16,6 +16,10 @@ from tests.test_support.portfolio_source_observation_migration_dependencies impo
     downgrade_observation_schema,
     observation_schema_semantics,
 )
+from tests.test_support.valuation_job_migration_dependencies import (
+    downgrade_valuation_job_schema,
+    valuation_job_schema_semantics,
+)
 
 pytestmark = [pytest.mark.integration_db, pytest.mark.db_direct]
 
@@ -228,7 +232,9 @@ def test_portfolio_tenant_cutover_rejects_ambiguous_rows_then_applies_and_rolls_
     with db_engine.begin() as connection:
         source_foreign_keys = inspect(connection).get_foreign_keys("transaction_source_revisions")
         observation_semantics = observation_schema_semantics(connection)
+        valuation_semantics = valuation_job_schema_semantics(connection)
         head_schema = connection.begin_nested()
+        downgrade_valuation_job_schema(connection)
         downgrade_observation_schema(connection)
         source_migration: dict[str, Any] = runpy.run_path(str(SOURCE_REVISION_MIGRATION))
         _bind_operations(source_migration, connection)
@@ -387,6 +393,7 @@ def test_portfolio_tenant_cutover_rejects_ambiguous_rows_then_applies_and_rolls_
             column["name"] for column in inspect(connection).get_columns("ingestion_jobs")
         }
         head_schema.rollback()
+        assert valuation_job_schema_semantics(connection) == valuation_semantics
         assert observation_schema_semantics(connection) == observation_semantics
         assert (
             inspect(connection).get_foreign_keys("transaction_source_revisions")

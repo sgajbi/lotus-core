@@ -10,6 +10,23 @@ and this file first. Then use the Platform
 [skill routing map](https://github.com/sgajbi/lotus-platform/blob/main/context/LOTUS-SKILL-ROUTING-MAP.md)
 and the task routes below to load only relevant specialist context.
 
+## Valuation-job ownership practice
+
+Portfolio valuation jobs derive `tenant_id` from the exact persisted portfolio root.
+Their constraints and indexes live in `valuation_job_schema.py`, while typed stale and
+dispatch recovery builders live in `valuation_job_recovery.py`. The public ORM model
+and table inventory remain intact. Bank improvements in the native maintainability and
+module-size ratchets rather than allowing growth in the shared model/repository files.
+Do not add header/default attribution or trim portfolio/security identities at terminal
+transitions. Use `AttributedValuationJobUpsert` after source attribution and
+`ValuationJobClaim` for dispatch recovery. Worker admission reads live authority without
+holding a job lock across calculation; terminal updates repeat tenant, token, and expiry
+fences and roll back effects after ownership loss. Global source observations remain global.
+Migration `c185b2c3d546` requires a coordinated writer drain and refuses unprovable retained
+owners atomically. PostgreSQL fixtures must seed explicit portfolio owners before jobs.
+See [the cutover runbook](docs/operations/valuation-job-tenant-cutover.md); critical DB and
+lifecycle lanes own collision, lease/replay, and actual Alembic refusal evidence.
+
 ## Imported model effective-window practice
 
 Both imported model definitions and targets use inclusive date windows: equal dates are valid,

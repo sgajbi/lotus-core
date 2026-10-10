@@ -133,6 +133,8 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/services/calculators/position_valuation_calculator/"
         "test_int_reprocessing_job_repository.py",
         "tests/integration/services/calculators/position_valuation_calculator/"
+        "test_valuation_job_tenant_postgresql.py",
+        "tests/integration/services/calculators/position_valuation_calculator/"
         "test_int_valuation_repo.py",
         "tests/integration/services/calculators/position_valuation_calculator/"
         "test_int_valuation_repo_empty_open_dates.py",

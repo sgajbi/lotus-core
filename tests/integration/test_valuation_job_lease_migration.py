@@ -67,8 +67,13 @@ def _lease_migration_predecessor(
 ) -> Iterator[None]:
     _bind_operations(migration, connection)
     _bind_operations(hot_path_migration, connection)
+    tenant_migration = runpy.run_path(
+        str(MIGRATION.with_name("c185b2c3d546_valuation_job_tenant_authority.py"))
+    )
+    _bind_operations(tenant_migration, connection)
 
     try:
+        tenant_migration["downgrade"]()
         hot_path_migration["downgrade"]()
         assert OLD_INDEX in _valuation_job_indexes(connection)
         assert NEW_INDEX not in _valuation_job_indexes(connection)
@@ -86,6 +91,8 @@ def _lease_migration_predecessor(
         assert NEW_INDEX not in _valuation_job_indexes(connection)
     finally:
         _restore_current_hot_path_index(hot_path_migration, connection)
+        tenant_migration["upgrade"]()
+        connection.commit()
 
     assert NEW_INDEX in _valuation_job_indexes(connection)
     assert OLD_INDEX not in _valuation_job_indexes(connection)

@@ -17,6 +17,7 @@ from portfolio_common.database_models import (
     Portfolio,
     PositionHistory,
 )
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.domain.valuation import (
     FinancialSourceReference,
     InstrumentValuationPolicyAssignment,
@@ -273,6 +274,7 @@ def consumer(mock_dependencies: dict) -> ValuationConsumer:
 def mock_event() -> PortfolioValuationRequiredEvent:
     """Provides a consistent valuation event for tests."""
     return PortfolioValuationRequiredEvent(
+        tenant_id=TEST_TENANT_ID,
         portfolio_id="PORT_VAL_01",
         security_id="SEC_VAL_01",
         valuation_date=date(2025, 8, 1),
@@ -303,6 +305,7 @@ def mock_dependencies():
     mock_idempotency_repo = AsyncMock(spec=IdempotencyRepository)
     mock_outbox_repo = AsyncMock(spec=OutboxRepository)
     mock_valuation_repo = AsyncMock(spec=ValuationRepository)
+    mock_valuation_repo.owns_valuation_claim.return_value = True
     mock_valuation_repo.update_job_status.return_value = (
         ValuationJobTransitionOutcome.TERMINAL_APPLIED
     )
@@ -356,6 +359,30 @@ def _source_reference(record_id: str) -> FinancialSourceReference:
         source_content_hash=canonical_content_hash({"record_id": record_id}),
         observed_at=datetime(2025, 8, 1, 8, tzinfo=UTC),
     )
+
+
+async def test_unowned_valuation_claim_stops_before_idempotency_and_financial_reads(
+    mock_dependencies, mock_event
+) -> None:
+    repository = mock_dependencies["valuation_repo"]
+    repository.owns_valuation_claim.return_value = False
+    await mock_dependencies["processor"].process_valid_event(
+        mock_event, "foreign-delivery", "transport-correlation", claim_token="b" * 32
+    )
+    repository.owns_valuation_claim.assert_awaited_once_with(
+        tenant_id=TenantId(mock_event.tenant_id),
+        portfolio_id=mock_event.portfolio_id,
+        security_id=mock_event.security_id,
+        valuation_date=mock_event.valuation_date,
+        epoch=mock_event.epoch,
+        claim_token="b" * 32,
+    )
+    mock_dependencies["idempotency_repo"].claim_event_processing.assert_not_awaited()
+    repository.get_last_position_history_before_date.assert_not_awaited()
+    repository.get_portfolio.assert_not_awaited()
+    repository.update_job_status.assert_not_awaited()
+    repository.upsert_daily_snapshot.assert_not_awaited()
+    mock_dependencies["outbox_repo"].create_outbox_event.assert_not_awaited()
 
 
 async def test_invalid_valuation_event_is_raised_to_shared_recovery_boundary(
@@ -424,6 +451,7 @@ async def test_valuation_processor_executes_success_path_without_kafka_consumer(
         mock_event.portfolio_id,
         "position-valuation-calculator",
         "processor-corr-id",
+        tenant_id=mock_event.tenant_id,
     )
     mock_valuation_repo.update_job_status.assert_awaited_once()
     assert (
@@ -632,6 +660,7 @@ async def test_scoped_portfolio_uses_exact_authority_without_legacy_price_read(
     expected_status: str,
     expects_receipt: bool,
 ) -> None:
+    mock_event.tenant_id = "TENANT-SG"
     repo = mock_dependencies["valuation_repo"]
     mock_dependencies["idempotency_repo"].claim_event_processing.return_value = True
     position = PositionHistory(
@@ -757,6 +786,7 @@ async def test_scoped_portfolio_fails_closed_when_policy_authority_is_missing(
     mock_event: PortfolioValuationRequiredEvent,
     mock_dependencies: dict,
 ) -> None:
+    mock_event.tenant_id = "TENANT-SG"
     repo = mock_dependencies["valuation_repo"]
     mock_dependencies["idempotency_repo"].claim_event_processing.return_value = True
     repo.get_last_position_history_before_date.return_value = PositionHistory(
@@ -807,6 +837,7 @@ async def test_scoped_portfolio_fails_closed_when_policy_authority_is_missing(
         "FAILED",
         failure_reason="no exact authority",
         expected_claim_token=None,
+        tenant_id=TenantId(mock_event.tenant_id),
     )
     failed_snapshot = repo.upsert_daily_snapshot.await_args.args[0]
     assert failed_snapshot.valuation_status == "FAILED"
@@ -1187,7 +1218,11 @@ async def test_valuation_consumer_success(
 
     # ASSERT
     mock_valuation_repo.get_last_position_history_before_date.assert_called_once_with(
-        mock_event.portfolio_id, mock_event.security_id, mock_event.valuation_date, mock_event.epoch
+        mock_event.portfolio_id,
+        mock_event.security_id,
+        mock_event.valuation_date,
+        mock_event.epoch,
+        tenant_id=TenantId(mock_event.tenant_id),
     )
     valuation_candidate = mock_valuation_repo.upsert_daily_snapshot.call_args.args[0]
     assert valuation_candidate.valuation_fx_rate_date == mock_event.valuation_date

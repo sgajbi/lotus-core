@@ -20,6 +20,11 @@ from tests.test_support.selected_history_migration_dependencies import (
     restore_selected_history_portfolio_foreign_keys,
     suspend_selected_history_portfolio_foreign_keys,
 )
+from tests.test_support.valuation_job_migration_dependencies import (
+    downgrade_valuation_job_schema,
+    restore_valuation_job_schema,
+    valuation_job_schema_semantics,
+)
 
 pytestmark = [pytest.mark.integration_db, pytest.mark.db_direct]
 
@@ -325,6 +330,8 @@ def test_portfolio_valuation_book_scope_applies_rolls_back_and_enforces_authorit
 
     with db_engine.begin() as connection:
         original_observation_semantics = observation_schema_semantics(connection)
+        original_valuation_semantics = valuation_job_schema_semantics(connection)
+        valuation_migration = downgrade_valuation_job_schema(connection)
         suspend_selected_history_portfolio_foreign_keys(connection)
         dependent_migrations = _downgrade_dependent_schema(connection)
         _bind_operations(migration, connection)
@@ -399,6 +406,8 @@ def test_portfolio_valuation_book_scope_applies_rolls_back_and_enforces_authorit
             dependent_migration["upgrade"]()
         assert observation_schema_semantics(connection) == original_observation_semantics
         restore_selected_history_portfolio_foreign_keys(connection)
+        restore_valuation_job_schema(valuation_migration, connection)
+        assert valuation_job_schema_semantics(connection) == original_valuation_semantics
         if any(migration["revision"] == "c177b2c3d538" for migration in dependent_migrations):
             _assert_source_revision_integrity(connection)
         if dependent_migrations:

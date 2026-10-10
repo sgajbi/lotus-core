@@ -1,10 +1,16 @@
 # tests/unit/libs/portfolio-common/test_valuation_job_repository.py
+from dataclasses import asdict
 from datetime import date
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.infrastructure.persistence.statement_batching import (
     POSTGRES_STATEMENT_ROW_LIMIT,
+)
+from portfolio_common.valuation_job_attribution import attribute_valuation_jobs
+from portfolio_common.valuation_job_contracts import (
+    AttributedValuationJobUpsert,
 )
 from portfolio_common.valuation_job_contracts import (
     ValuationJobUpsert as ContractValuationJobUpsert,
@@ -16,6 +22,24 @@ from portfolio_common.valuation_job_repository import (
 )
 
 pytestmark = pytest.mark.asyncio
+
+TENANT = TenantId("valuation-unit-owner")
+
+
+def _owned_request(*args, **kwargs) -> AttributedValuationJobUpsert:
+    return AttributedValuationJobUpsert(*args, **kwargs, tenant_id=TENANT)
+
+
+@pytest.fixture(autouse=True)
+def source_attribution_double(monkeypatch):
+    """These SQL upsert tests inject owner selection; attribution has its own tests."""
+
+    async def attribute(_database, jobs):
+        return [_owned_request(**asdict(job)) for job in jobs]
+
+    monkeypatch.setattr(
+        "portfolio_common.valuation_job_repository.attribute_valuation_jobs", attribute
+    )
 
 
 async def test_repository_preserves_valuation_job_upsert_import_compatibility() -> None:
@@ -81,7 +105,7 @@ async def test_upsert_job_builds_correct_statement(
     assert called_values[0]["status"] == "PENDING"
 
     mock_pg_insert.return_value.values.return_value.on_conflict_do_update.assert_called_once_with(
-        index_elements=["portfolio_id", "security_id", "valuation_date", "epoch"],
+        index_elements=["tenant_id", "portfolio_id", "security_id", "valuation_date", "epoch"],
         set_=ANY,
         where=ANY,
     )
@@ -96,7 +120,9 @@ async def test_upsert_job_skips_when_newer_epoch_already_exists(
     mock_pg_insert, repository: ValuationJobRepository, mock_db_session: AsyncMock
 ):
     latest_epoch_result = MagicMock()
-    latest_epoch_result.all.return_value = [("PORT_VJR_02", "SEC_VJR_02", date(2025, 8, 12), 3)]
+    latest_epoch_result.all.return_value = [
+        (TENANT.value, "PORT_VJR_02", "SEC_VJR_02", date(2025, 8, 12), 3)
+    ]
     mock_db_session.execute.return_value = latest_epoch_result
 
     await repository.upsert_job(
@@ -150,7 +176,7 @@ async def test_upsert_job_marks_prior_pending_epochs_as_superseded(
     ) = mock_final_statement
     mock_final_statement.returning.return_value = mock_returning_statement
     latest_epoch_result = MagicMock()
-    latest_epoch_result.all.return_value = [("P1", "S1", date(2025, 8, 10), 1)]
+    latest_epoch_result.all.return_value = [(TENANT.value, "P1", "S1", date(2025, 8, 10), 1)]
     insert_result = MagicMock()
     insert_result.all.return_value = [("P1", "S1", date(2025, 8, 10), 2)]
     skip_result = MagicMock()
@@ -183,7 +209,7 @@ async def test_upsert_job_does_not_rearm_processing_job_with_same_correlation(
     ) = mock_final_statement
     mock_final_statement.returning.return_value = mock_returning_statement
     latest_epoch_result = MagicMock()
-    latest_epoch_result.all.return_value = [("P1", "S1", date(2025, 8, 10), 2)]
+    latest_epoch_result.all.return_value = [(TENANT.value, "P1", "S1", date(2025, 8, 10), 2)]
     insert_result = MagicMock()
     insert_result.all.return_value = []
     skip_result = MagicMock()
@@ -199,7 +225,7 @@ async def test_upsert_job_does_not_rearm_processing_job_with_same_correlation(
     )
 
     mock_pg_insert.return_value.values.return_value.on_conflict_do_update.assert_called_once_with(
-        index_elements=["portfolio_id", "security_id", "valuation_date", "epoch"],
+        index_elements=["tenant_id", "portfolio_id", "security_id", "valuation_date", "epoch"],
         set_=ANY,
         where=ANY,
     )
@@ -226,7 +252,7 @@ async def test_explicit_source_correction_can_rearm_completed_job(
     ) = mock_final_statement
     mock_final_statement.returning.return_value = mock_returning_statement
     latest_epoch_result = MagicMock()
-    latest_epoch_result.all.return_value = [("P1", "S1", date(2025, 8, 10), 2)]
+    latest_epoch_result.all.return_value = [(TENANT.value, "P1", "S1", date(2025, 8, 10), 2)]
     insert_result = MagicMock()
     insert_result.all.return_value = [("P1", "S1", date(2025, 8, 10), 2)]
     skip_result = MagicMock()
@@ -269,7 +295,7 @@ async def test_source_requeue_requires_transport_neutral_correction_identity(
 async def test_source_requeue_compares_correction_identity_not_transport_correlation() -> None:
     statement = _valuation_job_upsert_stmt(
         [
-            ValuationJobUpsert(
+            _owned_request(
                 portfolio_id="P1",
                 security_id="S1",
                 valuation_date=date(2025, 8, 10),
@@ -292,7 +318,7 @@ async def test_source_requeue_compares_correction_identity_not_transport_correla
 async def test_position_readiness_fence_compares_exact_outbox_sequence() -> None:
     statement = _valuation_job_upsert_stmt(
         [
-            ValuationJobUpsert(
+            _owned_request(
                 portfolio_id="P1",
                 security_id="S1",
                 valuation_date=date(2025, 8, 10),
@@ -371,6 +397,70 @@ async def test_upsert_jobs_deduplicates_duplicate_requests(repository: Valuation
     ]
 
 
+@pytest.mark.parametrize("other_attributed", [True, False], ids=["owned", "plain"])
+@pytest.mark.parametrize("foreign_first", [True, False], ids=["foreign-first", "foreign-last"])
+async def test_staging_refuses_foreign_duplicate_before_any_job_write(
+    repository, mock_db_session, monkeypatch, other_attributed, foreign_first
+):
+    monkeypatch.setattr(
+        "portfolio_common.valuation_job_repository.attribute_valuation_jobs",
+        attribute_valuation_jobs,
+    )
+    scope = dict(portfolio_id="P1", security_id="S1", valuation_date=date(2025, 8, 10), epoch=1)
+    foreign = AttributedValuationJobUpsert(**scope, tenant_id=TenantId("foreign-owner"))
+    other = _owned_request(**scope) if other_attributed else ValuationJobUpsert(**scope)
+    roots = MagicMock()
+    roots.all.return_value = [("P1", TENANT.value)]
+    empty_result = MagicMock()
+    empty_result.all.return_value = []
+    mock_db_session.execute.side_effect = [roots, empty_result, empty_result, empty_result]
+
+    with pytest.raises(ValueError, match="tenant conflicts with persisted ownership"):
+        await repository.upsert_jobs([foreign, other] if foreign_first else [other, foreign])
+
+    # Only the real attribution SELECT runs; neither INSERT nor supersession UPDATE is reached.
+    mock_db_session.execute.assert_awaited_once()
+    statement = mock_db_session.execute.await_args.args[0]
+    assert statement.is_select
+    assert "FOR UPDATE" in str(statement)
+
+
+@pytest.mark.parametrize(
+    "attributed_flags", [(False, False), (True, True), (True, False), (False, True)]
+)
+async def test_staging_accepts_valid_duplicates_after_real_owner_validation(
+    repository, mock_db_session, monkeypatch, attributed_flags
+):
+    monkeypatch.setattr(
+        "portfolio_common.valuation_job_repository.attribute_valuation_jobs",
+        attribute_valuation_jobs,
+    )
+    scope = dict(portfolio_id="P1", security_id="S1", valuation_date=date(2025, 8, 10), epoch=1)
+    jobs = [
+        (_owned_request if attributed else ValuationJobUpsert)(
+            **scope, correlation_id=f" corr-{index} "
+        )
+        for index, attributed in enumerate(attributed_flags)
+    ]
+    roots, epochs, inserted, superseded = [MagicMock() for _ in range(4)]
+    roots.all.return_value = [("P1", TENANT.value)]
+    epochs.all.return_value = []
+    inserted.all.return_value = [("P1", "S1", scope["valuation_date"], 1)]
+    superseded.rowcount = 0
+    mock_db_session.execute.side_effect = [roots, epochs, inserted, superseded]
+
+    assert await repository.upsert_jobs(iter(jobs)) == 1
+
+    statements = [call.args[0] for call in mock_db_session.execute.await_args_list]
+    assert len(statements) == 4
+    insert = statements[2]
+    assert insert.is_insert
+    values = insert.compile().params
+    assert values["tenant_id_m0"] == TENANT.value
+    assert values["correlation_id_m0"] == "corr-1"
+    assert "tenant_id_m1" not in values
+
+
 async def test_upsert_jobs_normalizes_reversed_inputs_to_unique_key_lock_order(
     repository: ValuationJobRepository,
 ):
@@ -444,10 +534,13 @@ async def test_high_fanout_epoch_lookup_uses_bind_safe_statement_chunks(
     mock_db_session: AsyncMock,
 ) -> None:
     first_result = MagicMock()
-    first_result.all.return_value = [("P-HIGH-FANOUT", "S-00000", date(2025, 8, 12), 3)]
+    first_result.all.return_value = [
+        (TENANT.value, "P-HIGH-FANOUT", "S-00000", date(2025, 8, 12), 3)
+    ]
     second_result = MagicMock()
     second_result.all.return_value = [
         (
+            TENANT.value,
             "P-HIGH-FANOUT",
             f"S-{POSTGRES_STATEMENT_ROW_LIMIT:05d}",
             date(2025, 8, 12),
@@ -466,11 +559,14 @@ async def test_high_fanout_epoch_lookup_uses_bind_safe_statement_chunks(
         for index in range(POSTGRES_STATEMENT_ROW_LIMIT + 1)
     ]
 
-    latest_epochs = await repository.get_latest_epochs_for_scopes(jobs)
+    latest_epochs = await repository.get_latest_epochs_for_scopes(
+        [_owned_request(**asdict(job)) for job in jobs]
+    )
 
     assert latest_epochs == {
-        ("P-HIGH-FANOUT", "S-00000", date(2025, 8, 12)): 3,
+        (TENANT.value, "P-HIGH-FANOUT", "S-00000", date(2025, 8, 12)): 3,
         (
+            TENANT.value,
             "P-HIGH-FANOUT",
             f"S-{POSTGRES_STATEMENT_ROW_LIMIT:05d}",
             date(2025, 8, 12),

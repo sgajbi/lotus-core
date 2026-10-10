@@ -21,6 +21,11 @@ from tests.test_support.selected_history_migration_dependencies import (
     restore_selected_history_portfolio_foreign_keys,
     suspend_selected_history_portfolio_foreign_keys,
 )
+from tests.test_support.valuation_job_migration_dependencies import (
+    downgrade_valuation_job_schema,
+    restore_valuation_job_schema,
+    valuation_job_schema_semantics,
+)
 
 pytestmark = [pytest.mark.integration_db, pytest.mark.db_direct]
 
@@ -147,6 +152,8 @@ def test_aggregation_job_cutover_quiesces_backfills_and_rejects_false_authority(
     with db_engine.begin() as connection:
         original_source_semantics = _source_revision_semantics(connection)
         original_observation_semantics = observation_schema_semantics(connection)
+        original_valuation_semantics = valuation_job_schema_semantics(connection)
+        valuation_migration = downgrade_valuation_job_schema(connection)
         observation_migration = downgrade_observation_schema(connection)
         suspend_selected_history_portfolio_foreign_keys(connection)
         _bind_operations(source_migration, connection)
@@ -209,6 +216,8 @@ def test_aggregation_job_cutover_quiesces_backfills_and_rejects_false_authority(
         _bind_operations(source_migration, connection)
         source_migration["upgrade"]()
         restore_observation_schema(observation_migration, connection)
+        restore_valuation_job_schema(valuation_migration, connection)
+        assert valuation_job_schema_semantics(connection) == original_valuation_semantics
         assert observation_schema_semantics(connection) == original_observation_semantics
         assert _source_revision_semantics(connection) == original_source_semantics
 

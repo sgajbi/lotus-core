@@ -695,3 +695,11 @@ def test_manifest_coverage_command_accepts_multiple_source_targets() -> None:
         "--cov=src.services.portfolio_transaction_processing_service.app.domain.cost_basis",
         "--cov-report=",
     ]
+
+
+def test_valuation_owner_collision_and_lease_proof_is_on_native_critical_db_lane():
+    node = (
+        "tests/integration/services/calculators/position_valuation_calculator/"
+        "test_valuation_job_tenant_postgresql.py"
+    )
+    assert get_suite("critical-db-coverage").count(node) == 1

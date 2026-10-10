@@ -97,7 +97,7 @@ def test_actual_upgrade_refuses_retained_invalid_windows_atomically(
         with db_engine.begin() as connection:
             for table in TABLES:
                 connection.execute(table.delete().where(table.c.model_portfolio_id == MODEL_ID))
-        restored = _alembic(db_engine, "upgrade", CURRENT)
+        restored = _alembic(db_engine, "upgrade", "head")
         assert restored.returncode == 0, restored.stderr
 
 
@@ -151,5 +151,5 @@ def test_actual_valid_upgrade_preserves_rows_and_enforces_insert_update_checks(d
         with db_engine.begin() as connection:
             for table in TABLES:
                 connection.execute(table.delete().where(table.c.model_portfolio_id == MODEL_ID))
-        restored = _alembic(db_engine, "upgrade", CURRENT)
+        restored = _alembic(db_engine, "upgrade", "head")
         assert restored.returncode == 0, restored.stderr

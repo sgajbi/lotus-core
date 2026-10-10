@@ -330,6 +330,7 @@ async def test_calculator_slos_returns_coherent_snapshot_under_queue_churn(
                 updated_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P2",
                 security_id="SEC-VAL-OLD",
                 valuation_date=date(2025, 8, 20),
@@ -340,6 +341,7 @@ async def test_calculator_slos_returns_coherent_snapshot_under_queue_churn(
                 updated_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P2",
                 security_id="SEC-VAL-LATE",
                 valuation_date=date(2025, 8, 31),
@@ -430,6 +432,7 @@ async def test_calculator_slos_ignore_superseded_pending_valuation_epochs(
                 created_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P2Q",
                 security_id="SEC-VAL-EPOCH",
                 valuation_date=date(2025, 8, 20),
@@ -440,6 +443,7 @@ async def test_calculator_slos_ignore_superseded_pending_valuation_epochs(
                 updated_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P2Q",
                 security_id="SEC-VAL-EPOCH",
                 valuation_date=date(2025, 8, 20),
@@ -1553,6 +1557,7 @@ async def test_lineage_keys_return_coherent_snapshot_under_key_churn(
                 created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P8",
                 security_id="SEC-LINEAGE-OLD",
                 valuation_date=date(2025, 8, 20),
@@ -1563,6 +1568,7 @@ async def test_lineage_keys_return_coherent_snapshot_under_key_churn(
                 updated_at=datetime(2025, 8, 30, 10, 10, tzinfo=timezone.utc),
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P8",
                 security_id="SEC-LINEAGE-LATE",
                 valuation_date=date(2025, 8, 31),
@@ -1708,6 +1714,7 @@ async def test_lineage_returns_coherent_snapshot_under_state_churn(
                 created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P8D",
                 security_id="SEC-LINEAGE-DETAIL",
                 valuation_date=date(2025, 8, 20),
@@ -1718,6 +1725,7 @@ async def test_lineage_returns_coherent_snapshot_under_state_churn(
                 updated_at=datetime(2025, 8, 30, 10, 10, tzinfo=timezone.utc),
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P8D",
                 security_id="SEC-LINEAGE-DETAIL",
                 valuation_date=date(2025, 8, 31),
@@ -1776,6 +1784,7 @@ async def test_valuation_jobs_return_coherent_snapshot_under_job_churn(
     async_db_session.add_all(
         [
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P9",
                 security_id="SEC-VAL-OLD",
                 valuation_date=date(2025, 8, 20),
@@ -1790,6 +1799,7 @@ async def test_valuation_jobs_return_coherent_snapshot_under_job_churn(
                 updated_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P9",
                 security_id="SEC-VAL-LATE",
                 valuation_date=date(2025, 8, 31),
@@ -1849,6 +1859,7 @@ async def test_valuation_jobs_expose_skipped_operational_state(
 
     async_db_session.add(
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P9S",
             security_id="SEC-VAL-SKIPPED",
             valuation_date=date(2025, 8, 20),
@@ -1901,6 +1912,7 @@ async def test_valuation_jobs_hide_superseded_pending_epochs_in_backlog_views(
     async_db_session.add_all(
         [
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P9Q",
                 security_id="SEC-VAL-EPOCH",
                 valuation_date=date(2025, 8, 20),
@@ -1911,6 +1923,7 @@ async def test_valuation_jobs_hide_superseded_pending_epochs_in_backlog_views(
                 updated_at=datetime(2025, 8, 30, 9, 0, tzinfo=timezone.utc),
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P9Q",
                 security_id="SEC-VAL-EPOCH",
                 valuation_date=date(2025, 8, 20),
@@ -1957,6 +1970,7 @@ async def test_valuation_jobs_show_superseded_epoch_by_direct_job_lookup(
     await async_db_session.flush()
 
     skipped_job = PortfolioValuationJob(
+        tenant_id=TEST_TENANT_ID,
         portfolio_id="P9R",
         security_id="SEC-VAL-SUPERSEDED",
         valuation_date=date(2025, 8, 20),
@@ -2369,6 +2383,7 @@ async def test_get_load_run_progress_returns_run_scoped_completion_snapshot(
                 created_at=datetime(2025, 8, 30, 11, 50, tzinfo=timezone.utc),
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="LOAD_20260418T065154Z_PF_0001",
                 security_id="SEC-1",
                 valuation_date=date(2026, 4, 17),
@@ -2379,6 +2394,7 @@ async def test_get_load_run_progress_returns_run_scoped_completion_snapshot(
                 updated_at=datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="LOAD_20260418T065154Z_PF_0002",
                 security_id="SEC-2",
                 valuation_date=date(2026, 4, 17),
@@ -2668,6 +2684,7 @@ async def test_get_load_run_progress_excludes_stage_rows_created_after_generated
                 created_at=datetime(2025, 8, 31, 12, 30, tzinfo=timezone.utc),
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="LOAD_20260418T065154Z_PF_0001",
                 security_id="SEC-1",
                 valuation_date=date(2026, 4, 17),
@@ -2678,6 +2695,7 @@ async def test_get_load_run_progress_excludes_stage_rows_created_after_generated
                 updated_at=datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc),
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="LOAD_20260418T065154Z_PF_0002",
                 security_id="SEC-2",
                 valuation_date=date(2026, 4, 17),

@@ -24,9 +24,9 @@
     {
       "path": "src/libs/portfolio-common/portfolio_common/valuation_repository_base.py",
       "rank": "C",
-      "mi": 6.535744588393695,
+      "mi": 7.553619260159001,
       "owner": "lotus-core maintainers",
-      "rationale": "Existing valuation repository hotspot; baseline has zero growth headroom.",
+      "rationale": "Tenant-owned valuation recovery builders extracted in #798; improved floor retains zero growth headroom.",
       "issue": "#462"
     },
     {

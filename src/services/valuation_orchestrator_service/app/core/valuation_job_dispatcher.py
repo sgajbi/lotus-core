@@ -50,6 +50,7 @@ class ValuationJobDispatcher:
     @staticmethod
     def _valuation_required_event(job: PortfolioValuationJob) -> dict[str, Any]:
         event = PortfolioValuationRequiredEvent(
+            tenant_id=job.tenant_id,
             portfolio_id=job.portfolio_id,
             security_id=job.security_id,
             valuation_date=job.valuation_date,
