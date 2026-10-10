@@ -709,7 +709,17 @@ async def test_openapi_describes_classification_taxonomy_shared_schema(async_tes
     request_schema = components["ClassificationTaxonomyIngestionRequest"]
     record_schema = components["ClassificationTaxonomyRecord"]
 
-    assert "platform taxonomy labels are introduced or updated" in path["description"]
+    description = path["description"]
+    assert "taxonomy labels or one bounded historical instrument assignment cut" in description
+    assert "Conflicts return 409" in description
+    assert "does not certify provider authority or financial cut compatibility" in description
+    assert request_schema["properties"]["assignment_cut"]["anyOf"] == [
+        {"$ref": "#/components/schemas/InstrumentClassificationCut"},
+        {"type": "null"},
+    ]
+    assert request_schema["properties"]["assignment_cut"]["description"] == (
+        "Explicit immutable historical assignment cut; never upserts current labels."
+    )
     assert request_schema["properties"]["classification_taxonomy"]["description"] == (
         "Classification taxonomy records to ingest or upsert."
     )
