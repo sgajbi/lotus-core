@@ -54,6 +54,8 @@ from tests.test_support.transaction_processing import (
 from tests.test_support.valuation_outage import (
     assert_live_default_claim,
     assert_same_claim_financial_settlement,
+    assert_same_live_claim,
+    assert_worker_row_lock,
     valuation_outage_snapshot,
 )
 
@@ -466,21 +468,29 @@ def _recover_admitted_valuation(db_engine, scope, trigger: Callable[[], None]) -
             _native_compose("start", worker)
             started = True
             worker_ips = _native_compose("exec", "-T", worker, "hostname", "-i").split()
+            evidence["holder_pid"] = holder_pid
+            evidence["worker_ips"] = worker_ips
 
             def blocked_worker():
                 with db_engine.connect() as observer:
-                    return [
+                    rows = [
                         dict(row)
                         for row in observer.execute(
                             text("""
-                            SELECT pid, host(client_addr) AS client_host, wait_event_type, query
+                            SELECT pid, backend_start, query_start, state, application_name,
+                                   datname, usename, host(client_addr) AS client_host,
+                                   wait_event_type, wait_event, query,
+                                   pg_blocking_pids(pid) AS blocking_pids,
+                                   current_setting('track_activity_query_size') AS query_size_limit
                             FROM pg_stat_activity
                             WHERE :holder = ANY(pg_blocking_pids(pid))
-                              AND query ILIKE '%UPDATE portfolio_valuation_jobs%'
                         """),
                             {"holder": holder_pid},
                         ).mappings()
                     ]
+                # Preserve the latest raw observation even when admission times out.
+                evidence["phases"]["blocker_observation"] = rows
+                return rows
 
             evidence["phases"]["blocked_worker"] = wait_for_value(
                 blocked_worker,
@@ -492,10 +502,13 @@ def _recover_admitted_valuation(db_engine, scope, trigger: Callable[[], None]) -
                     )
                 ),
             )
+            assert_worker_row_lock(
+                evidence["phases"]["blocked_worker"],
+                holder_pid=holder_pid,
+                worker_ips=worker_ips,
+            )
             before_fault = valuation_outage_snapshot(db_engine, scope)
-            locked_claim = assert_live_default_claim(before_fault)
-            for field in ("id", "epoch", "attempt_count", "valuation_claim_token"):
-                assert locked_claim[field] == claim[field], (claim, locked_claim)
+            assert_same_live_claim(claim, before_fault)
             evidence["phases"]["before_fault"] = before_fault
             try:
                 with ComposeFaultRecoveryBoundary(
