@@ -9,6 +9,11 @@ from tests.test_support.analytics_correction_oracle import (
     assert_equivalent_read,
     has_economics,
 )
+from tests.test_support.analytics_export_oracle import (
+    assert_corrected_export,
+    assert_export_matches_source,
+    assert_ndjson_matches_export,
+)
 from tests.test_support.output_control import emit_test_output
 from tests.test_support.pipeline_quiescence import (
     read_pipeline_activity_snapshot,
@@ -18,6 +23,50 @@ from tests.test_support.pipeline_quiescence import (
 
 from .api_client import E2EApiClient
 from .data_factory import unique_suffix
+
+EXPORT_ENDPOINT = "/integration/exports/analytics-timeseries/jobs"
+
+
+def create_retained_export(client, portfolio_id, dataset, request, source, *, anchor=None):
+    export_request = {
+        "dataset_type": f"{dataset}_timeseries",
+        "portfolio_id": portfolio_id,
+        f"{dataset}_timeseries_request": request,
+    }
+    if anchor is not None:
+        export_request["refresh_of_job_id"] = anchor
+    response = client.post_query(EXPORT_ENDPOINT, export_request)
+    assert response.status_code == 200, response.text
+    job = response.json()
+    assert job["status"] == "completed", job
+    result = client.query_control(job["result_endpoint"]).json()
+    assert result["job_id"] == job["job_id"]
+    assert_export_matches_source(result, source, dataset, request)
+    assert_retained_formats(client, job, result)
+    return {"request": export_request, "job": job, "result": result}
+
+
+def assert_retained_formats(client, job, expected):
+    assert client.query_control(job["result_endpoint"]).json() == expected
+    for compression in ("none", "gzip"):
+        response = client.query_control(
+            job["result_endpoint"] + f"?result_format=ndjson&compression={compression}"
+        )
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("application/x-ndjson")
+        if compression == "gzip":
+            assert response.headers["content-encoding"] == "gzip"
+        # Requests decodes Content-Encoding before exposing content.
+        assert_ndjson_matches_export(response.content, expected)
+
+
+def assert_reused_export(client, retained):
+    replay = client.post_query(EXPORT_ENDPOINT, retained["request"]).json()
+    assert replay["status"] == "completed"
+    assert replay["disposition"] == "reused_completed"
+    assert replay["job_id"] == retained["job"]["job_id"]
+    assert_retained_formats(client, replay, retained["result"])
+    return replay
 
 
 def seed_prices(client: E2EApiClient, security_id: str, prices: tuple[str, ...]):
@@ -143,6 +192,9 @@ def test_supported_historical_price_correction_changes_live_analytics_identity(
             "page": page,
             "continuation_request": continuation,
             "unchanged_continuation": unchanged.json(),
+            "original_export": create_retained_export(
+                client, portfolio_id, dataset, request, before
+            ),
         }
     correction = {
         "market_prices": [
@@ -176,6 +228,19 @@ def test_supported_historical_price_correction_changes_live_analytics_identity(
         assert stale.status_code == 409, stale.text
         assert stale.json()["error_code"] == "QCP_ANALYTICS_STALE_CONTINUATION"
         receipt.update(after=after, corrected_repeat=repeated, stale_continuation=stale.json())
+        original_export = receipt["original_export"]
+        receipt["original_request_after_correction"] = assert_reused_export(client, original_export)
+        corrected_export = create_retained_export(
+            client,
+            portfolio_id,
+            dataset,
+            request,
+            after,
+            anchor=original_export["job"]["job_id"],
+        )
+        assert_corrected_export(original_export["result"], corrected_export["result"])
+        receipt["corrected_export"] = corrected_export
+        receipt["correction_request_replay"] = assert_reused_export(client, corrected_export)
     # A duplicate supported source delivery may enqueue work but cannot change economics/identity.
     replay = client.ingest("/ingest/market-prices", correction)
     assert replay.status_code == 202
@@ -191,6 +256,22 @@ def test_supported_historical_price_correction_changes_live_analytics_identity(
         repeated = client.post_query(receipt["endpoint"], request).json()
         assert_equivalent_read(receipt["after"], repeated, dataset)
         receipt["source_replay_read"] = repeated
+    # A fresh TCP client/session reads persisted A and B after source replay. This
+    # is independent retrieval, not a process-restart or provider-custody claim.
+    fresh_client = E2EApiClient(
+        client.ingestion_url, client.query_url, client.query_control_plane_url, client.tenant_id
+    )
+    try:
+        for receipt in receipts.values():
+            for name in ("original_export", "corrected_export"):
+                retained = receipt[name]
+                status = fresh_client.query_control(
+                    f"{EXPORT_ENDPOINT}/{retained['job']['job_id']}"
+                ).json()
+                assert status["status"] == "completed"
+                assert_retained_formats(fresh_client, status, retained["result"])
+    finally:
+        fresh_client.session.close()
     # Bypass pytest capture only for this source-safe synthetic receipt: default main E2E
     # logs retain passing proof without changing workflow/manifest capture policy.
     with capsys.disabled():

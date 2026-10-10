@@ -322,7 +322,9 @@ async def test_actual_http_continuation_refuses_prior_page_same_epoch_correction
 
 
 @pytest.mark.parametrize("dataset", ["portfolio", "position"])
-@pytest.mark.parametrize("source_case", ["consistent", "degraded", "mixed", "unknown", "empty"])
+@pytest.mark.parametrize(
+    "source_case", ["consistent", "degraded", "degraded_first", "mixed", "unknown", "empty"]
+)
 async def test_export_retained_page_evidence_pg_http(
     content_identity_client, dataset, source_case, monkeypatch
 ):
@@ -342,7 +344,9 @@ async def test_export_retained_page_evidence_pg_http(
             "freshness_status": "CURRENT",
             "source_evidence_current": True,
         }
-        if second and source_case == "degraded":
+        if (second and source_case == "degraded") or (
+            not second and source_case == "degraded_first"
+        ):
             updates.update(
                 data_quality_status="PARTIAL",
                 freshness_status="STALE",
@@ -407,7 +411,13 @@ async def test_export_retained_page_evidence_pg_http(
     assert evidence["source_cut_status"] == (
         "UNAVAILABLE" if source_case == "unknown" else "AVAILABLE"
     )
-    assert evidence["source_evidence_current"] is (source_case != "degraded")
+    assert evidence["source_evidence_current"] is (
+        source_case not in {"degraded", "degraded_first"}
+    )
+    if source_case == "degraded_first":
+        assert evidence["quality_statuses"] == ["PARTIAL", "COMPLETE"]
+        assert evidence["freshness_statuses"] == ["STALE", "CURRENT"]
+        assert "PAGE_SOURCE_EVIDENCE_NOT_CURRENT" in evidence["unavailable_reasons"]
     assert len(evidence["pages"]) == 2
     for captured, page in zip(acquired_pages, evidence["pages"], strict=True):
         assert page["source_metadata"] == {
