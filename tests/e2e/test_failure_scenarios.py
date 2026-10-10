@@ -36,6 +36,11 @@ from tests.test_support.native_consumer_boundary import (
     wait_for_value,
 )
 from tests.test_support.output_control import emit_test_output
+from tests.test_support.pipeline_quiescence import (
+    read_pipeline_activity_snapshot,
+    read_pipeline_last_activity_at,
+    wait_for_pipeline_quiescence,
+)
 from tests.test_support.runtime.compose_fault_recovery import (
     ComposeFaultRecoveryBoundary,
     wait_for_owned_container_exit,
@@ -45,6 +50,11 @@ from tests.test_support.transaction_processing import (
     canonical_transaction_record,
     instrument_record,
     portfolio_record,
+)
+from tests.test_support.valuation_outage import (
+    assert_live_default_claim,
+    assert_same_claim_financial_settlement,
+    valuation_outage_snapshot,
 )
 
 from .api_client import E2EApiClient
@@ -426,13 +436,126 @@ def wait_for_service_ready(service_url: str, timeout: int = 60):
     emit_test_output(f"\n--- Service at {service_url} is healthy ---", verbose_only=True)
 
 
+def _recover_admitted_valuation(db_engine, scope, trigger: Callable[[], None]) -> None:
+    """Fault an executing, default-lease claim without manufacturing recovery authority."""
+    worker = "position_valuation_calculator"
+    evidence = {"scope": scope, "phases": {}}
+    started = False
+    primary_error = None
+    try:
+        # Stop only the owned project's worker while native ingestion/scheduling admits work.
+        # No claim/status/expiry/attempt/offset is written by this test.
+        _native_compose("stop", worker)
+        trigger()
+        admitted = wait_for_value(
+            lambda: valuation_outage_snapshot(db_engine, scope),
+            lambda value: (
+                bool(value["jobs"]) and all(job["status"] == "PROCESSING" for job in value["jobs"])
+            ),
+        )
+        evidence["phases"]["admitted"] = admitted
+        claim = assert_live_default_claim(admitted)
+        with db_engine.connect() as holder:
+            holder.execute(text("SET LOCAL lock_timeout = '5s'"))
+            held = holder.execute(
+                text("SELECT id FROM portfolio_valuation_jobs WHERE id = :id FOR UPDATE"),
+                {"id": claim["id"]},
+            ).scalar_one()
+            assert held == claim["id"]
+            holder_pid = holder.execute(text("SELECT pg_backend_pid()")).scalar_one()
+            _native_compose("start", worker)
+            started = True
+            worker_ips = _native_compose("exec", "-T", worker, "hostname", "-i").split()
+
+            def blocked_worker():
+                with db_engine.connect() as observer:
+                    return [
+                        dict(row)
+                        for row in observer.execute(
+                            text("""
+                            SELECT pid, host(client_addr) AS client_host, wait_event_type, query
+                            FROM pg_stat_activity
+                            WHERE :holder = ANY(pg_blocking_pids(pid))
+                              AND query ILIKE '%UPDATE portfolio_valuation_jobs%'
+                        """),
+                            {"holder": holder_pid},
+                        ).mappings()
+                    ]
+
+            evidence["phases"]["blocked_worker"] = wait_for_value(
+                blocked_worker,
+                lambda rows: (
+                    bool(rows)
+                    and all(
+                        row["client_host"] in worker_ips and row["wait_event_type"] == "Lock"
+                        for row in rows
+                    )
+                ),
+            )
+            before_fault = valuation_outage_snapshot(db_engine, scope)
+            locked_claim = assert_live_default_claim(before_fault)
+            for field in ("id", "epoch", "attempt_count", "valuation_claim_token"):
+                assert locked_claim[field] == claim[field], (claim, locked_claim)
+            evidence["phases"]["before_fault"] = before_fault
+            try:
+                with ComposeFaultRecoveryBoundary(
+                    project_name=os.environ["COMPOSE_PROJECT_NAME"],
+                    faulted_service="postgres",
+                    recovery_services=E2E_RECOVERY_SERVICES,
+                    faulted_service_ready=lambda: wait_for_postgres_ready(db_engine, timeout=60),
+                    recovery_services_ready=_wait_for_core_services_ready,
+                ) as outage:
+                    wait_for_postgres_unavailable(db_engine)
+                    # PostgreSQL termination releases this test-owned row lock. Never reuse
+                    # or roll back its now-dead connection after normal service restoration.
+                    holder.invalidate()
+                    outage.restore()
+                    recovered_at = time.monotonic()
+                    evidence["phases"]["fault"] = outage.recovery_evidence
+            finally:
+                holder.invalidate()
+        evidence["phases"]["restored"] = valuation_outage_snapshot(db_engine, scope)
+        evidence["phases"]["quiescent"] = wait_for_pipeline_quiescence(
+            timeout_seconds=120,
+            poll_seconds=1,
+            stable_cycles=2,
+            quiet_seconds=8,
+            snapshot_reader=lambda: read_pipeline_activity_snapshot(db_engine),
+            last_activity_reader=lambda: read_pipeline_last_activity_at(db_engine),
+        )
+        settled = valuation_outage_snapshot(db_engine, scope)
+        evidence["phases"]["settled"] = settled
+        assert_same_claim_financial_settlement(claim, settled)
+        assert time.monotonic() - recovered_at <= 120, evidence
+    except BaseException as error:
+        primary_error = error
+        try:
+            evidence["phases"]["failure"] = valuation_outage_snapshot(db_engine, scope)
+        except Exception as diagnostic_error:
+            evidence["phases"]["failure"] = {"missing": repr(diagnostic_error)}
+        error.add_note("Valuation outage evidence: " + json.dumps(evidence, default=str))
+        raise
+    finally:
+        if not started:
+            try:
+                _native_compose("start", worker)
+            except Exception as recovery_error:
+                if primary_error is None:
+                    raise
+                primary_error.add_note(f"Valuation worker restoration failed: {recovery_error!r}")
+        emit_test_output("Valuation outage evidence: " + json.dumps(evidence, default=str))
+
+
 def test_db_outage_recovery(
-    docker_services, db_engine, clean_db_module, e2e_api_client: E2EApiClient, poll_db_until
+    docker_services,
+    db_engine,
+    clean_db_module,
+    e2e_api_client: E2EApiClient,
+    poll_db_until,
+    request,
 ):
     """
-    Tests that the persistence-service can recover from a transient DB outage,
-    successfully process a message after retrying, and does not send the
-    message to the DLQ.
+    Require persistence recovery and autonomous same-claim financial valuation after DB loss.
     """
     # 1. ARRANGE: Define test data
     suffix = uuid.uuid4().hex[:8].upper()
@@ -449,6 +572,7 @@ def test_db_outage_recovery(
         "auto.offset.reset": "latest",
     }
     dlq_consumer = Consumer(dlq_consumer_conf)
+    request.addfinalizer(dlq_consumer.close)
     dlq_consumer.subscribe([KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC])
 
     # 3. ARRANGE: Ingest and settle the reference data this database-recovery
@@ -512,27 +636,41 @@ def test_db_outage_recovery(
             }
         ]
     }
-    e2e_api_client.ingest("/ingest/transactions", transaction_payload_before)
-    poll_db_until(
-        query="SELECT 1 FROM transactions WHERE transaction_id = :txn_id",
-        params={"txn_id": transaction_id_before},
-        validation_func=lambda r: r is not None,
-        timeout=60,
-        fail_message=f"Pre-outage transaction '{transaction_id_before}' was not persisted.",
-    )
 
-    # 5. ACT: Simulate database outage.
-    emit_test_output("\n--- Stopping PostgreSQL container ---")
-    with ComposeFaultRecoveryBoundary(
-        project_name=os.environ["COMPOSE_PROJECT_NAME"],
-        faulted_service="postgres",
-        recovery_services=E2E_RECOVERY_SERVICES,
-        faulted_service_ready=lambda: wait_for_postgres_ready(db_engine, timeout=60),
-        recovery_services_ready=_wait_for_core_services_ready,
-    ) as outage:
-        wait_for_postgres_unavailable(db_engine)
-        emit_test_output("\n--- Reconciling PostgreSQL and dependent services ---")
-        outage.restore()
+    def trigger_valuation():
+        e2e_api_client.ingest("/ingest/transactions", transaction_payload_before)
+        poll_db_until(
+            query="SELECT 1 FROM transactions WHERE transaction_id = :txn_id",
+            params={"txn_id": transaction_id_before},
+            validation_func=lambda r: r is not None,
+            timeout=60,
+            fail_message=f"Pre-outage transaction '{transaction_id_before}' was not persisted.",
+        )
+        e2e_api_client.ingest(
+            "/ingest/market-prices",
+            {
+                "market_prices": [
+                    {
+                        "security_id": security_id,
+                        "price_date": "2025-08-05",
+                        "price": 2,
+                        "currency": "USD",
+                    }
+                ]
+            },
+        )
+        e2e_api_client.ingest(
+            "/ingest/business-dates",
+            {
+                "business_dates": [{"business_date": "2025-08-05"}],
+            },
+        )
+
+    _recover_admitted_valuation(
+        db_engine,
+        {"pid": portfolio_id, "sid": security_id, "date": "2025-08-05"},
+        trigger_valuation,
+    )
     emit_test_output("\n--- Core services fully recovered after outage ---")
 
     # 7. ACT/ASSERT: Ingest and persist a new transaction after recovery.
@@ -569,7 +707,6 @@ def test_db_outage_recovery(
     # 8. ASSERT: Verify the DLQ is empty
     emit_test_output("\n--- Verifying DLQ is empty ---", verbose_only=True)
     msg = dlq_consumer.poll(timeout=10)
-    dlq_consumer.close()
 
     assert msg is None, (
         f"A message was unexpectedly found in the DLQ: {msg.value() if msg else 'None'}"
