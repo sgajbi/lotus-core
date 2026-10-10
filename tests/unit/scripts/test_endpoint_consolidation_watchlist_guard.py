@@ -1,9 +1,100 @@
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from portfolio_common.source_data_products import (
+    ANALYTICS_INPUT,
+    OPERATIONAL_READ,
+    SOURCE_DATA_PRODUCT_CATALOG,
+    validate_source_data_product_catalog,
+)
 
 from scripts.quality import endpoint_consolidation_watchlist_guard as guard
 from scripts.quality import route_contract_family_guard, source_data_product_contract_guard
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/prices",
+        "/prices/",
+        "/fx-rates",
+        "/fx-rates/",
+        "/prices/{security_id}",
+        "/fx-rates/{pair}",
+        "/prices/?as_of=2024-02-29",
+        "https://core.example/fx-rates/",
+    ],
+)
+def test_watchlist_rejects_operational_market_route_in_any_analytics_contract(
+    monkeypatch, capsys, path: str
+) -> None:
+    product = next(p for p in SOURCE_DATA_PRODUCT_CATALOG if p.product_name == "MarketDataWindow")
+    catalog = (
+        replace(
+            product,
+            product_name="NewAnalyticsContract",
+            consumers=("new-analytics-consumer",),
+            current_routes=(path,),
+        ),
+    )
+    # This is a structurally valid catalog; the operational/analytics rule must reject it.
+    validate_source_data_product_catalog(catalog)
+    monkeypatch.setattr(guard, "SOURCE_DATA_PRODUCT_CATALOG", catalog, raising=False)
+
+    assert guard.main() == 1
+    output = capsys.readouterr().out
+    assert "NewAnalyticsContract" in output
+    assert path in output
+    assert "operational market" in output
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/integration/benchmarks/{benchmark_id}/market-series",
+        "/integration/prices",
+        "/prices-archive",
+        "/fx-rates-audit",
+    ],
+)
+def test_watchlist_accepts_window_and_distinct_analytics_paths(monkeypatch, path: str) -> None:
+    product = next(p for p in SOURCE_DATA_PRODUCT_CATALOG if p.product_name == "MarketDataWindow")
+    catalog = (replace(product, current_routes=(path,)),)
+    monkeypatch.setattr(guard, "SOURCE_DATA_PRODUCT_CATALOG", catalog, raising=False)
+
+    assert guard.main() == 0
+
+
+def test_watchlist_keeps_operational_market_reads_outside_analytics_prohibition(
+    monkeypatch,
+) -> None:
+    product = next(p for p in SOURCE_DATA_PRODUCT_CATALOG if p.product_name == "MarketDataWindow")
+    operational = replace(
+        product,
+        product_name="OperationalMarketRead",
+        route_family=OPERATIONAL_READ,
+        current_routes=("/prices/", "/fx-rates/"),
+    )
+    monkeypatch.setattr(guard, "SOURCE_DATA_PRODUCT_CATALOG", (product, operational), raising=False)
+
+    assert product.route_family == ANALYTICS_INPUT
+    assert guard.main() == 0
+
+
+def test_watchlist_refuses_empty_analytics_contract_inventory(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(guard, "SOURCE_DATA_PRODUCT_CATALOG", (), raising=False)
+
+    assert guard.main() == 1
+    assert "no analytics input contracts" in capsys.readouterr().out
+
+
+def test_watchlist_refuses_invalid_analytics_catalog(monkeypatch, capsys) -> None:
+    product = next(p for p in SOURCE_DATA_PRODUCT_CATALOG if p.product_name == "MarketDataWindow")
+    monkeypatch.setattr(guard, "SOURCE_DATA_PRODUCT_CATALOG", (replace(product, consumers=()),))
+
+    assert guard.main() == 1
+    assert "catalog is invalid" in capsys.readouterr().out
 
 
 def _route(

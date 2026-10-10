@@ -10,6 +10,16 @@ and this file first. Then use the Platform
 [skill routing map](https://github.com/sgajbi/lotus-platform/blob/main/context/LOTUS-SKILL-ROUTING-MAP.md)
 and the task routes below to load only relevant specialist context.
 
+## Operational market contract guard practice
+
+From the repository root, `make endpoint-consolidation-watchlist-guard` rejects `Analytics Input`
+catalog bindings to the operational `/prices` and `/fx-rates` route families for every consumer.
+Keep new contracts in the existing source-data product catalog so the guard can inspect them;
+use named analytics windows for calculation inputs. The rule preserves `Operational Read` contracts
+and exact path boundaries, and rejects an empty analytics inventory. Its command-level controls are
+in `tests/unit/scripts/test_endpoint_consolidation_watchlist_guard.py`. This is a static publication
+guard; it does not prove downstream adoption or qualify temporal/source semantics.
+
 ## Benchmark market-window currency authority practice
 
 The existing QCP benchmark market-series service requires an effective benchmark definition before

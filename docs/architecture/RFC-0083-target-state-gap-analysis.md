@@ -146,7 +146,7 @@ date parameters should be reviewed before they become public contract precedent.
 | `PositionTimeseriesInput` | `/integration/portfolios/{portfolio_id}/analytics/position-timeseries`, `position_timeseries` | Strong baseline | Normalize product metadata and freshness/completeness signals |
 | `PortfolioTimeseriesInput` | `/integration/portfolios/{portfolio_id}/analytics/portfolio-timeseries`, `portfolio_timeseries` | Strong baseline | Normalize product metadata and export semantics |
 | `PortfolioAnalyticsReference` | `/integration/portfolios/{portfolio_id}/analytics/reference`, portfolio reference state | Strong baseline | Keep aligned with analytics input product identity, freshness, and evidence metadata |
-| `MarketDataWindow` | prices, FX, market/reference integration routes | Partial | Effective benchmark definition is required before currency/FX selection; complete temporal policy, operational-route separation, source qualification and downstream adoption remain open |
+| `MarketDataWindow` | prices, FX, market/reference integration routes | Partial | Effective benchmark definition is required before currency/FX selection; the watchlist rejects analytics catalog bindings to operational prices/FX reads; complete temporal policy, source qualification and downstream adoption remain open |
 | `InstrumentReferenceBundle` | instruments, enrichment bulk, taxonomy, retained historical classification cuts, lookthrough | Partial | Exact historical assignment selection and append-only correction custody are implemented; qualify source producers and joined source-cut compatibility before downstream use, and complete remaining reference bundle coverage |
 | `BenchmarkAssignment` | benchmark assignment route and table | Strong baseline | Add product-level provenance and version/deprecation rules |
 | `BenchmarkConstituentWindow` | benchmark composition window route and table | Strong baseline | Add completeness and observed/ingested timestamp semantics |
@@ -214,6 +214,14 @@ consumer-specific convenience APIs instead of durable source-data products.
 
 The live executable watchlist is `docs/standards/endpoint-consolidation-watchlist.json`; it is
 enforced by `make endpoint-consolidation-watchlist-guard`.
+
+The same gate inspects every `Analytics Input` contract in the source-data product catalog,
+including contracts for new consumers. Bindings to the operational `/prices` or `/fx-rates`
+route families fail closed; an empty analytics inventory or invalid catalog also fails. The rule
+recognizes path boundaries rather than substring matches, and does not prohibit `Operational Read`
+contracts. Tests exercise the actual command entrypoint with rejected raw routes and accepted window
+contracts. This delivers the bounded #458 S2 guard requirement, not downstream adoption or a declared
+whole-window temporal/selection policy. Runtime operational routes and source values are unchanged.
 
 | Surface | Risk | Target disposition |
 | --- | --- | --- |
