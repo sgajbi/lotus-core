@@ -23,9 +23,11 @@ Each transaction RFC must define:
 units. A positive rate supplied by the booking source is immutable cost authority for the product
 transaction and its generated settlement cash leg. Cost enrichment consults effective-dated
 reference FX only when that source field is absent; ordinary replay preserves the rate already
-booked on a generated leg. An authorized source correction may replace the source-booked rate
-explicitly; an authorized correction of reference-derived economics may rederive the settlement
-cash basis, while ordinary replay freezes the existing generated rate.
+booked on a generated leg. Replacing source-booked FX requires separately qualified economic
+supersession; the evidence-confirmation command does not provide it. Application repair can
+rederive reference-derived settlement cash basis from corrected source authority, while ordinary
+replay freezes the existing generated rate. Neither capability authorizes direct database repair
+as an operator workflow.
 
 Core records the server-owned origin as `SOURCE_BOOKED`, `REFERENCE_DERIVED`, or
 `LEGACY_UNKNOWN`; clients cannot assert this provenance. Only `SOURCE_BOOKED` FX is part of source
@@ -70,6 +72,120 @@ transaction correction/replay workflow to rebuild those economics; direct databa
 a supported remediation path.
 
 ## Required Explicitness
+
+### Booked Cost and Valuation FX Attribution
+
+The implemented position-valuation convention translates the local price component at
+valuation-date FX and assigns retranslation of historical local cost to the FX component.
+This is Core position economics, not a time-weighted performance attribution methodology.
+For one position, define:
+
+| Symbol | Source and units |
+| --- | --- |
+| `C_local` | Persisted historical local cost basis, in instrument currency |
+| `C_base` | Persisted historical cost basis, in portfolio base currency |
+| `M_local` | Quantity times the valuation price aligned to instrument currency |
+| `X_value` | Valuation FX, portfolio-base units per one instrument-currency unit |
+
+Before ledger output normalization:
+
+```text
+M_base = M_local * X_value
+total_PnL_base = M_base - C_base
+FX_PnL_base = C_local * X_value - C_base
+price_PnL_base = total_PnL_base - FX_PnL_base
+```
+
+`POSITION_VALUATION_LEDGER_OUTPUT_V1` normalizes market values and FX P&L, then derives
+price P&L from normalized total minus normalized FX P&L. Any ledger rounding residual
+therefore belongs to price P&L; the persisted decomposition conserves total P&L exactly.
+Do not reconstruct historical base cost from current reference FX.
+
+For a BUY of 10 units at 100 XTS with supplied XTS/USD `2`, local cost is 1000 XTS and
+base cost is 2000 USD even when the trade-date reference rate is `2.5`. At local market
+value 1100 XTS and valuation FX `2.5`, market value is 2750 USD: price P&L is 250 USD,
+FX P&L is 500 USD, and total P&L is 750 USD. A valuation FX correction to `3` changes
+these to market value 3300 USD, price P&L 300 USD, FX P&L 1000 USD and total P&L
+1300 USD, without changing either historical cost basis.
+
+The authority cases are intentionally distinct:
+
+| Input or change | Cost-authority outcome |
+| --- | --- |
+| Positive supplied rate, conflicting or missing reference | Preserve supplied rate; reference lookup is unnecessary for cost enrichment |
+| Absent supplied rate | Derive latest reference effective on or before the economic leg date; mark `REFERENCE_DERIVED` |
+| Absent supplied rate and no eligible reference | Retryable missing-FX failure; do not default cross-currency cost to `1` |
+| Zero, negative or non-finite supplied rate | Public transaction admission rejects it |
+| Same trade/base currency | Identity `1`; reject a supplied non-unit rate |
+| Later-effective reference delivered before an earlier transaction | Never select a future-effective row; arrival order is not business-date authority |
+| Reference correction | May change valuation; does not supersede `SOURCE_BOOKED` cost |
+| Authorized source transaction correction | Requires separately qualified economic-supersession authority; ordinary redelivery and evidence confirmation cannot replace booked FX |
+
+The current `POST /ingest/transactions/{transaction_id}/source-evidence` command confirms
+missing source evidence under the contract owned by issues #1176/#1004. It preserves the
+original transaction economics; its successful completion does not authorize an FX-rate
+replacement. The PostgreSQL regression
+`test_source_booked_fx_only_correction_is_material_and_idempotent` deliberately updates the
+stored source row before invoking application repair. It proves material recalculation and
+idempotency at that boundary, not a supported HTTP economic-correction workflow. The original
+#1155 conditional economic-supersession requirement remains a separately assessed dependency;
+do not use that regression or the evidence-confirmation route to claim it satisfied.
+
+The same-date conflict, backdated lot rebuild and disposal example are exercised by
+`test_source_booked_fx_governs_product_and_generated_cash_basis` in the combined FX
+PostgreSQL integration module. Its direct application/database boundary is not HTTP ingress.
+The supported HTTP valuation-correction/replay/query-process-restart scenario is separately
+owned by `test_booked_fx_cash_reference_correction_replay_and_process_restart`. It admits
+source-booked FX `2` against trade-date reference `2.5` and requires fixed 2000/-2000 base
+costs for the equity/cash pair. Execution evidence must match this exact scenario revision;
+earlier versions seeded equal booking-date/reference FX and do not prove the conflict.
+The named component regression `test_source_booked_fx_rate_is_not_replaced_by_reference_rate`
+must reject restoration of unconditional reference overwrite. Evidence from these scopes must
+not be promoted into provider, downstream, full-window performance or production certification.
+
+### Funded Cash, Fees and Settlement Dates
+
+For ordinary generated settlement legs, `trade_fee` is an amount in trade currency, not a
+separately denominated fee. BUY cash outflow includes the fee; SELL, DIVIDEND and income INTEREST
+cash inflows deduct it. The generated child has zero fee, so replay cannot charge it again.
+There is no ordinary generated-leg fee-currency conversion field or supported third-currency
+fee conversion in this contract. A separately booked FX-linked FEE has its own authority and
+does not demonstrate that capability. Cash-account, mapped instrument and trade currencies must
+agree; FX never repairs a mismatched account mapping.
+
+The supported HTTP scenario above also defines this independent positive-cash book. Deposit
+2000 XTS before the original BUY; retain booked FX2 and value both positions at FX3, with equity
+price110 and cash price1. Fees are 2 XTS on each additional source transaction. Amounts below are
+USD; historical base basis does not use valuation FX3.
+
+| Cumulative source cut | Equity basis | Cash basis | Equity mark | Cash mark | Total unrealized P&L |
+| --- | --- | --- | --- | --- | --- |
+| Funded original BUY10 at100 | 2000 | 2000 | 3300 | 3000 | 2300 |
+| BUY1 at100 plus fee2 | 2204 | 1796 | 3630 | 2694 | 2324 |
+| SELL5 at110 less fee2 | 1204 | 2892 | 1980 | 4338 | 2222 |
+| DIVIDEND100 less fee2 | 1204 | 3088 | 1980 | 4632 | 2320 |
+| Income INTEREST50 less fee2 | 1204 | 3184 | 1980 | 4776 | 2368 |
+
+FIFO SELL consumes 500 XTS/1000 USD of original acquisition cost. Net proceeds are 548 XTS/
+1096 USD, so realized P&L is 48 XTS/96 USD. Original BUY and fee-bearing BUY settle on their
+trade dates; SELL and both income legs settle on the next business date. Each generated child
+uses settlement date and preserves source-booked FX2 even though that date's valuation FX is3.
+The source commands, actual settlement builder and adverse literal-oracle controls have focused
+unit coverage. Actual HTTP/worker/PostgreSQL execution of these added stages requires fresh
+hosted evidence for this source revision; collection or older fixture execution is insufficient.
+
+An independent USD-base/USD-instrument/USD-cash control uses booked identity1 and admits no FX
+rate rows. After funding2000 USD and BUY10 at100 USD, both bases are1000 USD; day-two equity
+mark1100 and cash mark1000 imply total mark2100 and unrealized P&L100. Both FX components must
+be zero, and exactly one generated cash child must remain linked to the BUY. This control uses
+the supported ingestion/query paths in the same registered scenario, not a rescaled foreign-FX
+response. Its hosted execution is required independently of the component controls.
+
+The same scenario first withholds the day-two exact valuation fixing. It requires null base
+valuation and `VALUATION_CURRENCY_LINEAGE_MISSING` on the public holdings response, plus actual
+latest-epoch valuation jobs for both securities in `FAILED` state with the exact missing-date FX
+reason, before supplying the fixing and checking recovery. This distinguishes a missing FX cause
+from unrelated degradation; booked cost remains unchanged throughout.
 
 If a transaction produces realized pnl, the transaction RFC must define both:
 

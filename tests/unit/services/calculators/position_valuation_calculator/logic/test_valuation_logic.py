@@ -11,6 +11,51 @@ from src.services.calculators.position_valuation_calculator.app.logic.valuation_
 )
 
 
+@pytest.mark.parametrize(
+    (
+        "quantity",
+        "price",
+        "local_cost",
+        "base_cost",
+        "rate",
+        "mark",
+        "price_pnl",
+        "fx_pnl",
+        "total",
+    ),
+    [
+        ("10", "110", "1000", "2000", "2.5", "2750", "250", "500", "750"),
+        ("10", "110", "1000", "2000", "3", "3300", "300", "1000", "1300"),
+        ("-1000", "1", "-1000", "-2000", "2.5", "-2500", "0", "-500", "-500"),
+        ("-1000", "1", "-1000", "-2000", "3", "-3000", "0", "-1000", "-1000"),
+    ],
+    ids=["equity-reference-2.5", "equity-reference-3", "cash-reference-2.5", "cash-reference-3"],
+)
+def test_booked_cost_reference_correction_has_independent_literal_attribution(
+    quantity, price, local_cost, base_cost, rate, mark, price_pnl, fx_pnl, total
+):
+    """Literal worked figures pin the implemented split, not only conservation."""
+    components = ValuationLogic.calculate_valuation_components(
+        quantity=Decimal(quantity),
+        market_price=Decimal(price),
+        cost_basis_local=Decimal(local_cost),
+        cost_basis_base=Decimal(base_cost),
+        price_currency="XTS",
+        instrument_currency="XTS",
+        portfolio_currency="USD",
+        instrument_to_portfolio_fx_rate=Decimal(rate),
+    )
+
+    assert components is not None
+    assert components.market_value_base == Decimal(mark)
+    assert components.unrealized_price_base == Decimal(price_pnl)
+    assert components.unrealized_fx_base == Decimal(fx_pnl)
+    assert components.unrealized_total_base == Decimal(total)
+    assert components.unrealized_total_base == (
+        components.unrealized_price_base + components.unrealized_fx_base
+    )
+
+
 def test_unrealized_pnl_decomposes_into_price_fx_and_total_components() -> None:
     components = ValuationLogic.calculate_valuation_components(
         quantity=Decimal("100"),
