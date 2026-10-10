@@ -15,6 +15,7 @@ from portfolio_common.database_models import (
     ProcessedEvent,
     Transaction,
 )
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.events import PortfolioValuationRequiredEvent
 from portfolio_common.valuation_job_contracts import (
     VALUATION_CLAIM_HEADER,
@@ -92,6 +93,7 @@ async def test_valuation_message_persists_snapshot_outbox_and_idempotency(
                 currency="USD",
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="PORT-VAL-INT-01",
                 security_id="SEC-VAL-INT-01",
                 valuation_date=date(2025, 8, 19),
@@ -119,6 +121,7 @@ async def test_valuation_message_persists_snapshot_outbox_and_idempotency(
     await async_db_session.commit()
 
     event = PortfolioValuationRequiredEvent(
+        tenant_id=TEST_TENANT_ID,
         portfolio_id="PORT-VAL-INT-01",
         security_id="SEC-VAL-INT-01",
         valuation_date=date(2025, 8, 19),
@@ -267,6 +270,7 @@ async def test_valuation_message_skips_side_effects_after_losing_job_ownership(
                 currency="USD",
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="PORT-VAL-INT-02",
                 security_id="SEC-VAL-INT-02",
                 valuation_date=date(2025, 8, 20),
@@ -293,6 +297,7 @@ async def test_valuation_message_skips_side_effects_after_losing_job_ownership(
     await async_db_session.commit()
 
     event = PortfolioValuationRequiredEvent(
+        tenant_id=TEST_TENANT_ID,
         portfolio_id="PORT-VAL-INT-02",
         security_id="SEC-VAL-INT-02",
         valuation_date=date(2025, 8, 20),
@@ -325,12 +330,14 @@ async def test_valuation_message_skips_side_effects_after_losing_job_ownership(
         status: str,
         failure_reason: str | None = None,
         *,
+        tenant_id: TenantId,
         expected_claim_token: str | None = None,
     ) -> ValuationJobTransitionOutcome:
         async with session_factory() as session:
             await session.execute(
                 update(PortfolioValuationJob)
                 .where(
+                    PortfolioValuationJob.tenant_id == tenant_id.value,
                     PortfolioValuationJob.portfolio_id == portfolio_id,
                     PortfolioValuationJob.security_id == security_id,
                     PortfolioValuationJob.valuation_date == valuation_date,
@@ -351,6 +358,7 @@ async def test_valuation_message_skips_side_effects_after_losing_job_ownership(
             valuation_date,
             epoch,
             status,
+            tenant_id=tenant_id,
             failure_reason=failure_reason,
             expected_claim_token=expected_claim_token,
         )
@@ -492,6 +500,7 @@ async def test_valuation_message_allows_rearmed_same_scope_delivery_to_refresh_s
                 valuation_status="VALUED_CURRENT",
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="PORT-VAL-INT-03",
                 security_id="CASH-VAL-INT-03",
                 valuation_date=date(2025, 8, 21),
@@ -524,6 +533,7 @@ async def test_valuation_message_allows_rearmed_same_scope_delivery_to_refresh_s
     await async_db_session.commit()
 
     event = PortfolioValuationRequiredEvent(
+        tenant_id=TEST_TENANT_ID,
         portfolio_id="PORT-VAL-INT-03",
         security_id="CASH-VAL-INT-03",
         valuation_date=date(2025, 8, 21),

@@ -1,3 +1,6 @@
+from .domain.tenant import TenantId
+from .valuation_job_contracts import ValuationJobClaim
+
 DISPATCH_PUBLISH_FAILURE_PHASE = "publish"
 DISPATCH_CONFIRMATION_TIMEOUT_PHASE = "delivery_confirmation_timeout"
 DISPATCH_BUDGET_EXHAUSTED_PHASE = "budget_exhausted"
@@ -9,7 +12,7 @@ class SchedulerDispatchError(RuntimeError):
         *,
         message: str,
         recovery_job_ids: tuple[int, ...],
-        recovery_claims: tuple[tuple[int, str], ...] = (),
+        recovery_claims: tuple[ValuationJobClaim, ...] = (),
         recovery_record_keys: tuple[str, ...],
         published_record_keys: tuple[str, ...],
         failure_phase: str,
@@ -42,13 +45,15 @@ def present_job_ids(jobs: list[object]) -> tuple[int, ...]:
     return tuple(job_id for job in jobs if isinstance((job_id := getattr(job, "id", None)), int))
 
 
-def present_job_claims(jobs: list[object]) -> tuple[tuple[int, str], ...]:
-    """Return only complete durable id/token claim pairs for recovery fencing."""
+def present_job_claims(jobs: list[object]) -> tuple[ValuationJobClaim, ...]:
+    """Return complete source-tenant/id/token authority for recovery fencing."""
 
-    claims: list[tuple[int, str]] = []
+    claims: list[ValuationJobClaim] = []
     for job in jobs:
         job_id = getattr(job, "id", None)
         claim_token = getattr(job, "valuation_claim_token", None)
         if isinstance(job_id, int) and isinstance(claim_token, str) and claim_token:
-            claims.append((job_id, claim_token))
+            claims.append(
+                ValuationJobClaim(TenantId(getattr(job, "tenant_id", None)), job_id, claim_token)
+            )
     return tuple(claims)

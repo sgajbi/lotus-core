@@ -19,7 +19,11 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.database_runtime_profile import DatabasePoolMode
 from portfolio_common.db import create_async_database_engine
-from portfolio_common.valuation_job_contracts import ValuationJobTransitionOutcome
+from portfolio_common.domain.tenant import TenantId
+from portfolio_common.valuation_job_contracts import (
+    ValuationJobClaim,
+    ValuationJobTransitionOutcome,
+)
 from portfolio_common.valuation_job_repository import ValuationJobRepository, ValuationJobUpsert
 from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -29,6 +33,7 @@ from src.services.calculators.position_valuation_calculator.app.repositories.val
     ValuationRepository,
 )
 from tests.test_support.tenant import TEST_TENANT_ID
+from tests.test_support.valuation_job_roots import seed_valuation_portfolios
 
 pytestmark = pytest.mark.asyncio
 
@@ -90,11 +95,15 @@ async def setup_stale_job_data(clean_db, session_factory: async_sessionmaker):
     - One stale 'COMPLETE' job (should not be reset).
     """
     async with session_factory() as session:
+        await seed_valuation_portfolios(
+            session, ["P1", "P2", "P3", "P4"], tenant_id=TenantId(TEST_TENANT_ID)
+        )
         now = datetime.now(timezone.utc)
         stale_time = now - timedelta(minutes=30)
 
         jobs = [
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P1",
                 security_id="S1",
                 valuation_date=date(2025, 8, 1),
@@ -103,6 +112,7 @@ async def setup_stale_job_data(clean_db, session_factory: async_sessionmaker):
                 **_valuation_lease(expires_at=stale_time),
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P2",
                 security_id="S2",
                 valuation_date=date(2025, 8, 1),
@@ -111,6 +121,7 @@ async def setup_stale_job_data(clean_db, session_factory: async_sessionmaker):
                 **_valuation_lease("b" * 32, expires_at=now + timedelta(hours=1)),
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P3",
                 security_id="S3",
                 valuation_date=date(2025, 8, 1),
@@ -118,6 +129,7 @@ async def setup_stale_job_data(clean_db, session_factory: async_sessionmaker):
                 updated_at=stale_time,
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P4",
                 security_id="S4",
                 valuation_date=date(2025, 8, 1),
@@ -949,10 +961,15 @@ async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
 async def test_find_and_reset_stale_jobs_skips_superseded_stale_processing_rows(
     clean_db, async_db_session: AsyncSession
 ):
+    await seed_valuation_portfolios(
+        async_db_session, ["P-SUPERSEDE-STALE"], tenant_id=TenantId(TEST_TENANT_ID)
+    )
+
     stale_time = datetime.now(timezone.utc) - timedelta(minutes=30)
     async_db_session.add_all(
         [
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P-SUPERSEDE-STALE",
                 security_id="S-SUPERSEDE-STALE",
                 valuation_date=date(2025, 8, 11),
@@ -963,6 +980,7 @@ async def test_find_and_reset_stale_jobs_skips_superseded_stale_processing_rows(
                 **_valuation_lease(expires_at=stale_time),
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P-SUPERSEDE-STALE",
                 security_id="S-SUPERSEDE-STALE",
                 valuation_date=date(2025, 8, 11),
@@ -1060,12 +1078,20 @@ async def test_concurrent_stale_recovery_drains_disjoint_bounded_cohorts(
     clean_db,
     session_factory: async_sessionmaker,
 ):
+    async with session_factory() as root_session:
+        await seed_valuation_portfolios(
+            root_session,
+            [f"P-STALE-COHORT-{index:04d}" for index in range(1_001)],
+            tenant_id=TenantId(TEST_TENANT_ID),
+        )
+
     stale_time = datetime.now(timezone.utc) - timedelta(minutes=30)
     job_count = 1_001
     async with session_factory() as seed_session:
         seed_session.add_all(
             [
                 PortfolioValuationJob(
+                    tenant_id=TEST_TENANT_ID,
                     portfolio_id=f"P-STALE-COHORT-{index:04d}",
                     security_id="S-STALE-COHORT",
                     valuation_date=date(2025, 8, 1),
@@ -1114,10 +1140,16 @@ async def test_stale_recovery_rollback_preserves_lease_authority(
     clean_db,
     session_factory: async_sessionmaker,
 ):
+    async with session_factory() as root_session:
+        await seed_valuation_portfolios(
+            root_session, ["P-STALE-ROLLBACK"], tenant_id=TenantId(TEST_TENANT_ID)
+        )
+
     stale_time = datetime.now(timezone.utc) - timedelta(minutes=30)
     async with session_factory() as seed_session:
         seed_session.add(
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P-STALE-ROLLBACK",
                 security_id="S-STALE-ROLLBACK",
                 valuation_date=date(2025, 8, 1),
@@ -1398,6 +1430,10 @@ async def test_find_contiguous_snapshot_dates_stops_at_unreconciled_snapshot(
 async def test_stale_older_epoch_job_is_not_rearmed_when_newer_epoch_exists(
     async_db_session: AsyncSession, clean_db
 ):
+    await seed_valuation_portfolios(
+        async_db_session, ["P-STAGE-1"], tenant_id=TenantId(TEST_TENANT_ID)
+    )
+
     repo = ValuationJobRepository(async_db_session)
 
     await repo.upsert_job(
@@ -1440,6 +1476,10 @@ async def test_stale_older_epoch_job_is_not_rearmed_when_newer_epoch_exists(
 async def test_upsert_job_deduplicates_concurrent_duplicate_scheduler_pressure(
     async_db_session: AsyncSession, clean_db
 ):
+    await seed_valuation_portfolios(
+        async_db_session, ["P-VAL-CONC"], tenant_id=TenantId(TEST_TENANT_ID)
+    )
+
     session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
     barrier_lock = asyncio.Lock()
     barrier_ready = asyncio.Event()
@@ -1497,6 +1537,10 @@ async def test_upsert_job_deduplicates_concurrent_duplicate_scheduler_pressure(
 async def test_upsert_jobs_bulk_skips_stale_rows_and_stages_eligible_rows(
     async_db_session: AsyncSession, clean_db
 ):
+    await seed_valuation_portfolios(
+        async_db_session, ["P-BULK-1"], tenant_id=TenantId(TEST_TENANT_ID)
+    )
+
     repo = ValuationJobRepository(async_db_session)
 
     await repo.upsert_job(
@@ -1551,6 +1595,13 @@ async def test_concurrent_reversed_valuation_job_batches_use_one_lock_order(
     session_factory: async_sessionmaker,
     clean_db,
 ):
+    async with session_factory() as root_session:
+        await seed_valuation_portfolios(
+            root_session,
+            [f"P-LOCK-{index:02d}" for index in range(10)],
+            tenant_id=TenantId(TEST_TENANT_ID),
+        )
+
     job_keys = [
         (f"P-LOCK-{index // 10:02d}", f"S-LOCK-{index % 10:02d}", date(2025, 8, 14), 1)
         for index in range(100)
@@ -1596,6 +1647,11 @@ async def test_single_job_scheduling_overlaps_ordered_batch_without_deadlock(
     session_factory: async_sessionmaker,
     clean_db,
 ):
+    async with session_factory() as root_session:
+        await seed_valuation_portfolios(
+            root_session, ["P-SINGLE-BATCH"], tenant_id=TenantId(TEST_TENANT_ID)
+        )
+
     batch_jobs = [
         ValuationJobUpsert(
             "P-SINGLE-BATCH",
@@ -1637,10 +1693,15 @@ async def test_single_job_scheduling_overlaps_ordered_batch_without_deadlock(
 async def test_upsert_job_does_not_rearm_processing_job_with_same_source_correction(
     async_db_session: AsyncSession, clean_db
 ):
+    await seed_valuation_portfolios(
+        async_db_session, ["P-PROCESSING-1"], tenant_id=TenantId(TEST_TENANT_ID)
+    )
+
     repo = ValuationJobRepository(async_db_session)
 
     async_db_session.add(
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P-PROCESSING-1",
             security_id="S-PROCESSING-1",
             valuation_date=date(2025, 8, 12),
@@ -1691,10 +1752,15 @@ async def test_upsert_job_does_not_rearm_processing_job_with_same_source_correct
 async def test_source_correction_defers_in_flight_claim_and_requeues_after_completion(
     async_db_session: AsyncSession, clean_db
 ):
+    await seed_valuation_portfolios(
+        async_db_session, ["P-PROCESSING-CORRECTION"], tenant_id=TenantId(TEST_TENANT_ID)
+    )
+
     job_writer = ValuationJobRepository(async_db_session)
     job_state = ValuationRepository(async_db_session)
     async_db_session.add(
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P-PROCESSING-CORRECTION",
             security_id="S-PROCESSING-CORRECTION",
             valuation_date=date(2025, 8, 12),
@@ -1741,6 +1807,7 @@ async def test_source_correction_defers_in_flight_claim_and_requeues_after_compl
     assert job.source_correction_id == "sha256:" + ("c" * 64)
 
     outcome = await job_state.update_job_status(
+        tenant_id=TenantId(TEST_TENANT_ID),
         portfolio_id=job.portfolio_id,
         security_id=job.security_id,
         valuation_date=job.valuation_date,
@@ -1761,8 +1828,13 @@ async def test_source_correction_defers_in_flight_claim_and_requeues_after_compl
 async def test_scheduler_poll_preserves_failed_job_until_source_correction_rearms_it(
     async_db_session: AsyncSession, clean_db
 ) -> None:
+    await seed_valuation_portfolios(
+        async_db_session, ["P-MISSING-SOURCE"], tenant_id=TenantId(TEST_TENANT_ID)
+    )
+
     repository = ValuationJobRepository(async_db_session)
     failed_job = PortfolioValuationJob(
+        tenant_id=TEST_TENANT_ID,
         portfolio_id="P-MISSING-SOURCE",
         security_id="S-MISSING-SOURCE",
         valuation_date=date(2025, 8, 12),
@@ -1811,8 +1883,13 @@ async def test_job_status_transition_distinguishes_terminal_owner_from_stale_del
     async_db_session: AsyncSession,
     clean_db,
 ) -> None:
+    await seed_valuation_portfolios(
+        async_db_session, ["P-TRANSITION-OUTCOME"], tenant_id=TenantId(TEST_TENANT_ID)
+    )
+
     repo = ValuationRepository(async_db_session)
     job = PortfolioValuationJob(
+        tenant_id=TEST_TENANT_ID,
         portfolio_id="P-TRANSITION-OUTCOME",
         security_id="S-TRANSITION-OUTCOME",
         valuation_date=date(2025, 8, 12),
@@ -1825,6 +1902,7 @@ async def test_job_status_transition_distinguishes_terminal_owner_from_stale_del
     await async_db_session.commit()
 
     applied = await repo.update_job_status(
+        tenant_id=TenantId(TEST_TENANT_ID),
         portfolio_id=job.portfolio_id,
         security_id=job.security_id,
         valuation_date=job.valuation_date,
@@ -1833,6 +1911,7 @@ async def test_job_status_transition_distinguishes_terminal_owner_from_stale_del
         expected_claim_token="e" * 32,
     )
     stale_delivery = await repo.update_job_status(
+        tenant_id=TenantId(TEST_TENANT_ID),
         portfolio_id=job.portfolio_id,
         security_id=job.security_id,
         valuation_date=job.valuation_date,
@@ -1852,6 +1931,11 @@ async def test_reclaimed_valuation_claim_rejects_late_prior_owner(
     session_factory: async_sessionmaker,
     clean_db,
 ) -> None:
+    async with session_factory() as root_session:
+        await seed_valuation_portfolios(
+            root_session, ["P-CLAIM-GENERATION"], tenant_id=TenantId(TEST_TENANT_ID)
+        )
+
     scope = {
         "portfolio_id": "P-CLAIM-GENERATION",
         "security_id": "S-CLAIM-GENERATION",
@@ -1859,7 +1943,9 @@ async def test_reclaimed_valuation_claim_rejects_late_prior_owner(
         "epoch": 2,
     }
     async with session_factory() as first_session:
-        first_session.add(PortfolioValuationJob(**scope, status="PENDING"))
+        first_session.add(
+            PortfolioValuationJob(**scope, tenant_id=TEST_TENANT_ID, status="PENDING")
+        )
         await first_session.commit()
         first_repo = ValuationRepository(first_session)
         first_claim = (await first_repo.find_and_claim_eligible_jobs(1))[0]
@@ -1884,6 +1970,7 @@ async def test_reclaimed_valuation_claim_rejects_late_prior_owner(
             await second_session.commit()
 
             stale_outcome = await first_repo.update_job_status(
+                tenant_id=TenantId(TEST_TENANT_ID),
                 **scope,
                 status="COMPLETE",
                 expected_claim_token=first_token,
@@ -1892,6 +1979,7 @@ async def test_reclaimed_valuation_claim_rejects_late_prior_owner(
             assert stale_outcome is ValuationJobTransitionOutcome.NOT_OWNED
 
             applied_outcome = await second_repo.update_job_status(
+                tenant_id=TenantId(TEST_TENANT_ID),
                 **scope,
                 status="COMPLETE",
                 expected_claim_token=second_token,
@@ -1904,13 +1992,17 @@ async def test_expired_valuation_claim_rejects_same_token_terminal_write(
     async_db_session: AsyncSession,
     clean_db,
 ) -> None:
+    await seed_valuation_portfolios(
+        async_db_session, ["P-EXPIRED-CLAIM"], tenant_id=TenantId(TEST_TENANT_ID)
+    )
+
     scope = {
         "portfolio_id": "P-EXPIRED-CLAIM",
         "security_id": "S-EXPIRED-CLAIM",
         "valuation_date": date(2025, 8, 12),
         "epoch": 1,
     }
-    async_db_session.add(PortfolioValuationJob(**scope, status="PENDING"))
+    async_db_session.add(PortfolioValuationJob(**scope, tenant_id=TEST_TENANT_ID, status="PENDING"))
     await async_db_session.commit()
     repo = ValuationRepository(async_db_session)
     claim = (
@@ -1931,6 +2023,7 @@ async def test_expired_valuation_claim_rejects_same_token_terminal_write(
     await async_db_session.commit()
 
     outcome = await repo.update_job_status(
+        tenant_id=TenantId(TEST_TENANT_ID),
         **scope,
         status="COMPLETE",
         expected_claim_token=claim_token,
@@ -1948,6 +2041,10 @@ async def test_valuation_terminal_fence_uses_statement_time_after_transaction_ag
     clean_db,
 ) -> None:
     """Reject expiry even when the worker transaction began while its lease was valid."""
+    async with session_factory() as root_session:
+        await seed_valuation_portfolios(
+            root_session, ["P-AGED-TRANSACTION-CLAIM"], tenant_id=TenantId(TEST_TENANT_ID)
+        )
 
     scope = {
         "portfolio_id": "P-AGED-TRANSACTION-CLAIM",
@@ -1956,7 +2053,9 @@ async def test_valuation_terminal_fence_uses_statement_time_after_transaction_ag
         "epoch": 1,
     }
     async with session_factory() as worker_session:
-        worker_session.add(PortfolioValuationJob(**scope, status="PENDING"))
+        worker_session.add(
+            PortfolioValuationJob(**scope, tenant_id=TEST_TENANT_ID, status="PENDING")
+        )
         await worker_session.commit()
         repository = ValuationRepository(worker_session)
         claim = (await repository.find_and_claim_eligible_jobs(1))[0]
@@ -1979,6 +2078,7 @@ async def test_valuation_terminal_fence_uses_statement_time_after_transaction_ag
         await worker_session.execute(select(func.pg_sleep(1.25)))
 
         outcome = await repository.update_job_status(
+            tenant_id=TenantId(TEST_TENANT_ID),
             **scope,
             status="COMPLETE",
             expected_claim_token=claim_token,
@@ -1995,8 +2095,13 @@ async def test_dispatch_recovery_cannot_release_a_reclaimed_valuation_job(
     async_db_session: AsyncSession,
     clean_db,
 ) -> None:
+    await seed_valuation_portfolios(
+        async_db_session, ["P-DISPATCH-FENCE"], tenant_id=TenantId(TEST_TENANT_ID)
+    )
+
     async_db_session.add(
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P-DISPATCH-FENCE",
             security_id="S-DISPATCH-FENCE",
             valuation_date=date(2025, 8, 12),
@@ -2024,7 +2129,7 @@ async def test_dispatch_recovery_cannot_release_a_reclaimed_valuation_job(
     await async_db_session.commit()
 
     recovery = await repo.recover_dispatch_failed_jobs(
-        [(first_claim.id, first_token)],
+        [ValuationJobClaim(TenantId(TEST_TENANT_ID), first_claim.id, first_token)],
         max_attempts=3,
         failure_reason="late first-owner dispatch recovery",
     )
@@ -2040,9 +2145,14 @@ async def test_completed_job_requires_explicit_source_correction_rearm(
     async_db_session: AsyncSession,
     clean_db,
 ) -> None:
+    await seed_valuation_portfolios(
+        async_db_session, ["P-COMPLETE-1"], tenant_id=TenantId(TEST_TENANT_ID)
+    )
+
     repo = ValuationJobRepository(async_db_session)
     async_db_session.add(
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P-COMPLETE-1",
             security_id="S-COMPLETE-1",
             valuation_date=date(2025, 8, 12),
@@ -2098,6 +2208,9 @@ async def test_completed_job_requires_explicit_source_correction_rearm(
 async def test_upsert_job_marks_older_pending_epoch_skipped_when_newer_epoch_arrives(
     async_db_session: AsyncSession, clean_db
 ):
+    await seed_valuation_portfolios(
+        async_db_session, ["P-SUPERSEDE-1"], tenant_id=TenantId(TEST_TENANT_ID)
+    )
     repo = ValuationJobRepository(async_db_session)
 
     await repo.upsert_job(
@@ -2143,8 +2256,13 @@ async def test_upsert_job_marks_older_pending_epoch_skipped_when_newer_epoch_arr
 async def test_find_and_claim_eligible_jobs_does_not_double_claim_under_concurrency(
     async_db_session: AsyncSession, clean_db
 ):
+    await seed_valuation_portfolios(
+        async_db_session, ["P-VAL-CLAIM"], tenant_id=TenantId(TEST_TENANT_ID)
+    )
+
     async_db_session.add(
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P-VAL-CLAIM",
             security_id="S-VAL-CLAIM",
             valuation_date=date(2025, 8, 15),
@@ -2194,10 +2312,17 @@ async def test_find_and_claim_eligible_jobs_caps_oversized_physical_cohort(
     async_db_session: AsyncSession,
     clean_db,
 ):
+    await seed_valuation_portfolios(
+        async_db_session,
+        [f"P-VAL-CLAIM-BOUND-{index:04d}" for index in range(1_001)],
+        tenant_id=TenantId(TEST_TENANT_ID),
+    )
+
     job_count = 1_001
     async_db_session.add_all(
         [
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=f"P-VAL-CLAIM-BOUND-{index:04d}",
                 security_id="S-VAL-CLAIM-BOUND",
                 valuation_date=date(2025, 8, 15),
@@ -2224,9 +2349,16 @@ async def test_find_and_claim_eligible_jobs_caps_oversized_physical_cohort(
 async def test_find_and_claim_eligible_jobs_enforces_in_flight_limit(
     async_db_session: AsyncSession, clean_db
 ):
+    await seed_valuation_portfolios(
+        async_db_session,
+        [f"P-VAL-CAP-{index}" for index in range(5)],
+        tenant_id=TenantId(TEST_TENANT_ID),
+    )
+
     async_db_session.add_all(
         [
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=f"P-VAL-CAP-{index}",
                 security_id="S-VAL-CAP",
                 valuation_date=date(2025, 8, 15),
@@ -2259,9 +2391,16 @@ async def test_find_and_claim_eligible_jobs_enforces_in_flight_limit(
 async def test_find_and_claim_eligible_jobs_enforces_in_flight_limit_concurrently(
     async_db_session: AsyncSession, clean_db
 ):
+    await seed_valuation_portfolios(
+        async_db_session,
+        [f"P-VAL-CONCURRENT-CAP-{index}" for index in range(10)],
+        tenant_id=TenantId(TEST_TENANT_ID),
+    )
+
     async_db_session.add_all(
         [
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id=f"P-VAL-CONCURRENT-CAP-{index}",
                 security_id="S-VAL-CONCURRENT-CAP",
                 valuation_date=date(2025, 8, 15),
@@ -2297,9 +2436,14 @@ async def test_find_and_claim_eligible_jobs_enforces_in_flight_limit_concurrentl
 async def test_find_and_claim_eligible_jobs_skips_superseded_pending_epochs(
     async_db_session: AsyncSession, clean_db
 ):
+    await seed_valuation_portfolios(
+        async_db_session, ["P-VAL-EPOCH"], tenant_id=TenantId(TEST_TENANT_ID)
+    )
+
     async_db_session.add_all(
         [
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P-VAL-EPOCH",
                 security_id="S-VAL-EPOCH",
                 valuation_date=date(2025, 8, 15),
@@ -2308,6 +2452,7 @@ async def test_find_and_claim_eligible_jobs_skips_superseded_pending_epochs(
                 correlation_id="corr-old",
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P-VAL-EPOCH",
                 security_id="S-VAL-EPOCH",
                 valuation_date=date(2025, 8, 15),
@@ -2352,9 +2497,14 @@ async def test_find_and_claim_eligible_jobs_skips_superseded_pending_epochs(
 async def test_get_job_queue_stats_ignores_superseded_pending_epochs(
     async_db_session: AsyncSession, clean_db
 ):
+    await seed_valuation_portfolios(
+        async_db_session, ["P-VAL-STATS"], tenant_id=TenantId(TEST_TENANT_ID)
+    )
+
     async_db_session.add_all(
         [
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P-VAL-STATS",
                 security_id="S-VAL-STATS",
                 valuation_date=date(2025, 8, 15),
@@ -2363,6 +2513,7 @@ async def test_get_job_queue_stats_ignores_superseded_pending_epochs(
                 correlation_id="corr-old",
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P-VAL-STATS",
                 security_id="S-VAL-STATS",
                 valuation_date=date(2025, 8, 15),
@@ -2371,6 +2522,7 @@ async def test_get_job_queue_stats_ignores_superseded_pending_epochs(
                 correlation_id="corr-new",
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P-VAL-STATS",
                 security_id="S-VAL-STATS-ACTIONABLE",
                 valuation_date=date(2025, 8, 16),
@@ -2379,6 +2531,7 @@ async def test_get_job_queue_stats_ignores_superseded_pending_epochs(
                 correlation_id="corr-actionable",
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P-VAL-STATS",
                 security_id="S-VAL-STATS-FAILED",
                 valuation_date=date(2025, 8, 17),
@@ -2421,6 +2574,7 @@ async def test_get_latest_business_date_falls_back_to_processing_dates_when_cale
     async_db_session.add_all(
         [
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P-FALLBACK-1",
                 security_id="S-FALLBACK-1",
                 valuation_date=date(2025, 8, 10),
@@ -2510,6 +2664,7 @@ async def test_get_latest_business_date_prefers_calendar_over_future_processing_
     async_db_session.add_all(
         [
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P-CALENDAR-BOUND-1",
                 security_id="S-CALENDAR-BOUND-1",
                 valuation_date=date(2026, 6, 17),

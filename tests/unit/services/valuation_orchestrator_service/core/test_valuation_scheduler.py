@@ -8,6 +8,7 @@ from portfolio_common.database_models import (
     PortfolioValuationJob,
     PositionState,
 )
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.event_publisher import KafkaEventPublisher
 from portfolio_common.kafka_utils import KafkaProducer
 from portfolio_common.monitoring import (
@@ -21,7 +22,7 @@ from portfolio_common.scheduler_dispatch_recovery import (
     DISPATCH_PUBLISH_FAILURE_PHASE,
     SchedulerDispatchError,
 )
-from portfolio_common.valuation_job_contracts import VALUATION_CLAIM_HEADER
+from portfolio_common.valuation_job_contracts import VALUATION_CLAIM_HEADER, ValuationJobClaim
 from portfolio_common.valuation_job_repository import ValuationJobRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -59,8 +60,13 @@ from src.services.valuation_orchestrator_service.app.repositories import (
 from src.services.valuation_orchestrator_service.app.repositories.valuation_repository import (
     ValuationRepository,
 )
+from tests.test_support.tenant import TEST_TENANT_ID
 
 pytestmark = pytest.mark.asyncio
+
+
+def _claim(job_id: int, token: str) -> ValuationJobClaim:
+    return ValuationJobClaim(TenantId(TEST_TENANT_ID), job_id, token)
 
 
 @pytest.fixture
@@ -983,6 +989,7 @@ async def test_scheduler_dispatches_claimed_jobs(
 ):
     claimed_jobs = [
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P1",
             security_id="S1",
             valuation_date=date(2025, 8, 11),
@@ -1002,6 +1009,7 @@ async def test_scheduler_dispatches_claimed_jobs(
             "schema_version": None,
             "correlation_id": "corr-1",
             "traceparent": None,
+            "tenant_id": TEST_TENANT_ID,
             "portfolio_id": "P1",
             "security_id": "S1",
             "valuation_date": "2025-08-11",
@@ -1026,6 +1034,7 @@ async def test_job_dispatcher_dispatches_claimed_jobs_without_scheduler_loop(
     )
     claimed_jobs = [
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P1",
             security_id="S1",
             valuation_date=date(2025, 8, 11),
@@ -1045,6 +1054,7 @@ async def test_job_dispatcher_dispatches_claimed_jobs_without_scheduler_loop(
             "schema_version": None,
             "correlation_id": "corr-1",
             "traceparent": None,
+            "tenant_id": TEST_TENANT_ID,
             "portfolio_id": "P1",
             "security_id": "S1",
             "valuation_date": "2025-08-11",
@@ -1064,6 +1074,7 @@ async def test_scheduler_omits_empty_correlation_header(
 ):
     claimed_jobs = [
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P2",
             security_id="S2",
             valuation_date=date(2025, 8, 12),
@@ -1083,6 +1094,7 @@ async def test_scheduler_omits_empty_correlation_header(
             "schema_version": None,
             "correlation_id": None,
             "traceparent": None,
+            "tenant_id": TEST_TENANT_ID,
             "portfolio_id": "P2",
             "security_id": "S2",
             "valuation_date": "2025-08-12",
@@ -1099,6 +1111,7 @@ async def test_scheduler_flushes_and_raises_with_remaining_keys_on_partial_dispa
 ):
     claimed_jobs = [
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P1",
             security_id="S1",
             valuation_date=date(2025, 8, 11),
@@ -1107,6 +1120,7 @@ async def test_scheduler_flushes_and_raises_with_remaining_keys_on_partial_dispa
             valuation_claim_token="d" * 32,
         ),
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P1",
             security_id="S2",
             valuation_date=date(2025, 8, 12),
@@ -1129,6 +1143,7 @@ async def test_scheduler_dispatch_failure_before_first_job_recovers_all_unpublis
 ):
     claimed_jobs = [
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             id=101,
             portfolio_id="P1",
             security_id="S1",
@@ -1138,6 +1153,7 @@ async def test_scheduler_dispatch_failure_before_first_job_recovers_all_unpublis
             valuation_claim_token="f" * 32,
         ),
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             id=102,
             portfolio_id="P1",
             security_id="S2",
@@ -1157,7 +1173,7 @@ async def test_scheduler_dispatch_failure_before_first_job_recovers_all_unpublis
 
     assert exc_info.value.failure_phase == DISPATCH_PUBLISH_FAILURE_PHASE
     assert exc_info.value.recovery_job_ids == (101, 102)
-    assert exc_info.value.recovery_claims == ((101, "f" * 32), (102, "1" * 32))
+    assert exc_info.value.recovery_claims == (_claim(101, "f" * 32), _claim(102, "1" * 32))
     assert exc_info.value.recovery_record_keys == (
         "P1|S1|2025-08-11|1",
         "P1|S2|2025-08-12|1",
@@ -1172,6 +1188,7 @@ async def test_scheduler_partial_dispatch_failure_recovers_only_unpublished_jobs
 ):
     claimed_jobs = [
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             id=201,
             portfolio_id="P1",
             security_id="S1",
@@ -1181,6 +1198,7 @@ async def test_scheduler_partial_dispatch_failure_recovers_only_unpublished_jobs
             valuation_claim_token="2" * 32,
         ),
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             id=202,
             portfolio_id="P1",
             security_id="S2",
@@ -1197,7 +1215,7 @@ async def test_scheduler_partial_dispatch_failure_recovers_only_unpublished_jobs
 
     assert exc_info.value.failure_phase == DISPATCH_PUBLISH_FAILURE_PHASE
     assert exc_info.value.recovery_job_ids == (202,)
-    assert exc_info.value.recovery_claims == ((202, "3" * 32),)
+    assert exc_info.value.recovery_claims == (_claim(202, "3" * 32),)
     assert exc_info.value.recovery_record_keys == ("P1|S2|2025-08-12|1",)
     assert exc_info.value.published_record_keys == ("P1|S1|2025-08-11|1",)
 
@@ -1208,6 +1226,7 @@ async def test_scheduler_partial_dispatch_flush_timeout_recovers_all_claimed_job
 ):
     claimed_jobs = [
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             id=211,
             portfolio_id="P1",
             security_id="S1",
@@ -1217,6 +1236,7 @@ async def test_scheduler_partial_dispatch_flush_timeout_recovers_all_claimed_job
             valuation_claim_token="4" * 32,
         ),
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             id=212,
             portfolio_id="P1",
             security_id="S2",
@@ -1237,7 +1257,7 @@ async def test_scheduler_partial_dispatch_flush_timeout_recovers_all_claimed_job
 
     assert exc_info.value.failure_phase == DISPATCH_CONFIRMATION_TIMEOUT_PHASE
     assert exc_info.value.recovery_job_ids == (211, 212)
-    assert exc_info.value.recovery_claims == ((211, "4" * 32), (212, "5" * 32))
+    assert exc_info.value.recovery_claims == (_claim(211, "4" * 32), _claim(212, "5" * 32))
     assert exc_info.value.recovery_record_keys == (
         "P1|S1|2025-08-11|1",
         "P1|S2|2025-08-12|1",
@@ -1251,6 +1271,7 @@ async def test_scheduler_raises_on_flush_timeout(
 ):
     claimed_jobs = [
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P1",
             security_id="S1",
             valuation_date=date(2025, 8, 11),
@@ -1322,6 +1343,7 @@ async def test_scheduler_claim_loop_stops_after_partial_batch(
 
     claimed_batch_1 = [
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P1",
             security_id="S1",
             valuation_date=date(2025, 8, 11),
@@ -1329,6 +1351,7 @@ async def test_scheduler_claim_loop_stops_after_partial_batch(
             correlation_id="corr-1",
         ),
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P1",
             security_id="S1",
             valuation_date=date(2025, 8, 12),
@@ -1338,6 +1361,7 @@ async def test_scheduler_claim_loop_stops_after_partial_batch(
     ]
     claimed_batch_2 = [
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P1",
             security_id="S2",
             valuation_date=date(2025, 8, 13),
@@ -1379,6 +1403,7 @@ async def test_dispatch_coordinator_claims_and_dispatches_without_scheduler_loop
     mock_db_session = AsyncMock(spec=AsyncSession)
     claimed_batch_1 = [
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P1",
             security_id="S1",
             valuation_date=date(2025, 8, 11),
@@ -1386,6 +1411,7 @@ async def test_dispatch_coordinator_claims_and_dispatches_without_scheduler_loop
             correlation_id="corr-1",
         ),
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P1",
             security_id="S1",
             valuation_date=date(2025, 8, 12),
@@ -1395,6 +1421,7 @@ async def test_dispatch_coordinator_claims_and_dispatches_without_scheduler_loop
     ]
     claimed_batch_2 = [
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P1",
             security_id="S2",
             valuation_date=date(2025, 8, 13),
@@ -1437,6 +1464,7 @@ async def test_dispatch_coordinator_uses_effective_claim_cohort_for_exhaustion()
     mock_repo = AsyncMock(spec=ValuationRepository)
     mock_db_session = AsyncMock(spec=AsyncSession)
     claimed_job = PortfolioValuationJob(
+        tenant_id=TEST_TENANT_ID,
         portfolio_id="P1",
         security_id="S1",
         valuation_date=date(2025, 8, 11),
@@ -1488,6 +1516,7 @@ async def test_scheduler_claim_loop_recovers_dispatch_failure_before_next_poll(
     )
     claimed_batch = [
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             id=301,
             portfolio_id="P1",
             security_id="S1",
@@ -1503,7 +1532,7 @@ async def test_scheduler_claim_loop_recovers_dispatch_failure_before_next_poll(
     dispatch_error = SchedulerDispatchError(
         message="dispatch failed",
         recovery_job_ids=(301,),
-        recovery_claims=((301, "a" * 32),),
+        recovery_claims=(_claim(301, "a" * 32),),
         recovery_record_keys=("P1|S1|2025-08-11|1",),
         published_record_keys=(),
         failure_phase=DISPATCH_PUBLISH_FAILURE_PHASE,
@@ -1527,7 +1556,7 @@ async def test_scheduler_claim_loop_recovers_dispatch_failure_before_next_poll(
             await scheduler._claim_and_dispatch_ready_jobs()
 
     mock_repo.recover_dispatch_failed_jobs.assert_awaited_once_with(
-        [(301, "a" * 32)],
+        [_claim(301, "a" * 32)],
         max_attempts=scheduler._max_attempts,
         failure_reason=(
             "Scheduler dispatch publish failed before queueing record keys: P1|S1|2025-08-11|1"
@@ -1545,6 +1574,7 @@ async def test_scheduler_claim_loop_stops_before_next_round_when_poll_budget_exh
     )
     claimed_batch = [
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P1",
             security_id="S1",
             valuation_date=date(2025, 8, 11),
@@ -1552,6 +1582,7 @@ async def test_scheduler_claim_loop_stops_before_next_round_when_poll_budget_exh
             correlation_id="corr-1",
         ),
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             portfolio_id="P1",
             security_id="S2",
             valuation_date=date(2025, 8, 12),
@@ -1608,6 +1639,7 @@ async def test_scheduler_dispatch_budget_exhaustion_recovers_remaining_claimed_j
     )
     claimed_batch = [
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             id=301,
             portfolio_id="P1",
             security_id="S1",
@@ -1617,6 +1649,7 @@ async def test_scheduler_dispatch_budget_exhaustion_recovers_remaining_claimed_j
             valuation_claim_token="a" * 32,
         ),
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             id=302,
             portfolio_id="P1",
             security_id="S2",
@@ -1660,7 +1693,7 @@ async def test_scheduler_dispatch_budget_exhaustion_recovers_remaining_claimed_j
     mock_kafka_producer.flush.assert_called_once_with(timeout=10)
     mock_budget_exhausted.assert_called_once_with("dispatch")
     mock_repo.recover_dispatch_failed_jobs.assert_awaited_once_with(
-        [(302, "b" * 32)],
+        [_claim(302, "b" * 32)],
         max_attempts=scheduler._max_attempts,
         failure_reason=(
             "Scheduler dispatch budget exhausted before queueing record keys: P1|S2|2025-08-12|1"
@@ -1680,6 +1713,7 @@ async def test_scheduler_counts_producer_backpressure_and_recovers_claimed_jobs(
     )
     claimed_batch = [
         PortfolioValuationJob(
+            tenant_id=TEST_TENANT_ID,
             id=301,
             portfolio_id="P1",
             security_id="S1",
@@ -1717,7 +1751,7 @@ async def test_scheduler_counts_producer_backpressure_and_recovers_claimed_jobs(
     assert exc_info.value.recovery_job_ids == (301,)
     mock_backpressure.assert_called_once_with()
     mock_repo.recover_dispatch_failed_jobs.assert_awaited_once_with(
-        [(301, "a" * 32)],
+        [_claim(301, "a" * 32)],
         max_attempts=scheduler._max_attempts,
         failure_reason=(
             "Scheduler dispatch publish failed before queueing record keys: P1|S1|2025-08-11|1"

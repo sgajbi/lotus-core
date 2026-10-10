@@ -776,11 +776,17 @@ class PortfolioValuationRequiredEvent(CoreEventModel):
     for a specific portfolio, security, and date.
     """
 
+    tenant_id: str
     portfolio_id: str
     security_id: str
     valuation_date: date
     epoch: int
     correlation_id: Optional[str] = None
+
+    @field_validator("tenant_id")
+    @classmethod
+    def _canonical_tenant(cls, value: str) -> str:
+        return TenantId(value).value
 
 
 class TransactionProcessingCompletedEvent(CoreEventModel):

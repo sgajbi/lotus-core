@@ -1,13 +1,15 @@
 # src/libs/portfolio-common/portfolio_common/valuation_job_repository.py
 import logging
+from dataclasses import replace
 from datetime import date
-from typing import Iterable, Optional
+from typing import Iterable, Optional, TypeVar
 
 from sqlalchemy import and_, case, func, literal, not_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import PortfolioValuationJob
+from .domain.tenant import TenantId
 from .durable_correlation import durable_correlation_diagnostics
 from .infrastructure.persistence.statement_batching import (
     StatementBatchOperation,
@@ -15,9 +17,11 @@ from .infrastructure.persistence.statement_batching import (
     observe_multi_statement_batch,
 )
 from .logging_utils import normalize_lineage_value
-from .valuation_job_contracts import ValuationJobUpsert
+from .valuation_job_attribution import attribute_valuation_jobs
+from .valuation_job_contracts import AttributedValuationJobUpsert, ValuationJobUpsert
 
 logger = logging.getLogger(__name__)
+JobRequest = TypeVar("JobRequest", bound=ValuationJobUpsert)
 
 
 class ValuationJobRepository:
@@ -127,15 +131,18 @@ class ValuationJobRepository:
         requeue_if_processing: bool,
         fence_by_readiness_sequence: bool = False,
     ) -> int:
-        normalized_jobs = self._normalize_jobs(jobs)
-        if not normalized_jobs:
+        requests = list(jobs)
+        if not requests:
             return 0
         if requeue_if_processing and any(
-            job.source_correction_id is None for job in normalized_jobs
+            normalize_lineage_value(job.source_correction_id) is None for job in requests
         ):
             raise ValueError(
                 "source_correction_id is required when requeue_if_processing is enabled"
             )
+        # Validate every supplied authority before duplicate scopes can discard a request.
+        attributed_jobs = await attribute_valuation_jobs(self.db, requests)
+        normalized_jobs = self._normalize_jobs(attributed_jobs)
 
         try:
             latest_epochs_by_scope = await self.get_latest_epochs_for_scopes(normalized_jobs)
@@ -173,16 +180,16 @@ class ValuationJobRepository:
 
     def _eligible_jobs(
         self,
-        normalized_jobs: list[ValuationJobUpsert],
-        latest_epochs_by_scope: dict[tuple[str, str, date], int],
-    ) -> list[ValuationJobUpsert]:
+        normalized_jobs: list[AttributedValuationJobUpsert],
+        latest_epochs_by_scope: dict[tuple[str, str, str, date], int],
+    ) -> list[AttributedValuationJobUpsert]:
         return [
             job for job in normalized_jobs if not self._is_stale_job(job, latest_epochs_by_scope)
         ]
 
     async def _execute_upsert_jobs(
         self,
-        eligible_jobs: list[ValuationJobUpsert],
+        eligible_jobs: list[AttributedValuationJobUpsert],
         *,
         rearm_completed: bool,
         requeue_if_processing: bool,
@@ -192,12 +199,12 @@ class ValuationJobRepository:
         observe_multi_statement_batch(
             operation=StatementBatchOperation.VALUATION_JOB_UPSERT,
             item_count=len(eligible_jobs),
-            binds_per_row=11,
+            binds_per_row=12,
             reserved_binds=16,
         )
         for job_chunk in iter_statement_chunks(
             eligible_jobs,
-            binds_per_row=11,
+            binds_per_row=12,
             reserved_binds=16,
         ):
             result = await self.db.execute(
@@ -216,17 +223,13 @@ class ValuationJobRepository:
             staged_count += len(result.all())
         return staged_count
 
-    def _normalize_jobs(self, jobs: Iterable[ValuationJobUpsert]) -> list[ValuationJobUpsert]:
-        normalized_by_scope: dict[tuple[str, str, date, int], ValuationJobUpsert] = {}
+    def _normalize_jobs(self, jobs: Iterable[JobRequest]) -> list[JobRequest]:
+        normalized_by_scope: dict[tuple[str, str, date, int], JobRequest] = {}
         for job in jobs:
-            normalized_job = ValuationJobUpsert(
-                portfolio_id=job.portfolio_id,
-                security_id=job.security_id,
-                valuation_date=job.valuation_date,
-                epoch=job.epoch,
+            normalized_job = replace(
+                job,
                 correlation_id=normalize_lineage_value(job.correlation_id),
                 source_correction_id=normalize_lineage_value(job.source_correction_id),
-                readiness_outbox_id=job.readiness_outbox_id,
             )
             normalized_by_scope[
                 (
@@ -243,11 +246,11 @@ class ValuationJobRepository:
 
     def _is_stale_job(
         self,
-        job: ValuationJobUpsert,
-        latest_epochs_by_scope: dict[tuple[str, str, date], int],
+        job: AttributedValuationJobUpsert,
+        latest_epochs_by_scope: dict[tuple[str, str, str, date], int],
     ) -> bool:
         latest_epoch = latest_epochs_by_scope.get(
-            (job.portfolio_id, job.security_id, job.valuation_date)
+            (job.tenant_id.value, job.portfolio_id, job.security_id, job.valuation_date)
         )
         if latest_epoch is not None and latest_epoch > job.epoch:
             logger.info(
@@ -266,12 +269,16 @@ class ValuationJobRepository:
     async def get_latest_epoch_for_scope(
         self,
         *,
+        tenant_id: TenantId,
         portfolio_id: str,
         security_id: str,
         valuation_date: date,
     ) -> int | None:
+        if not isinstance(tenant_id, TenantId):
+            raise TypeError("valuation epoch lookup requires a TenantId")
         result = await self.db.execute(
             select(func.max(PortfolioValuationJob.epoch)).where(
+                PortfolioValuationJob.tenant_id == tenant_id.value,
                 PortfolioValuationJob.portfolio_id == portfolio_id,
                 PortfolioValuationJob.security_id == security_id,
                 PortfolioValuationJob.valuation_date == valuation_date,
@@ -281,21 +288,27 @@ class ValuationJobRepository:
         return int(latest_epoch) if latest_epoch is not None else None
 
     async def get_latest_epochs_for_scopes(
-        self, jobs: Iterable[ValuationJobUpsert]
-    ) -> dict[tuple[str, str, date], int]:
-        scopes = sorted({(job.portfolio_id, job.security_id, job.valuation_date) for job in jobs})
+        self, jobs: Iterable[AttributedValuationJobUpsert]
+    ) -> dict[tuple[str, str, str, date], int]:
+        scopes = sorted(
+            {
+                (job.tenant_id.value, job.portfolio_id, job.security_id, job.valuation_date)
+                for job in jobs
+            }
+        )
         if not scopes:
             return {}
 
-        latest_epochs: dict[tuple[str, str, date], int] = {}
+        latest_epochs: dict[tuple[str, str, str, date], int] = {}
         observe_multi_statement_batch(
             operation=StatementBatchOperation.VALUATION_JOB_EPOCH_LOOKUP,
             item_count=len(scopes),
-            binds_per_row=3,
+            binds_per_row=4,
         )
-        for scope_chunk in iter_statement_chunks(scopes, binds_per_row=3):
+        for scope_chunk in iter_statement_chunks(scopes, binds_per_row=4):
             result = await self.db.execute(
                 select(
+                    PortfolioValuationJob.tenant_id,
                     PortfolioValuationJob.portfolio_id,
                     PortfolioValuationJob.security_id,
                     PortfolioValuationJob.valuation_date,
@@ -303,12 +316,14 @@ class ValuationJobRepository:
                 )
                 .where(
                     tuple_(
+                        PortfolioValuationJob.tenant_id,
                         PortfolioValuationJob.portfolio_id,
                         PortfolioValuationJob.security_id,
                         PortfolioValuationJob.valuation_date,
                     ).in_(scope_chunk)
                 )
                 .group_by(
+                    PortfolioValuationJob.tenant_id,
                     PortfolioValuationJob.portfolio_id,
                     PortfolioValuationJob.security_id,
                     PortfolioValuationJob.valuation_date,
@@ -316,8 +331,14 @@ class ValuationJobRepository:
             )
             latest_epochs.update(
                 {
-                    (portfolio_id, security_id, valuation_date): latest_epoch
-                    for portfolio_id, security_id, valuation_date, latest_epoch in result.all()
+                    (tenant_id, portfolio_id, security_id, valuation_date): latest_epoch
+                    for (
+                        tenant_id,
+                        portfolio_id,
+                        security_id,
+                        valuation_date,
+                        latest_epoch,
+                    ) in result.all()
                 }
             )
         return latest_epochs
@@ -325,12 +346,12 @@ class ValuationJobRepository:
     async def _skip_superseded_pending_jobs(
         self,
         *,
-        normalized_jobs: list[ValuationJobUpsert],
-        latest_epochs_by_scope: dict[tuple[str, str, date], int],
+        normalized_jobs: list[AttributedValuationJobUpsert],
+        latest_epochs_by_scope: dict[tuple[str, str, str, date], int],
     ) -> int:
-        latest_epoch_targets: dict[tuple[str, str, date], int] = {}
+        latest_epoch_targets: dict[tuple[str, str, str, date], int] = {}
         for job in normalized_jobs:
-            scope = (job.portfolio_id, job.security_id, job.valuation_date)
+            scope = (job.tenant_id.value, job.portfolio_id, job.security_id, job.valuation_date)
             latest_epoch_targets[scope] = max(
                 latest_epochs_by_scope.get(scope, job.epoch),
                 latest_epoch_targets.get(scope, job.epoch),
@@ -339,6 +360,7 @@ class ValuationJobRepository:
 
         skipped_count = 0
         for (
+            tenant_id,
             portfolio_id,
             security_id,
             valuation_date,
@@ -346,6 +368,7 @@ class ValuationJobRepository:
             stmt = (
                 update(PortfolioValuationJob)
                 .where(
+                    PortfolioValuationJob.tenant_id == tenant_id,
                     PortfolioValuationJob.portfolio_id == portfolio_id,
                     PortfolioValuationJob.security_id == security_id,
                     PortfolioValuationJob.valuation_date == valuation_date,
@@ -365,7 +388,7 @@ class ValuationJobRepository:
 
 
 def _valuation_job_upsert_stmt(
-    eligible_jobs: list[ValuationJobUpsert],
+    eligible_jobs: list[AttributedValuationJobUpsert],
     *,
     rearm_completed: bool = False,
     requeue_if_processing: bool = False,
@@ -378,7 +401,7 @@ def _valuation_job_upsert_stmt(
         readiness_outbox_id = eligible_jobs[0].readiness_outbox_id
     stmt = pg_insert(PortfolioValuationJob).values(_valuation_job_insert_values(eligible_jobs))
     return stmt.on_conflict_do_update(
-        index_elements=["portfolio_id", "security_id", "valuation_date", "epoch"],
+        index_elements=["tenant_id", "portfolio_id", "security_id", "valuation_date", "epoch"],
         set_=_valuation_job_update_values(
             stmt,
             requeue_if_processing=requeue_if_processing,
@@ -394,7 +417,7 @@ def _valuation_job_upsert_stmt(
 
 
 def _valuation_job_insert_values(
-    eligible_jobs: list[ValuationJobUpsert],
+    eligible_jobs: list[AttributedValuationJobUpsert],
 ) -> list[dict[str, object]]:
     values: list[dict[str, object]] = []
     for job in eligible_jobs:
@@ -408,6 +431,7 @@ def _valuation_job_insert_values(
         )
         values.append(
             {
+                "tenant_id": job.tenant_id.value,
                 "portfolio_id": job.portfolio_id,
                 "security_id": job.security_id,
                 "valuation_date": job.valuation_date,

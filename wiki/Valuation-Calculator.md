@@ -45,6 +45,15 @@ requires reconciliation and data quality evidence.
 
 ## Runtime role
 
+Valuation jobs retain the canonical tenant of their exact persisted portfolio root.
+Scheduling, dispatch, worker admission, terminal updates, and recovery preserve that
+authority alongside claim-token and lease fences. Missing owners and foreign claims fail
+closed. The coordinated deployment and historical-refusal procedure is in the
+[valuation-job tenant cutover runbook](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/valuation-job-tenant-cutover.md).
+This boundary preserves financial calculations and source-correction requeue behavior;
+tenant-owned outbox partitioning and support for identical portfolio IDs across tenants
+remain separate work.
+
 For an eligible portfolio-security-day valuation job, the service:
 
 1. claims the next valuation job for processing

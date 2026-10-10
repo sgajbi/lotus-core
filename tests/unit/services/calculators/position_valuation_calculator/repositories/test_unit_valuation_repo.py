@@ -35,11 +35,30 @@ def setup_stale_job_data(db_engine):
     - One stale 'COMPLETE' job (should not be reset).
     """
     with Session(db_engine) as session:
+        session.add_all(
+            [
+                Portfolio(
+                    tenant_id=TEST_TENANT_ID,
+                    portfolio_id=portfolio_id,
+                    base_currency="USD",
+                    open_date=date(2024, 1, 1),
+                    risk_exposure="moderate",
+                    investment_time_horizon="long_term",
+                    portfolio_type="discretionary",
+                    booking_center_code="Singapore",
+                    client_id=f"CLIENT-{portfolio_id}",
+                    status="ACTIVE",
+                )
+                for portfolio_id in ["P1", "P2", "P3", "P4"]
+            ]
+        )
+        session.flush()
         now = datetime.now(timezone.utc)
         stale_time = now - timedelta(minutes=30)
 
         jobs = [
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P1",
                 security_id="S1",
                 valuation_date=date(2025, 8, 1),
@@ -50,6 +69,7 @@ def setup_stale_job_data(db_engine):
                 valuation_lease_expires_at=stale_time,
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P2",
                 security_id="S2",
                 valuation_date=date(2025, 8, 1),
@@ -60,6 +80,7 @@ def setup_stale_job_data(db_engine):
                 valuation_lease_expires_at=now + timedelta(hours=1),
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P3",
                 security_id="S3",
                 valuation_date=date(2025, 8, 1),
@@ -67,6 +88,7 @@ def setup_stale_job_data(db_engine):
                 updated_at=stale_time,
             ),
             PortfolioValuationJob(
+                tenant_id=TEST_TENANT_ID,
                 portfolio_id="P4",
                 security_id="S4",
                 valuation_date=date(2025, 8, 1),

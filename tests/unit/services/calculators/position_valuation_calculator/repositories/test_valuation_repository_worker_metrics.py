@@ -3,7 +3,11 @@ from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from portfolio_common.valuation_job_contracts import ValuationJobTransitionOutcome
+from portfolio_common.domain.tenant import TenantId
+from portfolio_common.valuation_job_contracts import (
+    ValuationJobClaim,
+    ValuationJobTransitionOutcome,
+)
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +16,11 @@ from src.services.calculators.position_valuation_calculator.app.repositories.val
 )
 
 pytestmark = pytest.mark.asyncio
+TENANT = TenantId("valuation-worker-test")
+
+
+def _claim(job_id: int, token: str) -> ValuationJobClaim:
+    return ValuationJobClaim(TENANT, job_id, token)
 
 
 @pytest.fixture
@@ -95,9 +104,9 @@ async def test_find_and_reset_stale_jobs_emits_reset_metric(
 
     select_result = MagicMock()
     select_result.all.return_value = [
-        MagicMock(id=101, attempt_count=1, has_newer_epoch=False),
-        MagicMock(id=102, attempt_count=1, has_newer_epoch=False),
-        MagicMock(id=103, attempt_count=1, has_newer_epoch=False),
+        MagicMock(tenant_id=TENANT.value, id=101, attempt_count=1, has_newer_epoch=False),
+        MagicMock(tenant_id=TENANT.value, id=102, attempt_count=1, has_newer_epoch=False),
+        MagicMock(tenant_id=TENANT.value, id=103, attempt_count=1, has_newer_epoch=False),
     ]
     mock_result = MagicMock()
     mock_result.fetchall.return_value = [(101,), (102,), (103,)]
@@ -122,12 +131,18 @@ async def test_stale_valuation_recovery_bounds_selection_and_chunks_reset_update
     second_result.fetchall.return_value = [(1_001,)]
     mock_db_session.execute.side_effect = [first_result, second_result]
 
-    reset_count = await repo._reset_retryable_stale_jobs(list(range(1_001, 0, -1)))
+    reset_count = await repo._reset_retryable_stale_jobs(
+        [(TENANT.value, job_id) for job_id in range(1_001, 0, -1)]
+    )
 
     assert reset_count == 1_001
     assert mock_db_session.execute.await_count == 2
     statement_lengths = [
-        len(call.args[0].compile().params["id_1"])
+        len(
+            next(
+                value for value in call.args[0].compile().params.values() if isinstance(value, list)
+            )
+        )
         for call in mock_db_session.execute.await_args_list
     ]
     assert statement_lengths == [1_000, 1]
@@ -157,7 +172,9 @@ async def test_stale_valuation_recovery_logs_counts_without_identifier_collectio
     mock_db_session.execute.return_value = MagicMock()
 
     with patch("portfolio_common.valuation_repository_base.logger.warning") as warning:
-        await repo._mark_over_limit_stale_jobs_failed([3, 2, 2, 1], max_attempts=3)
+        await repo._mark_over_limit_stale_jobs_failed(
+            [(TENANT.value, job_id) for job_id in [3, 2, 2, 1]], max_attempts=3
+        )
 
     extra = warning.call_args.kwargs["extra"]
     assert extra["job_count"] == 3
@@ -170,7 +187,9 @@ async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
     repo = ValuationRepository(mock_db_session)
 
     select_result = MagicMock()
-    select_result.all.return_value = [MagicMock(id=201, attempt_count=3, has_newer_epoch=False)]
+    select_result.all.return_value = [
+        MagicMock(tenant_id=TENANT.value, id=201, attempt_count=3, has_newer_epoch=False)
+    ]
     failed_result = MagicMock()
     mock_db_session.execute.side_effect = [select_result, failed_result]
 
@@ -190,6 +209,7 @@ async def test_stale_recovery_preserves_superseding_source_correction_after_atte
     select_result = MagicMock()
     select_result.all.return_value = [
         MagicMock(
+            tenant_id=TENANT.value,
             id=202,
             attempt_count=3,
             has_newer_epoch=False,
@@ -218,7 +238,9 @@ async def test_find_and_reset_stale_jobs_skips_superseded_rows_without_emitting_
     repo = ValuationRepository(mock_db_session)
 
     select_result = MagicMock()
-    select_result.all.return_value = [MagicMock(id=301, attempt_count=1, has_newer_epoch=True)]
+    select_result.all.return_value = [
+        MagicMock(tenant_id=TENANT.value, id=301, attempt_count=1, has_newer_epoch=True)
+    ]
     skipped_result = MagicMock()
     mock_db_session.execute.side_effect = [select_result, skipped_result]
 
@@ -237,7 +259,9 @@ async def test_find_and_reset_stale_jobs_rechecks_processing_state_before_reset(
     repo = ValuationRepository(mock_db_session)
 
     select_result = MagicMock()
-    select_result.all.return_value = [MagicMock(id=101, attempt_count=1, has_newer_epoch=False)]
+    select_result.all.return_value = [
+        MagicMock(tenant_id=TENANT.value, id=101, attempt_count=1, has_newer_epoch=False)
+    ]
     update_result = MagicMock()
     update_result.fetchall.return_value = []
     mock_db_session.execute.side_effect = [select_result, update_result]
@@ -269,7 +293,7 @@ async def test_recover_dispatch_failed_jobs_requeues_retryable_and_fails_exhaust
     mock_db_session.execute.side_effect = [failed_result, pending_result]
 
     result = await repo.recover_dispatch_failed_jobs(
-        [(101, "a" * 32), (102, "b" * 32), (103, "c" * 32)],
+        [_claim(101, "a" * 32), _claim(102, "b" * 32), _claim(103, "c" * 32)],
         max_attempts=3,
         failure_reason="Scheduler dispatch publish failed before queueing record keys: key-1",
     )
@@ -307,7 +331,7 @@ async def test_recover_dispatch_failed_jobs_chunks_and_aggregates_unique_claims(
         result.rowcount = rowcount
         results.append(result)
     mock_db_session.execute.side_effect = results
-    claims = [(job_id, f"token-{job_id:05d}") for job_id in reversed(range(1_001))]
+    claims = [_claim(job_id, f"{job_id:032x}") for job_id in reversed(range(1, 1_002))]
     claims.append(claims[0])
 
     recovered = await repo.recover_dispatch_failed_jobs(
@@ -327,7 +351,7 @@ async def test_recover_dispatch_failed_jobs_rejects_conflicting_claim_tokens_bef
 
     with pytest.raises(ValueError, match="conflicting valuation claim tokens"):
         await repo.recover_dispatch_failed_jobs(
-            [(101, "first-token"), (101, "different-token")],
+            [_claim(101, "a" * 32), _claim(101, "b" * 32)],
             max_attempts=3,
             failure_reason="Dispatch failed.",
         )
@@ -667,7 +691,7 @@ async def test_get_instrument_trims_security_id_before_query(
     assert "trim(instruments.security_id) = 'SEC_A'" in compiled_query
 
 
-async def test_get_portfolio_trims_portfolio_id_before_query(
+async def test_get_portfolio_binds_tenant_and_exact_portfolio_identity(
     mock_db_session: AsyncMock,
 ) -> None:
     repo = ValuationRepository(mock_db_session)
@@ -676,12 +700,14 @@ async def test_get_portfolio_trims_portfolio_id_before_query(
     result.scalars.return_value.first.return_value = None
     mock_db_session.execute.return_value = result
 
-    portfolio = await repo.get_portfolio(" PORT_001 ")
+    portfolio = await repo.get_portfolio(" PORT_001 ", tenant_id=TENANT)
 
     assert portfolio is None
     stmt = mock_db_session.execute.await_args.args[0]
     compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "trim(portfolios.portfolio_id) = 'PORT_001'" in compiled_query
+    assert "portfolios.tenant_id = 'valuation-worker-test'" in compiled_query
+    assert "portfolios.portfolio_id = ' PORT_001 '" in compiled_query
+    assert "trim(portfolios.portfolio_id)" not in compiled_query
 
 
 async def test_get_portfolios_by_ids_trims_portfolio_ids_and_skips_blanks(
@@ -712,7 +738,7 @@ async def test_get_portfolios_by_ids_skips_empty_identifier_list(
     mock_db_session.execute.assert_not_awaited()
 
 
-async def test_get_last_position_history_before_date_trims_portfolio_and_security_ids(
+async def test_get_last_position_history_binds_owner_and_exact_portfolio_identity(
     mock_db_session: AsyncMock,
 ) -> None:
     repo = ValuationRepository(mock_db_session)
@@ -722,19 +748,21 @@ async def test_get_last_position_history_before_date_trims_portfolio_and_securit
     mock_db_session.execute.return_value = result
 
     history = await repo.get_last_position_history_before_date(
-        " PORT_001 ", " SEC_A ", date(2026, 3, 27), 42
+        " PORT_001 ", " SEC_A ", date(2026, 3, 27), 42, tenant_id=TENANT
     )
 
     assert history is None
     stmt = mock_db_session.execute.await_args.args[0]
     compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "trim(position_history.portfolio_id) = 'PORT_001'" in compiled_query
+    assert "portfolios.tenant_id = 'valuation-worker-test'" in compiled_query
+    assert "position_history.portfolio_id = ' PORT_001 '" in compiled_query
+    assert "trim(position_history.portfolio_id)" not in compiled_query
     assert "trim(position_history.security_id) = 'SEC_A'" in compiled_query
     assert "position_history.position_date <= '2026-03-27'" in compiled_query
     assert "position_history.epoch = 42" in compiled_query
 
 
-async def test_update_job_status_trims_portfolio_and_security_ids(
+async def test_update_job_status_binds_tenant_and_exact_persisted_identifiers(
     mock_db_session: AsyncMock,
 ) -> None:
     repo = ValuationRepository(mock_db_session)
@@ -750,13 +778,16 @@ async def test_update_job_status_trims_portfolio_and_security_ids(
         epoch=42,
         status="COMPLETED",
         expected_claim_token="a" * 32,
+        tenant_id=TENANT,
     )
 
     assert outcome is ValuationJobTransitionOutcome.TERMINAL_APPLIED
     stmt = mock_db_session.execute.await_args.args[0]
     compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "trim(portfolio_valuation_jobs.portfolio_id) = 'PORT_001'" in compiled_query
-    assert "trim(portfolio_valuation_jobs.security_id) = 'SEC_A'" in compiled_query
+    assert "portfolio_valuation_jobs.tenant_id = 'valuation-worker-test'" in compiled_query
+    assert "portfolio_valuation_jobs.portfolio_id = ' PORT_001 '" in compiled_query
+    assert "portfolio_valuation_jobs.security_id = ' SEC_A '" in compiled_query
+    assert "trim(" not in compiled_query
     assert "portfolio_valuation_jobs.valuation_date = '2026-03-27'" in compiled_query
     assert "portfolio_valuation_jobs.epoch = 42" in compiled_query
     assert "portfolio_valuation_jobs.status = 'PROCESSING'" in compiled_query
@@ -793,6 +824,7 @@ async def test_update_job_status_classifies_non_terminal_outcomes(
         valuation_date=date(2026, 3, 27),
         epoch=42,
         status="COMPLETE",
+        tenant_id=TENANT,
     )
 
     assert outcome is expected_outcome
@@ -813,6 +845,7 @@ async def test_update_job_status_rejects_unsupported_applied_status(
             valuation_date=date(2026, 3, 27),
             epoch=42,
             status="COMPLETE",
+            tenant_id=TENANT,
         )
 
 

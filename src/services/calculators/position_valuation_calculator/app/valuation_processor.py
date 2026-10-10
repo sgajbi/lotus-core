@@ -18,6 +18,7 @@ from portfolio_common.database_models import (
     PositionHistory,
 )
 from portfolio_common.domain.eventing import portfolio_security_partition_key
+from portfolio_common.domain.tenant import TenantId
 from portfolio_common.domain.valuation import (
     BOND_QUOTE_AUTHORITY_REQUIRED_REASON,
     MarketPriceSourceFact,
@@ -185,11 +186,23 @@ class ValuationJobProcessor:
         async with db.begin():
             dependencies = self._dependency_factory.from_session(db)
 
+            tenant_id = TenantId(event.tenant_id)
+            if not await dependencies.repo.owns_valuation_claim(
+                tenant_id=tenant_id,
+                portfolio_id=event.portfolio_id,
+                security_id=event.security_id,
+                valuation_date=event.valuation_date,
+                epoch=event.epoch,
+                claim_token=claim_token,
+            ):
+                return
+
             if not await dependencies.idempotency_repo.claim_event_processing(
                 event_id,
                 event.portfolio_id,
                 SERVICE_NAME,
                 correlation_id,
+                tenant_id=tenant_id.value,
             ):
                 logger.warning("Event %s already processed. Skipping.", event_id)
                 return
@@ -236,6 +249,7 @@ class ValuationJobProcessor:
                     status=VALUATION_FAILED,
                     failure_reason=str(exc),
                     expected_claim_token=claim_token,
+                    tenant_id=TenantId(event.tenant_id),
                 )
                 self._terminal_transition_applied(
                     outcome,
@@ -293,6 +307,7 @@ class ValuationJobProcessor:
             event.security_id,
             event.valuation_date,
             event.epoch,
+            tenant_id=TenantId(event.tenant_id),
         )
         if position_state:
             return position_state
@@ -308,7 +323,9 @@ class ValuationJobProcessor:
         event: PortfolioValuationRequiredEvent,
     ) -> ValuationReferenceData:
         instrument = await repo.get_instrument(event.security_id)
-        portfolio = await repo.get_portfolio(event.portfolio_id)
+        portfolio = await repo.get_portfolio(
+            event.portfolio_id, tenant_id=TenantId(event.tenant_id)
+        )
         price = None
         if (
             portfolio is None
@@ -349,6 +366,7 @@ class ValuationJobProcessor:
             VALUATION_FAILED,
             failure_reason=error_msg,
             expected_claim_token=claim_token,
+            tenant_id=TenantId(event.tenant_id),
         )
         self._terminal_transition_applied(
             outcome,
@@ -804,6 +822,7 @@ class ValuationJobProcessor:
             terminal_status,
             failure_reason=snapshot_result.job_failure_reason,
             expected_claim_token=claim_token,
+            tenant_id=TenantId(event.tenant_id),
         )
         return self._terminal_transition_applied(
             outcome,
@@ -873,6 +892,7 @@ class ValuationJobProcessor:
                 status=VALUATION_JOB_SKIPPED_NO_POSITION,
                 failure_reason=str(error),
                 expected_claim_token=claim_token,
+                tenant_id=TenantId(event.tenant_id),
             )
             if not self._terminal_transition_applied(
                 outcome,

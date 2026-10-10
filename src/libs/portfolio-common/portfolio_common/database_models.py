@@ -65,6 +65,7 @@ from .transaction_source_revision_schema import (
     TransactionSourceRevisionColumns,
     transaction_source_revision_table_args,
 )
+from .valuation_job_schema import portfolio_valuation_job_table_args
 
 _REPLAY_CONTROL_PATTERN = r"U&'[\0001-\001F\007F-\009F]'"
 
@@ -4530,6 +4531,7 @@ class PortfolioValuationJob(Base):
     __tablename__ = "portfolio_valuation_jobs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    tenant_id = Column(String(128), nullable=False)
     portfolio_id = Column(String, nullable=False, index=True)
     security_id = Column(String, nullable=False, index=True)
     valuation_date = Column(Date, nullable=False, index=True)
@@ -4551,106 +4553,14 @@ class PortfolioValuationJob(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    __table_args__ = (
-        CheckConstraint(
-            "valuation_claim_token IS NULL OR valuation_claim_token ~ '^[0-9a-f]{32}$'",
-            name="ck_portfolio_valuation_jobs_claim_token",
-        ),
-        CheckConstraint(
-            "(valuation_lease_owner IS NULL AND valuation_claim_token IS NULL "
-            "AND valuation_lease_expires_at IS NULL) OR "
-            "(valuation_lease_owner IS NOT NULL AND valuation_claim_token IS NOT NULL "
-            "AND valuation_lease_expires_at IS NOT NULL)",
-            name="ck_portfolio_valuation_jobs_lease_all_or_none",
-        ),
-        CheckConstraint(
-            "valuation_lease_owner IS NULL OR btrim(valuation_lease_owner) <> ''",
-            name="ck_portfolio_valuation_jobs_lease_owner_nonblank",
-        ),
-        CheckConstraint(
-            "valuation_lease_expires_at IS NULL OR valuation_lease_expires_at "
-            "NOT IN ('infinity'::timestamptz, '-infinity'::timestamptz)",
-            name="ck_portfolio_valuation_jobs_lease_expiry_finite",
-        ),
-        CheckConstraint(
-            "(status = 'PROCESSING' AND valuation_lease_owner IS NOT NULL "
-            "AND valuation_claim_token IS NOT NULL AND valuation_lease_expires_at IS NOT NULL) "
-            "OR (status <> 'PROCESSING' AND valuation_lease_owner IS NULL "
-            "AND valuation_claim_token IS NULL AND valuation_lease_expires_at IS NULL)",
-            name="ck_portfolio_valuation_jobs_processing_lease_state",
-        ),
-        UniqueConstraint(
-            "portfolio_id",
-            "security_id",
-            "valuation_date",
-            "epoch",
-            name="_portfolio_security_valuation_date_epoch_uc",
-        ),
-        Index(
-            "ix_portfolio_valuation_jobs_status_valuation_date",
-            "status",
-            "valuation_date",
-        ),
-        Index(
-            "ix_portfolio_valuation_jobs_status_updated_at",
-            "status",
-            "updated_at",
-        ),
-        Index(
-            "ix_portfolio_valuation_jobs_processing_lease_recovery",
-            "valuation_lease_expires_at",
-            "id",
-            postgresql_where=status == "PROCESSING",
-        ),
-        Index(
-            "ix_portfolio_valuation_jobs_claim_order_epoch",
-            "status",
-            "portfolio_id",
-            "security_id",
-            "valuation_date",
-            epoch.desc(),
-            "id",
-        ),
-        Index(
-            "ix_portfolio_valuation_jobs_portfolio_status_updated",
-            "portfolio_id",
-            "status",
-            "updated_at",
-        ),
-        Index(
-            "ix_portfolio_valuation_jobs_portfolio_status_date_updated_id",
-            "portfolio_id",
-            "status",
-            "valuation_date",
-            "updated_at",
-            "id",
-        ),
-        Index(
-            "ix_val_jobs_norm_port_sec_date_epoch_status",
-            func.trim(portfolio_id),
-            func.trim(security_id),
-            "valuation_date",
-            "epoch",
-            "status",
-        ),
-        Index(
-            "ix_val_jobs_lineage_latest",
-            "portfolio_id",
-            func.trim(security_id),
-            "epoch",
-            valuation_date.desc(),
-            id.desc(),
-        ),
-        Index(
-            "ix_val_jobs_port_corr_date_updated_id",
-            "portfolio_id",
-            "correlation_id",
-            "valuation_date",
-            "updated_at",
-            "id",
-            postgresql_where=correlation_id.is_not(None),
-        ),
-        Index("ix_portfolio_valuation_jobs_alternate_lookup_key", "alternate_lookup_key"),
+    __table_args__ = portfolio_valuation_job_table_args(
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        valuation_date=valuation_date,
+        epoch=epoch,
+        status=status,
+        job_id=id,
+        correlation_id=correlation_id,
     )
 
 

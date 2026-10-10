@@ -130,6 +130,7 @@ async def test_new_default_business_date_rearms_exact_current_epoch_work(
     session.add_all(
         [
             PortfolioValuationJob(
+                tenant_id="tenant-calendar-admission",
                 portfolio_id="CALENDAR_COMPLETE",
                 security_id="SEC_COMPLETE",
                 valuation_date=ADMITTED_DATE,
@@ -138,6 +139,7 @@ async def test_new_default_business_date_rearms_exact_current_epoch_work(
                 source_correction_id="prior-price-correction",
             ),
             PortfolioValuationJob(
+                tenant_id="tenant-calendar-admission",
                 portfolio_id="CALENDAR_PROCESSING",
                 security_id="SEC_PROCESSING",
                 valuation_date=ADMITTED_DATE,

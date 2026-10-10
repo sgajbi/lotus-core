@@ -288,6 +288,7 @@ async def test_dated_source_cut_retains_coherence_without_current_certification(
         )
     token = await _claim(sessions)
     event = PortfolioValuationRequiredEvent(
+        tenant_id=TENANT,
         portfolio_id=PORTFOLIO,
         security_id=SECURITY,
         valuation_date=DAY,
@@ -645,6 +646,7 @@ async def test_authoritative_price_only_correction_stages_durable_revaluation(
         )
     token = await _claim(sessions)
     event = PortfolioValuationRequiredEvent(
+        tenant_id=TENANT,
         portfolio_id=PORTFOLIO,
         security_id=SECURITY,
         valuation_date=DAY,
