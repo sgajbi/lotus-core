@@ -440,11 +440,21 @@ def wait_for_service_ready(service_url: str, timeout: int = 60):
     emit_test_output(f"\n--- Service at {service_url} is healthy ---", verbose_only=True)
 
 
+def _restore_valuation_orchestrator() -> None:
+    service = "valuation_orchestrator_service"
+    _native_compose("start", service)
+    wait_for_service_ready(
+        f"http://localhost:{os.environ[E2E_RECOVERY_HEALTH_PORT_ENV[service]]}/health/ready"
+    )
+
+
 def _recover_admitted_valuation(db_engine, scope, trigger: Callable[[], object]) -> None:
     """Fault an executing, default-lease claim without manufacturing recovery authority."""
     worker = "position_valuation_calculator"
+    orchestrator = "valuation_orchestrator_service"
     evidence = {"scope": scope, "phases": {}}
     started = False
+    restore_orchestrator = False
     primary_error = None
     try:
         # Stop only the owned project's worker while native ingestion/scheduling admits work.
@@ -459,6 +469,23 @@ def _recover_admitted_valuation(db_engine, scope, trigger: Callable[[], object])
         )
         evidence["phases"]["admitted"] = admitted
         claim = assert_live_default_claim(admitted)
+        sources = valuation_source_prerequisites(db_engine, scope)
+        evidence["phases"]["admitted_sources"] = sources
+        # The scheduler can enqueue a competing upsert ahead of the calculator.
+        # Retire it only to establish test lock order, never as recovery authority.
+        container = _native_compose("ps", "--quiet", orchestrator).strip()
+        restore_orchestrator = True  # A partially failed stop still needs restoration.
+        _native_compose("stop", orchestrator)
+        wait_for_owned_container_exit(
+            container,
+            project_name=os.environ["COMPOSE_PROJECT_NAME"],
+            service_name=orchestrator,
+        )
+        evidence["phases"]["orchestrator_retired"] = {"container": container}
+        assert_same_live_claim(claim, valuation_outage_snapshot(db_engine, scope))
+        retired_sources = valuation_source_prerequisites(db_engine, scope)
+        evidence["phases"]["retired_sources"] = retired_sources
+        assert retired_sources == sources
         with db_engine.connect() as holder:
             holder.execute(text("SET LOCAL lock_timeout = '5s'"))
             held = holder.execute(
@@ -509,6 +536,18 @@ def _recover_admitted_valuation(db_engine, scope, trigger: Callable[[], object])
                 holder_pid=holder_pid,
                 worker_ips=worker_ips,
             )
+            # Restore the normal topology BEFORE the fault. The actual direct
+            # calculator wait must survive restoration; source-derived queue
+            # hypotheses cannot substitute for the observed PostgreSQL graph.
+            _restore_valuation_orchestrator()
+            restore_orchestrator = False
+            evidence["phases"]["orchestrator_restored"] = True
+            restored_blockers = blocked_worker()
+            evidence["phases"]["restored_blockers"] = restored_blockers
+            assert_worker_row_lock(restored_blockers, holder_pid=holder_pid, worker_ips=worker_ips)
+            restored_sources = valuation_source_prerequisites(db_engine, scope)
+            evidence["phases"]["restored_sources"] = restored_sources
+            assert restored_sources == sources
             before_fault = valuation_outage_snapshot(db_engine, scope)
             assert_same_live_claim(claim, before_fault)
             evidence["phases"]["before_fault"] = before_fault
@@ -551,6 +590,15 @@ def _recover_admitted_valuation(db_engine, scope, trigger: Callable[[], object])
         error.add_note("Valuation outage evidence: " + json.dumps(evidence, default=str))
         raise
     finally:
+        if restore_orchestrator:
+            try:
+                _restore_valuation_orchestrator()
+            except Exception as recovery_error:
+                if primary_error is None:
+                    raise
+                primary_error.add_note(
+                    f"Valuation orchestrator restoration failed: {recovery_error!r}"
+                )
         if not started:
             try:
                 _native_compose("start", worker)
