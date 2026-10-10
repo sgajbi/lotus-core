@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -10,6 +12,10 @@ from src.services.ingestion_service.app.application.reference_data_ingestion_reg
     ReferenceDataIngestionCommand,
     ReferenceDataIngestionRegistry,
 )
+from src.services.ingestion_service.app.DTOs.reference_data_support_dto import (
+    ClassificationTaxonomyIngestionRequest,
+)
+from tests.test_support.classification_history import source_cut
 
 EXPECTED_COMMANDS = {
     "portfolio_cash_availability_observation": (
@@ -250,6 +256,73 @@ async def test_reference_data_command_dispatches_to_service_with_preserved_recor
 def test_reference_data_registry_rejects_unknown_command_key() -> None:
     with pytest.raises(KeyError, match="Unknown reference-data ingestion command"):
         REFERENCE_DATA_INGESTION_REGISTRY.require("unknown_reference_family")
+
+
+@pytest.mark.asyncio
+async def test_historical_classification_command_preserves_cut_without_label_upsert() -> None:
+    cut = source_cut()
+    payload = ClassificationTaxonomyIngestionRequest(assignment_cut=cut)
+    command = REFERENCE_DATA_INGESTION_REGISTRY.require("classification_taxonomy")
+    service = SimpleNamespace(
+        append_classification_cut=AsyncMock(), upsert_classification_taxonomy=AsyncMock()
+    )
+
+    assert command.accepted_count(payload) == len(cut.assignments) == 2
+    assert command.request_payload(payload)["assignment_cut"] == cut.model_dump(mode="json")
+    await command.persist(service, payload)
+
+    service.append_classification_cut.assert_awaited_once_with(cut)
+    assert service.append_classification_cut.await_args.args[0] is cut
+    service.upsert_classification_taxonomy.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_classification_label_command_preserves_legacy_upsert_without_cut_append() -> None:
+    payload = ClassificationTaxonomyIngestionRequest.model_validate(
+        {
+            "classification_taxonomy": [
+                {
+                    "classification_set_id": "SYNTHETIC_SECTOR",
+                    "taxonomy_scope": "instrument",
+                    "dimension_name": "sector",
+                    "dimension_value": "TECHNOLOGY",
+                    "effective_from": "2026-01-01",
+                }
+            ]
+        }
+    )
+    command = REFERENCE_DATA_INGESTION_REGISTRY.require("classification_taxonomy")
+    service = SimpleNamespace(
+        append_classification_cut=AsyncMock(), upsert_classification_taxonomy=AsyncMock()
+    )
+
+    assert command.accepted_count(payload) == 1
+    assert "assignment_cut" not in command.request_payload(payload)
+    await command.persist(service, payload)
+
+    service.upsert_classification_taxonomy.assert_awaited_once_with(
+        [payload.classification_taxonomy[0].model_dump()]
+    )
+    service.append_classification_cut.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_classification_custody_refusal_never_falls_back_to_label_upsert() -> None:
+    cut = source_cut()
+    payload = ClassificationTaxonomyIngestionRequest(assignment_cut=cut)
+    command = REFERENCE_DATA_INGESTION_REGISTRY.require("classification_taxonomy")
+    refusal = RuntimeError("SYNTHETIC_CUSTODY_REFUSED")
+    service = SimpleNamespace(
+        append_classification_cut=AsyncMock(side_effect=refusal),
+        upsert_classification_taxonomy=AsyncMock(),
+    )
+
+    with pytest.raises(RuntimeError, match="SYNTHETIC_CUSTODY_REFUSED") as raised:
+        await command.persist(service, payload)
+
+    assert raised.value is refusal
+    service.append_classification_cut.assert_awaited_once_with(cut)
+    service.upsert_classification_taxonomy.assert_not_called()
 
 
 def test_reference_data_registry_rejects_ambiguous_command_keys() -> None:
