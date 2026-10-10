@@ -8,6 +8,7 @@ from portfolio_common.openapi_enrichment import exact_numeric_openapi_descriptio
 from portfolio_common.pydantic_financial_numeric import ExactRatioDecimal18_10
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .ingestion_validation_errors import validate_effective_window
 from .reference_data_source_observation_dto import SourceObservationLineage
 
 
@@ -66,12 +67,18 @@ class ModelPortfolioTargetRecord(SourceObservationLineage):
     )
     effective_to: date | None = Field(
         None,
-        description="Target effective end date, null when open-ended.",
-        examples=["2026-12-31"],
+        description=(
+            "Inclusive target end date, null when open-ended. Must be on or after "
+            "effective_from; equal dates form a valid one-day window."
+        ),
+        examples=["2026-12-31", "2026-03-25", None],
     )
 
     @model_validator(mode="after")
     def validate_bands(self) -> "ModelPortfolioTargetRecord":
+        validate_effective_window(
+            effective_from=self.effective_from, effective_to=self.effective_to
+        )
         _validate_target_band_order(
             target_weight=self.target_weight,
             min_weight=self.min_weight,
