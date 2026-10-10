@@ -67,6 +67,9 @@ def setup_dual_currency_data(clean_db_module, e2e_api_client: E2EApiClient):
         {"business_dates": [{"businessDate": buy_date}, {"businessDate": sell_date}]},
     )
 
+    # Portfolio ingress is asynchronous; transactions require persisted tenant authority.
+    e2e_api_client.wait_for_admitted_portfolio(portfolio_id)
+
     # 2. Ingest transactions
     e2e_api_client.ingest(
         "/ingest/transactions",

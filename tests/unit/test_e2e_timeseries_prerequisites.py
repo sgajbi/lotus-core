@@ -7,6 +7,7 @@ import pytest
 import requests
 
 from tests.e2e.api_client import E2EApiClient
+from tests.e2e.test_dual_currency_workflow import setup_dual_currency_data
 from tests.e2e.test_mwr_pipeline import setup_mwr_data
 from tests.e2e.test_performance_pipeline import setup_performance_data
 from tests.e2e.test_timeseries_convergence import (
@@ -87,7 +88,7 @@ def test_foreign_portfolio_stops_seed_before_transaction_publication(scenario):
 
 
 @pytest.mark.parametrize("authority", ["delayed-owned", "missing", "foreign"])
-@pytest.mark.parametrize("scenario", ["performance", "mwr"])
+@pytest.mark.parametrize("scenario", ["performance", "mwr", "dual-currency"])
 def test_financial_fixture_requires_owned_visibility_before_publication(
     monkeypatch, authority, scenario
 ):
@@ -100,6 +101,7 @@ def test_financial_fixture_requires_owned_visibility_before_publication(
 
     def post(url, *, json, timeout):
         nonlocal portfolio_id
+        assert client.tenant_id == client.session.headers["X-Tenant-Id"] == "tenant_e2e"
         events.append(url)
         assert timeout == 10
         if url.endswith("/ingest/portfolios"):
@@ -115,6 +117,24 @@ def test_financial_fixture_requires_owned_visibility_before_publication(
     def query(endpoint):
         nonlocal visible
         assert portfolio_id is not None
+        if scenario == "dual-currency" and endpoint == f"/portfolios/{portfolio_id}/positions":
+            assert visible and len(transactions) == 2
+            return SimpleNamespace(
+                status_code=200,
+                json=lambda: {
+                    "positions": [
+                        {
+                            "valuation": {
+                                "market_price": "180",
+                                "market_value": "10800",
+                                "market_value_local": "10800",
+                                "unrealized_gain_loss": "1800",
+                                "unrealized_gain_loss_local": "1800",
+                            },
+                        }
+                    ]
+                },
+            )
         assert endpoint == f"/portfolios?portfolio_id={portfolio_id}"
         events.append("portfolio-query")
         if authority == "foreign":
@@ -137,6 +157,8 @@ def test_financial_fixture_requires_owned_visibility_before_publication(
     def run_fixture():
         if scenario == "mwr":
             return setup_mwr_data.__wrapped__(None, None, client, poll_db_until)
+        if scenario == "dual-currency":
+            return setup_dual_currency_data.__wrapped__(None, client)
         return setup_performance_data.__wrapped__(None, client, poll_db_until)
 
     try:
@@ -149,7 +171,10 @@ def test_financial_fixture_requires_owned_visibility_before_publication(
             )
             assert events.count("http://ingestion/ingest/transactions") == 1
             assert events.count("http://ingestion/ingest/market-prices") == 1
-            assert len(transactions) == (5 if scenario == "mwr" else 1)
+            assert len(transactions) == {"mwr": 5, "performance": 1, "dual-currency": 2}[scenario]
+            if scenario == "dual-currency":
+                poll_db_until.assert_not_called()
+                return
             expected_poll_count = 2 if scenario == "mwr" else 1
             assert poll_db_until.call_count == expected_poll_count
             assert poll_db_until.call_args_list[0].kwargs["params"] == {

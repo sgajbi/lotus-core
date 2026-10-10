@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 from decimal import Decimal
+from ipaddress import ip_address
 from typing import Any
 
 from sqlalchemy import text
@@ -67,8 +68,11 @@ def assert_same_claim_financial_settlement(before: dict[str, Any], after: dict[s
     """Completion must be the admitted row/epoch, not a reset/reclaimed replacement."""
     assert len(after["jobs"]) == len(after["snapshots"]) == 1, after
     job, snapshot = after["jobs"][0], after["snapshots"][0]
-    for field in ("id", "portfolio_id", "security_id", "valuation_date", "epoch", "attempt_count"):
+    for field in ("id", "portfolio_id", "security_id", "valuation_date", "epoch"):
         assert job[field] == before[field], (field, before, after)
+    # The existing terminal transition increments once as it clears the live lease.
+    # A zero increment or an extra claim/reclaim cannot qualify completion.
+    assert job["attempt_count"] == before["attempt_count"] + 1, (before, after)
     assert job["status"] == "COMPLETE", after
     assert all(
         job[field] is None
@@ -92,3 +96,35 @@ def assert_same_claim_financial_settlement(before: dict[str, Any], after: dict[s
     }
     for field, value in expected.items():
         assert snapshot[field] == Decimal(value), (field, after)
+
+
+def assert_same_live_claim(before: dict[str, Any], observation: dict[str, Any]) -> None:
+    """Keep the exact admitted owner/token/expiry while the worker is blocked."""
+    current = assert_live_default_claim(observation)
+    for field in (
+        "id",
+        "portfolio_id",
+        "security_id",
+        "valuation_date",
+        "epoch",
+        "attempt_count",
+        "valuation_lease_owner",
+        "valuation_claim_token",
+        "valuation_lease_expires_at",
+    ):
+        assert current[field] == before[field], (field, before, observation)
+
+
+def assert_worker_row_lock(
+    rows: list[dict[str, Any]], *, holder_pid: int, worker_ips: list[str]
+) -> None:
+    """Qualify measured blocking on the sole test-held claim, not SQL text spelling."""
+    assert rows and worker_ips, (rows, worker_ips)
+    expected_ips = {ip_address(value) for value in worker_ips}
+    for row in rows:
+        assert row["pid"] > 0 and row["pid"] != holder_pid, row
+        assert ip_address(row["client_host"]) in expected_ips, row
+        assert holder_pid in row["blocking_pids"], row
+        assert row["state"] == "active" and row["wait_event_type"] == "Lock", row
+        assert row["wait_event"] in {"transactionid", "tuple"}, row
+        assert row["backend_start"] and row["query_start"] and row["query"].strip(), row
