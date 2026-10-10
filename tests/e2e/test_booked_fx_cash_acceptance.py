@@ -26,11 +26,38 @@ from .api_client import E2EApiClient
 from .data_factory import unique_suffix
 
 
+def admit_scenario_instruments(client, equity, cash):
+    """Own and settle real reference admission before publishing any transaction."""
+    client.ingest(
+        "/ingest/instruments",
+        {
+            "instruments": [
+                {
+                    "security_id": security,
+                    "name": f"Synthetic {kind}",
+                    "isin": security,
+                    "currency": "XTS",
+                    "product_type": kind,
+                    "asset_class": kind,
+                }
+                for security, kind in ((equity, "Equity"), (cash, "Cash"))
+            ]
+        },
+    )
+    for security in (equity, cash):
+        client.poll_for_data(
+            f"/instruments/?security_id={security}",
+            lambda body, expected=security: any(
+                row["security_id"] == expected for row in body.get("instruments", [])
+            ),
+        )
+
+
 def test_booked_fx_cash_reference_correction_replay_and_process_restart(
     clean_db, db_engine, e2e_api_client: E2EApiClient, capsys
 ):
     client = e2e_api_client
-    scenario = seed_scenario(client, unique_suffix())
+    scenario = seed_scenario(client, unique_suffix(), admit_instruments=admit_scenario_instruments)
     scope = {key: scenario[key] for key in ("portfolio", "equity", "cash")}
     positions_url = f"/portfolios/{scope['portfolio']}/positions"
     transactions_url = f"/portfolios/{scope['portfolio']}/transactions?limit=50"
