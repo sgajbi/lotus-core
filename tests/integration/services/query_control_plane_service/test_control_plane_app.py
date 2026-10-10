@@ -2085,14 +2085,15 @@ async def test_openapi_describes_benchmark_reference_parameters(async_test_clien
         in (benchmark_coverage["description"])
     )
     assert "lotus-risk and other readiness/support flows" in (risk_free_coverage["description"])
-    assert (
-        "downstream consumers that need governed shared classification labels"
-        in (classification_taxonomy["description"])
+    classification_description = classification_taxonomy["description"]
+    assert "effective taxonomy labels or explicitly pinned instrument history" in (
+        classification_description
     )
-    assert "instead of local taxonomy drift" in classification_taxonomy["description"]
-    assert (
-        "Missing labels remain absent rather than synthesized"
-        in classification_taxonomy["description"]
+    assert "source/version/cut/content pins" in classification_description
+    assert "current labels never fill history" in classification_description
+    assert "Corrections preserve original custody" in classification_description
+    assert "Retention is unqualified and financial compatibility unavailable" in (
+        classification_description
     )
 
     index_id = next(
