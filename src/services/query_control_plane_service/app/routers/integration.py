@@ -168,6 +168,11 @@ from ..dependencies import (
     get_sustainability_preference_profile_service,
 )
 from ..domain.market_fx import FxSourceSelectionRejected
+from .benchmark_market_http import (
+    BENCHMARK_MARKET_SERIES_DESCRIPTION,
+    BENCHMARK_MARKET_SERIES_UNAVAILABLE_RESPONSE,
+    raise_benchmark_market_source_unavailable,
+)
 from .core_snapshot_http import core_snapshot_response_or_http_error
 from .fx_source_scope import verified_fx_source_context
 from .integration_source_route_descriptions import (
@@ -478,24 +483,6 @@ BENCHMARK_MARKET_SERIES_INVALID_REQUEST_EXAMPLE = _integration_source_bad_reques
     source_product="MarketDataWindow",
     detail=BENCHMARK_MARKET_SERIES_INVALID_REQUEST_DETAIL,
     metadata={"benchmark_id": "BMK_GLOBAL_BALANCED_60_40", "reason": "ValueError"},
-)
-BENCHMARK_MARKET_SERIES_UNAVAILABLE_DETAIL = (
-    "The effective benchmark definition or requested FX source selection is unavailable "
-    "or conflicting."
-)
-BENCHMARK_MARKET_SERIES_UNAVAILABLE_EXAMPLE = cast(
-    dict[str, object],
-    problem_example(
-        status_code=status.HTTP_409_CONFLICT,
-        title="Market data source selection unavailable",
-        detail=BENCHMARK_MARKET_SERIES_UNAVAILABLE_DETAIL,
-        error_code="QCP_FX_SOURCE_SELECTION_CONFLICT",
-        instance="/integration/benchmarks/BMK_GLOBAL_BALANCED_60_40/market-series",
-        metadata={
-            "source_product": "MarketDataWindow",
-            "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
-        },
-    ),
 )
 HTTP_422_UNPROCESSABLE_CONTENT = 422
 
@@ -2048,24 +2035,10 @@ async def fetch_index_catalog(
             "Benchmark market series request is invalid.",
             BENCHMARK_MARKET_SERIES_INVALID_REQUEST_EXAMPLE,
         ),
-        status.HTTP_409_CONFLICT: problem_response(
-            BENCHMARK_MARKET_SERIES_UNAVAILABLE_DETAIL,
-            BENCHMARK_MARKET_SERIES_UNAVAILABLE_EXAMPLE,
-        ),
+        status.HTTP_409_CONFLICT: BENCHMARK_MARKET_SERIES_UNAVAILABLE_RESPONSE,
     },
     summary="Fetch benchmark market series inputs",
-    description=(
-        "What: Return benchmark market series inputs required by lotus-performance.\n"
-        "How: Resolves components and returns aligned raw series honoring requested "
-        "series_fields, deterministic paging, and benchmark-to-target FX context semantics.\n"
-        "When: Used by lotus-performance and other downstream benchmark sourcing workflows that "
-        "need native component series plus benchmark-to-target FX context. The response "
-        "publishes native component series plus optional benchmark-to-target FX context; "
-        "lotus-performance owns benchmark math and any benchmark-currency normalization of "
-        "component series. An effective benchmark definition is required for every request; "
-        "missing definitions refuse with HTTP 409 before component or FX reads. The requested "
-        "target currency never supplies benchmark base-currency authority."
-    ),
+    description=BENCHMARK_MARKET_SERIES_DESCRIPTION,
     openapi_extra=source_data_product_openapi_extra("MarketDataWindow"),
 )
 async def fetch_benchmark_market_series(
@@ -2092,13 +2065,7 @@ async def fetch_benchmark_market_series(
             request=request,
         )
     except FxSourceSelectionRejected:
-        raise_problem(
-            status_code=status.HTTP_409_CONFLICT,
-            title="Market data source selection unavailable",
-            detail=BENCHMARK_MARKET_SERIES_UNAVAILABLE_DETAIL,
-            error_code="QCP_FX_SOURCE_SELECTION_CONFLICT",
-            metadata={"source_product": "MarketDataWindow", "benchmark_id": benchmark_id},
-        )
+        raise_benchmark_market_source_unavailable(benchmark_id)
     except ValueError as exc:
         raise_integration_source_bad_request(
             source_product="MarketDataWindow",
