@@ -8,7 +8,7 @@
     "smoke_suite": "e2e-smoke",
     "runtime_mode": "live_worker",
     "environment_profile": "e2e",
-    "expected_full_node_count": 70,
+    "expected_full_node_count": 71,
     "expected_smoke_node_count": 7,
     "baseline_run": "github-actions:29185995035",
     "baseline_full_runtime_seconds": 1082,
@@ -271,6 +271,19 @@
       ],
       "non_duplication_rationale": "Lower-layer tests own retry algorithms; these nodes prove externally observable convergence after real worker ordering, outage, and replay boundaries."
     },
+    "analytics-ingress-correction-identity": {
+      "owner": "lotus-core/query-control-plane-analytics",
+      "invariant": "Supported historical market-price ingress and real worker materialization change both Portfolio and Position economic rows and content digests; unchanged/replayed reads stay stable and stale continuations refuse.",
+      "production_defect_class": "Unavailable or request-only producer identity hides changed economics, worker corrections fail to reach analytics, or continuation combines incompatible selected inputs.",
+      "fixture_boundary": "One isolated owned E2E dataset, existing admitted ingress/worker/runtime and full-lane image verification. Ten USD shares at prices100/110/120 become100/130/120 through supported ingress only; no direct SQL writes or worker calls. Passing synthetic request/response receipts are emitted to the native test log. Runtime execution is pending until observed; source cut remains UNAVAILABLE.",
+      "external_dependencies": ["PostgreSQL", "Kafka", "Core HTTP services", "Valuation and timeseries workers"],
+      "source_contracts": ["wiki/Integrations.md", "docs/standards/test-lane-governance.v1.json"],
+      "lower_layer_proofs": [
+        "tests/unit/test_support/test_analytics_correction_oracle.py",
+        "tests/integration/services/query_control_plane_service/test_analytics_content_identity_postgresql.py"
+      ],
+      "non_duplication_rationale": "Direct SQL/ASGI correction tests prove reader and metadata behavior but not supported ingress-to-worker materialization. This live node closes only that missing behavioral chain, not source-cut/provider or downstream certification."
+    },
     "timeseries-and-returns": {
       "owner": "lotus-core/timeseries-performance",
       "invariant": "Cash flows, position history, portfolio timeseries, and money-weighted-return inputs converge by governed date without duplication.",
@@ -318,6 +331,7 @@
     {"ownership_id": "e2e-004", "nodeid": "tests/e2e/test_5_day_workflow.py::test_day_4_workflow", "capability_profile": "multi-day-position-history", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-005", "nodeid": "tests/e2e/test_5_day_workflow.py::test_day_5_workflow", "capability_profile": "multi-day-position-history", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-006", "nodeid": "tests/e2e/test_5_day_workflow.py::test_prerequisites_are_loaded", "capability_profile": "multi-day-position-history", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-073", "nodeid": "tests/e2e/test_analytics_price_correction.py::test_supported_historical_price_correction_changes_live_analytics_identity", "capability_profile": "analytics-ingress-correction-identity", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-007", "nodeid": "tests/e2e/test_avco_workflow.py::test_avco_realized_pnl", "capability_profile": "cost-basis-and-currency", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-008", "nodeid": "tests/e2e/test_cashflow_pipeline.py::test_cashflow_pipeline", "capability_profile": "derived-state-analytics", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
     {"ownership_id": "e2e-009", "nodeid": "tests/e2e/test_complex_portfolio_lifecycle.py::test_complex_lifecycle_cross_api_consistency", "capability_profile": "complex-portfolio-lifecycle", "current_lanes": ["e2e-smoke", "e2e-all"], "review_decision": "needs-review"},
