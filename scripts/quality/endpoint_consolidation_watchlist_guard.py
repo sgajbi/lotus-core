@@ -9,6 +9,14 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
+
+from portfolio_common.source_data_products import (
+    ANALYTICS_INPUT,
+    SOURCE_DATA_PRODUCT_CATALOG,
+    SourceDataProductDefinition,
+    validate_source_data_product_catalog,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_ROOT = Path(__file__).resolve().parent
@@ -21,6 +29,7 @@ WATCHLIST_PATH = REPO_ROOT / "docs" / "standards" / "endpoint-consolidation-watc
 WATCHLIST_SPEC_VERSION = "1.0.0"
 APPLICATION = "lotus-core"
 GOVERNING_RFCS = {"RFC-0067", "RFC-0082", "RFC-0083"}
+OPERATIONAL_MARKET_ROUTE_ROOTS = ("/prices", "/fx-rates")
 
 
 @dataclass(frozen=True)
@@ -226,8 +235,12 @@ def evaluate_watchlist(
     discovered_routes: list[route_guard.Route],
     source_routes: list[source_guard.SourceDataProductRoute],
     route_families: dict[str, str] | None = None,
+    *,
+    catalog: tuple[SourceDataProductDefinition, ...] | None = None,
 ) -> list[str]:
-    errors: list[str] = []
+    errors = _analytics_market_route_errors(
+        SOURCE_DATA_PRODUCT_CATALOG if catalog is None else catalog
+    )
     route_by_key = _route_keys(discovered_routes)
     source_product_by_route = _source_product_by_route(source_routes)
     route_families = route_families if route_families is not None else _route_family_by_key()
@@ -293,6 +306,32 @@ def evaluate_watchlist(
         if entry.route.full_key in route_by_key:
             errors.append(f"{entry.route.full_key} is retired in watchlist but still has a router")
 
+    return errors
+
+
+def _analytics_market_route_errors(
+    catalog: tuple[SourceDataProductDefinition, ...],
+) -> list[str]:
+    try:
+        validate_source_data_product_catalog(catalog)
+    except ValueError as exc:
+        return [f"source-data product catalog is invalid: {exc}"]
+    analytics_products = tuple(p for p in catalog if p.route_family == ANALYTICS_INPUT)
+    if not analytics_products:
+        return ["source-data product catalog has no analytics input contracts"]
+    errors: list[str] = []
+    for product in analytics_products:
+        for route in product.current_routes:
+            path = urlsplit(route.strip()).path
+            if any(
+                path == root or path.startswith(root + "/")
+                for root in OPERATIONAL_MARKET_ROUTE_ROOTS
+            ):
+                errors.append(
+                    f"{product.product_name} analytics input contract for "
+                    f"{product.consumers!r} references operational market route {route!r}; "
+                    "use a governed analytics window product"
+                )
     return errors
 
 

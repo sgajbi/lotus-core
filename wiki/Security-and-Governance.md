@@ -54,6 +54,20 @@ It is enforced through:
 - synthetic fixture, API example, seed example, and generated-evidence leakage governance in
   `docs/standards/synthetic-test-data-governance.v1.json`
 
+## Operational market reads and analytics contracts
+
+From the `lotus-core` repository root, run `make endpoint-consolidation-watchlist-guard` before
+publishing a source contract. The same command runs in the architecture gate and rejects every
+`Analytics Input` catalog binding to the operational `/prices` or `/fx-rates` route families,
+including bindings for a new consumer. It accepts named analytics window contracts and keeps
+`Operational Read` bindings outside this analytics prohibition. Invalid catalogs and empty analytics
+inventories fail closed. Unit controls exercise the command entrypoint with both rejected raw routes
+and accepted windows; path boundaries prevent unrelated names from being rejected.
+
+This static guard implements the bounded #458 S2 publication rule. It does not certify consumer
+adoption, complete window temporal/selection semantics, source qualification, financial compatibility
+or programme capacity. Operational routes and returned values are unchanged.
+
 ## HTTP app security controls
 
 Every non-public operation requires a normalized, non-blank `X-Tenant-Id`, including local and

@@ -6,7 +6,7 @@
     "RFC-0083",
     "RFC-0067"
   ],
-  "description": "Machine-readable RFC-0083 endpoint consolidation watchlist. It prevents monitored convenience-route families from growing without explicit ownership, product identity, or approved bounded-use rationale.",
+  "description": "Machine-readable RFC-0083 endpoint consolidation watchlist. It prevents monitored convenience-route families from growing without explicit ownership, product identity, or approved bounded-use rationale. The guard also rejects every Analytics Input catalog contract that binds the operational /prices or /fx-rates route family, regardless of consumer; operational-read contracts remain outside this analytics prohibition.",
   "monitoredRoutes": [
     {
       "service": "query_service",
