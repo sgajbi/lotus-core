@@ -122,6 +122,11 @@ def _validate_step_condition(
             f"step={step_name!r}"
         )
     action = step.get("uses")
+    if (
+        action == "actions/download-artifact@v8"
+        and step.get("if") == "steps.classify.outputs.mode != 'docs-only'"
+    ):
+        return
     if not is_conditional_auxiliary_action(action):
         raise RequiredStatusChecksError(
             f"blocking workflow enforcement steps must be unconditional: {context_text}; "
@@ -444,6 +449,26 @@ def dependency_ids(job: Mapping[str, Any], *, contexts: tuple[str, ...]) -> tupl
     return dependency_values
 
 
+def _validate_classified_downloads(steps: list[Mapping[str, Any]], *, context: str) -> None:
+    downloads = [
+        index
+        for index, step in enumerate(steps)
+        if step.get("uses") == "actions/download-artifact@v8" and "if" in step
+    ]
+    if not downloads:
+        return
+    classifiers = [index for index, step in enumerate(steps) if step.get("id") == "classify"]
+    if len(classifiers) != 1 or classifiers[0] >= min(downloads):
+        raise RequiredStatusChecksError(
+            f"classified downloads require preceding unique classifier: {context}"
+        )
+    classifier = steps[classifiers[0]]
+    if classifier.get("run") != "make change-classification" or "if" in classifier:
+        raise RequiredStatusChecksError(
+            f"classified downloads require unconditional native classifier: {context}"
+        )
+
+
 def validate_blocking_job(
     job: Mapping[str, Any],
     *,
@@ -497,6 +522,7 @@ def validate_blocking_job(
         validated_steps.append(validated_step)
         if is_enforcement:
             enforcement_steps += 1
+    _validate_classified_downloads(validated_steps, context=context_text)
     if enforcement_steps != 1:
         raise RequiredStatusChecksError(
             "blocking workflow jobs must declare exactly one unconditional id: enforce step: "

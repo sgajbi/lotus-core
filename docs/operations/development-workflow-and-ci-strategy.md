@@ -29,7 +29,7 @@ Define a repeatable, single-developer-friendly workflow that preserves instituti
    head SHA. Apply it whenever the PR is ready to queue; existing exact-head checks remain valid.
 6. A `synchronize` event is different: it means the PR head changed. The PR Merge Gate must validate
    the new head and may cancel stale work for the prior PR ref. Opened, reopened, and
-   ready-for-review events continue to enter the full gate; broader same-head evidence reuse for
+   ready-for-review events enter the governed gate with fresh classification; broader same-head evidence reuse for
    those lifecycle events remains separately governed.
 7. PR Auto Merge uses the repository-scoped `LOTUS_AUTOMERGE_TOKEN` under read-only workflow
    permissions. When that credential is absent, the workflow warns and stops; it never falls back
@@ -68,7 +68,79 @@ Goal: production-readiness evidence without slowing every PR loop.
 
 ## Exact-Source Runtime Image Sets
 
-PR Merge Gate and Main Releasability each build one governed runtime image set after coverage
+Documentation-only PRs use conservative source classification as described below and produce no
+runtime images, image SBOM or build provenance. Full PR and every main/release run retain the
+existing exact-source image and security certification; omitted cohorts never mint fake evidence.
+
+## Conservative PR Change Selection
+
+`scripts/quality/change_classification.py` owns one merge-base diff classifier. Its explicit
+allowlist covers regular non-executable authored Markdown in the named documentation directories,
+the wiki, README, changelog and repository engineering context. `docs/standards/`, contracts,
+generated documentation inputs, arbitrary Markdown locations and non-Markdown files are full.
+Renames, copies, deletions, type changes, symlinks, executable documents, empty diffs and unknown
+paths are full. Application, shared-library, test, migration, API/event/schema, dependency, build,
+workflow and classifier/guard changes retain every applicable runtime cohort. Per-service selection
+is deferred to the ownership split in [#462](https://github.com/sgajbi/lotus-core/issues/462).
+
+A workflow can omit runtime work only for a verified `pull_request` in the canonical merge gate.
+The event base/source, actual checkout, tree, merge-base, repository, workflow, run, attempt and job
+are recorded. A source checkout or its exact base/source synthetic merge must match; missing refs,
+dirty tracked files, unexpected context or identity mismatch select full. Every synchronize event
+recomputes the decision; an older receipt or environment mode flag cannot authorize omission.
+
+All 39 app-bound required contexts still run their own unconditional jobs and enforcement steps.
+Fixed `pr-*` Make targets execute the original full native target for source changes. For a proved
+documentation-only diff, they run the documentation/wiki/catalog guard, `make docs-evidence-pack`
+and, for test matrix entries, the corresponding native collection selector, then report
+`omit-runtime-docs-only`. The native documentation evidence pack is retained inside each successful
+selection receipt. Full unit, DB,
+coverage aggregation, image build and runtime/E2E execution are omitted only by that verified path.
+The static security/dependency checks and Quality Baseline governance jobs remain enabled.
+`output/pr-validation/*.json`, uploaded per exact run/head/job, and job summaries record reasons,
+selected commands and native exits. Conditional downloads only omit artifacts that this same
+classification intentionally did not create; no required enforcement step is conditional.
+
+Merge/Main full-unit execution and the zero-warning budget have one owner, `coverage-shard-unit`;
+combined coverage still enforces its unchanged thresholds. The redundant serial static warning
+execution is removed. Original local Make targets and all main/scheduled/release/security,
+SBOM/provenance/image certification stay full. Feature push validation defers only after positively
+observing an open main-targeting PR and canonical required PR run for the exact head. Otherwise it
+retains its original full-unit warning and DB producers, including on API error, cancellation,
+wrong head/base or ambiguous authority. A PR opened after Feature fallback begins can overlap;
+this conservative race is not hidden or counted as universal deduplication.
+
+From the repository root, in PowerShell:
+
+```powershell
+python scripts/development/repository_python.py scripts/quality/change_classification.py --base origin/main --head HEAD
+make change-classification-guard quality-workflow-governance-gate
+```
+
+From the repository root, in Bash:
+
+```bash
+python scripts/development/repository_python.py scripts/quality/change_classification.py --base origin/main --head HEAD
+make change-classification-guard quality-workflow-governance-gate
+```
+
+The explicit local range command is diagnostic; workflow omission uses the verified event path.
+The Make authority guard follows each registered PR wrapper into its same-named native full target,
+so changing a wrapped build/coverage recipe cannot escape the existing exact command contract.
+Guard controls exercise valid and damaged workflow/Make inputs. Miniature subprocess fixtures run
+the unchanged native unit/warning/coverage owner with real passing, failing and warning cases;
+they supplement the full source-change PR producer rather than substituting mock composition.
+
+Closure evidence must include a live documentation-only PR and representative full source-change
+PR, all required contexts, receipts for each omitted/selected cohort, actual main and wiki parity.
+Measure wall duration and summed job runner duration from named successful runs and exact sources;
+report setup/queue differences and the Feature fallback race. Summed hosted job time is not a
+precise billable-minute claim. A lower job count or mocked producer alone does not establish
+[full #749 acceptance](https://github.com/sgajbi/lotus-core/issues/749).
+
+## Runtime Image Certification
+
+Full PR validation and Main Releasability each build one governed runtime image set after coverage
 passes. The existing `Validate Docker Build` job is the sole producer for that workflow SHA:
 
 1. `prebuild_ci_images.py` builds the ordered service union once, coalesces identical Dockerfiles,

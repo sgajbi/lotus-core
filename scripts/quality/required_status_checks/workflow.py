@@ -312,6 +312,8 @@ def _governed_contexts(
         _validate_workflow_triggers(workflow, path=policy.path)
         if policy.path == Path(".github/workflows/pr-merge-gate.yml"):
             _validate_make_authority_bootstrap(workflow, path=policy.path)
+            # Optional push routing remains governed even when a PR owns the required proof.
+            all_make_targets.update({"feature-pr-authority", "warning-gate", "docs-evidence-pack"})
         jobs = _workflow_jobs(workflow, path=policy.path)
         for job_id, job in jobs.items():
             if not isinstance(job, dict):

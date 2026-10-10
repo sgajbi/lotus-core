@@ -12,6 +12,8 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
+  actions: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -20,8 +22,37 @@ env:
   PYTHON_VERSION: "3.11"
 
 jobs:
+  validation-plan:
+    name: Feature Lane / Exact Head PR Authority
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run_feature: ${{ steps.authority.outputs.run_feature }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Resolve exact-head required PR authority
+        id: authority
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: make feature-pr-authority
+      - name: Upload feature routing evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: feature-authority-${{ github.run_id }}-${{ github.sha }}
+          path: output/pr-validation/*.json
+          if-no-files-found: error
+          retention-days: 14
+
   workflow-lint:
     name: Feature Lane / Workflow Lint
+    needs: [validation-plan]
+    if: needs.validation-plan.outputs.run_feature == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -30,6 +61,8 @@ jobs:
 
   windows-lock-closures:
     name: Feature Lane / Windows Lock Closure Replay
+    needs: [validation-plan]
+    if: needs.validation-plan.outputs.run_feature == 'true'
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -44,7 +77,8 @@ jobs:
 
   lint-typecheck-contracts-security:
     name: Feature Lane / Lint Typecheck Contracts Security
-    needs: [windows-lock-closures]
+    needs: [validation-plan, windows-lock-closures]
+    if: needs.validation-plan.outputs.run_feature == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -117,7 +151,8 @@ jobs:
 
   test-suites:
     name: Feature Lane / Tests (${{ matrix.suite }})
-    needs: [lint-typecheck-contracts-security]
+    needs: [validation-plan, lint-typecheck-contracts-security]
+    if: needs.validation-plan.outputs.run_feature == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:

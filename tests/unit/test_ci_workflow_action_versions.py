@@ -178,7 +178,8 @@ def test_critical_database_suites_are_protected_in_every_delivery_workflow() -> 
         workflow = yaml.safe_load(Path(".github/workflows", filename).read_text(encoding="utf-8"))
         matrix = workflow["jobs"]["test-suites"]["strategy"]["matrix"]["include"]
         for suite in expected:
-            assert suite in matrix, filename
+            prefix = "pr-" if filename == "pr-merge-gate.yml" else ""
+            assert {**suite, "target": prefix + suite["target"]} in matrix, filename
 
 
 def test_pr_and_main_coverage_is_owned_by_exact_parallel_shards() -> None:
@@ -195,12 +196,13 @@ def test_pr_and_main_coverage_is_owned_by_exact_parallel_shards() -> None:
         coverage_rows = {
             (row["suite"], row["target"]) for row in matrix if row.get("coverage") is True
         }
-        assert coverage_rows == expected
+        prefix = "pr-" if workflow_path.name == "pr-merge-gate.yml" else ""
+        assert coverage_rows == {(suite, prefix + target) for suite, target in expected}
         assert {
             (row["suite"], row["target"])
             for row in matrix
             if row["suite"] == "critical-lifecycle-db"
-        } == {("critical-lifecycle-db", "test-critical-lifecycle-db")}
+        } == {("critical-lifecycle-db", prefix + "test-critical-lifecycle-db")}
 
         aggregate = workflow["jobs"]["coverage-gate"]
         download = next(
@@ -212,7 +214,7 @@ def test_pr_and_main_coverage_is_owned_by_exact_parallel_shards() -> None:
         assert "${{ github.run_id }}" in download["with"]["pattern"]
         assert "${{ github.sha }}" in download["with"]["pattern"]
         enforce = next(step for step in aggregate["steps"] if step.get("id") == "enforce")
-        assert enforce["run"] == "make coverage-aggregate"
+        assert enforce["run"] == f"make {prefix}coverage-aggregate"
 
 
 def test_dependency_health_cache_is_reused_only_before_merge() -> None:
@@ -307,7 +309,12 @@ def test_governed_lanes_replay_all_platform_lock_closures_before_inventory() -> 
         lint_job = jobs["lint-typecheck-contracts-security"]
         lint_commands = {step.get("run") for step in lint_job["steps"]}
 
-        assert lint_job["needs"] == ["windows-lock-closures"]
+        expected_needs = (
+            ["validation-plan", "windows-lock-closures"]
+            if filename == "feature-lane.yml"
+            else ["windows-lock-closures"]
+        )
+        assert lint_job["needs"] == expected_needs
         assert "make dependency-lock-replay-check" in lint_commands
         assert (
             "python scripts/development/update_shared_runtime_lock.py --check --platform windows"
@@ -625,7 +632,7 @@ def test_pr_merge_gate_lotus_core_validation_is_blocking_with_platform_contracts
     assert platform_checkout["with"]["persist-credentials"] is False
 
     validation_step = step_by_name["Run lotus-core app validation gate"]
-    assert validation_step["run"] == "make lotus-core-validate"
+    assert validation_step["run"] == "make pr-lotus-core-validate"
     assert "set +e" not in workflow_path.read_text(encoding="utf-8")
     assert "exit 0" not in workflow_path.read_text(encoding="utf-8")
     assert "report-only rollout preserves evidence" not in workflow_path.read_text(encoding="utf-8")
@@ -639,7 +646,8 @@ def test_transaction_processing_contract_is_blocking_in_pr_and_main_matrices() -
     for workflow_path in GOVERNED_RUNTIME_WORKFLOWS:
         workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8")) or {}
         matrix = workflow["jobs"]["test-suites"]["strategy"]["matrix"]["include"]
-        assert expected in matrix
+        prefix = "pr-" if workflow_path.name == "pr-merge-gate.yml" else ""
+        assert {**expected, "target": prefix + expected["target"]} in matrix
 
 
 def test_quality_baseline_runs_workflow_governance_gate() -> None:

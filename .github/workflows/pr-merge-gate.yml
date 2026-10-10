@@ -130,10 +130,21 @@ jobs:
           path: output/dependency-technology/*.json
           if-no-files-found: error
           retention-days: 30
-      - name: Warning Gate
+      - name: Classify changed source
+        id: classify
+        run: make change-classification
+      - name: Verify conservative validation selection
         id: enforce
         shell: bash
-        run: make warning-gate
+        run: make change-classification-guard
+      - name: Upload exact-source validation selection
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-selection-${{ github.run_id }}-lint-typecheck-contracts-security-${{ github.sha }}
+          path: output/pr-validation/*.json
+          if-no-files-found: error
+          retention-days: 14
 
   test-suites:
     name: PR Merge Gate / Tests (${{ matrix.suite }})
@@ -145,38 +156,38 @@ jobs:
       matrix:
         include:
           - suite: unit
-            target: coverage-shard-unit
+            target: pr-coverage-shard-unit
             coverage: true
           - suite: unit-db
-            target: coverage-shard-unit-db
+            target: pr-coverage-shard-unit-db
             coverage: true
           - suite: critical-db-coverage
-            target: coverage-shard-critical-db
+            target: pr-coverage-shard-critical-db
             coverage: true
           - suite: critical-lifecycle-db
-            target: test-critical-lifecycle-db
+            target: pr-test-critical-lifecycle-db
           - suite: query-authority-db-contract
-            target: test-query-authority-db-contract
+            target: pr-test-query-authority-db-contract
           - suite: integration-lite
-            target: coverage-shard-integration-lite
+            target: pr-coverage-shard-integration-lite
             coverage: true
           - suite: ops-contract
-            target: coverage-shard-ops-contract
+            target: pr-coverage-shard-ops-contract
             coverage: true
           - suite: transaction-buy-contract
-            target: test-transaction-buy-contract
+            target: pr-test-transaction-buy-contract
           - suite: transaction-sell-contract
-            target: test-transaction-sell-contract
+            target: pr-test-transaction-sell-contract
           - suite: transaction-dividend-contract
-            target: test-transaction-dividend-contract
+            target: pr-test-transaction-dividend-contract
           - suite: transaction-interest-contract
-            target: test-transaction-interest-contract
+            target: pr-test-transaction-interest-contract
           - suite: transaction-fx-contract
-            target: test-transaction-fx-contract
+            target: pr-test-transaction-fx-contract
           - suite: transaction-portfolio-flow-bundle-contract
-            target: test-transaction-portfolio-flow-bundle-contract
+            target: pr-test-transaction-portfolio-flow-bundle-contract
           - suite: transaction-processing-contract
-            target: test-transaction-processing-contract
+            target: pr-test-transaction-processing-contract
     steps:
       - uses: actions/checkout@v6
         with:
@@ -185,6 +196,9 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
+      - name: Classify changed source
+        id: classify
+        run: make change-classification
       - name: Install
         run: make install-ci
       - name: Run ${{ matrix.suite }}
@@ -194,13 +208,21 @@ jobs:
           LOTUS_COVERAGE_CHANGED_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD~1' }}
         run: make ${{ matrix.target }}
       - name: Upload ${{ matrix.suite }} coverage
-        if: matrix.coverage == true
+        if: matrix.coverage == true && steps.classify.outputs.mode != 'docs-only'
         uses: actions/upload-artifact@v7
         with:
           name: pr-merge-gate-coverage-${{ github.run_id }}-${{ matrix.suite }}-${{ github.sha }}
           path: output/coverage-shards/*
           if-no-files-found: error
           retention-days: 7
+      - name: Upload exact-source validation selection
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-selection-${{ github.run_id }}-test-suites-${{ matrix.suite }}-${{ github.sha }}
+          path: output/pr-validation/*.json
+          if-no-files-found: error
+          retention-days: 14
 
   coverage-gate:
     name: PR Merge Gate / Coverage Gate (Combined)
@@ -215,10 +237,14 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
+      - name: Classify changed source
+        id: classify
+        run: make change-classification
       - name: Install
         run: make install-ci
       - name: Download exact-run coverage artifacts
         uses: actions/download-artifact@v8
+        if: steps.classify.outputs.mode != 'docs-only'
         with:
           pattern: pr-merge-gate-coverage-${{ github.run_id }}-*-${{ github.sha }}
           path: output/coverage-shards
@@ -228,7 +254,15 @@ jobs:
         shell: bash
         env:
           LOTUS_COVERAGE_CHANGED_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD~1' }}
-        run: make coverage-aggregate
+        run: make pr-coverage-aggregate
+      - name: Upload exact-source validation selection
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-selection-${{ github.run_id }}-coverage-gate-${{ github.sha }}
+          path: output/pr-validation/*.json
+          if-no-files-found: error
+          retention-days: 14
 
   docker-build:
     name: PR Merge Gate / Validate Docker Build
@@ -237,12 +271,17 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
+      - name: Classify changed source
+        id: classify
+        run: make change-classification
       - name: Install CI tooling
         run: make install-ci-tooling
       - name: Restore Docker build cache
@@ -261,12 +300,13 @@ jobs:
           LOTUS_RUNTIME_IMAGE_SET_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
           LOTUS_RUNTIME_IMAGE_SET_REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
           LOTUS_RUNTIME_IMAGE_SET_CI_RUN_ID: ${{ github.run_id }}
-        run: make build-runtime-image-set
+        run: make pr-build-runtime-image-set
       - name: Generate runtime SBOM
-        run: make generate-runtime-sbom
+        run: make pr-generate-runtime-sbom
       - name: Write build provenance manifest
-        run: make write-runtime-build-provenance
+        run: make pr-write-runtime-build-provenance
       - name: Upload build evidence
+        if: steps.classify.outputs.mode != 'docs-only'
         uses: actions/upload-artifact@v7
         with:
           name: pr-merge-gate-docker-build-evidence
@@ -276,6 +316,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Upload runtime image set
+        if: steps.classify.outputs.mode != 'docs-only'
         uses: actions/upload-artifact@v7
         with:
           name: pr-runtime-image-set
@@ -283,6 +324,14 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 1
+      - name: Upload exact-source validation selection
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-selection-${{ github.run_id }}-docker-build-${{ github.sha }}
+          path: output/pr-validation/*.json
+          if-no-files-found: error
+          retention-days: 14
 
   e2e-smoke:
     name: PR Merge Gate / E2E Smoke
@@ -291,12 +340,18 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
+      - name: Classify changed source
+        id: classify
+        run: make change-classification
       - name: Download runtime image set
         uses: actions/download-artifact@v8
+        if: steps.classify.outputs.mode != 'docs-only'
         with:
           name: pr-runtime-image-set
           path: output/runtime-image-set
@@ -311,15 +366,23 @@ jobs:
           E2E_QUERY_URL: http://localhost:8401
           HOST_DATABASE_URL: postgresql://user:password@localhost:57432/portfolio_db
           LOTUS_TESTS_COMPOSE_LOG_FILE: output/e2e-smoke/e2e-smoke-logs.txt
-        run: make test-e2e-smoke
+        run: make pr-test-e2e-smoke
       - name: Upload E2E smoke diagnostics
-        if: always()
+        if: always() && steps.classify.outputs.mode != 'docs-only'
         uses: actions/upload-artifact@v7
         with:
           name: pr-merge-gate-e2e-smoke-artifacts
           path: |
             output/e2e-smoke/*
           if-no-files-found: warn
+          retention-days: 14
+      - name: Upload exact-source validation selection
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-selection-${{ github.run_id }}-e2e-smoke-${{ github.sha }}
+          path: output/pr-validation/*.json
+          if-no-files-found: error
           retention-days: 14
 
   docker-smoke-contract:
@@ -329,12 +392,18 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
+      - name: Classify changed source
+        id: classify
+        run: make change-classification
       - name: Download runtime image set
         uses: actions/download-artifact@v8
+        if: steps.classify.outputs.mode != 'docs-only'
         with:
           name: pr-runtime-image-set
           path: output/runtime-image-set
@@ -343,9 +412,9 @@ jobs:
       - name: Run deterministic docker endpoint smoke
         id: enforce
         shell: bash
-        run: make test-docker-smoke
+        run: make pr-test-docker-smoke
       - name: Upload smoke artifacts
-        if: always()
+        if: always() && steps.classify.outputs.mode != 'docs-only'
         uses: actions/upload-artifact@v7
         with:
           name: pr-merge-gate-docker-smoke-artifacts
@@ -354,6 +423,14 @@ jobs:
             output/task-runs/*.md
             output/task-runs/diagnostics/docker-smoke-compose.log
           if-no-files-found: warn
+          retention-days: 14
+      - name: Upload exact-source validation selection
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-selection-${{ github.run_id }}-docker-smoke-contract-${{ github.sha }}
+          path: output/pr-validation/*.json
+          if-no-files-found: error
           retention-days: 14
 
   lotus-core-validation-report:
@@ -365,6 +442,8 @@ jobs:
       LOTUS_PLATFORM_ROOT: ${{ github.workspace }}/lotus-platform
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - name: Check out lotus-platform validation contracts
         uses: actions/checkout@v6
         with:
@@ -375,8 +454,12 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
+      - name: Classify changed source
+        id: classify
+        run: make change-classification
       - name: Download runtime image set
         uses: actions/download-artifact@v8
+        if: steps.classify.outputs.mode != 'docs-only'
         with:
           name: pr-runtime-image-set
           path: output/runtime-image-set
@@ -385,9 +468,9 @@ jobs:
       - name: Run lotus-core app validation gate
         id: enforce
         shell: bash
-        run: make lotus-core-validate
+        run: make pr-lotus-core-validate
       - name: Upload lotus-core validation evidence
-        if: always()
+        if: always() && steps.classify.outputs.mode != 'docs-only'
         uses: actions/upload-artifact@v7
         with:
           name: pr-merge-gate-lotus-core-validation-report
@@ -397,6 +480,14 @@ jobs:
             output/task-runs/diagnostics/*.log
           if-no-files-found: warn
           retention-days: 14
+      - name: Upload exact-source validation selection
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-selection-${{ github.run_id }}-lotus-core-validation-report-${{ github.sha }}
+          path: output/pr-validation/*.json
+          if-no-files-found: error
+          retention-days: 14
 
   latency-gate:
     name: PR Merge Gate / Latency Gate
@@ -405,12 +496,18 @@ jobs:
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
+      - name: Classify changed source
+        id: classify
+        run: make change-classification
       - name: Download runtime image set
         uses: actions/download-artifact@v8
+        if: steps.classify.outputs.mode != 'docs-only'
         with:
           name: pr-runtime-image-set
           path: output/runtime-image-set
@@ -423,9 +520,9 @@ jobs:
           DEMO_DATA_PACK_HISTORY_DAYS: "240"
           DEMO_DATA_PACK_PORTFOLIO_IDS: "DEMO_DPM_EUR_001"
           DEMO_DATA_PACK_INGEST_ONLY: "true"
-        run: make test-latency-gate
+        run: make pr-test-latency-gate
       - name: Upload latency artifacts
-        if: always()
+        if: always() && steps.classify.outputs.mode != 'docs-only'
         uses: actions/upload-artifact@v7
         with:
           name: pr-merge-gate-latency-artifacts
@@ -435,6 +532,14 @@ jobs:
             output/task-runs/diagnostics/latency-gate-compose.log
           if-no-files-found: warn
           retention-days: 14
+      - name: Upload exact-source validation selection
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-selection-${{ github.run_id }}-latency-gate-${{ github.sha }}
+          path: output/pr-validation/*.json
+          if-no-files-found: error
+          retention-days: 14
 
   performance-load-gate:
     name: PR Merge Gate / Performance Load Gate (Fast)
@@ -443,12 +548,18 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
+      - name: Classify changed source
+        id: classify
+        run: make change-classification
       - name: Download runtime image set
         uses: actions/download-artifact@v8
+        if: steps.classify.outputs.mode != 'docs-only'
         with:
           name: pr-runtime-image-set
           path: output/runtime-image-set
@@ -457,9 +568,9 @@ jobs:
       - name: Run deterministic performance load gate
         id: enforce
         shell: bash
-        run: make test-performance-load-gate
+        run: make pr-test-performance-load-gate
       - name: Upload performance load artifacts
-        if: always()
+        if: always() && steps.classify.outputs.mode != 'docs-only'
         uses: actions/upload-artifact@v7
         with:
           name: pr-merge-gate-performance-load-artifacts
@@ -469,6 +580,14 @@ jobs:
             output/task-runs/diagnostics/performance-load-gate-compose.log
           if-no-files-found: warn
           retention-days: 14
+      - name: Upload exact-source validation selection
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-selection-${{ github.run_id }}-performance-load-gate-${{ github.sha }}
+          path: output/pr-validation/*.json
+          if-no-files-found: error
+          retention-days: 14
 
   derived-state-recovery-gate:
     name: PR Merge Gate / Derived-State Recovery Gate
@@ -477,25 +596,31 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
+      - name: Classify changed source
+        id: classify
+        run: make change-classification
       - name: Download runtime image set
         uses: actions/download-artifact@v8
+        if: steps.classify.outputs.mode != 'docs-only'
         with:
           name: pr-runtime-image-set
           path: output/runtime-image-set
       - name: Install
         run: make install-ci
       - name: Run fixed-income book-cost recovery gate
-        run: make test-fixed-income-book-cost-recovery-gate
+        run: make pr-test-fixed-income-book-cost-recovery-gate
       - name: Run deterministic derived-state recovery gate
         id: enforce
         shell: bash
-        run: make test-derived-state-recovery-gate
+        run: make pr-test-derived-state-recovery-gate
       - name: Upload derived-state recovery artifacts
-        if: always()
+        if: always() && steps.classify.outputs.mode != 'docs-only'
         uses: actions/upload-artifact@v7
         with:
           name: pr-merge-gate-derived-state-recovery-artifacts
@@ -504,4 +629,12 @@ jobs:
             output/task-runs/*derived-state-recovery-gate*.md
             output/task-runs/diagnostics/derived-state-recovery-gate-compose.log
           if-no-files-found: warn
+          retention-days: 14
+      - name: Upload exact-source validation selection
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-selection-${{ github.run_id }}-derived-state-recovery-gate-${{ github.sha }}
+          path: output/pr-validation/*.json
+          if-no-files-found: error
           retention-days: 14
