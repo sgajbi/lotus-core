@@ -4,6 +4,9 @@ import logging
 from dataclasses import dataclass
 from typing import Any, NoReturn, cast
 
+from portfolio_common.domain.reference_data.classification_history import (
+    ClassificationHistoryConflict,
+)
 from portfolio_common.domain.tenant import TenantContext
 from portfolio_common.domain.valuation.assignments import ValuationPolicyAssignmentError
 from portfolio_common.domain.valuation.source_facts import MarketPriceSourceFactError
@@ -198,6 +201,14 @@ class ReferenceDataIngestionCommandHandler:
     ) -> None:
         try:
             await command.registry_command.persist(self.reference_data_service, command.request)
+        except ClassificationHistoryConflict as exc:
+            await self._mark_failed_and_raise(
+                job_id=job_id,
+                tenant_id=command.tenant_context.tenant_id_text,
+                status_code=HTTP_CONFLICT,
+                code="CLASSIFICATION_HISTORY_CONFLICT",
+                exc=exc,
+            )
         except MarketPriceSourceFactError as exc:
             await self._mark_failed_and_raise(
                 job_id=job_id,

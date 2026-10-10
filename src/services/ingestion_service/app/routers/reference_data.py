@@ -899,9 +899,11 @@ async def ingest_risk_free_series(
     tags=["Reference Data"],
     summary="Ingest classification taxonomy",
     description=(
-        "What: Accept classification taxonomy records used for attribution alignment.\n"
-        "How: Validate canonical dimensions and upsert effective-dated taxonomy entries.\n"
-        "When: Use when platform taxonomy labels are introduced or updated."
+        "What: Accept taxonomy labels or one bounded historical instrument assignment cut.\n"
+        "How: Upsert effective labels, or append an immutable source version with exact "
+        "predecessor and declared security/group universe. Conflicts return 409.\n"
+        "When: Use for reference updates and separately selectable historical corrections. "
+        "Retention does not certify provider authority or financial cut compatibility."
     ),
 )
 async def ingest_classification_taxonomy(

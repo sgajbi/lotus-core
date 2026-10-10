@@ -49,6 +49,21 @@ class ReferenceDataIngestionRegistry:
         return tuple(self._commands_by_key.values())
 
 
+class ClassificationTaxonomyIngestionCommand(ReferenceDataIngestionCommand):
+    """Keep historical cuts in the existing taxonomy ingestion family."""
+
+    def accepted_count(self, payload: ReferenceDataPayload) -> int:
+        cut = getattr(payload, "assignment_cut", None)
+        return len(cut.assignments) if cut is not None else super().accepted_count(payload)
+
+    async def persist(self, service: Any, payload: ReferenceDataPayload) -> None:
+        cut = getattr(payload, "assignment_cut", None)
+        if cut is not None:
+            await service.append_classification_cut(cut)
+        else:
+            await super().persist(service, payload)
+
+
 REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
     [
         ReferenceDataIngestionCommand(
@@ -205,7 +220,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             records_attribute="risk_free_series",
             persist_method_name="upsert_risk_free_series",
         ),
-        ReferenceDataIngestionCommand(
+        ClassificationTaxonomyIngestionCommand(
             command_key="classification_taxonomy",
             endpoint="/ingest/reference/classification-taxonomy",
             entity_type="classification_taxonomy",

@@ -1,5 +1,16 @@
 # API Surface
 
+## Historical instrument classification custody
+
+The existing classification ingestion/reference routes retain immutable source versions and
+select exact historical security assignments through `assignment_cut` / `history_selection`.
+Half-open assignment intervals, complete source-declared universes, exact cut/content pins and
+independent source/Core cutoffs prevent current labels from filling historical gaps. Corrections
+preserve original selectable custody. Declared coverage may be COMPLETE, PARTIAL or UNAVAILABLE;
+provider qualification and joined financial compatibility remain unavailable. See the
+[historical classification contract](https://github.com/sgajbi/lotus-core/blob/main/docs/integration/historical-instrument-classifications.md)
+for capabilities, controlled examples, limits, retention and native PostgreSQL proof commands.
+
 ## Client restriction authority
 
 `ClientRestrictionProfile:v1` selects the authoritative effective revision before applying the

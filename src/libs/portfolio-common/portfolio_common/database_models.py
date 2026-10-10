@@ -53,6 +53,10 @@ from .financial_reconciliation_schema import (
 from .ingestion_job_schema import IngestionJobColumns, ingestion_job_table_args
 from .outbox_event_schema import outbox_event_table_args
 from .processed_event_schema import processed_event_table_args
+from .reference_classification_schema import (
+    ClassificationTaxonomyColumns,
+    InstrumentClassificationCutRecord,  # noqa: F401
+)
 from .transaction_source_revision_schema import (
     TransactionSourceRevisionColumns,
     transaction_source_revision_table_args,
@@ -1811,25 +1815,8 @@ class RiskFreeSeries(Base):
     )
 
 
-class ClassificationTaxonomy(Base):
+class ClassificationTaxonomy(ClassificationTaxonomyColumns, Base):
     __tablename__ = "classification_taxonomy"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    classification_set_id = Column(String, nullable=False, index=True)
-    taxonomy_scope = Column(String, nullable=False, index=True)
-    dimension_name = Column(String, nullable=False, index=True)
-    dimension_value = Column(String, nullable=False, index=True)
-    dimension_description = Column(String, nullable=True)
-    effective_from = Column(Date, nullable=False, index=True)
-    effective_to = Column(Date, nullable=True, index=True)
-    source_timestamp = Column(DateTime(timezone=True), nullable=True)
-    source_vendor = Column(String, nullable=True)
-    source_record_id = Column(String, nullable=True)
-    quality_status = Column(String, nullable=False, server_default="accepted", index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
-    )
 
     __table_args__ = (
         UniqueConstraint(

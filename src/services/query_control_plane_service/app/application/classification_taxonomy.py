@@ -5,6 +5,7 @@ from dataclasses import asdict
 from datetime import datetime
 from typing import cast
 
+from portfolio_common.api_contract.classification_history import ClassificationHistorySelection
 from portfolio_common.market_reference_quality import (
     MarketReferenceCoverageSignal,
     classify_market_reference_coverage,
@@ -23,6 +24,10 @@ from ..contracts.classification_taxonomy import (
 )
 from ..domain.classification_taxonomy import ClassificationTaxonomyEvidence
 from ..ports.classification_taxonomy import ClassificationTaxonomyReader
+from .classification_history import (
+    classification_history_degradation,
+    selected_classification_history,
+)
 from .source_evidence import latest_evidence_timestamp
 
 
@@ -41,6 +46,8 @@ class ClassificationTaxonomyService:
     async def get(
         self, *, request: ClassificationTaxonomyRequest
     ) -> ClassificationTaxonomyResponse:
+        if request.history_selection is not None:
+            return await self._historical(request=request, selection=request.history_selection)
         records = sorted(
             await self._reader.list_effective(
                 as_of_date=request.as_of_date,
@@ -58,6 +65,41 @@ class ClassificationTaxonomyService:
             request=request,
             records=records,
             generated_at=self._clock(),
+        )
+
+    async def _historical(
+        self, *, request: ClassificationTaxonomyRequest, selection: ClassificationHistorySelection
+    ) -> ClassificationTaxonomyResponse:
+        history = selected_classification_history(selection, await self._reader.load_cut(selection))
+        retained = history.retained_cut
+        metadata = source_data_product_runtime_metadata(
+            generated_at=self._clock(),
+            as_of_date=request.as_of_date,
+            data_quality_status=history.status,
+            freshness_status="UNAVAILABLE",
+            latest_evidence_timestamp=retained.source.observed_at if retained else None,
+            source_cut_id=retained.cut_id if retained else None,
+            content_hash=stable_content_hash(history.model_dump(mode="json")),
+            source_refs=[
+                "lotus-core://source/InstrumentReferenceBundle/classification/" + retained.cut_id
+            ]
+            if retained
+            else [],
+            lineage={
+                "source_owner": "lotus-core",
+                "qualification": "RETAINED_UNQUALIFIED",
+                "source_cut_scope": "classification_only",
+                "compatibility": "UNAVAILABLE",
+            },
+            source_evidence_current=False,
+        )
+        return ClassificationTaxonomyResponse(
+            history=history,
+            degradation=classification_history_degradation(history),
+            records=[],
+            taxonomy_version=retained.source.taxonomy_revision if retained else "UNAVAILABLE",
+            request_fingerprint=request_fingerprint(request.model_dump(mode="json")),
+            **metadata,
         )
 
 

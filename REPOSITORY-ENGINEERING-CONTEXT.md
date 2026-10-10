@@ -10,6 +10,22 @@ and this file first. Then use the Platform
 [skill routing map](https://github.com/sgajbi/lotus-platform/blob/main/context/LOTUS-SKILL-ROUTING-MAP.md)
 and the task routes below to load only relevant specialist context.
 
+## Historical classification reference practice
+
+The existing classification ingestion/reference routes accept `assignment_cut` and select
+`history_selection` for immutable historical security assignments. Shared contracts live in
+`portfolio_common/api_contract/classification_history.py`; identity/coverage is pure domain
+logic, the reference writer appends bounded cuts, and the QCP read port selects exact custody.
+The classification schema module owns effective dictionary columns and retained history, without
+growing the large model module or adding a deployable runtime. Current instrument enrichment
+does not fill historical gaps. Complete declared coverage remains RETAINED_UNQUALIFIED with
+compatibility UNAVAILABLE. Preserve source/expected-universe pins, half-open assignment intervals,
+and separate source observation/Core receipt cutoffs. See
+[the historical classification contract](docs/integration/historical-instrument-classifications.md)
+for limits, native commands, correction preservation and controlled PostgreSQL proof. Migration
+`c183b2c3d544` refuses populated downgrade. Provider qualification, joined financial source cuts,
+membership and BF/method approval remain separate owner responsibilities.
+
 ## Repository Role
 
 ### Financial-effect epoch binding practice

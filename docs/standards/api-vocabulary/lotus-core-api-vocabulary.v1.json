@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-10-09T06:19:00.866090+00:00",
+  "generatedAt": "2026-10-10T02:41:56.041948+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -787,6 +787,57 @@
       ],
       "observedTypes": [
         "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.assignment_cut",
+      "canonicalTerm": "assignment_cut",
+      "preferredName": "assignment_cut",
+      "description": "Explicit immutable historical assignment cut; never upserts current labels.",
+      "example": {
+        "assignments": [
+          {
+            "effective_from": "2026-01-01",
+            "effective_to": "2026-02-01",
+            "group_id": "TECHNOLOGY",
+            "observed_at": "2026-02-01T00:00:00Z",
+            "security_id": "SYNTHETIC_A",
+            "source_record_id": "SYNTHETIC_ROW_SYNTHETIC_A"
+          },
+          {
+            "effective_from": "2026-01-01",
+            "effective_to": "2026-02-01",
+            "group_id": "FINANCE",
+            "observed_at": "2026-02-01T00:00:00Z",
+            "security_id": "SYNTHETIC_B",
+            "source_record_id": "SYNTHETIC_ROW_SYNTHETIC_B"
+          }
+        ],
+        "classification_set_id": "SYNTHETIC_SECTOR",
+        "coverage_from": "2026-01-01",
+        "coverage_to": "2026-02-01",
+        "dimension_name": "sector",
+        "expected_group_ids": [
+          "TECHNOLOGY",
+          "FINANCE"
+        ],
+        "expected_security_ids": [
+          "SYNTHETIC_A",
+          "SYNTHETIC_B"
+        ],
+        "generated_at": "2026-02-01T01:00:00Z",
+        "observed_at": "2026-02-01T00:00:00Z",
+        "producer_id": "SYNTHETIC_REFERENCE",
+        "source_record_id": "SYNTHETIC_JANUARY",
+        "source_version": 1,
+        "taxonomy_revision": "SYNTHETIC_V1"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -42181,11 +42232,12 @@
         "Reference Data"
       ],
       "summary": "Ingest classification taxonomy",
-      "description": "What: Accept classification taxonomy records used for attribution alignment.\nHow: Validate canonical dimensions and upsert effective-dated taxonomy entries.\nWhen: Use when platform taxonomy labels are introduced or updated.",
+      "description": "What: Accept taxonomy labels or one bounded historical instrument assignment cut.\nHow: Upsert effective labels, or append an immutable source version with exact predecessor and declared security/group universe. Conflicts return 409.\nWhen: Use for reference updates and separately selectable historical corrections. Retention does not certify provider authority or financial cut compatibility.",
       "naming": {
         "boundedContext": "reference_data",
         "canonicalTerms": [
           "accepted_count",
+          "assignment_cut",
           "classification_set_id",
           "classification_taxonomy",
           "correlation_id",
@@ -42219,9 +42271,17 @@
             "attributeRef": "lotus.x_tenant_id"
           },
           {
+            "name": "assignment_cut",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.assignment_cut",
+            "attributeRef": "lotus.assignment_cut"
+          },
+          {
             "name": "classification_taxonomy",
             "location": "body",
-            "required": true,
+            "required": false,
             "type": "array",
             "semanticId": "lotus.classification_taxonomy",
             "attributeRef": "lotus.classification_taxonomy"
