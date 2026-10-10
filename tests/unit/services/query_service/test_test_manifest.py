@@ -486,6 +486,8 @@ def test_critical_lifecycle_suite_has_repository_native_make_target() -> None:
 def test_query_authority_db_contract_executes_tenant_and_service_regressions() -> None:
     assert get_suite("query-authority-db-contract") == [
         "tests/integration/services/query_control_plane_service/"
+        "test_benchmark_market_currency_postgresql.py",
+        "tests/integration/services/query_control_plane_service/"
         "test_classification_history_postgresql.py",
         "tests/integration/services/query_control_plane_service/"
         "test_source_receipt_http_restart_postgresql.py",

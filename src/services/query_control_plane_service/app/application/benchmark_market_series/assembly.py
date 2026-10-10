@@ -28,7 +28,7 @@ def build_benchmark_market_series_response(
     *,
     benchmark_id: str,
     request: BenchmarkMarketSeriesRequest,
-    definition: BenchmarkDefinitionEvidence | None,
+    definition: BenchmarkDefinitionEvidence,
     request_fingerprint: str,
     page_size: int,
     has_more: bool,
@@ -44,11 +44,7 @@ def build_benchmark_market_series_response(
 ) -> BenchmarkMarketSeriesResponse:
     """Assemble one deterministic page from persistence-independent source evidence."""
 
-    benchmark_currency = (
-        definition.benchmark_currency
-        if definition is not None
-        else request.target_currency or "UNKNOWN"
-    )
+    benchmark_currency = definition.benchmark_currency
     resolved_components = resolve_benchmark_component_segments(
         components,
         start_date=request.window.start_date,

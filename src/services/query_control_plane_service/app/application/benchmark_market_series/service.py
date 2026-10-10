@@ -94,7 +94,7 @@ class BenchmarkMarketSeriesService:
             benchmark_id=benchmark_id,
             as_of_date=request.as_of_date,
         )
-        if selection is not None and definition is None:
+        if definition is None:
             raise FxSourceSelectionRejected("FX_SOURCE_BENCHMARK_DEFINITION_REQUIRED")
         candidate_index_ids = await self._benchmark_reader.list_component_index_ids_page(
             benchmark_id=benchmark_id,
@@ -107,11 +107,7 @@ class BenchmarkMarketSeriesService:
             candidate_index_ids=candidate_index_ids,
             page_size=scope.page_size,
         )
-        benchmark_currency = (
-            definition.benchmark_currency
-            if definition is not None
-            else request.target_currency or "UNKNOWN"
-        )
+        benchmark_currency = definition.benchmark_currency
         fx_context = resolve_fx_context(
             benchmark_currency=benchmark_currency,
             target_currency=request.target_currency,

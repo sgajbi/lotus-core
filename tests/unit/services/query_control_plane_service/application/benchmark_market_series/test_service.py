@@ -246,21 +246,39 @@ async def test_explicit_fx_source_refuses_missing_definition_before_downstream_r
 
 
 @pytest.mark.asyncio
-async def test_missing_definition_without_selection_preserves_legacy_currency_assumption():
+@pytest.mark.parametrize(
+    ("target_currency", "series_fields"),
+    [
+        (None, ["index_price"]),
+        ("SGD", ["index_price"]),
+        ("USD", ["index_price"]),
+        ("SGD", ["index_price", "fx_rate"]),
+        ("USD", ["index_price", "fx_rate"]),
+    ],
+)
+async def test_missing_definition_without_selection_refuses_before_downstream_reads(
+    target_currency, series_fields
+):
     calls = []
+    tokens = RecordingPageTokens()
     service = _service(
         benchmark_reader=RecordingBenchmarkReader(
             candidate_ids=["IDX_1"], calls=calls, missing_definition=True
         ),
         calls=calls,
-        page_tokens=RecordingPageTokens(),
+        page_tokens=tokens,
     )
-    result = await service.get(benchmark_id="BMK_1", request=_request())
-    # Compatibility only: absent definition is not authority that SGD is the base currency.
-    assert result.benchmark_currency == "SGD"
-    assert result.fx_source_qualification == "IDENTITY"
-    assert result.component_series[0].points[0].fx_rate == Decimal("1")
-    assert "fx_rates" not in calls
+    request = BenchmarkMarketSeriesRequest.model_validate(
+        {
+            **_request().model_dump(),
+            "target_currency": target_currency,
+            "series_fields": series_fields,
+        }
+    )
+    with pytest.raises(FxSourceSelectionRejected, match="FX_SOURCE_BENCHMARK_DEFINITION_REQUIRED"):
+        await service.get(benchmark_id="BMK_1", request=request)
+    assert calls == ["definition"]
+    assert tokens.encoded_payloads == []
 
 
 @pytest.mark.asyncio

@@ -165,17 +165,23 @@ events emitted by `from_observation` retain their original algorithm and valid w
 
 ## Remaining Original Acceptance
 
-Benchmark market-series requests with an explicit retained `fx_source` require an effective
-benchmark definition. If that definition is absent, the existing typed source-selection conflict
-returns HTTP 409 before component/retained FX reads or response assembly; the requested provider,
-source, temporal boundaries and cut are never silently discarded in favor of target-currency
-identity. A valid definition continues to bind the exact requested retained selection.
+Every benchmark market-series request requires a benchmark definition effective on `as_of_date`,
+including native-only requests and requests without a retained `fx_source` selector. Missing,
+future-effective or expired definitions return the existing HTTP 409 source-selection problem
+(`QCP_FX_SOURCE_SELECTION_CONFLICT`) before component or FX reads and response assembly. The
+problem identifies `MarketDataWindow` and the requested benchmark; it contains no invented currency
+or series. The target currency is never a fallback benchmark base currency, and no `UNKNOWN`
+placeholder or identity rate of one is synthesized for an absent definition.
 
-Without a selector, the pre-existing missing-definition fallback still assumes the requested target
-currency as benchmark currency (or `UNKNOWN` without a target). That is compatibility, not evidence
-of the benchmark's actual base currency: an identity rate of one under this fallback does not
-establish supported conversion. The broader unknown-definition assumption remains an open owning
-issue/acceptance concern, not certified or expanded by this canonical FX slice.
+With an effective definition, same-currency context retains exact identity FX, and different-currency
+context retains the actual directed Decimal rate. Native component prices remain in their source
+currency; Performance still owns normalization. Explicit retained selection preserves its verified
+tenant/provider/source/time/cut boundary and never falls back to legacy global FX.
+
+Registered HTTP/actual PostgreSQL controls in `test_benchmark_market_currency_postgresql.py`
+exercise absent/future/expired definitions, native-only/same/different target currencies, exact
+stored prices/rates and retained-selector refusal using the existing source adapters. This proves
+bounded source selection, not genuine provider approval or full-window financial acceptance.
 
 The legacy pair/date store remains mutable and unqualified. Canonical software retention and
 selection do not replace independent provider approval, genuine observations, complete enrolled
