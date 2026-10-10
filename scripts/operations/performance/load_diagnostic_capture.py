@@ -359,6 +359,11 @@ class DiagnosticCapture:
         self.public_scope, self.stop_process = public_scope, stop_process
         self.budget_seconds, self.max_bytes = budget_seconds, max_bytes
         self.request_event, self.cancel_event = request_event, cancel_event
+        # A terminated child can leave a multiprocessing Event's condition locked.
+        # Parent workers must only wait/read parent-owned synchronization primitives.
+        self.wakeup = threading.Event()
+        self.cancelled = threading.Event()
+        self.signal_lock = threading.Lock()
         self.idle_seconds = idle_seconds
         self.scope_slot = scope_slot
         self.scope_binding_status = "not_bound" if scope_slot else "legacy_direct_scope"
@@ -406,25 +411,27 @@ class DiagnosticCapture:
 
     def request(self) -> bool:
         """Signal the pre-armed child once; never launch, wait, receive or join here."""
-        started = time.monotonic()
-        if self.started is not None or not self._idle_request_ready(started):
-            return False
-        if self.scope_slot is not None:
-            header_started = time.monotonic()
-            requested = self.scope_slot.request(started + self.budget_seconds - 1)
-            self.boundary_header_seconds = time.monotonic() - header_started
-            if not requested:
+        with self.signal_lock:
+            started = time.monotonic()
+            if self.started is not None or not self._idle_request_ready(started):
                 return False
-        self.started = started
-        self.requested_at = datetime.now(UTC).isoformat()
-        self.request_event.set()
-        return True
+            if self.scope_slot is not None:
+                header_started = time.monotonic()
+                requested = self.scope_slot.request(started + self.budget_seconds - 1)
+                self.boundary_header_seconds = time.monotonic() - header_started
+                if not requested:
+                    return False
+            self.started = started
+            self.requested_at = datetime.now(UTC).isoformat()
+            self.request_event.set()
+            self.wakeup.set()
+            return True
 
     def _idle_request_ready(self, now: float) -> bool:
         """Shared preparation/cancellation/idle validity for binding and requesting."""
         return (
             not self.done.is_set()
-            and not self.cancel_event.is_set()
+            and not self.cancelled.is_set()
             and self.idle_started is not None
             and now < self.idle_started + self.idle_seconds
         )
@@ -451,7 +458,7 @@ class DiagnosticCapture:
             self.scope_binding_seconds = time.monotonic() - started
 
     def _supervise(self) -> None:
-        if not self.request_event.wait(self.idle_seconds):
+        if not self.wakeup.wait(self.idle_seconds):
             self._expire()
             return
         if self.started is None:
@@ -484,16 +491,15 @@ class DiagnosticCapture:
 
     def _expire(self) -> None:
         self.expired.set()
-        self.cancel_event.set()
-        self.request_event.set()
+        self._cancel()
         # Killing the sole sender also releases a receiver blocked on a partial pipe frame.
         self._stop()
 
     def _receive(self) -> None:
         try:
-            if not self.request_event.wait(self.idle_seconds):
+            if not self.wakeup.wait(self.idle_seconds):
                 self.expired.set()
-            if self.started is None or self.cancel_event.is_set():
+            if self.started is None or self.cancelled.is_set():
                 status = "idle_expired" if self.expired.is_set() else "unused"
                 self._complete({"status": status, "scope": self.public_scope})
                 return
@@ -555,11 +561,19 @@ class DiagnosticCapture:
             pass  # Missing/invalid wall-clock capture timing is not measured zero.
         return timing
 
+    def _cancel(self) -> None:
+        """Wake parents locally; signal the child once, strictly before termination."""
+        with self.signal_lock:
+            if self.cancelled.is_set():
+                return
+            self.cancelled.set()
+            self.wakeup.set()
+            # Cancellation precedes the child wake-up; it cannot become probe authority.
+            self.cancel_event.set()
+            self.request_event.set()
+
     def _complete(self, result: dict[str, Any]) -> None:
-        self.cancel_event.set()
-        # Wake idle workers even if another worker failed to start. Cancellation must
-        # precede the wake-up, so a late child cannot interpret it as probe authority.
-        self.request_event.set()
+        self._cancel()
         cleanup = self._stop()
         self._close_pipes(cleanup)
         if self.scope_slot is not None:
@@ -591,8 +605,7 @@ class DiagnosticCapture:
         if self.final_result is not None:
             return self.final_result
         if self.started is None and not self.done.is_set():
-            self.cancel_event.set()
-            self.request_event.set()
+            self._cancel()
         remaining = (
             0.0
             if self.started is None

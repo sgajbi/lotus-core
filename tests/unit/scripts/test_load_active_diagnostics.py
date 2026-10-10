@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 from datetime import UTC, datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -219,6 +220,15 @@ class DelayedProcess:
 
     def __getattr__(self, name):
         return getattr(self.process, name)
+
+
+def hold_request_condition_after_cancellation(sender, request, ready):
+    """A real child acknowledges exact lock custody before owned termination."""
+    ready.set()
+    if request.wait(10):
+        with request._cond:
+            sender.send_bytes(b"request-condition-held")
+            time.sleep(20)
 
 
 def actual_capture(
@@ -705,6 +715,73 @@ def test_partial_reader_start_failure_preserves_actual_timer_custody(monkeypatch
             capture.timer.join(timeout=2)
             assert not capture.timer.is_alive()
         slot.close()
+
+
+def test_partial_reader_failure_retires_timer_after_child_poisoned_event_lock(monkeypatch):
+    """Parent custody never waits on a lock that an owned child can die holding."""
+    context = multiprocessing.get_context("spawn")
+    receiver, sender = context.Pipe(duplex=False)
+    request, cancel, ready = (context.Event() for _ in range(3))
+    process = context.Process(
+        target=hold_request_condition_after_cancellation, args=(sender, request, ready), daemon=True
+    )
+    allow_supervisor = threading.Event()
+    original_supervise = DiagnosticCapture._supervise
+    original_start, original_close = threading.Thread.start, type(process).close
+    retirement = {}
+
+    def supervise(capture):
+        assert allow_supervisor.wait(4), "parent handoff missing"
+        original_supervise(capture)
+
+    def start(worker):
+        if getattr(worker._target, "__name__", None) == "_receive":
+            raise RuntimeError("private worker adapter")
+        original_start(worker)
+
+    def close(child):
+        if child is process:
+            retirement.update(pid=child.pid, exitcode=child.exitcode)
+        original_close(child)
+
+    def stop(child):
+        assert receiver.poll(3), "child lock acknowledgement missing"
+        assert receiver.recv_bytes(128) == b"request-condition-held"
+        allow_supervisor.set()
+        return collector._stop_diagnostic_process(child)
+
+    monkeypatch.setattr(DiagnosticCapture, "_supervise", supervise)
+    monkeypatch.setattr(threading.Thread, "start", start)
+    # An instance-attached local method would itself be pickled by Windows spawn.
+    monkeypatch.setattr(type(process), "close", close)
+    capture = DiagnosticCapture(
+        process=process,
+        receiver=receiver,
+        sender=sender,
+        public_scope={"stage": "replay_storm"},
+        stop_process=stop,
+        budget_seconds=2,
+        max_bytes=32768,
+        request_event=request,
+        cancel_event=cancel,
+        ready_event=ready,
+        idle_seconds=10,
+    )
+    assert capture.done.wait(2)
+    capture.timer.join(timeout=2)  # Never extend the original failed fixture's join.
+    if capture.timer.is_alive():
+        stack = traceback.format_stack(sys._current_frames()[capture.timer.ident])
+        pytest.fail(f"Owned supervisor remains alive; child={retirement}; stack={stack}")
+    result = assert_custody_closed(capture)
+    assert result["status"] == "unavailable" and result["reason"] == "RuntimeError"
+    assert result["capture_timing"]["requested_at"] is None
+    assert retirement["pid"] > 0 and retirement["exitcode"] is not None
+    assert capture.reader.ident is None and not capture.reader.is_alive()
+    # Shared primitives may now be poisoned. Repeat cancellation must not touch them.
+    monkeypatch.setattr(request, "set", lambda: pytest.fail("post-retirement child wake"))
+    monkeypatch.setattr(cancel, "set", lambda: pytest.fail("post-retirement child cancel"))
+    capture._cancel()
+    assert not capture.request() and capture.finish() is result
 
 
 def test_request_header_is_constant_work_without_json_serialization_or_ack_wait(monkeypatch):
