@@ -11,6 +11,7 @@ from tests.test_support.valuation_outage import (
     assert_live_default_claim,
     assert_same_claim_financial_settlement,
     assert_same_live_claim,
+    assert_stable_valuation_sources,
     assert_worker_row_lock,
 )
 
@@ -27,6 +28,11 @@ def admitted():
                 "epoch": 3,
                 "status": "PROCESSING",
                 "attempt_count": 1,
+                "requeue_requested": False,
+                "source_correction_id": "native-source",
+                "correlation_id": "native-correlation",
+                "claimed_readiness_outbox_id": 41,
+                "latest_readiness_outbox_id": 41,
                 "valuation_lease_owner": "native-scheduler",
                 "valuation_claim_token": "a" * 32,
                 "updated_at": now,
@@ -76,6 +82,12 @@ def test_default_live_claim_and_same_row_financial_settlement():
         ("status", "COMPLETE"),
         ("status", "FAILED"),
         ("attempt_count", 2),
+        ("requeue_requested", True),
+        ("requeue_requested", None),
+        ("claimed_readiness_outbox_id", 40),
+        ("claimed_readiness_outbox_id", 42),
+        ("latest_readiness_outbox_id", 0),
+        ("correlation_id", None),
         ("valuation_lease_owner", None),
         ("valuation_claim_token", None),
         ("valuation_claim_token", "z" * 32),
@@ -117,6 +129,9 @@ def test_expired_default_lease_cannot_qualify():
         ("attempt_count", 3),
         ("status", "PROCESSING"),
         ("valuation_claim_token", "b" * 32),
+        ("requeue_requested", True),
+        ("source_correction_id", "new-source"),
+        ("claimed_readiness_outbox_id", 42),
     ],
 )
 def test_replacement_reclaim_foreign_or_unfinished_job_cannot_qualify(field, value):
@@ -158,6 +173,10 @@ def test_wrong_scope_or_financial_result_cannot_qualify(field, value):
         ("valuation_lease_owner", "stale-owner"),
         ("valuation_claim_token", "b" * 32),
         ("valuation_lease_expires_at", datetime(2026, 10, 10, 0, 15, 1, tzinfo=UTC)),
+        ("source_correction_id", "new-source"),
+        ("correlation_id", "new-correlation"),
+        ("claimed_readiness_outbox_id", 42),
+        ("latest_readiness_outbox_id", 40),
     ],
 )
 def test_blocked_observation_refuses_replacement_or_changed_live_claim(field, value):
@@ -217,6 +236,137 @@ def test_worker_block_refuses_foreign_unblocked_or_missing_backend_evidence(fiel
 def test_worker_block_requires_actual_rows_and_container_identity(rows, ips):
     with pytest.raises(AssertionError):
         assert_worker_row_lock(rows, holder_pid=101, worker_ips=ips)
+
+
+def stable_sources():
+    return {
+        "calendar_present": True,
+        "prices": 1,
+        "replay_pending": 0,
+        "positions": 0,
+        "jobs": 0,
+        "receipts": [
+            {
+                "outbox_id": 41,
+                "correlation_id": "price-only-request",
+                "event_id": "price.persisted-0-7",
+                "processed_at": datetime.now(UTC),
+            }
+        ],
+    }
+
+
+def test_settled_source_prerequisites_are_read_only():
+    observation = stable_sources()
+    original = deepcopy(observation)
+    assert_stable_valuation_sources(observation)
+    assert observation == original
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("calendar_present", False),
+        ("prices", 0),
+        ("prices", 2),
+        ("replay_pending", 1),
+        ("positions", 1),
+        ("jobs", 1),
+        ("receipts", []),
+    ],
+)
+def test_unsettled_source_phase_cannot_introduce_position(field, value):
+    observation = stable_sources()
+    observation[field] = value
+    with pytest.raises(AssertionError):
+        assert_stable_valuation_sources(observation)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("outbox_id", 0),
+        ("correlation_id", None),
+        ("event_id", None),
+        ("processed_at", None),
+    ],
+)
+def test_missing_native_price_receipt_cannot_qualify(field, value):
+    observation = stable_sources()
+    observation["receipts"][0][field] = value
+    with pytest.raises(AssertionError):
+        assert_stable_valuation_sources(observation)
+
+
+def test_orchestrator_blocker_is_not_calculator_execution():
+    orchestrator = dict(
+        blocked_backend(), client_host="172.20.0.9", application_name="valuation-orchestrator"
+    )
+    with pytest.raises(AssertionError):
+        assert_worker_row_lock([orchestrator], holder_pid=101, worker_ips=["172.20.0.8"])
+
+
+@pytest.mark.parametrize("price_stays_unsettled", [False, True])
+def test_native_source_phase_precedes_transaction_and_missing_receipt_stops_it(
+    monkeypatch, price_stays_unsettled
+):
+    from tests.e2e import test_failure_scenarios as scenario
+
+    client = MagicMock()
+    requests = []
+    waits = 0
+    source_checks = 0
+
+    def ingest(endpoint, payload):
+        requests.append(endpoint)
+        if endpoint == "/ingest/transactions":
+            assert waits == 2 and source_checks == 3
+
+    def observe(*_):
+        nonlocal source_checks
+        source_checks += 1
+        observation = stable_sources()
+        if source_checks == 1:
+            observation.update(prices=0, receipts=[])
+        elif source_checks == 2 or price_stays_unsettled:
+            observation["receipts"] = []
+        return observation
+
+    def wait(read, accept):
+        nonlocal waits
+        waits += 1
+        observation = read()
+        if accept(observation):
+            return observation
+        assert "/ingest/transactions" not in requests
+        observation = read()
+        if not accept(observation):
+            raise TimeoutError("native price consumption missing")
+        return observation
+
+    client.ingest.side_effect = ingest
+    consumer = MagicMock()
+    consumer.poll.return_value = None
+    monkeypatch.setattr(scenario, "Consumer", lambda *_: consumer)
+    monkeypatch.setattr(scenario, "wait_for_value", wait)
+    monkeypatch.setattr(scenario, "valuation_source_prerequisites", observe)
+    monkeypatch.setattr(scenario, "_recover_admitted_valuation", lambda _, __, trigger: trigger())
+    monkeypatch.setattr(scenario, "emit_test_output", lambda *_, **__: None)
+    args = (None, object(), None, client, MagicMock(), MagicMock())
+    if price_stays_unsettled:
+        with pytest.raises(TimeoutError, match="native price consumption missing"):
+            scenario.test_db_outage_recovery(*args)
+        assert "/ingest/transactions" not in requests
+    else:
+        scenario.test_db_outage_recovery(*args)
+        assert requests == [
+            "/ingest/portfolios",
+            "/ingest/instruments",
+            "/ingest/business-dates",
+            "/ingest/market-prices",
+            "/ingest/transactions",
+            "/ingest/transactions",
+        ]
 
 
 @pytest.mark.parametrize("family", ["jobs", "snapshots"])
