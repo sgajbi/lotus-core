@@ -3,6 +3,13 @@
   "repository": "sgajbi/lotus-core",
   "branch": "main",
   "strict": true,
+  "pr_validation_policy": {
+    "classifier": "scripts/quality/change_classification.py",
+    "documentation": "allowlisted-authored-markdown-only",
+    "feature_authority": "exact-head-pr-producer-or-full-feature-fallback",
+    "required_contexts": "unchanged-job-owned-unconditional-enforcement",
+    "main_release_security": "always-full"
+  },
   "workflow_policies": [
     {
       "path": ".github/workflows/pr-merge-gate.yml",

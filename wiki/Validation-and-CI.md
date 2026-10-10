@@ -101,6 +101,42 @@ discard cached plans after installing their wrapper and exercise a deliberately 
 
 ## Lane Model
 
+PR source selection uses the repository-owned merge-base classifier in
+`scripts/quality/change_classification.py`. Only explicitly allowlisted, regular, non-executable
+authored Markdown can select `docs-only`. Unknown paths, code/tests, schemas/API/events, shared
+libraries, dependencies/build/images, workflow/guard inputs, migrations, generated contracts,
+renames/copies/deletions/type changes, symlinks, empty diffs and unverified source identity select
+`full`. Every PR update recomputes event base/source, actual checkout/tree and merge-base identity;
+stored evidence or a caller mode flag cannot authorize omission.
+
+All 39 GitHub Actions app-bound required contexts keep their own unconditional jobs and enforcement.
+Fixed PR Make wrappers run original native targets for source changes. Documentation-only test
+jobs run the documentation/wiki/catalog guard, `make docs-evidence-pack` and the corresponding native
+collection selector; successful selection receipts retain the produced documentation evidence pack.
+runtime jobs prove their omission without constructing fake image, coverage or provenance artifacts.
+The static security/dependency checks and Quality Baseline governance jobs remain enabled.
+Per-run/head/job `output/pr-validation/*.json` artifacts and summaries report source/base/checkout,
+workflow/run/attempt, reasons, commands and native exits. Only narrowly audited auxiliary downloads
+may be conditional on the same verified classification; required enforcement never is.
+
+Full unit execution with its zero-warning budget has one Merge/Main owner, `coverage-shard-unit`;
+combined coverage retains its unchanged thresholds. The serial duplicate static warning execution
+is removed. Feature push validation delegates only when an open main-targeting PR and canonical
+required workflow run positively match the exact head. Missing/ambiguous/cancelled/API-error
+authority preserves the original full Feature unit/warning and DB lane. A PR opened after fallback
+starts may still overlap. Main, scheduled, release and security/image/SBOM/provenance certification
+remain full; original local Make targets do not gain a skip flag.
+
+Run `make change-classification-guard quality-workflow-governance-gate` from the repository root
+in PowerShell or Bash after changing selection or workflow authority. The native Make guard follows
+registered PR dispatch into the same-named full target and refuses underlying recipe tampering.
+Positive and bad-input controls include real miniature subprocess unit/warning/coverage execution,
+not only mocked composition. Full acceptance also requires successful live documentation-only and
+representative source-change PRs, measured wall/summed job durations, actual main and wiki parity.
+Per-service omissions remain deferred to [#462](https://github.com/sgajbi/lotus-core/issues/462).
+See the [operator workflow](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/development-workflow-and-ci-strategy.md)
+for exact commands, evidence and conservative fallback boundaries.
+
 `lotus-core` uses:
 
 1. `Remote Feature Lane`
@@ -111,7 +147,7 @@ The `automerge` label is consumed only by the small PR Auto Merge workflow. Appl
 does not route to, cancel, or duplicate the full Pull Request Merge Gate for an unchanged head SHA.
 Code-changing `synchronize` events still invalidate stale-head work and run the complete protected
 gate for the new immutable head. Opened, reopened, and ready-for-review events retain their current
-full-gate behavior; broader same-head evidence reuse is outside this bounded control. PR Auto Merge
+governed-job behavior with fresh change classification. PR Auto Merge
 uses the explicit `LOTUS_AUTOMERGE_TOKEN` under read-only workflow permissions and safely stops when
 the secret is absent. It never falls back to `github.token`.
 
@@ -302,7 +338,7 @@ CI identity. `make image-provenance-guard` rejects a new Compose build that omit
 Make build path that bypasses this source-derived boundary. Promoted-image provenance remains owned
 by the release workflow below.
 
-PR Merge Gate and Main Releasability each use one exact-source runtime image set. The required
+Full PR validation and Main Releasability each use one exact-source runtime image set. The required
 `Validate Docker Build` job builds the workflow's service union once, records build timings, and
 uploads a one-day transport bundle. Docker smoke, E2E, latency, load, validation, recovery, and
 institutional jobs load that bundle instead of rebuilding overlapping images.
@@ -597,7 +633,7 @@ used by release enforcement and does not replace protected PR or exact-main proo
 runs contract checks and deterministic runtime smoke, writes machine-readable evidence under
 `output/lotus-core-validation/`, and exits non-zero when proof is weak.
 
-The PR Merge Gate runs this command as a blocking validation gate. The job checks out
+For full validation, the PR Merge Gate runs this command as a blocking validation gate. The job checks out
 `lotus-platform` into the workflow workspace and sets `LOTUS_PLATFORM_ROOT` before running the
 command so domain-product contract validation uses the governed platform validator and vocabulary.
 If static contracts, supported-feature truth, or deterministic runtime smoke fail, the PR gate fails

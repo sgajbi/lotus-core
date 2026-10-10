@@ -691,6 +691,26 @@ Workflow optimizations must preserve required checks, exact-source identity, war
 policies, complete main certification, and final wiki parity. A merged-and-validated slice—not a
 passing narrow test or issue count—is the unit of delivery.
 
+PR change selection is owned by `scripts/quality/change_classification.py` and the fixed native
+dispatchers in `scripts/quality/pr_validation/`. Only allowlisted regular authored Markdown can
+omit PR test execution, database and runtime-image cohorts. Required jobs and enforcement steps
+still run; documentation guards, `make docs-evidence-pack` and selected-suite collection must pass
+before omission succeeds. Each successful omission receipt retains the produced documentation pack.
+Unknown paths, renames, deletions, executable/symlink documents, dependencies, workflows, contracts,
+migrations, code, tests, empty ranges and unverified event/source identity select full validation.
+Classification receipts record source/base/merge-base/checkout identity and selected native commands.
+Main, release and security authority remain full; local original Make targets remain unconditional.
+Merge/Main run full unit tests with the zero-warning budget once through `coverage-shard-unit`;
+the combined gate still enforces coverage. Feature retains its full-unit fallback unless an open
+main-targeting PR and canonical required workflow run positively match the exact source head.
+API failure, cancellation or ambiguity keeps the full Feature lane. A PR opened after Feature
+fallback starts may still overlap; never claim universally zero execution overlap.
+
+Run `make change-classification-guard quality-workflow-governance-gate` from the repository root
+after changing classifier, lane, fixed dispatch or Make delegation authority. The static Make guard
+walks each registered PR dispatcher's same-named full target; it must still reject tampering of the
+underlying full recipe. Preserve all 39 app-bound required contexts and exact-run artifact selectors.
+
 Main Releasability starts Integration Full alongside the test/coverage matrix after the existing
 lint/typecheck/contracts/security prerequisite. That prerequisite retains Windows lock replay and
 exact-revision admission. Integration Full consumes no coverage artifact; its complete selector,

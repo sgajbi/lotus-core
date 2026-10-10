@@ -66,6 +66,97 @@ quality-maintainability-gate:
 	$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py verify radon
 	$(REPOSITORY_PYTHON) scripts/quality/maintainability_gate.py src --baseline quality/maintainability-baseline.v1.json
 
+.PHONY: change-classification change-classification-guard feature-pr-authority pr-build-runtime-image-set pr-coverage-aggregate pr-coverage-shard-critical-db pr-coverage-shard-integration-lite pr-coverage-shard-ops-contract pr-coverage-shard-unit pr-coverage-shard-unit-db pr-generate-runtime-sbom pr-lotus-core-validate pr-test-critical-lifecycle-db pr-test-derived-state-recovery-gate pr-test-docker-smoke pr-test-e2e-smoke pr-test-fixed-income-book-cost-recovery-gate pr-test-latency-gate pr-test-performance-load-gate pr-test-query-authority-db-contract pr-test-transaction-buy-contract pr-test-transaction-dividend-contract pr-test-transaction-fx-contract pr-test-transaction-interest-contract pr-test-transaction-portfolio-flow-bundle-contract pr-test-transaction-processing-contract pr-test-transaction-sell-contract pr-write-runtime-build-provenance
+
+change-classification:
+	$(REPOSITORY_PYTHON) scripts/quality/change_classification.py
+
+change-classification-guard: pr-validation-contract-guard
+	$(REPOSITORY_PYTHON) -m pytest tests/unit/scripts/quality/test_change_classification.py tests/unit/scripts/quality/test_pr_validation.py tests/unit/scripts/quality/test_pr_validation_authority.py -q
+
+feature-pr-authority:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation.feature_authority
+
+pr-build-runtime-image-set:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation build-runtime-image-set
+
+pr-coverage-aggregate:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation coverage-aggregate
+
+pr-coverage-shard-critical-db:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation coverage-shard-critical-db
+
+pr-coverage-shard-integration-lite:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation coverage-shard-integration-lite
+
+pr-coverage-shard-ops-contract:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation coverage-shard-ops-contract
+
+pr-coverage-shard-unit:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation coverage-shard-unit
+
+pr-coverage-shard-unit-db:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation coverage-shard-unit-db
+
+pr-generate-runtime-sbom:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation generate-runtime-sbom
+
+pr-lotus-core-validate:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation lotus-core-validate
+
+pr-test-critical-lifecycle-db:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation test-critical-lifecycle-db
+
+pr-test-derived-state-recovery-gate:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation test-derived-state-recovery-gate
+
+pr-test-docker-smoke:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation test-docker-smoke
+
+pr-test-e2e-smoke:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation test-e2e-smoke
+
+pr-test-fixed-income-book-cost-recovery-gate:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation test-fixed-income-book-cost-recovery-gate
+
+pr-test-latency-gate:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation test-latency-gate
+
+pr-test-performance-load-gate:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation test-performance-load-gate
+
+pr-test-query-authority-db-contract:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation test-query-authority-db-contract
+
+pr-test-transaction-buy-contract:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation test-transaction-buy-contract
+
+pr-test-transaction-dividend-contract:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation test-transaction-dividend-contract
+
+pr-test-transaction-fx-contract:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation test-transaction-fx-contract
+
+pr-test-transaction-interest-contract:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation test-transaction-interest-contract
+
+pr-test-transaction-portfolio-flow-bundle-contract:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation test-transaction-portfolio-flow-bundle-contract
+
+pr-test-transaction-processing-contract:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation test-transaction-processing-contract
+
+pr-test-transaction-sell-contract:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation test-transaction-sell-contract
+
+pr-write-runtime-build-provenance:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation write-runtime-build-provenance
+
+.PHONY: pr-validation-contract-guard
+
+pr-validation-contract-guard:
+	$(REPOSITORY_PYTHON) -m scripts.quality.pr_validation.contract
+
 quality-source-size-gate:
 	$(REPOSITORY_PYTHON) scripts/quality/source_size_gate.py
 
@@ -78,8 +169,8 @@ quality-unit-collection-gate:
 quality-integration-lite-collection-gate:
 	$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite integration-lite --collect-only --quiet
 
-quality-workflow-governance-gate: required-status-checks-code-quality-gate
-	$(REPOSITORY_PYTHON) -m pytest tests/unit/test_ci_workflow_action_versions.py tests/unit/scripts/quality/test_required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_fail_closed.py --cov=scripts.quality.required_status_checks --cov=scripts.quality.required_status_checks_guard --cov-branch --cov-report=term-missing --cov-fail-under=90 -q
+quality-workflow-governance-gate: required-status-checks-code-quality-gate change-classification-guard
+	$(REPOSITORY_PYTHON) -m pytest tests/unit/test_ci_workflow_action_versions.py tests/unit/scripts/quality/test_required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_fail_closed.py tests/unit/scripts/quality/test_pr_validation_authority.py --cov=scripts.quality.required_status_checks --cov=scripts.quality.required_status_checks_guard --cov-branch --cov-report=term-missing --cov-fail-under=90 -q
 
 required-status-checks-code-quality-gate:
 	$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run ruff check scripts/quality/required_status_checks scripts/quality/required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_guard.py tests/unit/scripts/quality/test_required_status_checks_fail_closed.py

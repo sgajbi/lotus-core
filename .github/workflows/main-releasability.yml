@@ -156,8 +156,6 @@ jobs:
           path: output/dependency-technology/*.json
           if-no-files-found: error
           retention-days: 90
-      - name: Warning Gate
-        run: make warning-gate
 
   test-suites:
     name: Main Releasability / Tests (${{ matrix.suite }})

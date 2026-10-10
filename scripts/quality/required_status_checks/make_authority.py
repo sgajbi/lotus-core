@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
+from scripts.quality.pr_validation.policy import TARGETS as PR_VALIDATION_TARGETS
 from scripts.quality.required_status_checks.make_policy import (
     recursive_make_recipe_targets,
     static_recipe_command_variables,
@@ -214,6 +215,22 @@ def load_phony_make_targets(path: Path) -> frozenset[str]:
     return frozenset(load_make_target_authority(path))
 
 
+def _pr_dispatch_dependencies(recipes: tuple[str, ...], *, target: str) -> tuple[str, ...]:
+    dependencies: list[str] = []
+    pattern = r"\$\(REPOSITORY_PYTHON\) -m scripts\.quality\.pr_validation ([a-z0-9-]+)"
+    for recipe in recipes:
+        match = re.fullmatch(pattern, recipe.strip())
+        if match is None:
+            continue
+        delegated = match.group(1)
+        if delegated not in PR_VALIDATION_TARGETS or target != f"pr-{delegated}":
+            raise RequiredStatusChecksError(
+                "PR dispatch must retain its registered same-named full target"
+            )
+        dependencies.append(delegated)
+    return tuple(dependencies)
+
+
 def _validate_blocking_make_target(
     target: str,
     *,
@@ -247,10 +264,14 @@ def _validate_blocking_make_target(
             f"governed Make target has no executable control: {path}; target={target}"
         )
     next_validating = validating | {target}
-    execution_dependencies = record.prerequisites + recursive_make_recipe_targets(
-        record.recipes,
-        path=path,
-        target=target,
+    execution_dependencies = (
+        record.prerequisites
+        + recursive_make_recipe_targets(
+            record.recipes,
+            path=path,
+            target=target,
+        )
+        + _pr_dispatch_dependencies(record.recipes, target=target)
     )
     for prerequisite in execution_dependencies:
         _validate_blocking_make_target(

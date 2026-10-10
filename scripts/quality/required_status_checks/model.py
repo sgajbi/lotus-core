@@ -9,6 +9,13 @@ DEFAULT_MANIFEST_PATH = Path("contracts/ci/required-status-checks.v1.json")
 CANONICAL_REPOSITORY = "sgajbi/lotus-core"
 CANONICAL_BRANCH = "main"
 GITHUB_ACTIONS_APP_ID = 15368
+PR_VALIDATION_POLICY = {
+    "classifier": "scripts/quality/change_classification.py",
+    "documentation": "allowlisted-authored-markdown-only",
+    "feature_authority": "exact-head-pr-producer-or-full-feature-fallback",
+    "required_contexts": "unchanged-job-owned-unconditional-enforcement",
+    "main_release_security": "always-full",
+}
 _SUPPORTED_POLICIES = frozenset({"all_jobs_blocking", "gate_jobs_blocking"})
 _CANONICAL_WORKFLOW_POLICIES = {
     Path(".github/workflows/pr-merge-gate.yml"): (
@@ -99,11 +106,14 @@ def _validate_manifest_header(payload: Mapping[str, Any]) -> tuple[str, str]:
         "repository",
         "branch",
         "strict",
+        "pr_validation_policy",
         "workflow_policies",
         "required_checks",
     }
     if set(payload) != expected_keys:
         raise RequiredStatusChecksError("required-check manifest has an unexpected shape")
+    if payload["pr_validation_policy"] != PR_VALIDATION_POLICY:
+        raise RequiredStatusChecksError("PR validation policy differs from conservative authority")
     if payload["schema_version"] != 1:
         raise RequiredStatusChecksError("unsupported required-check manifest schema_version")
     if payload["strict"] is not True:

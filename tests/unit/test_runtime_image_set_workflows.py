@@ -78,7 +78,12 @@ def _assert_runtime_image_producer(
         for step in _steps(producer)
         if step.get("name") == "Build exact-source runtime image set"
     )
-    assert build["run"] == "make build-runtime-image-set"
+    expected = (
+        "pr-build-runtime-image-set"
+        if group == "pr-runtime-image-set"
+        else "build-runtime-image-set"
+    )
+    assert build["run"] == f"make {expected}"
     assert build["shell"] == "bash"
     assert build["env"]["LOTUS_RUNTIME_IMAGE_SET_GROUP"] == group  # type: ignore[index]
     assert build["env"]["LOTUS_RUNTIME_IMAGE_SET_SOURCE_COMMIT_SHA"] == "${{ github.sha }}"  # type: ignore[index]
@@ -245,7 +250,7 @@ def test_ci_runtime_verification_requires_the_exact_github_sha(tmp_path: Path) -
 
 def test_runtime_image_set_make_target_delegates_to_one_fail_fast_control() -> None:
     makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
-    target = makefile.split("build-runtime-image-set:\n", maxsplit=1)[1].split(
+    target = makefile.split("\nbuild-runtime-image-set:\n", maxsplit=1)[1].split(
         "\ngenerate-runtime-sbom:", maxsplit=1
     )[0]
 
