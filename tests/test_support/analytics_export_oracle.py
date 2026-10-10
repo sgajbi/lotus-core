@@ -2,6 +2,7 @@
 
 import json
 import re
+from datetime import datetime
 
 from tests.test_support.analytics_correction_oracle import UNAVAILABLE, assert_content_identity
 
@@ -59,14 +60,29 @@ def assert_export_matches_source(export: dict, source: dict, dataset: str, reque
     assert metadata["page"]["snapshot_epoch"] == source["page"]["snapshot_epoch"]
 
 
+def _utc_instant(value: str) -> datetime:
+    """Validate UTC serialization without discarding subsecond precision."""
+    assert isinstance(value, str) and re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|\+00:00)", value
+    ), "generated_at must be an aware UTC timestamp"
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError as error:
+        raise AssertionError("generated_at must be a valid UTC timestamp") from error
+
+
 def assert_ndjson_matches_export(document: bytes, export: dict) -> None:
     """Require the complete NDJSON metadata and every financial row to agree with JSON."""
     lines = [json.loads(line) for line in document.splitlines()]
-    assert lines[0] == {
+    metadata = dict(lines[0])
+    # Validate both operands even when the strings match; only this field has
+    # equivalent wire encodings. All remaining fields and key sets stay exact.
+    metadata["generated_at"] = _utc_instant(metadata["generated_at"])
+    assert metadata == {
         "record_type": "metadata",
         "job_id": export["job_id"],
         "dataset_type": export["dataset_type"],
-        "generated_at": export["generated_at"],
+        "generated_at": _utc_instant(export["generated_at"]),
         "contract_version": export["contract_version"],
         "source_evidence": export["source_evidence"],
     }
