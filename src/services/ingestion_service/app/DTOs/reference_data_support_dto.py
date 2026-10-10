@@ -3,10 +3,14 @@ from __future__ import annotations
 from datetime import date
 from typing import cast
 
+from portfolio_common.api_contract.classification_history import (
+    CLASSIFICATION_CUT_EXAMPLE,
+    InstrumentClassificationCut,
+)
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
 from portfolio_common.pydantic_financial_numeric import ExactRatioDecimal18_10
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .reference_data_source_observation_dto import SourceObservationLineage
 
@@ -139,10 +143,15 @@ class InstrumentLookthroughComponentRecord(BaseModel):
 
 
 class ClassificationTaxonomyIngestionRequest(BaseModel):
+    assignment_cut: InstrumentClassificationCut | None = Field(
+        None,
+        exclude_if=lambda value: value is None,
+        description="Explicit immutable historical assignment cut; never upserts current labels.",
+        examples=[CLASSIFICATION_CUT_EXAMPLE],
+    )
     classification_taxonomy: list[ClassificationTaxonomyRecord] = Field(
-        ...,
+        default_factory=list,
         description="Classification taxonomy records to ingest or upsert.",
-        min_length=1,
         examples=[
             [
                 {
@@ -156,7 +165,16 @@ class ClassificationTaxonomyIngestionRequest(BaseModel):
         ],
     )
 
-    model_config = ConfigDict()
+    @model_validator(mode="after")
+    def exactly_one_reference_mode(self):
+        if bool(self.classification_taxonomy) == (self.assignment_cut is not None):
+            raise ValueError("Supply either taxonomy rows or one historical assignment cut")
+        return self
+
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={"examples": [{"assignment_cut": CLASSIFICATION_CUT_EXAMPLE}]},
+    )
 
 
 class CashAccountMasterIngestionRequest(BaseModel):

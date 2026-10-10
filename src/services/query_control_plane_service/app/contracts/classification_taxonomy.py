@@ -3,12 +3,17 @@
 from datetime import date
 from typing import Literal
 
+from portfolio_common.api_contract.classification_history import (
+    CLASSIFICATION_SELECTION_EXAMPLE,
+    ClassificationHistoryEvidence,
+    ClassificationHistorySelection,
+)
 from portfolio_common.source_data_product_metadata import (
     SourceDataProductRuntimeMetadata,
     product_name_field,
     product_version_field,
 )
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .common import SourceObservationEvidence
 
@@ -28,7 +33,34 @@ class ClassificationTaxonomyRequest(BaseModel):
         examples=["index"],
     )
 
-    model_config = ConfigDict()
+    history_selection: ClassificationHistorySelection | None = Field(
+        None,
+        exclude_if=lambda value: value is None,
+        description="Exact historical instrument assignment pins; no current-label fallback.",
+        examples=[CLASSIFICATION_SELECTION_EXAMPLE],
+    )
+
+    @model_validator(mode="after")
+    def historical_scope(self):
+        if self.history_selection is not None and (
+            self.as_of_date != self.history_selection.period_end
+            or self.taxonomy_scope not in (None, "instrument")
+        ):
+            raise ValueError("Historical instrument scope must match its explicit period end")
+        return self
+
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "as_of_date": "2026-01-31",
+                    "taxonomy_scope": "instrument",
+                    "history_selection": CLASSIFICATION_SELECTION_EXAMPLE,
+                }
+            ]
+        },
+    )
 
 
 class ClassificationTaxonomyEntry(SourceObservationEvidence):
@@ -81,6 +113,11 @@ class ClassificationTaxonomyResponse(SourceDataProductRuntimeMetadata):
         "rfc_062_v1",
         description="Taxonomy contract version exposed by query service.",
         examples=["rfc_062_v1"],
+    )
+    history: ClassificationHistoryEvidence | None = Field(
+        None,
+        exclude_if=lambda value: value is None,
+        description="Retained custody; provider and financial authority remain unavailable.",
     )
     request_fingerprint: str = Field(
         ...,

@@ -14,9 +14,9 @@
         {
             "path": "src/libs/portfolio-common/portfolio_common/database_models.py",
             "field": "source_timestamp",
-            "expectedCount": 8,
-            "ownerSlice": "Slice 7",
-            "reason": "Existing reference and series source-observed timestamp columns. New source-observation fields must use observed_at."
+            "expectedCount": 7,
+            "ownerSlice": "Slice 7 / Core #458 classification schema extraction",
+            "reason": "Seven existing reference/series columns remain here; the unchanged ClassificationTaxonomy column moved to reference_classification_schema.py. Historical assignments use observed_at; no new source_timestamp contract is introduced."
         },
         {
             "path": "src/services/ingestion_service/app/DTOs/reference_data_dto.py",

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
+from portfolio_common.api_contract.classification_history import InstrumentClassificationCut
 from portfolio_common.config import KAFKA_MARKET_PRICES_PERSISTED_TOPIC
 from portfolio_common.database_models import (
     BenchmarkCompositionSeries,
@@ -44,6 +45,7 @@ from ..DTOs.market_price_dto import AuthoritativeMarketPriceSourceFact
 from ..DTOs.reference_data_valuation_policy_dto import (
     InstrumentValuationPolicyAssignmentRecord as InstrumentValuationPolicyAssignmentPayload,
 )
+from .classification_history_writer import ClassificationHistoryWriter
 from .market_price_source_fact_writer import MarketPriceSourceFactWriter
 from .valuation_policy_assignment_writer import (
     ValuationPolicyAssignmentAuthorityChange,
@@ -687,6 +689,14 @@ class ReferenceDataIngestionService:
                 "quality_status",
             ],
         )
+
+    async def append_classification_cut(self, source: InstrumentClassificationCut) -> None:
+        try:
+            await ClassificationHistoryWriter(self._db).append(source)
+            await self._db.commit()
+        except Exception:
+            await self._db.rollback()
+            raise
 
     async def upsert_cash_account_masters(self, records: list[dict[str, Any]]) -> None:
         await self._commit_upsert_many(

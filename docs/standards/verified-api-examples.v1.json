@@ -29,6 +29,7 @@
       "service": "query_control_plane_service",
       "family": "Analytics Input",
       "exampleIds": [
+        "historical-classification-custody",
         "analytics-degraded-source-data",
         "analytics-pagination-filtering-sorting",
         "portfolio-source-observations-diagnostic"
@@ -51,6 +52,205 @@
     }
   ],
   "examples": [
+    {
+      "id": "historical-classification-custody",
+      "category": "success",
+      "service": "query_control_plane_service",
+      "family": "Analytics Input",
+      "method": "POST",
+      "path": "/integration/reference/classification-taxonomy",
+      "sourceTests": [
+        "tests/unit/services/query_control_plane_service/application/test_classification_history.py",
+        "tests/integration/services/query_control_plane_service/test_classification_history_postgresql.py"
+      ],
+      "request": {
+        "body": {
+          "as_of_date": "2026-01-31",
+          "taxonomy_scope": null,
+          "history_selection": {
+            "producer_id": "SYNTHETIC_REFERENCE",
+            "classification_set_id": "SYNTHETIC_SECTOR",
+            "source_record_id": "SYNTHETIC_JANUARY",
+            "source_version": 1,
+            "cut_id": "sha256:a7ae17dfe56dbb27cec991b1d8d418c6d8eaea6a0976cf1ec26109c05722439c",
+            "content_hash": "sha256:fbe0ba783c8e38e19e23603073ea9c9602cea29fcee7fa36868b3dae36c856b3",
+            "period_start": "2026-01-01",
+            "period_end": "2026-01-31",
+            "source_as_of": "2026-03-01T00:00:00Z",
+            "known_at": "2026-12-01T00:00:00Z",
+            "expected_security_ids": [
+              "SYNTHETIC_A",
+              "SYNTHETIC_B"
+            ],
+            "expected_group_ids": [
+              "TECHNOLOGY",
+              "FINANCE"
+            ]
+          }
+        },
+        "authorityBoundary": "Controlled synthetic typed service/serializer example; registered HTTP and PostgreSQL are proved separately. Provider authority and financial compatibility remain unavailable."
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "tenant_id": null,
+          "generated_at": "2026-10-10T00:00:00Z",
+          "as_of_date": "2026-01-31",
+          "restatement_version": "current",
+          "reconciliation_status": "UNKNOWN",
+          "data_quality_status": "COMPLETE",
+          "latest_evidence_timestamp": "2026-02-01T00:00:00Z",
+          "source_cut_id": "sha256:a7ae17dfe56dbb27cec991b1d8d418c6d8eaea6a0976cf1ec26109c05722439c",
+          "source_batch_fingerprint": null,
+          "snapshot_id": null,
+          "content_hash": "sha256:b08a85170dd327389dba927b7c77cc4f7df38c5db4d3df55a3a1f36747469258",
+          "source_digest": "sha256:b08a85170dd327389dba927b7c77cc4f7df38c5db4d3df55a3a1f36747469258",
+          "source_refs": [
+            "lotus-core://source/InstrumentReferenceBundle/classification/sha256:a7ae17dfe56dbb27cec991b1d8d418c6d8eaea6a0976cf1ec26109c05722439c"
+          ],
+          "source_lineage": {
+            "source_owner": "lotus-core",
+            "qualification": "RETAINED_UNQUALIFIED",
+            "source_cut_scope": "classification_only",
+            "compatibility": "UNAVAILABLE"
+          },
+          "degradation": {
+            "status": "UNAVAILABLE",
+            "reason_codes": [
+              "JOINED_SOURCE_CUT_COMPATIBILITY_UNPROVEN",
+              "SOURCE_PRODUCER_UNQUALIFIED"
+            ],
+            "details": [
+              {
+                "section": "history",
+                "record_key": null,
+                "affected_fields": ["history.compatibility"],
+                "source_kind": "UNAVAILABLE",
+                "source_product_name": "InstrumentReferenceBundle",
+                "source_product_version": "v1",
+                "source_as_of_date": null,
+                "latest_evidence_timestamp": null,
+                "freshness_status": "UNAVAILABLE",
+                "reason_code": "JOINED_SOURCE_CUT_COMPATIBILITY_UNPROVEN"
+              },
+              {
+                "section": "history",
+                "record_key": null,
+                "affected_fields": ["history.qualification"],
+                "source_kind": "UNAVAILABLE",
+                "source_product_name": "InstrumentReferenceBundle",
+                "source_product_version": "v1",
+                "source_as_of_date": null,
+                "latest_evidence_timestamp": null,
+                "freshness_status": "UNAVAILABLE",
+                "reason_code": "SOURCE_PRODUCER_UNQUALIFIED"
+              }
+            ]
+          },
+          "source_evidence_current": false,
+          "freshness_status": "UNAVAILABLE",
+          "policy_version": null,
+          "correlation_id": "synthetic-correlation",
+          "product_name": "InstrumentReferenceBundle",
+          "product_version": "v1",
+          "records": [],
+          "taxonomy_version": "SYNTHETIC_V1",
+          "history": {
+            "status": "COMPLETE",
+            "qualification": "RETAINED_UNQUALIFIED",
+            "compatibility": "UNAVAILABLE",
+            "selection": {
+              "producer_id": "SYNTHETIC_REFERENCE",
+              "classification_set_id": "SYNTHETIC_SECTOR",
+              "source_record_id": "SYNTHETIC_JANUARY",
+              "source_version": 1,
+              "cut_id": "sha256:a7ae17dfe56dbb27cec991b1d8d418c6d8eaea6a0976cf1ec26109c05722439c",
+              "content_hash": "sha256:fbe0ba783c8e38e19e23603073ea9c9602cea29fcee7fa36868b3dae36c856b3",
+              "period_start": "2026-01-01",
+              "period_end": "2026-01-31",
+              "source_as_of": "2026-03-01T00:00:00Z",
+              "known_at": "2026-12-01T00:00:00Z",
+              "expected_security_ids": [
+                "SYNTHETIC_A",
+                "SYNTHETIC_B"
+              ],
+              "expected_group_ids": [
+                "TECHNOLOGY",
+                "FINANCE"
+              ]
+            },
+            "retained_cut": {
+              "cut_id": "sha256:a7ae17dfe56dbb27cec991b1d8d418c6d8eaea6a0976cf1ec26109c05722439c",
+              "content_hash": "sha256:fbe0ba783c8e38e19e23603073ea9c9602cea29fcee7fa36868b3dae36c856b3",
+              "received_at": "2026-02-02T00:00:00Z",
+              "source": {
+                "producer_id": "SYNTHETIC_REFERENCE",
+                "classification_set_id": "SYNTHETIC_SECTOR",
+                "source_record_id": "SYNTHETIC_JANUARY",
+                "source_version": 1,
+                "predecessor_cut_id": null,
+                "taxonomy_revision": "SYNTHETIC_V1",
+                "dimension_name": "sector",
+                "coverage_from": "2026-01-01",
+                "coverage_to": "2026-02-01",
+                "observed_at": "2026-02-01T00:00:00Z",
+                "generated_at": "2026-02-01T01:00:00Z",
+                "expected_security_ids": [
+                  "SYNTHETIC_A",
+                  "SYNTHETIC_B"
+                ],
+                "expected_group_ids": [
+                  "TECHNOLOGY",
+                  "FINANCE"
+                ],
+                "assignments": [
+                  {
+                    "security_id": "SYNTHETIC_A",
+                    "group_id": "TECHNOLOGY",
+                    "effective_from": "2026-01-01",
+                    "effective_to": "2026-02-01",
+                    "source_record_id": "SYNTHETIC_ROW_SYNTHETIC_A",
+                    "observed_at": "2026-02-01T00:00:00Z"
+                  },
+                  {
+                    "security_id": "SYNTHETIC_B",
+                    "group_id": "FINANCE",
+                    "effective_from": "2026-01-01",
+                    "effective_to": "2026-02-01",
+                    "source_record_id": "SYNTHETIC_ROW_SYNTHETIC_B",
+                    "observed_at": "2026-02-01T00:00:00Z"
+                  }
+                ]
+              }
+            },
+            "assignments": [
+              {
+                "security_id": "SYNTHETIC_A",
+                "group_id": "TECHNOLOGY",
+                "effective_from": "2026-01-01",
+                "effective_to": "2026-02-01",
+                "source_record_id": "SYNTHETIC_ROW_SYNTHETIC_A",
+                "observed_at": "2026-02-01T00:00:00Z"
+              },
+              {
+                "security_id": "SYNTHETIC_B",
+                "group_id": "FINANCE",
+                "effective_from": "2026-01-01",
+                "effective_to": "2026-02-01",
+                "source_record_id": "SYNTHETIC_ROW_SYNTHETIC_B",
+                "observed_at": "2026-02-01T00:00:00Z"
+              }
+            ],
+            "missing_security_ids": [],
+            "reason_codes": [
+              "CLASSIFICATION_DECLARED_UNIVERSE_COVERED"
+            ]
+          },
+          "request_fingerprint": "c1fc3938e329a832951fbf50190b287a5da0bc55712f2943b19145dfc8452500"
+        }
+      },
+      "sensitivity": {"syntheticOnly": true}
+    },
     {
       "id": "portfolio-source-observations-diagnostic",
       "category": "success",

@@ -2193,12 +2193,12 @@ async def fetch_risk_free_series(
     response_model=ClassificationTaxonomyResponse,
     summary="Fetch canonical classification taxonomy",
     description=(
-        "What: Return effective classification taxonomy records.\n"
-        "How: Applies as-of effective dating and optional scope filtering.\n"
-        "When: Used by downstream consumers that need governed shared classification labels "
-        "instead of local taxonomy drift. Missing labels remain absent rather than synthesized, "
-        "so consumers can distinguish governed coverage gaps from valid source-owned "
-        "classifications."
+        "What: Return effective taxonomy labels or explicitly pinned instrument history.\n"
+        "How: Apply as-of dating for labels; history requires source/version/cut/content "
+        "pins, business interval, source/Core observation cutoffs and expected universe.\n"
+        "When: Use for shared reference labels or retained historical assignments. Missing "
+        "assignments remain explicit; current labels never fill history. Corrections preserve "
+        "original custody. Retention is unqualified and financial compatibility unavailable."
     ),
     openapi_extra=source_data_product_openapi_extra("InstrumentReferenceBundle"),
 )
