@@ -457,6 +457,11 @@ def test_blocker_timeout_retains_raw_backend_and_identity_without_starting_outag
         raise primary
 
     monkeypatch.setattr(scenario, "_native_compose", compose)
+    monkeypatch.setenv("COMPOSE_PROJECT_NAME", "owned")
+    monkeypatch.setenv("LOTUS_VALUATION_ORCHESTRATOR_HOST_PORT", "18000")
+    monkeypatch.setattr(scenario, "wait_for_owned_container_exit", lambda *_, **__: None)
+    monkeypatch.setattr(scenario, "wait_for_service_ready", lambda *_: None)
+    monkeypatch.setattr(scenario, "valuation_source_prerequisites", lambda *_: {})
     monkeypatch.setattr(scenario, "wait_for_value", wait)
     monkeypatch.setattr(scenario, "valuation_outage_snapshot", lambda *_: admitted())
     monkeypatch.setattr(scenario, "emit_test_output", lambda *_: None)
@@ -466,4 +471,179 @@ def test_blocker_timeout_retains_raw_backend_and_identity_without_starting_outag
     note = primary.__notes__[0]
     assert '"holder_pid": 101' in note and '"worker_ips": ["172.20.0.8"]' in note
     assert '"blocker_observation"' in note and "actual worker statement" in note
+    assert all("postgres" not in command for command in commands)
+    assert ("start", "valuation_orchestrator_service") in commands
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        None,
+        "stop",
+        "retirement",
+        "retired_claim",
+        "retired_source",
+        "worker_start",
+        "blocker",
+        "restore_start",
+        "health",
+        "restored_graph",
+        "restored_source",
+        "before_claim",
+        "fault",
+        "financial",
+    ],
+)
+def test_calculator_lock_choreography_fails_closed_and_restores(monkeypatch, failure):
+    """No database fault before healthy topology, direct actor and unchanged custody."""
+    from tests.e2e import test_failure_scenarios as scenario
+
+    engine = MagicMock()
+    connection = engine.connect.return_value.__enter__.return_value
+    connection.execute.return_value.scalar_one.side_effect = [17, 101]
+    events = []
+    primary = RuntimeError(f"failed {failure}")
+    source_reads = claim_reads = graph_reads = starts = health_reads = 0
+    invalid_observations = {
+        "retired_claim",
+        "retired_source",
+        "restored_graph",
+        "restored_source",
+        "before_claim",
+    }
+
+    def fail(stage):
+        events.append(stage)
+        if failure == stage and stage not in invalid_observations:
+            raise primary
+
+    def compose(*args):
+        nonlocal starts
+        if args == ("stop", "valuation_orchestrator_service"):
+            fail("stop")
+        if args == ("start", "position_valuation_calculator"):
+            fail("worker_start")
+        if args == ("start", "valuation_orchestrator_service"):
+            starts += 1
+            if starts == 1:
+                fail("restore_start")
+            events.append("orchestrator_start")
+        return "172.20.0.8" if args[0] == "exec" else "owned-container"
+
+    def retirement(container, **identity):
+        assert container == "owned-container"
+        assert identity == {
+            "project_name": "owned",
+            "service_name": "valuation_orchestrator_service",
+        }
+        fail("retirement")
+
+    def sources(*_):
+        nonlocal source_reads
+        source_reads += 1
+        stage = {2: "retired_source", 3: "restored_source"}.get(source_reads)
+        if stage:
+            fail(stage)
+        return {"receipt": "original", "price": "3" if stage and failure == stage else "2"}
+
+    def snapshot(*_):
+        nonlocal claim_reads
+        claim_reads += 1
+        stage = {2: "retired_claim", 3: "before_claim"}.get(claim_reads)
+        if stage:
+            fail(stage)
+        value = admitted()
+        if stage and failure == stage:
+            value["jobs"][0]["valuation_claim_token"] = "b" * 32
+        return value
+
+    def graph():
+        nonlocal graph_reads
+        graph_reads += 1
+        stage = "blocker" if graph_reads == 1 else "restored_graph"
+        fail(stage)
+        row = blocked_backend()
+        if failure == stage:
+            row["client_host"] = "172.20.0.99"
+        return [row]
+
+    def health(url):
+        nonlocal health_reads
+        health_reads += 1
+        assert url == "http://localhost:18000/health/ready"
+        if health_reads == 1:
+            fail("health")
+        events.append("healthy")
+
+    def wait(observe, accept):
+        value = observe()
+        assert accept(value)
+        return value
+
+    def boundary(**_):
+        assert events.index("healthy") < events.index("restored_graph")
+        assert "restored_source" in events and "before_claim" in events
+        fail("fault")
+        return MagicMock()
+
+    connection.execute.return_value.mappings.side_effect = graph
+    monkeypatch.setenv("COMPOSE_PROJECT_NAME", "owned")
+    monkeypatch.setenv("LOTUS_VALUATION_ORCHESTRATOR_HOST_PORT", "18000")
+    monkeypatch.setattr(scenario, "_native_compose", compose)
+    monkeypatch.setattr(scenario, "wait_for_owned_container_exit", retirement)
+    monkeypatch.setattr(scenario, "wait_for_service_ready", health)
+    monkeypatch.setattr(scenario, "valuation_source_prerequisites", sources)
+    monkeypatch.setattr(scenario, "valuation_outage_snapshot", snapshot)
+    monkeypatch.setattr(scenario, "wait_for_value", wait)
+    monkeypatch.setattr(scenario, "ComposeFaultRecoveryBoundary", boundary)
+    monkeypatch.setattr(scenario, "wait_for_postgres_unavailable", lambda *_: None)
+    monkeypatch.setattr(scenario, "wait_for_pipeline_quiescence", lambda **_: {})
+    monkeypatch.setattr(
+        scenario, "assert_same_claim_financial_settlement", lambda *_: fail("financial")
+    )
+    monkeypatch.setattr(scenario, "emit_test_output", lambda *_: None)
+    if failure is None:
+        scenario._recover_admitted_valuation(engine, {"pid": "OWNED"}, lambda: {})
+        assert events[-1] == "financial"
+    else:
+        with pytest.raises(
+            AssertionError if failure in invalid_observations else RuntimeError
+        ) as caught:
+            scenario._recover_admitted_valuation(engine, {"pid": "OWNED"}, lambda: {})
+        if failure not in invalid_observations:
+            assert caught.value is primary
+        if failure not in {"fault", "financial"}:
+            assert "fault" not in events
+    assert "orchestrator_start" in events and "healthy" in events
+
+
+def test_failed_orchestrator_cleanup_preserves_primary_and_still_restores_worker(monkeypatch):
+    from tests.e2e import test_failure_scenarios as scenario
+
+    primary = TimeoutError("orchestrator did not retire")
+    commands = []
+
+    def retirement(*_, **__):
+        raise primary
+
+    def health(*_):
+        raise ConnectionError("orchestrator did not recover")
+
+    monkeypatch.setenv("COMPOSE_PROJECT_NAME", "owned")
+    monkeypatch.setenv("LOTUS_VALUATION_ORCHESTRATOR_HOST_PORT", "18000")
+    monkeypatch.setattr(scenario, "_native_compose", lambda *args: commands.append(args) or "owned")
+    monkeypatch.setattr(scenario, "wait_for_owned_container_exit", retirement)
+    monkeypatch.setattr(scenario, "wait_for_service_ready", health)
+    monkeypatch.setattr(scenario, "valuation_source_prerequisites", lambda *_: {})
+    monkeypatch.setattr(scenario, "valuation_outage_snapshot", lambda *_: admitted())
+    monkeypatch.setattr(scenario, "wait_for_value", lambda observe, accept: observe())
+    monkeypatch.setattr(scenario, "emit_test_output", lambda *_: None)
+    with pytest.raises(TimeoutError) as caught:
+        scenario._recover_admitted_valuation(object(), {"pid": "OWNED"}, lambda: {})
+    assert caught.value is primary
+    assert commands[-2:] == [
+        ("start", "valuation_orchestrator_service"),
+        ("start", "position_valuation_calculator"),
+    ]
+    assert any("orchestrator restoration failed" in note for note in primary.__notes__)
     assert all("postgres" not in command for command in commands)
