@@ -145,7 +145,9 @@ def test_incomplete_or_contradictory_retained_export_fails(dataset, defect):
         assert_export_matches_source(export, source, dataset, request)
 
 
-@pytest.mark.parametrize("defect", ["metadata", "row", "missing", "extra"])
+@pytest.mark.parametrize(
+    "defect", ["metadata", "row", "missing", "extra", "key_missing", "key_extra"]
+)
 def test_ndjson_must_agree_with_complete_json(defect):
     _, _, export = documents("position")
     altered = deepcopy(export)
@@ -155,10 +157,60 @@ def test_ndjson_must_agree_with_complete_json(defect):
         altered["data"][0]["ending_market_value"] = "0"
     elif defect == "missing":
         altered["data"] = []
-    else:
+    elif defect == "extra":
         altered["data"].append(deepcopy(altered["data"][0]))
+    lines = [json.loads(line) for line in ndjson(altered).splitlines()]
+    if defect == "key_missing":
+        del lines[0]["source_evidence"]
+    elif defect == "key_extra":
+        lines[0]["unexpected"] = None
+    document = "\n".join(json.dumps(line) for line in lines).encode()
     with pytest.raises(AssertionError):
-        assert_ndjson_matches_export(ndjson(altered), export)
+        assert_ndjson_matches_export(document, export)
+
+
+@pytest.mark.parametrize("dataset", ["portfolio", "position"])
+@pytest.mark.parametrize("fraction", ["", ".867641"])
+@pytest.mark.parametrize("suffixes", [("Z", "+00:00"), ("+00:00", "Z")])
+def test_ndjson_generated_at_accepts_equivalent_utc_instants(dataset, fraction, suffixes):
+    _, _, export = documents(dataset)
+    wire = deepcopy(export)
+    export["generated_at"] = f"2026-04-10T12:00:00{fraction}{suffixes[0]}"
+    wire["generated_at"] = f"2026-04-10T12:00:00{fraction}{suffixes[1]}"
+    assert_ndjson_matches_export(ndjson(wire), export)
+
+
+@pytest.mark.parametrize(
+    "timestamp",
+    [
+        "invalid",
+        "2026-02-30T12:00:00Z",
+        "2026-04-10T12:00:00",
+        "2026-04-10T13:00:00+01:00",
+        "2026-04-10T11:00:00-01:00",
+        "2026-04-10T12:00:00.1234567Z",
+        None,
+    ],
+)
+@pytest.mark.parametrize("operand", ["json", "ndjson", "both"])
+def test_ndjson_generated_at_refuses_invalid_operands_even_when_equal(timestamp, operand):
+    _, _, export = documents("portfolio")
+    wire = deepcopy(export)
+    if operand in ("json", "both"):
+        export["generated_at"] = timestamp
+    if operand in ("ndjson", "both"):
+        wire["generated_at"] = timestamp
+    with pytest.raises(AssertionError):
+        assert_ndjson_matches_export(ndjson(wire), export)
+
+
+@pytest.mark.parametrize("timestamp", ["2026-04-10T12:00:01Z", "2026-04-10T12:00:00.000001+00:00"])
+def test_ndjson_generated_at_refuses_different_instants(timestamp):
+    _, _, export = documents("position")
+    wire = deepcopy(export)
+    wire["generated_at"] = timestamp
+    with pytest.raises(AssertionError):
+        assert_ndjson_matches_export(ndjson(wire), export)
 
 
 @pytest.mark.parametrize("unchanged", ["job_id", "data", "digest", None])
