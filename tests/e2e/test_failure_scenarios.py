@@ -55,8 +55,10 @@ from tests.test_support.valuation_outage import (
     assert_live_default_claim,
     assert_same_claim_financial_settlement,
     assert_same_live_claim,
+    assert_stable_valuation_sources,
     assert_worker_row_lock,
     valuation_outage_snapshot,
+    valuation_source_prerequisites,
 )
 
 from .api_client import E2EApiClient
@@ -438,7 +440,7 @@ def wait_for_service_ready(service_url: str, timeout: int = 60):
     emit_test_output(f"\n--- Service at {service_url} is healthy ---", verbose_only=True)
 
 
-def _recover_admitted_valuation(db_engine, scope, trigger: Callable[[], None]) -> None:
+def _recover_admitted_valuation(db_engine, scope, trigger: Callable[[], object]) -> None:
     """Fault an executing, default-lease claim without manufacturing recovery authority."""
     worker = "position_valuation_calculator"
     evidence = {"scope": scope, "phases": {}}
@@ -448,7 +450,7 @@ def _recover_admitted_valuation(db_engine, scope, trigger: Callable[[], None]) -
         # Stop only the owned project's worker while native ingestion/scheduling admits work.
         # No claim/status/expiry/attempt/offset is written by this test.
         _native_compose("stop", worker)
-        trigger()
+        evidence["phases"]["source_prerequisites"] = trigger()
         admitted = wait_for_value(
             lambda: valuation_outage_snapshot(db_engine, scope),
             lambda value: (
@@ -651,13 +653,16 @@ def test_db_outage_recovery(
     }
 
     def trigger_valuation():
-        e2e_api_client.ingest("/ingest/transactions", transaction_payload_before)
-        poll_db_until(
-            query="SELECT 1 FROM transactions WHERE transaction_id = :txn_id",
-            params={"txn_id": transaction_id_before},
-            validation_func=lambda r: r is not None,
-            timeout=60,
-            fail_message=f"Pre-outage transaction '{transaction_id_before}' was not persisted.",
+        # Price/calendar changes are legitimate newer-source work. Settle them before
+        # introducing the position, rather than racing them against its first claim.
+        e2e_api_client.ingest(
+            "/ingest/business-dates",
+            {"business_dates": [{"business_date": "2025-08-05"}]},
+        )
+        scope = {"pid": portfolio_id, "sid": security_id, "date": "2025-08-05"}
+        wait_for_value(
+            lambda: valuation_source_prerequisites(db_engine, scope),
+            lambda observation: observation["calendar_present"] is True,
         )
         e2e_api_client.ingest(
             "/ingest/market-prices",
@@ -672,12 +677,27 @@ def test_db_outage_recovery(
                 ]
             },
         )
-        e2e_api_client.ingest(
-            "/ingest/business-dates",
-            {
-                "business_dates": [{"business_date": "2025-08-05"}],
-            },
+
+        def sources_ready(observation):
+            try:
+                assert_stable_valuation_sources(observation)
+            except AssertionError:
+                return False
+            return True
+
+        prerequisites = wait_for_value(
+            lambda: valuation_source_prerequisites(db_engine, scope), sources_ready
         )
+        assert_stable_valuation_sources(prerequisites)
+        e2e_api_client.ingest("/ingest/transactions", transaction_payload_before)
+        poll_db_until(
+            query="SELECT 1 FROM transactions WHERE transaction_id = :txn_id",
+            params={"txn_id": transaction_id_before},
+            validation_func=lambda r: r is not None,
+            timeout=60,
+            fail_message=f"Pre-outage transaction '{transaction_id_before}' was not persisted.",
+        )
+        return prerequisites
 
     _recover_admitted_valuation(
         db_engine,
