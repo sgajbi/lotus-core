@@ -70,6 +70,11 @@ incremental calculation, full replay, and generated settlement cash. When it is 
 leg derives effective-dated reference FX at trade date and a generated cash leg derives it at
 settlement date; ordinary replay preserves the generated leg's booked result. Reference FX remains
 valuation authority and does not silently restate source-booked cost.
+The implemented position P&L convention translates the local price component at valuation FX
+and assigns retranslation of historical local cost to FX P&L. The
+[worked booked-cost and valuation example](https://github.com/sgajbi/lotus-core/blob/main/docs/rfc-transaction-specs/shared/06-common-calculation-conventions.md#booked-cost-and-valuation-fx-attribution)
+defines the quote, formulas, rounding residual and separate correction authorities; it is not
+portfolio-performance attribution or provider certification.
 An authorized correction of reference-derived economics may rederive settlement cash basis;
 ordinary replay keeps the existing generated rate frozen.
 Core persists server-owned booked/reference/legacy-unknown FX provenance. Only source-booked FX is
@@ -228,6 +233,20 @@ of current position epochs in one database round trip and returns
 `lot_quantity_vs_position_mismatch` when aggregate open-lot quantity differs from the current
 position quantity. The report is diagnostic only and omits transaction and lot identifiers; repair
 must use governed source correction/rebuild authority.
+
+## Booked FX and Funded Cash Evidence
+
+Source-booked FX fixes historical product and generated-cash cost; valuation FX can change market
+value and FX P&L without rewriting that cost. Ordinary generated BUY fees increase outflow, while
+SELL and income fees reduce inflow, all in trade currency. The generated child has no second fee.
+Cash-account and instrument currency must match trade currency; this is not third-currency fee
+conversion support.
+
+The [common calculation conventions](https://github.com/sgajbi/lotus-core/blob/main/docs/rfc-transaction-specs/shared/06-common-calculation-conventions.md#funded-cash-fees-and-settlement-dates)
+give independent positive-cash BUY/SELL/DIVIDEND/INTEREST values, dated settlement and missing-FX
+recovery requirements. Newly authored HTTP stages need fresh hosted execution; unit or earlier
+scenario evidence is not their runtime qualification. Evidence confirmation preserves economics
+and is not an FX economic-correction route.
 
 ## Combined runtime replay controls
 

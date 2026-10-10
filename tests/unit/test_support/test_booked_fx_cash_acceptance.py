@@ -2,6 +2,7 @@
 
 import copy
 import json
+from decimal import Decimal
 from importlib import import_module
 from subprocess import CompletedProcess
 
@@ -11,17 +12,24 @@ from tests.e2e.test_booked_fx_cash_acceptance import admit_scenario_instruments
 from tests.test_support.booked_fx_cash_oracle import (
     FIRST_DAY,
     LAST_DAY,
+    assert_funded_cash_transactions,
     assert_linked_transactions,
     assert_portfolio_marks,
     assert_qualified_holdings,
+    has_funded_cash_holdings,
+    has_missing_valuation_fx,
     has_qualified_holdings,
+    has_same_currency_funded_holdings,
 )
 from tests.test_support.booked_fx_cash_restart import restart_owned_query
-from tests.test_support.booked_fx_cash_scenario import seed_scenario
+from tests.test_support.booked_fx_cash_scenario import funded_cash_transactions, seed_scenario
 
 
 @pytest.mark.parametrize("admission_mode", ["valid", "omitted", "unsettled"])
-def test_synthetic_http_scenario_respects_registered_ingestion_schemas(admission_mode):
+@pytest.mark.parametrize("same_currency", [False, True])
+def test_synthetic_http_scenario_respects_registered_ingestion_schemas(
+    admission_mode, same_currency
+):
     """DTO validation only: never HTTP, worker execution or runtime acceptance."""
     models = {
         "/ingest/portfolios": ("portfolio_dto", "PortfolioIngestionRequest"),
@@ -56,6 +64,11 @@ def test_synthetic_http_scenario_respects_registered_ingestion_schemas(admission
             self.admitted, self.settled = set(), set()
 
         def ingest(self, endpoint, body):
+            if endpoint == "/ingest/fx-rates":
+                assert body["fx_rates"] == [
+                    {"from_currency": "XTS", "to_currency": "USD", "rate_date": day, "rate": "2.5"}
+                    for day in (FIRST_DAY,)
+                ]
             if endpoint == "/ingest/portfolios":
                 for row in body["portfolios"]:
                     row["tenant_id"] = self.tenant_id  # Existing E2E client admission behavior.
@@ -97,12 +110,20 @@ def test_synthetic_http_scenario_respects_registered_ingestion_schemas(admission
     admission = (lambda *_: None) if admission_mode == "omitted" else admit_scenario_instruments
     if admission_mode != "valid":
         with pytest.raises(AssertionError):
-            seed_scenario(SchemaOnlyClient(), "DTO_ONLY", admit_instruments=admission)
+            seed_scenario(
+                SchemaOnlyClient(),
+                "DTO_ONLY",
+                admit_instruments=admission,
+                same_currency=same_currency,
+            )
         assert "/ingest/transactions" not in calls
         return
-    scenario = seed_scenario(SchemaOnlyClient(), "DTO_ONLY", admit_instruments=admission)
-    assert set(calls) == set(models)
-    assert scenario["transaction"]["transaction_fx_rate"] == "2"
+    scenario = seed_scenario(
+        SchemaOnlyClient(), "DTO_ONLY", admit_instruments=admission, same_currency=same_currency
+    )
+    assert set(calls) == set(models) - ({"/ingest/fx-rates"} if same_currency else set())
+    assert scenario["transaction"]["transaction_fx_rate"] == ("1" if same_currency else "2")
+    assert scenario["transaction"]["trade_currency"] == ("USD" if same_currency else "XTS")
 
 
 def test_scenario_requires_explicit_instrument_admission_owner():
@@ -117,6 +138,7 @@ def payload(day=LAST_DAY, fx="2.5"):
     # Literal independently derived table, not values computed by the oracle under test.
     values = {
         (FIRST_DAY, "2"): (("2000", "0", "0", "0"), ("-2000", "0", "0", "0")),
+        (FIRST_DAY, "2.5"): (("2500", "500", "0", "500"), ("-2500", "-500", "0", "-500")),
         (LAST_DAY, "2.5"): (("2750", "750", "250", "500"), ("-2500", "-500", "0", "-500")),
         (LAST_DAY, "3"): (("3300", "1300", "300", "1000"), ("-3000", "-1000", "0", "-1000")),
     }
@@ -166,9 +188,233 @@ def payload(day=LAST_DAY, fx="2.5"):
     }
 
 
-@pytest.mark.parametrize("day,fx", [(FIRST_DAY, "2"), (LAST_DAY, "2.5"), (LAST_DAY, "3")])
+@pytest.mark.parametrize(
+    "day,fx", [(FIRST_DAY, "2"), (FIRST_DAY, "2.5"), (LAST_DAY, "2.5"), (LAST_DAY, "3")]
+)
 def test_independent_two_date_and_reference_corrected_cash_table(day, fx):
     assert_qualified_holdings(payload(day, fx), **SCOPE, day=day, reference_fx=fx)
+
+
+@pytest.mark.parametrize("mutation", [None, "unrelated", "complete", "fabricated_mark", "basis"])
+def test_missing_exact_date_fx_requires_specific_lineage_and_no_fabricated_economics(mutation):
+    body = payload()
+    body["data_quality_status"] = "PARTIAL"
+    body["degradation"]["reason_codes"] = ["VALUATION_CURRENCY_LINEAGE_MISSING"]
+    for row in body["positions"]:
+        row["valuation"]["market_value"] = None
+        row["valuation"]["unrealized_gain_loss"] = None
+    if mutation == "unrelated":
+        body["degradation"]["reason_codes"] = ["VALUATION_PENDING"]
+    elif mutation == "complete":
+        body["data_quality_status"] = "COMPLETE"
+    elif mutation == "fabricated_mark":
+        body["positions"][1]["valuation"]["market_value"] = "-2500"
+    elif mutation == "basis":
+        body["positions"][1]["cost_basis"] = "-1000"
+    assert has_missing_valuation_fx(body, **SCOPE) is (mutation is None)
+
+
+@pytest.mark.parametrize(
+    "stage", ["funded_buy", "funded_fee_buy", "funded_sell", "funded_income", "funded_interest"]
+)
+def test_funded_cash_literal_tables_and_meaningful_adverse_controls(stage):
+    body = payload(LAST_DAY, "3")
+    # Independent literals, not generated from the oracle's expected table.
+    tables = {
+        "funded_buy": [
+            ("10", "1000", "2000", "1100", "3300", "100", "1300", "300", "1000"),
+            ("1000", "1000", "2000", "1000", "3000", "0", "1000", "0", "1000"),
+        ],
+        "funded_fee_buy": [
+            ("11", "1102", "2204", "1210", "3630", "108", "1426", "324", "1102"),
+            ("898", "898", "1796", "898", "2694", "0", "898", "0", "898"),
+        ],
+        "funded_sell": [
+            ("6", "602", "1204", "660", "1980", "58", "776", "174", "602"),
+            ("1446", "1446", "2892", "1446", "4338", "0", "1446", "0", "1446"),
+        ],
+        "funded_income": [
+            ("6", "602", "1204", "660", "1980", "58", "776", "174", "602"),
+            ("1544", "1544", "3088", "1544", "4632", "0", "1544", "0", "1544"),
+        ],
+        "funded_interest": [
+            ("6", "602", "1204", "660", "1980", "58", "776", "174", "602"),
+            ("1592", "1592", "3184", "1592", "4776", "0", "1592", "0", "1592"),
+        ],
+    }
+    fields = (
+        "market_value_local",
+        "market_value",
+        "unrealized_gain_loss_local",
+        "unrealized_gain_loss",
+        "unrealized_price_gain_loss",
+        "unrealized_fx_gain_loss",
+    )
+    for row, values in zip(body["positions"], tables[stage], strict=True):
+        row.update(zip(("quantity", "cost_basis_local", "cost_basis"), values[:3], strict=True))
+        row["valuation"].update(zip(fields, values[3:], strict=True))
+    assert has_funded_cash_holdings(body, **SCOPE, stage=stage)
+    for key, value in (("cost_basis", "1000"), ("quantity", "-1000")):
+        wrong = copy.deepcopy(body)
+        wrong["positions"][1][key] = value
+        assert not has_funded_cash_holdings(wrong, **SCOPE, stage=stage)
+    wrong = copy.deepcopy(body)
+    wrong["positions"][1]["valuation"]["unrealized_fx_gain_loss"] = "0"
+    assert not has_funded_cash_holdings(wrong, **SCOPE, stage=stage)
+
+
+@pytest.mark.parametrize(
+    "mutation", [None, "foreign_currency", "wrong_basis", "nonzero_fx", "negative_cash"]
+)
+def test_same_currency_funded_control_requires_identity_cost_and_zero_fx_pnl(mutation):
+    body = payload()
+    for index, (quantity, mark, gain) in enumerate((("10", "1100", "100"), ("1000", "1000", "0"))):
+        row = body["positions"][index]
+        row.update(currency="USD", quantity=quantity, cost_basis="1000", cost_basis_local="1000")
+        row["valuation"].update(
+            market_value_local=mark,
+            market_value=mark,
+            unrealized_gain_loss_local=gain,
+            unrealized_gain_loss=gain,
+            unrealized_price_gain_loss=gain,
+            unrealized_fx_gain_loss="0",
+        )
+    if mutation == "foreign_currency":
+        body["positions"][1]["currency"] = "XTS"
+    elif mutation == "wrong_basis":
+        body["positions"][1]["cost_basis"] = "2000"
+    elif mutation == "nonzero_fx":
+        body["positions"][1]["valuation"]["unrealized_fx_gain_loss"] = "1"
+    elif mutation == "negative_cash":
+        body["positions"][1]["quantity"] = "-1000"
+    assert has_same_currency_funded_holdings(body, **SCOPE) is (mutation is None)
+
+
+@pytest.mark.parametrize("currency,rate", [("XTS", "2"), ("USD", "1")])
+def test_funded_commands_use_public_schema_trade_currency_fees_and_distinct_settlement_dates(
+    currency, rate
+):
+    from portfolio_common.events import TransactionEvent
+
+    from src.services.ingestion_service.app.DTOs.transaction_model_dto import Transaction
+    from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
+        build_generated_settlement_cash_leg,
+    )
+    from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+        transaction_mapping,
+    )
+
+    scenario = {
+        **SCOPE,
+        "buy_id": "BUY",
+        "transaction": {
+            "transaction_id": "BUY",
+            "portfolio_id": "P",
+            "instrument_id": "EQ",
+            "security_id": "EQ",
+            "transaction_date": f"{FIRST_DAY}T10:00:00Z",
+            "settlement_date": f"{FIRST_DAY}T10:00:00Z",
+            "transaction_type": "BUY",
+            "quantity": "10",
+            "price": "100",
+            "gross_transaction_amount": "1000",
+            "trade_currency": currency,
+            "currency": currency,
+            "transaction_fx_rate": rate,
+            "cash_entry_mode": "AUTO_GENERATE",
+            "settlement_cash_account_id": "CASH",
+            "settlement_cash_instrument_id": "CASH",
+        },
+    }
+    commands = funded_cash_transactions(scenario)
+    assert [stage for stage, _ in commands] == [
+        "funded_buy",
+        "funded_fee_buy",
+        "funded_sell",
+        "funded_income",
+        "funded_interest",
+    ]
+    models = [Transaction(**command) for _, command in commands]
+    assert models[0].transaction_type == "DEPOSIT" and models[0].security_id == "CASH"
+    assert str(models[0].quantity) == "2000"
+    assert models[0].trade_currency == currency and models[0].transaction_fx_rate == Decimal(rate)
+    assert models[1].transaction_date.date().isoformat() == LAST_DAY
+    for model in models[2:]:
+        assert model.transaction_date.date().isoformat() == FIRST_DAY
+    for model in models[1:]:
+        assert model.settlement_date.date().isoformat() == LAST_DAY
+        assert model.trade_currency == currency and model.trade_fee == 2
+        assert model.transaction_fx_rate == Decimal(rate)
+    for model, amount, base in zip(
+        models[1:], ("102", "548", "98", "48"), ("-102", "548", "98", "48"), strict=True
+    ):
+        event = TransactionEvent(
+            **model.model_dump(),
+            tenant_id="synthetic-fx-authority",
+            transaction_fx_rate_origin="SOURCE_BOOKED",
+        )
+        child = build_generated_settlement_cash_leg(
+            transaction_mapping.booked_transaction.to_booked_transaction(event)
+        )
+        assert child.gross_transaction_amount == Decimal(amount)
+        assert child.net_cost == Decimal(base) * Decimal(rate)
+        assert child.transaction_date.date().isoformat() == LAST_DAY
+        assert child.trade_currency == currency and child.transaction_fx_rate == Decimal(rate)
+        assert child.transaction_fx_rate_origin == "SOURCE_BOOKED" and child.trade_fee == 0
+
+
+@pytest.mark.parametrize(
+    "mutation", [None, "duplicate_child", "wrong_fee", "wrong_date", "wrong_pnl", "wrong_account"]
+)
+def test_funded_transaction_proof_rejects_duplicate_fee_date_disposal_and_account_errors(mutation):
+    parents = ("BUY", "BUY-FEE-BUY", "BUY-SELL", "BUY-DIVIDEND", "BUY-INTEREST")
+    rows = [{"transaction_id": "BUY-FUND", "transaction_fx_rate": "2"}]
+    for parent, amount, direction in zip(
+        parents,
+        ("1000", "102", "548", "98", "48"),
+        ("OUTFLOW", "OUTFLOW", "INFLOW", "INFLOW", "INFLOW"),
+        strict=True,
+    ):
+        day = FIRST_DAY if parent == "BUY" else LAST_DAY
+        rows.extend(
+            [
+                {
+                    "transaction_id": parent,
+                    "transaction_fx_rate": "2",
+                    "trade_fee": "2",
+                    "trade_currency": "XTS",
+                    "realized_gain_loss": "96",
+                    "realized_gain_loss_local": "48",
+                },
+                {
+                    "transaction_id": f"{parent}-CASHLEG",
+                    "transaction_fx_rate": "2",
+                    "originating_transaction_id": parent,
+                    "security_id": "CASH",
+                    "trade_fee": "0",
+                    "settlement_cash_account_id": "CASH",
+                    "movement_direction": direction,
+                    "gross_transaction_amount": amount,
+                    "transaction_date": f"{day}T10:00:00Z",
+                    "settlement_date": f"{day}T10:00:00Z",
+                },
+            ]
+        )
+    if mutation == "duplicate_child":
+        rows.append(copy.deepcopy(rows[-1]))
+    elif mutation == "wrong_fee":
+        rows[-1]["trade_fee"] = "2"
+    elif mutation == "wrong_date":
+        rows[-1]["transaction_date"] = f"{FIRST_DAY}T18:00:00Z"
+    elif mutation == "wrong_pnl":
+        rows[5]["realized_gain_loss"] = "100"
+    elif mutation == "wrong_account":
+        rows[-1]["settlement_cash_account_id"] = "FOREIGN"
+    if mutation is None:
+        assert_funded_cash_transactions({"transactions": rows}, {**SCOPE, "buy_id": "BUY"})
+    else:
+        with pytest.raises(AssertionError):
+            assert_funded_cash_transactions({"transactions": rows}, {**SCOPE, "buy_id": "BUY"})
 
 
 @pytest.mark.parametrize(
