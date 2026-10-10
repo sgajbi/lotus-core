@@ -156,12 +156,26 @@ async def get_transactions(
         examples=[False],
     ),
     pagination: Dict[str, int] = Depends(pagination_params),
+    source_system: Optional[str] = Query(
+        None,
+        min_length=1,
+        description="Filter retained supplier source-system identity.",
+        examples=["OMS_PRIMARY"],
+    ),
+    source_batch_id: Optional[str] = Query(
+        None,
+        min_length=1,
+        description="Filter retained supplier batch identity; scoped to this portfolio and tenant.",
+        examples=["CUST-20261009-PM"],
+    ),
     sorting: Dict[str, Optional[str]] = Depends(sorting_params),
     service: TransactionService = Depends(get_transaction_service),
 ):
     try:
         return await service.get_transactions(
             portfolio_id=portfolio_id,
+            source_system=source_system,
+            source_batch_id=source_batch_id,
             instrument_id=instrument_id,
             security_id=security_id,
             transaction_type=transaction_type,

@@ -9,7 +9,7 @@ from typing import Any
 from portfolio_common.database_models import Cashflow, FxRate, Transaction, TransactionCost
 from sqlalchemy import Date as SqlDate
 from sqlalchemy import DateTime as SqlDateTime
-from sqlalchemy import String, Text, cast, func, literal, select, true, union
+from sqlalchemy import String, Text, and_, cast, func, literal, select, true, tuple_, union
 from sqlalchemy.dialects.postgresql import aggregate_order_by
 
 from .currency_query_expressions import currency_code_sql_expr
@@ -68,10 +68,24 @@ def _ordered_jsonb_digest(*, values: tuple[Any, ...], order_by: tuple[Any, ...])
 
 
 def _transaction_aggregate(matching_transactions: Any) -> Any:
+    complete_batch = and_(
+        func.nullif(func.trim(Transaction.source_system), "").is_not(None),
+        func.nullif(func.trim(Transaction.source_batch_id), "").is_not(None),
+    )
     return (
         select(
             func.count(Transaction.id).label("transaction_count"),
             func.max(Transaction.updated_at).label("transaction_latest_at"),
+            func.count(Transaction.id).filter(complete_batch).label("batch_complete_count"),
+            func.count(
+                func.distinct(tuple_(Transaction.source_system, Transaction.source_batch_id))
+            )
+            .filter(complete_batch)
+            .label("batch_scope_count"),
+            func.min(Transaction.source_system).filter(complete_batch).label("batch_source_system"),
+            func.min(Transaction.source_batch_id)
+            .filter(complete_batch)
+            .label("batch_source_batch_id"),
             _ordered_jsonb_digest(
                 values=_model_values(Transaction, exclude=("id",)),
                 order_by=(Transaction.transaction_id.asc(), Transaction.id.asc()),
@@ -242,6 +256,10 @@ def transaction_ledger_input_evidence_statement(
             transaction_aggregate.c.transaction_count,
             transaction_aggregate.c.transaction_latest_at,
             transaction_aggregate.c.transaction_digest,
+            transaction_aggregate.c.batch_complete_count,
+            transaction_aggregate.c.batch_scope_count,
+            transaction_aggregate.c.batch_source_system,
+            transaction_aggregate.c.batch_source_batch_id,
             cost_aggregate.c.transaction_cost_latest_at,
             cost_aggregate.c.transaction_cost_digest,
             cashflow_aggregate.c.selected_cashflow_latest_at,

@@ -8,6 +8,7 @@ import os
 import re
 import shlex
 import subprocess  # nosec B404 - fixed executable arguments, never a shell
+import sys
 import tomllib
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -17,6 +18,15 @@ from pathlib import Path, PurePosixPath
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.release.image_acquisition_bindings import (  # noqa: E402
+    PYTHON_SOURCE,
+    acquired_image,
+    validate_bindings,
+)
+
 REPO_URL = "https://github.com/sgajbi/lotus-core"
 LOCAL_IMAGE_DIGEST = "unavailable-before-push"
 LOCAL_CI_RUN_ID = "unavailable-local-build"
@@ -407,6 +417,10 @@ def docker_build_command(metadata: LocalBuildMetadata) -> list[str]:
         "src/services/query_service/Dockerfile",
         "-t",
         "portfolio-analytics-query-service:ci",
+        "--platform",
+        "linux/amd64",
+        "--build-arg",
+        "PYTHON_IMAGE=" + acquired_image(PYTHON_SOURCE),
     ]
     for name, value in metadata.environment().items():
         command.extend(("--build-arg", f"{name}={value}"))
@@ -435,6 +449,7 @@ def run_local_build(
     runner: Runner = subprocess.run,
 ) -> None:
     environment = os.environ.copy()
+    validate_bindings(environment)
     environment.update(metadata.environment())
     runner(list(command), check=True, cwd=REPO_ROOT, env=environment)
 

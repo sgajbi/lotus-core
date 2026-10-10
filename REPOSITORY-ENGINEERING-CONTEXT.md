@@ -12,6 +12,31 @@ and the task routes below to load only relevant specialist context.
 
 ## Repository Role
 
+### CI image acquisition practice
+
+Use `.github/actions/acquire-images` with qualified Platform revision
+`0c96dd9ea00d1222e35d3e7d14de6a540a222104` before Docker acquisition. The existing native
+Platform validator alone owns admission; Core's fixed bindings transport successful outputs into
+Linux lock replay, base metadata inspection, Compose preparation/startup, all build commands and
+Trivy scan/SBOM commands. Keep all seven explicit inputs and ten fixed Bookworm Python bases.
+Compose requires operator-owned DockerHub read credentials for Kafka, ZooKeeper and Grafana;
+missing configuration fails closed. Never reuse branch-protection/GitHub credentials or invent
+an operator-copy distribution. See `docs/operations/ci-image-acquisition.md` for exact references,
+credential ownership, source/distribution evidence boundaries and focused checks.
+
+### Transaction supplier lineage practice
+
+Optional `source_record_id`, `source_batch_id` and aware `observed_at` retain upstream provenance
+through transaction ingress, events, processing commands, persistence and reads. They are transport
+lineage, not financial fingerprint inputs. `source_transaction_reference` remains a distinct
+material corporate-action child reference; never alias it. First accepted lineage is immutable,
+including legacy nulls, and metadata-only replay returns the original booking unchanged.
+Restricted job bodies remain absent and replay-ineligible; only a bounded transaction batch
+projection is retained. Ledger proof covers the complete filtered snapshot, not the returned page.
+Source-batch fingerprints identify declared supplier scope and never certify contents, completeness
+or monetary authority. See `docs/operations/transaction-supplier-lineage.md` for scope/reason codes,
+migration, event compatibility, commands and proof boundaries.
+
 ### Financial-effect epoch binding practice
 
 Combined transaction processing binds an unversioned financial-effect transaction to the

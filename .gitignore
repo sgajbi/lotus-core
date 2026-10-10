@@ -62,6 +62,7 @@ venv.bak
 *.swp
 
 # Docker
+.lotus-platform/
 docker-compose.override.yml
 
 # Jupyter Notebook

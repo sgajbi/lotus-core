@@ -191,7 +191,7 @@ def test_image_scan_generates_receipt_before_policy_enforcement() -> None:
         'vulnerability-exception-register.schema.json"' in str(steps[enforce_index]["run"])
     )
     assert "--enforced-at" in str(steps[enforce_index]["run"])
-    assert "aquasec/trivy:0.56.2@sha256:" in generate
+    assert "${LOTUS_CORE_TRIVY_IMAGE:?Qualified Trivy acquisition output is required}" in generate
     assert 'scanner_version="$(docker run --rm "${scanner_image}" --version)"' in generate
     assert '"${scanner_version}" != "Version: 0.56.2"' in generate
 

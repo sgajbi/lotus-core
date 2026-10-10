@@ -13,6 +13,10 @@ import tomllib
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+from scripts.release.image_acquisition_bindings import acquired_image  # noqa: E402
+
 RUNTIME_INPUT = REPO_ROOT / "requirements" / "shared-runtime.in"
 RUNTIME_LOCK = REPO_ROOT / "requirements" / "shared-runtime.lock.txt"
 WINDOWS_RUNTIME_LOCK = REPO_ROOT / "requirements" / "shared-runtime-windows.lock.txt"
@@ -134,7 +138,7 @@ def _compile_linux_runtime_lock(*, upgrade_packages: tuple[str, ...] = ()) -> st
                 "PIP_ROOT_USER_ACTION=ignore",
                 "--mount",
                 mount,
-                LINUX_COMPILE_IMAGE,
+                acquired_image(LINUX_COMPILE_IMAGE),
                 "sh",
                 "-ec",
                 shell_command,

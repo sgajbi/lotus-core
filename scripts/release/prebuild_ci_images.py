@@ -16,6 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 from scripts.quality.ci_service_sets import PREBUILD_GROUPS  # noqa: E402
+from scripts.release.image_acquisition_bindings import PYTHON_SOURCE, acquired_image  # noqa: E402
 
 SERVICE_BUILDS: dict[str, tuple[str, str]] = {
     "kafka-topic-creator": (
@@ -173,6 +174,10 @@ def _build(service: str, cache_dir: Path) -> dict[str, str | float]:
         dockerfile,
         "--tag",
         tag,
+        "--platform",
+        "linux/amd64",
+        "--build-arg",
+        "PYTHON_IMAGE=" + acquired_image(PYTHON_SOURCE),
         *provenance_build_args(),
         "--cache-to",
         f"type=local,dest={next_cache_dir},mode=max",

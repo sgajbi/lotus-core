@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-10-09T06:19:00.866090+00:00",
+  "generatedAt": "2026-10-09T19:41:43.184100+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -6340,7 +6340,7 @@
       "semanticId": "lotus.observed_at",
       "canonicalTerm": "observed_at",
       "preferredName": "observed_at",
-      "description": "Timestamp for observed at.",
+      "description": "Retained upstream observation time.",
       "example": "2026-02-27T10:30:00Z",
       "type": "string",
       "locations": [
@@ -9747,11 +9747,12 @@
       "semanticId": "lotus.source_batch_id",
       "canonicalTerm": "source_batch_id",
       "preferredName": "source_batch_id",
-      "description": "Optional upstream batch identifier for lineage and replay tracking.",
-      "example": "business-dates-20260310-am",
+      "description": "Filter retained supplier batch identity; scoped to this portfolio and tenant.",
+      "example": "CUST-20261009-PM",
       "type": "object",
       "locations": [
-        "body"
+        "body",
+        "query"
       ],
       "observedTypes": [
         "object"
@@ -10081,8 +10082,10 @@
       "semanticId": "lotus.source_record_id",
       "canonicalTerm": "source_record_id",
       "preferredName": "source_record_id",
-      "description": "Unique source record identifier.",
-      "example": "SOURCE_RECORD_001",
+      "description": "Retained supplier record identity.",
+      "example": {
+        "id": "OBJ_001"
+      },
       "type": "string",
       "locations": [
         "body"
@@ -10250,7 +10253,8 @@
       "example": "lotus-manage",
       "type": "string",
       "locations": [
-        "body"
+        "body",
+        "query"
       ],
       "observedTypes": [
         "object",
@@ -11323,6 +11327,9 @@
       "preferredName": "transaction",
       "description": "The exact canonical transaction record owned by this portfolio.",
       "example": {
+        "source_record_id": "example_value",
+        "source_batch_id": "example_value",
+        "observed_at": "2026-02-27T10:30:00Z",
         "transaction_source_evidence": {
           "contract_version": "transaction-source-evidence.v1",
           "consumer": "core-qcp",
@@ -11628,6 +11635,9 @@
       "description": "The list of transaction records for the current page.",
       "example": [
         {
+          "source_record_id": "example_value",
+          "source_batch_id": "example_value",
+          "observed_at": "2026-02-27T10:30:00Z",
           "transaction_source_evidence": {
             "contract_version": "transaction-source-evidence.v1",
             "consumer": "core-qcp",
@@ -13514,6 +13524,36 @@
       "exposure": "consumer_visible",
       "canonicalTerm": "include_projected",
       "semanticId": "lotus.include_projected"
+    },
+    {
+      "name": "source_system",
+      "kind": "request_option",
+      "location": "query",
+      "type": "object",
+      "required": false,
+      "default": "",
+      "allowedValues": [],
+      "description": "Filter retained supplier source-system identity.",
+      "example": "OMS_PRIMARY",
+      "behaviorImpact": "Affects get_transactions_portfolios__portfolio_id__transactions_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "source_system",
+      "semanticId": "lotus.source_system"
+    },
+    {
+      "name": "source_batch_id",
+      "kind": "request_option",
+      "location": "query",
+      "type": "object",
+      "required": false,
+      "default": "",
+      "allowedValues": [],
+      "description": "Filter retained supplier batch identity; scoped to this portfolio and tenant.",
+      "example": "CUST-20261009-PM",
+      "behaviorImpact": "Affects get_transactions_portfolios__portfolio_id__transactions_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "source_batch_id",
+      "semanticId": "lotus.source_batch_id"
     },
     {
       "name": "skip",
@@ -21380,6 +21420,7 @@
           "net_interest_amount",
           "net_interest_amount_reporting_currency",
           "new_factor",
+          "observed_at",
           "old_factor",
           "originating_transaction_id",
           "originating_transaction_type",
@@ -21431,6 +21472,7 @@
           "sort_order",
           "source_as_of_date",
           "source_batch_fingerprint",
+          "source_batch_id",
           "source_cut_id",
           "source_cut_sha256",
           "source_digest",
@@ -21440,6 +21482,7 @@
           "source_lineage",
           "source_product_name",
           "source_product_version",
+          "source_record_id",
           "source_refs",
           "source_system",
           "source_transaction_reference",
@@ -21598,6 +21641,22 @@
             "type": "boolean",
             "semanticId": "lotus.include_projected",
             "attributeRef": "lotus.include_projected"
+          },
+          {
+            "name": "source_system",
+            "location": "query",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "source_batch_id",
+            "location": "query",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_batch_id",
+            "attributeRef": "lotus.source_batch_id"
           },
           {
             "name": "skip",
@@ -21972,6 +22031,30 @@
             "type": "array",
             "semanticId": "lotus.transactions",
             "attributeRef": "lotus.transactions"
+          },
+          {
+            "name": "transactions[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "transactions[].source_batch_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_batch_id",
+            "attributeRef": "lotus.source_batch_id"
+          },
+          {
+            "name": "transactions[].observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
           },
           {
             "name": "transactions[].transaction_source_evidence",
@@ -23016,6 +23099,7 @@
           "net_interest_amount",
           "net_interest_amount_reporting_currency",
           "new_factor",
+          "observed_at",
           "old_factor",
           "originating_transaction_id",
           "originating_transaction_type",
@@ -23064,6 +23148,7 @@
           "snapshot_id",
           "source_as_of_date",
           "source_batch_fingerprint",
+          "source_batch_id",
           "source_cut_id",
           "source_cut_sha256",
           "source_digest",
@@ -23074,6 +23159,7 @@
           "source_lineage",
           "source_product_name",
           "source_product_version",
+          "source_record_id",
           "source_refs",
           "source_revision_id",
           "source_system",
@@ -23485,6 +23571,30 @@
             "type": "TransactionRecord",
             "semanticId": "lotus.transaction",
             "attributeRef": "lotus.transaction"
+          },
+          {
+            "name": "transaction.source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "transaction.source_batch_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_batch_id",
+            "attributeRef": "lotus.source_batch_id"
+          },
+          {
+            "name": "transaction.observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
           },
           {
             "name": "transaction.transaction_source_evidence",
@@ -29229,7 +29339,7 @@
         "Transactions"
       ],
       "summary": "Ingest a single transaction",
-      "description": "What: Accept one canonical transaction record for ledger ingestion.\nHow: Validate the portfolio against admitted tenant authority, enforce contract, mode, and rate controls, propagate any idempotency key as publish lineage, then publish asynchronously to Kafka.\nWhen: Use for low-volume operational corrections or single-record onboarding.",
+      "description": "What: Accept one canonical transaction record for ledger ingestion.\nHow: Validate the portfolio against admitted tenant authority, enforce contract, mode, and rate controls, propagate any idempotency key as publish lineage, then publish asynchronously to Kafka.\nWhen: Use for single-record onboarding and exact resends. Changed economics require the governed correction contract, never a silent overwrite.",
       "naming": {
         "boundedContext": "transactions",
         "canonicalTerms": [
@@ -29284,6 +29394,7 @@
           "near_leg_group_id",
           "net_interest_amount",
           "new_factor",
+          "observed_at",
           "old_factor",
           "originating_transaction_id",
           "originating_transaction_type",
@@ -29314,7 +29425,9 @@
           "settlement_date",
           "settlement_of_fx_contract_id",
           "settlement_status",
+          "source_batch_id",
           "source_instrument_id",
+          "source_record_id",
           "source_system",
           "source_transaction_reference",
           "spot_exposure_model",
@@ -29354,6 +29467,30 @@
             "type": "string",
             "semanticId": "lotus.x_tenant_id",
             "attributeRef": "lotus.x_tenant_id"
+          },
+          {
+            "name": "source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "source_batch_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_batch_id",
+            "attributeRef": "lotus.source_batch_id"
+          },
+          {
+            "name": "observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
           },
           {
             "name": "transaction_id",
@@ -30302,6 +30439,7 @@
           "near_leg_group_id",
           "net_interest_amount",
           "new_factor",
+          "observed_at",
           "old_factor",
           "originating_transaction_id",
           "originating_transaction_type",
@@ -30332,7 +30470,9 @@
           "settlement_date",
           "settlement_of_fx_contract_id",
           "settlement_status",
+          "source_batch_id",
           "source_instrument_id",
+          "source_record_id",
           "source_system",
           "source_transaction_reference",
           "spot_exposure_model",
@@ -30381,6 +30521,30 @@
             "type": "array",
             "semanticId": "lotus.transactions",
             "attributeRef": "lotus.transactions"
+          },
+          {
+            "name": "transactions[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "transactions[].source_batch_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_batch_id",
+            "attributeRef": "lotus.source_batch_id"
+          },
+          {
+            "name": "transactions[].observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
           },
           {
             "name": "transactions[].transaction_id",
@@ -34054,6 +34218,7 @@
           "net_interest_amount",
           "new_factor",
           "objective",
+          "observed_at",
           "old_factor",
           "open_date",
           "originating_transaction_id",
@@ -34096,6 +34261,7 @@
           "settlement_status",
           "source_batch_id",
           "source_instrument_id",
+          "source_record_id",
           "source_system",
           "source_transaction_reference",
           "spot_exposure_model",
@@ -34550,6 +34716,30 @@
             "type": "array",
             "semanticId": "lotus.transactions",
             "attributeRef": "lotus.transactions"
+          },
+          {
+            "name": "transactions[].source_record_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "transactions[].source_batch_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_batch_id",
+            "attributeRef": "lotus.source_batch_id"
+          },
+          {
+            "name": "transactions[].observed_at",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
           },
           {
             "name": "transactions[].transaction_id",

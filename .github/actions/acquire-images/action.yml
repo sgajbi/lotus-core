@@ -1,0 +1,44 @@
+name: Acquire exact Core image distributions
+description: Bind native Platform acquisition outputs before Core Docker operations
+inputs:
+  scope:
+    description: python, compose or release
+    required: true
+  dockerhub-username:
+    description: Owner-provisioned DockerHub read account for unresolved Compose dependencies
+    required: false
+  dockerhub-read-token:
+    description: Owner-provisioned DockerHub read-only token; never a GitHub token
+    required: false
+  evidence-id:
+    description: Owning matrix index for distinct failure artifacts
+    default: single
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v6
+      with:
+        repository: sgajbi/lotus-platform
+        ref: 0c96dd9ea00d1222e35d3e7d14de6a540a222104
+        persist-credentials: false
+        path: .lotus-platform
+    - name: Verify and export exact native acquisition outputs
+      shell: bash
+      env:
+        ACQUISITION_SCOPE: ${{ inputs.scope }}
+        DOCKERHUB_USERNAME: ${{ inputs.dockerhub-username }}
+        DOCKERHUB_READ_TOKEN: ${{ inputs.dockerhub-read-token }}
+      run: >-
+        python -m scripts.release.image_acquisition_bindings
+        --platform-root .lotus-platform
+        --scope "$ACQUISITION_SCOPE"
+        --github-env "$GITHUB_ENV"
+        --evidence "$RUNNER_TEMP/core-image-acquisition"
+    - name: Preserve acquisition failure evidence
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: core-image-acquisition-${{ github.job }}-${{ inputs.evidence-id }}
+        path: ${{ runner.temp }}/core-image-acquisition
+        if-no-files-found: ignore
+        retention-days: 14

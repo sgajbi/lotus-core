@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote
 
+from scripts.release.image_acquisition_bindings import acquired_image
+
 SHA256_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 SCHEMA_VERSION = "lotus-core.image-release-evidence.v1"
 SLSA_PROVENANCE_PREDICATE_TYPES = {"https://slsa.dev/provenance/v1"}
@@ -428,6 +430,7 @@ def base_image_evidence_identity(
         "dockerfile": dockerfile_path,
         **dockerfile_identity,
         "base_image": base["image"],
+        "acquired_base_image": acquired_image(base["image"]),
         "deployment_platform": platform,
         "runtime_manifest_digest": runtime_manifest["digest"],
         "config_digest": runtime_manifest["config_digest"],

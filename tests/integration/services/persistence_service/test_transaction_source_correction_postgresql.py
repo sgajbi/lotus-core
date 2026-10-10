@@ -384,7 +384,9 @@ def clean_db(request, db_engine, source_owned_pg_runtime):
         yield
 
 
-def _source(companion, *, missing_basis="local", transaction_id=None, producer=None):
+def _source(
+    companion, *, missing_basis="local", transaction_id=None, producer=None, supplier_lineage=False
+):
     _, prior, _ = fx_source_fixture(None, companion)
     source = replace(
         prior,
@@ -397,6 +399,16 @@ def _source(companion, *, missing_basis="local", transaction_id=None, producer=N
         realized_total_pnl_base=None,
         calculation_lineage=None,
         transaction_id=transaction_id or prior.transaction_id,
+        **(
+            {
+                "source_record_id": "SUPPLIER-FX-RECORD-1",
+                "source_system": "SUPPLIER-FX",
+                "source_batch_id": "SUPPLIER-FX-BATCH-1",
+                "observed_at": datetime(2026, 4, 1, 9, tzinfo=UTC),
+            }
+            if supplier_lineage
+            else {}
+        ),
     )
     raw = transaction_event_v1_payload(
         TransactionEvent.model_validate(
@@ -494,12 +506,14 @@ async def _seed(
     missing_basis="local",
     transaction_id=None,
     producer=None,
+    supplier_lineage=False,
 ):
     raw, ledger = _source(
         companion,
         missing_basis=missing_basis,
         transaction_id=transaction_id,
         producer=producer,
+        supplier_lineage=supplier_lineage,
     )
     async with factory() as db, db.begin():
         if (
@@ -1363,3 +1377,24 @@ async def test_public_status_independent_committed_fact_and_refusal(
                 "correlation_id": "qualified-test-correlation",
                 "details": {},
             }
+
+
+async def test_source_confirmation_retains_original_supplier_batch_lineage(source_confirmation_db):
+    """Existing confirmation changes source proof, never accepted booking provenance."""
+    client, factory = source_confirmation_db
+    identity = await _seed(factory, supplier_lineage=True)
+    immutable = await _original_snapshot(factory, identity)
+    before = await _read_ledger(factory, identity[2], selection="original")
+    assert before.transaction.source_record_id == "SUPPLIER-FX-RECORD-1"
+    assert before.transaction.source_batch_id == "SUPPLIER-FX-BATCH-1"
+    assert before.source_batch_fingerprint is not None
+    command, _ = await _submit(client, factory, identity, key="supplier-lineage-confirmation")
+    revision = await _execute(factory, command)
+    current = await _read_ledger(factory, identity[2])
+    assert current.transaction.transaction_source_evidence.revision_id == revision.revision_id
+    assert current.transaction.source_record_id == before.transaction.source_record_id
+    assert current.transaction.source_batch_id == before.transaction.source_batch_id
+    assert current.transaction.observed_at == before.transaction.observed_at
+    assert current.source_batch_fingerprint == before.source_batch_fingerprint
+    assert current.source_cut_sha256 != before.source_cut_sha256
+    assert await _original_snapshot(factory, identity) == immutable

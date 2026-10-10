@@ -4,6 +4,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Annotated, Any, Literal, Optional, cast
 
+from portfolio_common.api_contract.transaction_lineage import TransactionSourceLineage
 from portfolio_common.domain.currency import normalize_optional_currency_code
 from portfolio_common.domain.transaction.fee_components import (
     TRANSACTION_FEE_COMPONENT_FIELDS,
@@ -36,11 +37,12 @@ from portfolio_common.domain.transaction_control_codes import (
 from portfolio_common.openapi_enrichment import document_exact_numeric_properties
 from portfolio_common.temporal import standardize_governed_datetime
 from pydantic import (
-    BaseModel,
     ConfigDict,
     Field,
+    SerializerFunctionWrapHandler,
     ValidationInfo,
     field_validator,
+    model_serializer,
     model_validator,
 )
 
@@ -218,8 +220,17 @@ def _document_transaction_numeric_contract(schema: dict[str, Any]) -> None:
     )
 
 
-class Transaction(BaseModel):
+class Transaction(TransactionSourceLineage):
     model_config = ConfigDict(json_schema_extra=_document_transaction_numeric_contract)
+
+    @model_serializer(mode="wrap")
+    def serialize_supplier_lineage(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Preserve legacy validated dumps and request HMACs when no lineage was supplied."""
+        payload = handler(self)
+        for field in ("source_record_id", "source_batch_id", "observed_at"):
+            if payload.get(field) is None:
+                payload.pop(field, None)
+        return payload
 
     transaction_id: str = Field(
         description="Canonical transaction identifier for ingestion, replay, and audit workflows.",

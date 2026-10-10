@@ -42,6 +42,7 @@ x-shared-python-env: &shared_python_env
 x-outbox-stop-grace-period: &outbox_stop_grace_period ${OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS:-150}s
 
 x-local-build-args: &local_build_args
+  PYTHON_IMAGE: ${LOTUS_CORE_PYTHON_IMAGE:-python:3.11-slim-bookworm@sha256:97b0eafb29f5ebfba254be840115b2f3bc24ff6ff3de9b905e04b74ee7227ba6}
   LOTUS_GIT_COMMIT_SHA: ${LOTUS_GIT_COMMIT_SHA:-unknown}
   LOTUS_GIT_BRANCH: ${LOTUS_GIT_BRANCH:-unknown}
   LOTUS_BUILD_TIMESTAMP: ${LOTUS_BUILD_TIMESTAMP:-unknown}
@@ -123,7 +124,7 @@ services:
       - app_network
 
   postgres:
-    image: postgres:16-alpine
+    image: ${LOTUS_CORE_POSTGRES_IMAGE:-postgres:16-alpine}
     hostname: postgres
     ports:
       - "${LOTUS_POSTGRES_HOST_PORT:-55432}:5432"
@@ -586,7 +587,7 @@ services:
   # App-local observability overlay for isolated lotus-core development.
   # Canonical shared Prometheus ownership lives in lotus-platform/platform-stack.
   prometheus:
-    image: prom/prometheus:v2.47.2
+    image: ${LOTUS_CORE_PROMETHEUS_IMAGE:-prom/prometheus:v2.47.2}
     ports:
       - "${LOTUS_PROMETHEUS_HOST_PORT:-9190}:9090"
     volumes:
@@ -632,4 +633,3 @@ volumes:
 networks:
   app_network:
     driver: bridge
-

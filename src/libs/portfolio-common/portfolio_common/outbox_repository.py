@@ -130,10 +130,26 @@ def build_outbox_payload(
         raise TypeError("payload must be a dict (will be serialized by SQLAlchemy JSON type)")
 
     enriched_payload = dict(payload)
+    schema_version = EVENT_SCHEMA_VERSION
+    if event_type in {
+        "TransactionIngested",
+        "RawTransactionPersisted",
+        "ProcessedTransactionPersisted",
+    }:
+        schema_version = enriched_payload.get("schema_version") or (
+            "1.1.0"
+            if any(
+                enriched_payload.get(field) is not None
+                for field in ("source_record_id", "source_batch_id", "observed_at")
+            )
+            else "1.0.0"
+        )
+        if schema_version not in {"1.0.0", "1.1.0"}:
+            raise ValueError("Unsupported transaction schema_version")
     normalized_correlation_id = normalize_lineage_value(correlation_id)
     normalized_traceparent = normalize_traceparent(traceparent)
     _require_matching_payload_metadata(enriched_payload, "event_type", event_type)
-    _require_matching_payload_metadata(enriched_payload, "schema_version", EVENT_SCHEMA_VERSION)
+    _require_matching_payload_metadata(enriched_payload, "schema_version", schema_version)
     if normalized_correlation_id is not None:
         _require_matching_payload_metadata(
             enriched_payload,
@@ -148,7 +164,7 @@ def build_outbox_payload(
         )
 
     enriched_payload["event_type"] = event_type
-    enriched_payload["schema_version"] = EVENT_SCHEMA_VERSION
+    enriched_payload["schema_version"] = schema_version
     enriched_payload["correlation_id"] = normalized_correlation_id
     enriched_payload["traceparent"] = normalized_traceparent
     return enriched_payload

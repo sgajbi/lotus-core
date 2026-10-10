@@ -728,7 +728,7 @@ def test_image_release_workflow_enforces_supply_chain_controls() -> None:
         "${GITHUB_SHA}",
         "--sbom=true",
         "--provenance=true",
-        "aquasec/trivy",
+        "${LOTUS_CORE_TRIVY_IMAGE:?Qualified Trivy acquisition output is required}",
         "--severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL",
         "--format cyclonedx",
         "-sbom.cdx.json",

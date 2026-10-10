@@ -4,6 +4,11 @@
 
 `lotus-core` uses Alembic for schema migration governance.
 
+Transaction supplier lineage revision `c182b2c3d543` adds nullable source record, batch and
+observation columns, a source/batch index, a bounded ingestion-job projection and an immutable
+lineage trigger. Historical rows remain unknown without backfill. A populated downgrade refuses
+to destroy retained lineage; production uses a forward fix.
+
 Schema changes are part of the product contract here because portfolio, transaction, valuation,
 supportability, and replay state all depend on deterministic database shape.
 

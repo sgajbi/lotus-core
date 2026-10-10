@@ -6,6 +6,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
+from .api_contract.transaction_lineage import TransactionSourceLineage
 from .domain.business_calendar import normalize_business_calendar_code
 from .domain.cost_basis_method import CostBasisMethod, normalize_cost_basis_method
 from .domain.currency import normalize_currency_code, normalize_optional_currency_code
@@ -450,7 +451,7 @@ class InstrumentEvent(CoreEventModel):
         return normalize_optional_currency_code(value)
 
 
-class TransactionEvent(CoreEventModel):
+class TransactionEvent(CoreEventModel, TransactionSourceLineage):
     transaction_id: str
     portfolio_id: str
     tenant_id: Optional[str] = None

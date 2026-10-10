@@ -30,6 +30,7 @@ from portfolio_common.infrastructure.transaction_source_evidence import (
     SqlAlchemyTransactionSourceEvidence,
 )
 from portfolio_common.logging_utils import operation_log_extra
+from portfolio_common.transaction_batch_lineage import transaction_batch_lineage_from_counts
 from portfolio_common.utils import async_timed
 from sqlalchemy import asc, desc, func, select, text, true
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -150,6 +151,8 @@ def _ledger_identity_filters(filters: TransactionLedgerFilters) -> dict[str, str
     return _identity_filter_kwargs(
         portfolio_id=filters.portfolio_id,
         transaction_id=filters.transaction_id,
+        source_system=filters.source_system,
+        source_batch_id=filters.source_batch_id,
         instrument_id=filters.instrument_id,
         transaction_type=filters.transaction_type,
         component_type=filters.component_type,
@@ -453,6 +456,13 @@ class TransactionRepository:
             default=None,
         )
         return TransactionLedgerInputEvidence(
+            transaction_batch_lineage=transaction_batch_lineage_from_counts(
+                count=int(row.transaction_count or 0),
+                complete_count=int(row.batch_complete_count or 0),
+                scope_count=int(row.batch_scope_count or 0),
+                source_system=row.batch_source_system,
+                source_batch_id=row.batch_source_batch_id,
+            ),
             transaction_count=int(row.transaction_count or 0),
             latest_evidence_timestamp=latest_evidence_timestamp,
             transaction_digest=row.transaction_digest,

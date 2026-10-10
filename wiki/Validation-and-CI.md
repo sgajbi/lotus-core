@@ -603,6 +603,20 @@ command so domain-product contract validation uses the governed platform validat
 If static contracts, supported-feature truth, or deterministic runtime smoke fail, the PR gate fails
 and still uploads the generated evidence for diagnosis.
 
+## Exact CI image acquisition
+
+Core binds successful native Platform acquisition outputs from qualified revision
+`0c96dd9ea00d1222e35d3e7d14de6a540a222104` before Linux lock replay, metadata inspection,
+Compose startup, builds and scans. The fixed Python Bookworm base remains unchanged in all ten
+Dockerfiles. PostgreSQL, Prometheus and Trivy retain their exact admitted digests; all five
+external Compose images remain required. No test, health check or security gate is skipped.
+
+Compose jobs require operator-provisioned `DOCKERHUB_USERNAME` and `DOCKERHUB_READ_TOKEN` secrets
+for Kafka, ZooKeeper and Grafana. Missing credentials fail before acquisition. Public publisher
+metadata admission does not prove hosted image acquisition, and no operator copies are authorized
+by this configuration. See the [Core CI image acquisition runbook](../docs/operations/ci-image-acquisition.md)
+for exact identities, boundaries, credentials and focused controls.
+
 ## Documentation Evidence Pack
 
 `make docs-evidence-pack` writes `output/documentation-evidence/documentation-evidence-pack.json`.
