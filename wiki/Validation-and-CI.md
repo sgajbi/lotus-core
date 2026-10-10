@@ -142,6 +142,28 @@ Per-service omissions remain deferred to [#462](https://github.com/sgajbi/lotus-
 See the [operator workflow](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/development-workflow-and-ci-strategy.md)
 for exact commands, evidence and conservative fallback boundaries.
 
+The representative FULL source proof is [PR #1269](https://github.com/sgajbi/lotus-core/pull/1269),
+signed source `e09a18f7afc601433f58ce710163128cff040b01`, protected
+[run 38058721279](https://github.com/sgajbi/lotus-core/actions/runs/38058721279). All 14 suites and runtime
+gates passed; downloaded receipts prove all 25 native targets selected `full` and exited 0. The unit
+coverage owner passed 13,536 tests with zero warnings. Its candidate and merged main `a9f35cfb`
+trees match; final main certification remains a separate exact-source producer.
+
+| Completed observation, including Feature/Quality/PR | Cohort wall time | Summed job minutes |
+| --- | --- | --- |
+| Original documentation PR #748 | 23m 23s | 71.967 |
+| Earlier source PR #1265 | 36m 57s | 146.200 |
+| Change-aware source PR #1269 | 29m 28s | 143.133 |
+
+The [operator workflow evidence table](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/development-workflow-and-ci-strategy.md#observed-producer-evidence-2026-10-10)
+records every source and producing run. Job minutes are elapsed runner-duration observations,
+not billing or a controlled speedup claim. Source populations, queues, runner versions and check
+counts differ. Final #1269 retained the full Feature fallback during its head transition; those
+1,699 job seconds are included, while earlier positive delegation is explicitly historical.
+Documentation-only proof must retain each native documentation pack and suite collection result,
+complete each test-matrix job within five minutes, preserve all 39 required contexts and record
+every runtime omission. Final closure still requires exact-main and published-wiki parity.
+
 `lotus-core` uses:
 
 1. `Remote Feature Lane`

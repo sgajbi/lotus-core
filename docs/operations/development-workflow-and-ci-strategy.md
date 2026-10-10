@@ -143,6 +143,40 @@ report setup/queue differences and the Feature fallback race. Summed hosted job 
 precise billable-minute claim. A lower job count or mocked producer alone does not establish
 [full #749 acceptance](https://github.com/sgajbi/lotus-core/issues/749).
 
+### Observed producer evidence (2026-10-10)
+
+[PR #1269](https://github.com/sgajbi/lotus-core/pull/1269) provides the representative FULL source
+proof. Signed source `e09a18f7afc601433f58ce710163128cff040b01` passed protected
+[run 38058721279](https://github.com/sgajbi/lotus-core/actions/runs/38058721279), including all 14 native
+test suites, combined coverage, exact-source images, SBOM/provenance and runtime/recovery gates.
+The downloaded selection artifacts contain 23 classification receipts and all 25 registered native
+target receipts, each selecting `full` and recording native exit 0. The unit coverage owner passed
+13,536 tests with zero warnings against the unchanged zero-warning budget. Combined coverage passed
+the unchanged native 98% gate (97.790715% raw, displayed as 98% at precision zero). Candidate and
+merged main `a9f35cfb31b4042b679b925c55c8f30acdbddabc` have identical committed trees.
+
+The following observations include Feature, Quality Baseline and PR Merge Gate, using the earliest
+workflow creation through the latest workflow update for wall time and summing actual job intervals.
+
+| Completed observation | Exact source | PR / Feature / Quality runs | Cohort wall time | Summed job minutes |
+| --- | --- | --- | --- | --- |
+| Original documentation PR #748 | `975b001940248c049a82bbd3c21049cc24477703` | `29249794370` / `29249782905` / `29249794494` | 23m 23s | 71.967 |
+| Earlier source PR #1265 | `a1d6c7d96f6fa96e148dcbf3c694a753c86ad3a4` | `38042833646` / `38042830900` / `38042833640` | 36m 57s | 146.200 |
+| Change-aware source PR #1269 | `e09a18f7afc601433f58ce710163128cff040b01` | `38058721279` / `38058718003` / `38058721254` | 29m 28s | 143.133 |
+
+These are observed durations, not controlled causal speedup or billing measurements. Source
+populations, runner images, queues and required-check counts differ. In the final #1269 revision,
+Feature retained its full fallback because eligible exact-head PR authority was not verified at
+decision time; its 1,699 job seconds are included. An earlier revision separately demonstrated
+positive delegation in run `38057915411`; that historical result is not current-head qualification.
+
+For a documentation-only observation, retain every exact-run selection artifact, the produced
+documentation pack and native suite collection result. Measure each test-matrix job from its own
+start/end timestamps and require completion within five minutes. Verify all 39 required contexts,
+explicit runtime omissions and absence of fabricated image/coverage/provenance artifacts. Report
+Feature's actual delegation or fallback decision. Protected PR success alone does not certify main;
+use the exact natural main producer, wiki publication and committed-blob parity for final closure.
+
 ## Runtime Image Certification
 
 Full PR validation and Main Releasability each build one governed runtime image set after coverage
