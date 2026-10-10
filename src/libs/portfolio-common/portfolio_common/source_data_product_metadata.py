@@ -107,8 +107,8 @@ class SourceDataProductRuntimeMetadata(BaseModel):
     tenant_id: str | None = Field(
         None,
         description=(
-            "Tenant or book-of-record scope for this source-data product. Null until runtime "
-            "tenant enforcement is available for this product."
+            "Optional source-published tenant or book-of-record provenance. Null when the "
+            "source does not publish it; request access authority is enforced independently."
         ),
         examples=["tenant-sg"],
     )

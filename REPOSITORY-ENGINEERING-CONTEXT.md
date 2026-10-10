@@ -838,6 +838,13 @@ schema, machine-readable contracts, or executable evidence.
 - The native full-integration target retains per-test progress, diagnostic thread stacks after
   120 seconds, and a completed JUnit results artifact. Missing results after cancellation are not
   passing release evidence; see [Validation and CI](wiki/Validation-and-CI.md#full-integration-diagnostics).
+- QCP analytics readers require a typed admitted `TenantId` at construction. The persisted
+  portfolio owner lookup in the request-owned repeatable-read snapshot must run before source
+  selection, pagination tokens and content fingerprints. Foreign and missing portfolios share
+  the safe 404. Keep optional source-published tenant metadata independent of access authority;
+  do not echo headers to fabricate provenance. The real registered HTTP/PostgreSQL regression
+  module is `test_analytics_tenant_postgresql.py` in `query-authority-db-contract`. This bounded
+  #798 correction does not close durable export ownership or other isolation families.
 - Shared source-product metadata changes must retain registered-route OpenAPI regression proof
   in the premerge operations contract suite. Source materialization is not transport-serving
   time, and a resolved collective snapshot epoch alone is not current reconciliation/valuation

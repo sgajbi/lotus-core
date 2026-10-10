@@ -1,4 +1,4 @@
-from fastapi import Depends
+from fastapi import Depends, Request
 from portfolio_common.db import get_async_db_session
 from portfolio_common.infrastructure.persistence.security_audit_store import (
     PostgresSecurityAuditStore,
@@ -115,12 +115,16 @@ def get_security_audit_query_service() -> SecurityAuditQueryService:
 
 
 def get_analytics_timeseries_service(
+    request: Request,
     db: AsyncSession = Depends(get_async_db_session),
     read_db: AsyncSession = Depends(get_analytics_read_session),
 ) -> AnalyticsTimeseriesService:
+    from .routers.tenant_authority import require_admitted_tenant_id
+
+    tenant_id = require_admitted_tenant_id(request=request, supplied_tenant_id=None)
     settings = load_query_control_plane_settings()
     return AnalyticsTimeseriesService(
-        reader=AnalyticsTimeseriesRepository(read_db),
+        reader=AnalyticsTimeseriesRepository(read_db, tenant_id=tenant_id),
         export_store=AnalyticsExportRepository(db),
         unit_of_work=SqlAlchemyAnalyticsUnitOfWork(db),
         policy=AnalyticsRuntimePolicy(

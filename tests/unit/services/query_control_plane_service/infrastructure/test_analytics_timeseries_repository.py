@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from portfolio_common.database_models import Cashflow
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_control_plane_service.app.domain.analytics import (
@@ -22,6 +23,12 @@ _GLOBAL_CALENDAR_PREDICATE = (
     "upper(regexp_replace(business_dates.calendar_code, "
     "'^[[:space:]]+|[[:space:]]+$', '', 'g')) = 'GLOBAL'"
 )
+
+
+@pytest.mark.parametrize("untrusted_scope", [None, "tenant-test", {"tenant_id": "tenant-test"}])
+def test_analytics_reader_refuses_untyped_authority(untrusted_scope):
+    with pytest.raises(TypeError, match="typed admitted tenant authority"):
+        AnalyticsTimeseriesRepository(AsyncMock(spec=AsyncSession), tenant_id=untrusted_scope)
 
 
 class _FakeExecuteResult:
@@ -113,10 +120,14 @@ async def test_analytics_timeseries_repository_methods() -> None:
         ),
         _FakeExecuteResult([2]),
     ]
-    repo = AnalyticsTimeseriesRepository(db)
+    repo = AnalyticsTimeseriesRepository(db, tenant_id=TenantId("tenant-test"))
 
     portfolio = await repo.get_portfolio("P1")
     assert portfolio is not None
+    owner_query = db.execute.await_args_list[0].args[0]
+    owner_sql = str(owner_query.compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolios.portfolio_id = 'P1'" in owner_sql
+    assert "portfolios.tenant_id = 'tenant-test'" in owner_sql
 
     latest_date = await repo.get_latest_portfolio_timeseries_date("P1")
     assert latest_date == date(2025, 1, 31)
@@ -187,7 +198,7 @@ async def test_analytics_timeseries_repository_methods() -> None:
 async def test_latest_position_timeseries_date_uses_governed_business_calendar() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult([date(2025, 1, 31)])
-    repo = AnalyticsTimeseriesRepository(db)
+    repo = AnalyticsTimeseriesRepository(db, tenant_id=TenantId("tenant-test"))
 
     latest_date = await repo.get_latest_position_timeseries_date("P1")
 
@@ -202,7 +213,7 @@ async def test_latest_position_timeseries_date_uses_governed_business_calendar()
 async def test_business_calendar_presence_uses_canonical_global_identity() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.scalar.return_value = True
-    repo = AnalyticsTimeseriesRepository(db)
+    repo = AnalyticsTimeseriesRepository(db, tenant_id=TenantId("tenant-test"))
 
     assert await repo.has_business_calendar() is True
 
@@ -226,7 +237,7 @@ async def test_timeseries_repository_lists_business_and_observation_dates() -> N
             ]
         ),
     ]
-    repo = AnalyticsTimeseriesRepository(db)
+    repo = AnalyticsTimeseriesRepository(db, tenant_id=TenantId("tenant-test"))
 
     business_dates = await repo.list_business_dates(
         start_date=date(2025, 1, 1),
@@ -264,7 +275,7 @@ async def test_timeseries_repository_lists_business_and_observation_dates() -> N
 async def test_timeseries_repository_applies_snapshot_epoch_filters() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult([])
-    repo = AnalyticsTimeseriesRepository(db)
+    repo = AnalyticsTimeseriesRepository(db, tenant_id=TenantId("tenant-test"))
 
     await repo.list_position_timeseries_rows(
         portfolio_id="P1",
@@ -293,7 +304,7 @@ async def test_timeseries_repository_applies_snapshot_epoch_filters() -> None:
 @pytest.mark.asyncio
 async def test_timeseries_repository_short_circuits_invalid_position_scope() -> None:
     db = AsyncMock(spec=AsyncSession)
-    repo = AnalyticsTimeseriesRepository(db)
+    repo = AnalyticsTimeseriesRepository(db, tenant_id=TenantId("tenant-test"))
 
     rows = await repo.list_position_timeseries_rows(
         portfolio_id="P1",
@@ -314,7 +325,7 @@ async def test_timeseries_repository_short_circuits_invalid_position_scope() -> 
 @pytest.mark.asyncio
 async def test_timeseries_repository_snapshot_epoch_short_circuits_invalid_position_scope() -> None:
     db = AsyncMock(spec=AsyncSession)
-    repo = AnalyticsTimeseriesRepository(db)
+    repo = AnalyticsTimeseriesRepository(db, tenant_id=TenantId("tenant-test"))
 
     snapshot_epoch = await repo.get_position_snapshot_epoch(
         portfolio_id="P1",
@@ -349,7 +360,7 @@ async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow
             [_cashflow_row(security_id=None, is_position_flow=False, is_portfolio_flow=True)]
         ),
     ]
-    repo = AnalyticsTimeseriesRepository(db)
+    repo = AnalyticsTimeseriesRepository(db, tenant_id=TenantId("tenant-test"))
 
     unpaged_rows = await repo.list_position_timeseries_rows_unpaged(
         portfolio_id="P1",
@@ -432,7 +443,7 @@ async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow
 @pytest.mark.asyncio
 async def test_timeseries_repository_short_circuits_empty_cashflow_filters() -> None:
     db = AsyncMock(spec=AsyncSession)
-    repo = AnalyticsTimeseriesRepository(db)
+    repo = AnalyticsTimeseriesRepository(db, tenant_id=TenantId("tenant-test"))
 
     assert (
         await repo.list_latest_position_timeseries_before(

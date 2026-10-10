@@ -242,9 +242,21 @@ def test_stale_continuation_is_product_safe_restart_conflict() -> None:
 
 
 def test_get_analytics_timeseries_service_factory() -> None:
+    from starlette.requests import Request
+
+    from tests.test_support.tenant import TEST_TENANT_CONTEXT
+
     write_db, read_db = MagicMock(), MagicMock()
-    service = get_analytics_timeseries_service(db=write_db, read_db=read_db)
+    request = Request(
+        {
+            "type": "http",
+            "state": {"tenant_context": TEST_TENANT_CONTEXT},
+            "headers": [(b"x-tenant-id", b"untrusted-replacement")],
+        }
+    )
+    service = get_analytics_timeseries_service(request=request, db=write_db, read_db=read_db)
     assert service.repo.db is read_db
+    assert service.repo.tenant_id == TEST_TENANT_CONTEXT.tenant_id
     assert service.export_repo.db is write_db
 
 
