@@ -16,6 +16,19 @@ themselves certify a particular environment, production capacity, or downstream 
 
 ## Financial Source Observation Refusals
 
+For cash-balance qualification, distinguish a persisted explicit-zero cash snapshot from a
+master-only account whose displayed balance defaults to zero. Inspect the selected history,
+snapshot and position-state epochs, same-date `VALUED_CURRENT` amounts and persisted currency/FX
+lineage, then the exact collective portfolio-day reconciliation control at the maximum selected
+epoch. Older nonzero cash snapshots cannot replace a current zero. Missing, replaying, stale or
+failed evidence must not be reported as complete/current. Zero cash cannot cover a missing open
+holding in the cash-weight denominator. See the
+[Holdings As Of methodology](https://github.com/sgajbi/lotus-core/blob/main/docs/methodologies/source-data-products/holdings-as-of.md).
+
+The registered-route PostgreSQL proof is admitted to `critical-db-coverage` and
+`query-authority-db-contract`; it verifies source reads with seeded controls and does not
+substitute for live ingestion/worker or downstream financial certification.
+
 For an observation rejection, retain the fixed refusal code and receipt/idempotency lineage;
 do not retry a divergent revision or stale head as a new source fact. Verify authenticated
 tenant/producer, exact family write capability and separate server grant before source review.

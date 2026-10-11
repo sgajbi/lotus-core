@@ -6,6 +6,9 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_service.app.application.holdings_reconciliation import (
+    FinancialReconciliationControl,
+)
 from src.services.query_service.app.repositories.reporting_repository import ReportingSnapshotRow
 from src.services.query_service.app.services.cash_balance_service import (
     CashBalanceResolver,
@@ -47,6 +50,12 @@ def _snapshot(
     return SimpleNamespace(
         security_id=security_id,
         date=snapshot_date,
+        id=1,
+        epoch=1,
+        quantity=portfolio_market_value,
+        valuation_status="VALUED_CURRENT",
+        valuation_source_currency="USD",
+        valuation_reporting_currency="USD",
         market_value=portfolio_market_value,
         market_value_local=(
             Decimal(market_value_local)
@@ -78,6 +87,7 @@ async def test_get_cash_balances_returns_holdings_as_of_balances_and_metadata() 
                 currency=" usd ",
                 asset_class=" cash ",
             ),
+            position_state=SimpleNamespace(epoch=1, status="CURRENT"),
         ),
         ReportingSnapshotRow(
             portfolio=portfolio,
@@ -87,6 +97,7 @@ async def test_get_cash_balances_returns_holdings_as_of_balances_and_metadata() 
                 updated_at=datetime(2026, 3, 27, 11, 30, tzinfo=UTC),
             ),
             instrument=_instrument("SEC1"),
+            position_state=SimpleNamespace(epoch=1, status="CURRENT"),
         ),
     ]
     repo.get_latest_cash_account_ids.return_value = {"CASH_USD": "CASH-ACC-USD-001"}
@@ -97,6 +108,15 @@ async def test_get_cash_balances_returns_holdings_as_of_balances_and_metadata() 
         return_value=repo,
     ):
         service = CashBalanceService(AsyncMock(spec=AsyncSession))
+        service._position_repo = AsyncMock()
+        service._position_repo.get_holdings_reconciliation_controls.return_value = [
+            FinancialReconciliationControl(
+                date(2026, 3, 27),
+                1,
+                "COMPLETED",
+                datetime(2026, 3, 27, 12, tzinfo=UTC),
+            )
+        ]
         response = await service.get_cash_balances(
             portfolio_id="P1",
             reporting_currency=" sgd ",
@@ -121,6 +141,7 @@ async def test_get_cash_balances_returns_holdings_as_of_balances_and_metadata() 
     assert response.cash_accounts[0].cash_account_id_source == "validated_transaction_mapping"
     assert response.cash_accounts[0].account_currency == "USD"
     assert response.data_quality_status == "COMPLETE"
+    assert response.source_evidence_current is True
     assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 11, 30, tzinfo=UTC)
     assert response.source_batch_fingerprint is None
     assert response.content_hash.startswith("sha256:")
@@ -134,6 +155,7 @@ async def test_get_cash_balances_returns_holdings_as_of_balances_and_metadata() 
     repo.list_latest_snapshot_rows.assert_awaited_once_with(
         portfolio_ids=["P1"],
         as_of_date=date(2026, 3, 27),
+        include_zero_cash=True,
     )
     repo.get_latest_fx_rate.assert_awaited_once_with(
         from_currency="USD",
@@ -205,7 +227,8 @@ async def test_get_cash_balances_prefers_master_rows_and_preserves_zero_balance_
         "250"
     )
     assert response.totals.source_reported_cash_weight_supportability == "SUPPORTED"
-    assert response.data_quality_status == "COMPLETE"
+    assert response.data_quality_status != "COMPLETE"
+    assert response.source_evidence_current is False
     repo.get_latest_cash_account_ids.assert_not_awaited()
 
 
@@ -260,7 +283,7 @@ async def test_get_cash_balances_queries_fallback_account_ids_only_for_unmatched
     )
 
 
-async def test_get_cash_balances_marks_unknown_cash_account_fallback_partial() -> None:
+async def test_get_cash_balances_keeps_unqualified_cash_account_fallback_unknown() -> None:
     repo = AsyncMock()
     portfolio = _portfolio("P1", base_currency="USD")
     repo.get_portfolio_by_id.return_value = portfolio
@@ -292,7 +315,8 @@ async def test_get_cash_balances_marks_unknown_cash_account_fallback_partial() -
     assert response.cash_accounts[0].cash_account_id == "CASH_EUR"
     assert response.cash_accounts[0].cash_account_id_source == "cash_security_fallback"
     assert response.cash_accounts[0].instrument_name == "EUR Cash Instrument"
-    assert response.data_quality_status == "PARTIAL"
+    assert response.data_quality_status == "UNKNOWN"
+    assert response.source_evidence_current is False
     repo.get_latest_cash_account_ids.assert_awaited_once_with(
         portfolio_id="P1",
         cash_security_ids=["CASH_EUR"],

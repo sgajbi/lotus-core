@@ -33,6 +33,24 @@ class _FakeExecuteResult:
 
 
 @pytest.mark.asyncio
+async def test_cash_opt_in_projects_state_and_admits_only_cash_zero() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    state = SimpleNamespace(epoch=1, status="CURRENT")
+    db.execute.return_value = _FakeExecuteResult([("portfolio", "snapshot", "instrument", state)])
+    rows = await ReportingRepository(db).list_latest_snapshot_rows(
+        portfolio_ids=["P1"],
+        as_of_date=date(2026, 3, 27),
+        include_zero_cash=True,
+    )
+    assert rows[0].position_state is state
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "upper(trim(instruments.asset_class)) = 'CASH'" in compiled
+    assert "daily_position_snapshots.quantity != 0 OR" in compiled
+    assert "position_history.epoch = position_state.epoch" in compiled
+    assert "daily_position_snapshots.epoch = anon_" in compiled
+
+
+@pytest.mark.asyncio
 async def test_reporting_repository_lists_portfolios_with_scope_filters() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult(

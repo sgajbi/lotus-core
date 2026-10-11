@@ -555,7 +555,12 @@ production consistency boundary lives in dependency wiring, not a mutable reposi
   for reconciliation scopes and public evidence identity; shared PositionState completion timestamps
   are excluded, while epoch/status qualification remains material. Exact control failures have
   reconciliation-scoped degradation reasons. See the [Holdings As Of methodology](docs/methodologies/source-data-products/holdings-as-of.md);
-  cash-balance timestamp semantics are unchanged.
+  cash balances reuse the same projection and collective reconciliation policy. Their opt-in
+  snapshot read includes explicit-zero CASH at the matching history/state epoch, while ordinary
+  holdings stay nonzero. Master-only cash displays do not establish observed zero; missing
+  account facts, valuation/currency authority or exact completed controls cannot be current.
+  Cash-zero rows do not satisfy missing open-position denominator coverage. Cash identity includes
+  material row/epoch/valuation/control evidence and excludes shared state completion timestamps.
 - Source-data product declarations, feature status, route families, RFC status, and runtime
   validation are machine-checked. A declaration or local test is not production certification.
 

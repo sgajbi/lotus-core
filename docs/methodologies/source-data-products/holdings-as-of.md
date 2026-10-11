@@ -166,7 +166,7 @@ when the denominator is greater than zero. Otherwise:
 
 For cash balances:
 
-`C_n = snapshot.market_value_local or snapshot.market_value or 0`
+`C_n = snapshot.market_value_local if present, otherwise snapshot.market_value if present, otherwise 0`
 
 `C_p = snapshot.market_value or 0`
 
@@ -218,6 +218,9 @@ supportability posture is one of:
 13. For cash balances, read all HoldingsAsOf snapshot rows for the resolved portfolio/date, filter
     cash instruments for account balances, join active/effective cash-account master rows, and read
     transaction-derived fallback account identifiers only for unmatched cash securities.
+    This reader alone opts into explicit-zero CASH history/snapshots at the current state epoch.
+    Rank history before applying quantity eligibility, match snapshot epoch and quantity, and
+    never resurrect an older nonzero cash row. Ordinary holdings selection remains nonzero.
 14. Accept a transaction-derived fallback account identifier only when the account id and cash
     security validate against active/effective `cash_account_masters`; otherwise use the cash
     security id with `cash_account_id_source=cash_security_fallback`.
@@ -225,6 +228,18 @@ supportability posture is one of:
     portfolio-currency balances to reporting currency, compute source-reported cash weight from
     same-date portfolio market-value denominator evidence when supportable, and return totals with
     `HoldingsAsOf:v1` metadata.
+16. Qualify every displayed cash account against a persisted same-date, current-epoch,
+    `VALUED_CURRENT` cash snapshot with non-null local and portfolio values, explicit valuation
+    currency lineage, dated FX authority when required, and current position state. Master-only
+    accounts retain their zero display but cannot establish observed zero cash.
+17. Reuse the shared collective holdings reconciliation scopes over all selected cash/open
+    portfolio rows and the existing exact control reader. Complete source quality and dated
+    completed reconciliation are required for `source_evidence_current=true`. Missing open
+    holdings or a mixed observed/unobserved cash-account set cannot qualify as complete/current.
+    Zero cash rows do not count toward the expected open-position denominator coverage.
+18. Include selected row identity/epoch, persisted valuation lineage, state epoch/status,
+    collective scope and material control evidence in cash content/snapshot identity. Shared
+    state completion timestamps remain excluded, so bookkeeping alone cannot restate the cut.
 
 ## Validation and Failure Behavior
 
@@ -255,8 +270,9 @@ supportability posture is one of:
 | Selected economics/reference evidence, epoch scope or material reconciliation/data-quality status changes | Position-response material identity changes even when displayed amounts happen to match; no stale or replaying evidence is promoted to current. |
 | Cash balance response has no account records | Returns `data_quality_status=UNKNOWN`. |
 | Cash account records exist but no cash snapshot rows back them | Returns `data_quality_status=UNKNOWN`. |
-| Any cash account record uses `cash_account_id_source=cash_security_fallback` | Returns `data_quality_status=PARTIAL`. |
-| Cash account records are backed by cash snapshot rows | Returns `data_quality_status=COMPLETE`. |
+| Any cash account record uses `cash_account_id_source=cash_security_fallback` | Source quality is at most `PARTIAL`; reconciliation may reduce it further. |
+| Every cash account has qualified persisted snapshot evidence, complete open-position coverage and dated complete exact collective reconciliation | Returns `data_quality_status=COMPLETE` and `source_evidence_current=true`, including genuine persisted zero balances. |
+| Cash value, valuation currency/FX lineage, same-date fact, current state or exact control evidence is missing or adverse | Preserves display values while refusing complete/current qualification; shared reconciliation precedence determines the reduced quality. |
 | Cash-weight denominator rows are missing, omit an open holding, or contain null market value | Returns `source_reported_cash_weight=null`, denominator `null`, and `BLOCKED_MISSING_DENOMINATOR`. |
 | Cash-weight denominator is zero or negative | Returns `source_reported_cash_weight=null`, denominator `null`, and `BLOCKED_ZERO_DENOMINATOR`. |
 | Cash-weight denominator snapshot rows are older than the resolved `as_of_date` | Returns `source_reported_cash_weight=null`, denominator `null`, and `BLOCKED_STALE_DENOMINATOR`. |
