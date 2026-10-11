@@ -27,6 +27,8 @@ def transaction_event_payload(
 ) -> RawIngestionEventPayload:
     _ = TenantId(tenant_id)
     payload = transaction.model_dump()
+    if any(field in payload for field in ("source_record_id", "source_batch_id", "observed_at")):
+        payload["schema_version"] = "1.1.0"
     payload["transaction_fx_rate_origin"] = (
         "SOURCE_BOOKED" if transaction.transaction_fx_rate is not None else None
     )

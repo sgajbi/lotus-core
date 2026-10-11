@@ -108,10 +108,14 @@ def transaction_ledger_filters(
     end_date: date | None,
     as_of_date: date | None,
     transaction_id: str | None = None,
+    source_system: str | None = None,
+    source_batch_id: str | None = None,
 ) -> TransactionLedgerFilters:
     return build_transaction_ledger_filters(
         portfolio_id=portfolio_id,
         transaction_id=transaction_id,
+        source_system=source_system,
+        source_batch_id=source_batch_id,
         instrument_id=instrument_id,
         security_id=security_id,
         transaction_type=transaction_type,

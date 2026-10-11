@@ -424,8 +424,8 @@ async def test_record_failure_observation_ignores_unknown_job(
     assert session.added_rows == []
 
 
-def _persisted_job(*, request_payload: object) -> SimpleNamespace:
-    return SimpleNamespace(
+def _persisted_job(*, request_payload: object) -> DBIngestionJob:
+    return DBIngestionJob(
         job_id="job_replayable",
         tenant_id="tenant-test",
         endpoint="/ingest/transactions",
@@ -468,7 +468,7 @@ def _persisted_job(*, request_payload: object) -> SimpleNamespace:
 async def test_get_job_maps_persisted_row_or_returns_none(
     service: IngestionJobService,
     monkeypatch: pytest.MonkeyPatch,
-    persisted_row: SimpleNamespace | None,
+    persisted_row: DBIngestionJob | None,
     expected_job_id: str | None,
 ) -> None:
     session = _FakeSession(returned_row=persisted_row)
@@ -501,7 +501,7 @@ async def test_get_job_maps_persisted_row_or_returns_none(
 async def test_get_job_replay_context_maps_only_object_payloads(
     service: IngestionJobService,
     monkeypatch: pytest.MonkeyPatch,
-    persisted_row: SimpleNamespace | None,
+    persisted_row: DBIngestionJob | None,
     expected_payload: dict | None,
 ) -> None:
     session = _FakeSession(returned_row=persisted_row)
@@ -519,11 +519,41 @@ async def test_get_job_replay_context_maps_only_object_payloads(
         assert response is not None
         assert response.tenant_id == "tenant-test"
         assert response.request_payload == expected_payload
+        assert response.transaction_batch_lineage is None
         assert response.request_payload_policy_version == "ingestion-evidence-policy.v1"
         assert response.request_payload_replay_eligible is True
         assert response.request_payload_replay_expires_at == datetime(2026, 7, 29, tzinfo=UTC)
     assert len(session.executed_statements) == 1
     assert "ingestion_jobs.tenant_id = :tenant_id_1" in str(session.executed_statements[0])
+
+
+async def test_replay_context_retains_batch_projection_without_restricted_body(
+    service: IngestionJobService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    row = _persisted_job(request_payload=None)
+    row.transaction_batch_lineage = {
+        "source_system": "CUSTODY",
+        "source_batch_id": "BATCH-1",
+        "reason": "PROVEN",
+    }
+    row.request_payload_representation = "fingerprint_only"
+    row.request_payload_replay_eligible = False
+    row.request_payload_partial_replay_eligible = False
+    row.request_payload_replay_expires_at = None
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        make_single_session_getter(_FakeSession(returned_row=row)),
+    )
+
+    context = await service.get_job_replay_context("job_replayable", tenant_id="tenant-test")
+
+    assert context is not None
+    assert context.request_payload is None
+    assert context.transaction_batch_lineage == row.transaction_batch_lineage
+    assert context.request_payload_replay_eligible is False
+    assert context.request_payload_partial_replay_eligible is False
+    assert context.request_payload_replay_expires_at is None
 
 
 @pytest.mark.parametrize(

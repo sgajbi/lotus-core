@@ -120,6 +120,11 @@ class IngestionEvidenceQueryService:
             replay_audits=replay_audits[:_EVIDENCE_LIMIT],
             consumer_dlq_events=merged_dlq_events[:_EVIDENCE_LIMIT],
             request_payload=request_payload,
+            transaction_batch_lineage=(
+                getattr(replay_context, "transaction_batch_lineage", None)
+                if replay_context is not None
+                else None
+            ),
             evidence_complete=evidence_complete,
         )
 
