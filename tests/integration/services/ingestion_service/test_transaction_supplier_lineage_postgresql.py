@@ -25,6 +25,7 @@ from src.services.ingestion_service.app.main import app as ingress_app
 from src.services.ingestion_service.app.routers.transactions import (
     TRANSACTION_LINEAGE_SOURCE_SYSTEM_REQUIRED_EXAMPLE,
 )
+from src.services.ingestion_service.app.services import ingestion_job_service
 from src.services.ingestion_service.app.services.ingestion_job_service import (
     IngestionJobService,
     get_ingestion_job_service,
@@ -115,6 +116,8 @@ async def test_registered_supplier_lineage_persists_without_changing_booking_fen
     for app in apps:
         app.dependency_overrides.update(overrides)
     monkeypatch.setattr(base_consumer, "get_async_db_session", sessions)
+    # Store injection does not bind the service's imported lifecycle provider.
+    monkeypatch.setattr(ingestion_job_service, "get_async_db_session", sessions)
     consumer = TransactionPersistenceConsumer(
         bootstrap_servers="unused-broker-substitute:9092",
         topic="raw-transactions",

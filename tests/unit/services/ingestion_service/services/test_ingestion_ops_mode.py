@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -11,21 +12,6 @@ from src.services.ingestion_service.app.services.ingestion_ops_mode import (
 )
 
 pytestmark = pytest.mark.asyncio
-
-
-class _SingleSessionAsyncIterator:
-    def __init__(self, session):
-        self._session = session
-        self._yielded = False
-
-    def __aiter__(self):
-        return self
-
-    async def __anext__(self):
-        if self._yielded:
-            raise StopAsyncIteration
-        self._yielded = True
-        return self._session
 
 
 class _FakeBegin:
@@ -59,7 +45,10 @@ class _FakeSession:
 
 
 def _session_factory(session):
-    return lambda: _SingleSessionAsyncIterator(session)
+    async def sessions():
+        yield session  # This provider borrows the session; it never closes it.
+
+    return sessions
 
 
 class _FakeGauge:
@@ -155,3 +144,91 @@ async def test_assert_ingestion_writable_mode_blocks_paused_mode() -> None:
         )
 
     assert gauge.values == [1]
+
+
+async def _invoke_mode_operation(operation, session_factory, mode="normal"):
+    if operation == "read":
+        return await load_ops_mode_response(session_factory=session_factory)
+    return await update_ops_mode_response(
+        mode=mode,
+        replay_window_start=None,
+        replay_window_end=None,
+        updated_by="ops-user",
+        session_factory=session_factory,
+    )
+
+
+@pytest.mark.parametrize("operation", ["read", "update"])
+@pytest.mark.parametrize("mode", ["normal", "paused", "drain"])
+async def test_mode_operation_awaits_provider_close_before_return(operation, mode):
+    session = _FakeSession(
+        SimpleNamespace(
+            mode=mode,
+            replay_window_start=None,
+            replay_window_end=None,
+            updated_by="ops-user",
+            updated_at=datetime(2026, 6, 17, tzinfo=UTC),
+        )
+    )
+    closing, release = asyncio.Event(), asyncio.Event()
+    closed = []
+
+    async def sessions():
+        try:
+            yield session
+        finally:
+            closing.set()
+            await release.wait()
+            closed.append(session)
+
+    task = asyncio.create_task(_invoke_mode_operation(operation, sessions, mode))
+    try:
+        await asyncio.wait_for(closing.wait(), timeout=2)
+        assert not task.done(), "Operation returned before awaited provider closure"
+    finally:
+        release.set()
+        response = await task
+    assert response.mode == mode
+    assert response.updated_by == "ops-user"
+    assert closed == [session]
+
+
+@pytest.mark.parametrize("operation", ["read", "update"])
+@pytest.mark.parametrize("outcome", ["exception", "cancellation"])
+async def test_mode_operation_closes_provider_before_propagating_failure(operation, outcome):
+    entered, closing, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    sentinel = RuntimeError("native-read-fault")
+    closed = []
+
+    class FaultSession(_FakeSession):
+        async def scalar(self, statement):
+            entered.set()
+            if outcome == "exception":
+                raise sentinel
+            await asyncio.Event().wait()
+
+    session = FaultSession()
+
+    async def sessions():
+        try:
+            yield session
+        finally:
+            closing.set()
+            await release.wait()
+            closed.append(session)
+
+    task = asyncio.create_task(_invoke_mode_operation(operation, sessions))
+    await asyncio.wait_for(entered.wait(), timeout=2)
+    if outcome == "cancellation":
+        task.cancel()
+    try:
+        await asyncio.wait_for(closing.wait(), timeout=2)
+        assert not task.done(), "Failure escaped before awaited provider closure"
+    finally:
+        release.set()
+        expected = RuntimeError if outcome == "exception" else asyncio.CancelledError
+        with pytest.raises(expected) as caught:
+            await task
+    if outcome == "exception":
+        assert caught.value is sentinel
+    assert closed == [session]

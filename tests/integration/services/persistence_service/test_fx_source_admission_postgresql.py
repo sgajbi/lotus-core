@@ -1,5 +1,6 @@
 """Admission-only PG proof; captured broker is explicit, no historical QCP upgrade."""
 
+import asyncio
 import json
 from dataclasses import fields
 from datetime import UTC, datetime
@@ -9,6 +10,7 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 import pytest_asyncio
+from portfolio_common import db as database_providers
 from portfolio_common.database_models import IngestionJob, OutboxEvent, ProcessedEvent
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.db import get_async_db_session
@@ -21,13 +23,14 @@ from portfolio_common.event_publisher import KafkaEventPublisher, get_kafka_even
 from portfolio_common.events import TransactionEvent
 from portfolio_common.exceptions import TransactionSemanticConflictError
 from portfolio_common.kafka_utils import KafkaProducer
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, event, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.services.ingestion_service.app import main as ingestion_main
 from src.services.ingestion_service.app.DTOs.transaction_dto import (
     Transaction as IngestionTransaction,
 )
+from src.services.ingestion_service.app.services import ingestion_job_service
 from src.services.persistence_service.app.adapters.event_record_mapper import (
     transaction_event_to_record_values,
 )
@@ -150,6 +153,8 @@ async def fresh_fx_ingress(clean_db, async_db_session, monkeypatch):
         lambda: KafkaEventPublisher(producer),
     )
     monkeypatch.setattr(persistence_base, "get_async_db_session", database_session)
+    # Native lifecycle calls bypass FastAPI's dependency override dictionary.
+    monkeypatch.setattr(ingestion_job_service, "get_async_db_session", database_session)
     consumer = TransactionPersistenceConsumer(
         bootstrap_servers="unused-broker-substitute:9092",
         topic="raw-transactions",
@@ -177,6 +182,95 @@ def _fresh_wire_payload(local="0", base="0"):
     payload = IngestionTransaction.model_validate(source_values).model_dump(mode="json")
     payload.update(realized_fx_pnl_local=local, realized_fx_pnl_base=base)
     return payload
+
+
+@pytest.mark.parametrize("read_fault", [False, True])
+@pytest.mark.parametrize("operation", ["read", "update"])
+async def test_ingress_lifecycle_uses_owned_loop_and_closes_borrowed_session(
+    async_db_session, fresh_fx_ingress, monkeypatch, read_fault, operation
+):
+    """Use the current module loop and finish provider closure before returning."""
+    client, _, _ = fresh_fx_ingress
+    engine = async_db_session.bind.sync_engine
+    loop = asyncio.get_running_loop()
+    checkouts, checkins = [], []
+
+    def forbid_global_pool():
+        raise AssertionError("Native lifecycle escaped the fixture-owned session provider")
+
+    def checkout(connection, record, proxy):
+        checkouts.append(
+            (id(asyncio.get_running_loop()), connection.driver_connection.get_server_pid())
+        )
+
+    def checkin(connection, record):
+        checkins.append(record)
+
+    def fail_ops_read(connection, cursor, statement, parameters, context, executemany):
+        if "ingestion_ops_control" in statement:
+            raise RuntimeError("owned-lifecycle-read-fault")
+
+    async def invoke():
+        service = ingestion_job_service.get_ingestion_job_service()
+        if operation == "read":
+            return await service.get_ops_mode()
+        return await service.update_ops_mode(
+            mode="normal",
+            replay_window_start=None,
+            replay_window_end=None,
+            updated_by="lifetime-proof",
+        )
+
+    monkeypatch.setattr(database_providers, "AsyncSessionLocal", forbid_global_pool)
+    event.listen(engine, "checkout", checkout)
+    event.listen(engine, "checkin", checkin)
+    try:
+        if read_fault:
+            event.listen(engine, "before_cursor_execute", fail_ops_read)
+            try:
+                with pytest.raises(RuntimeError, match="owned-lifecycle-read-fault"):
+                    await invoke()
+            finally:
+                event.remove(engine, "before_cursor_execute", fail_ops_read)
+        else:
+            assert (await invoke()).mode == "normal"
+        # Assert synchronously after operation completion, without sleep or GC.
+        assert checkouts and all(owner_loop == id(loop) for owner_loop, _ in checkouts)
+        assert len(checkins) == len(checkouts)
+        active = (
+            (
+                await async_db_session.execute(
+                    text(
+                        "SELECT pid,state,query FROM pg_stat_activity "
+                        "WHERE datname=current_database() AND pid<>pg_backend_pid() "
+                        "AND backend_type='client backend' AND state<>'idle'"
+                    )
+                )
+            )
+            .mappings()
+            .all()
+        )
+        assert not active
+        await async_db_session.rollback()
+        # A real valid request after either read outcome still exercises the same owner.
+        response = await client.post(
+            "/ingest/transaction", headers=TEST_TENANT_HEADERS, json=_fresh_wire_payload()
+        )
+        assert response.status_code == 202, response.text
+        print(
+            "OWNED_INGRESS_LIFETIME",
+            {
+                "loop": id(loop),
+                "checkouts": checkouts,
+                "checkins": len(checkins),
+                "read_fault": read_fault,
+                "operation": operation,
+                "quiescence": list(active),
+            },
+        )
+    finally:
+        event.remove(engine, "checkout", checkout)
+        event.remove(engine, "checkin", checkin)
 
 
 async def _assert_no_fresh_financial_writes(session):

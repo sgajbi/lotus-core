@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, Callable
+from contextlib import aclosing
 from datetime import UTC, datetime
 from typing import Awaitable
 
@@ -9,7 +10,7 @@ from sqlalchemy import select
 
 from ..DTOs.ingestion_job_dto import IngestionOpsModeResponse
 
-SessionFactory = Callable[[], AsyncIterator[object]]
+SessionFactory = Callable[[], AsyncGenerator[object, None]]
 
 _MODE_STATE_VALUE = {"normal": 0, "paused": 1, "drain": 2}
 
@@ -28,22 +29,24 @@ async def load_ops_mode_response(
     *,
     session_factory: SessionFactory,
 ) -> IngestionOpsModeResponse:
-    async for db in session_factory():
-        row = await db.scalar(
-            select(DBIngestionOpsControl).where(DBIngestionOpsControl.id == 1).limit(1)
-        )
-        if row is None:
-            row = DBIngestionOpsControl(
-                id=1,
-                mode="normal",
-                replay_window_start=None,
-                replay_window_end=None,
-                updated_by="system_bootstrap",
+    # The operation owns this iterator, not the provider's shared engine.
+    async with aclosing(session_factory()) as sessions:
+        async for db in sessions:
+            row = await db.scalar(
+                select(DBIngestionOpsControl).where(DBIngestionOpsControl.id == 1).limit(1)
             )
-            async with db.begin():
-                db.add(row)
-                await db.flush()
-        return to_ops_mode_response(row)
+            if row is None:
+                row = DBIngestionOpsControl(
+                    id=1,
+                    mode="normal",
+                    replay_window_start=None,
+                    replay_window_end=None,
+                    updated_by="system_bootstrap",
+                )
+                async with db.begin():
+                    db.add(row)
+                    await db.flush()
+            return to_ops_mode_response(row)
     raise RuntimeError("Unable to read ingestion ops mode.")
 
 
@@ -55,21 +58,22 @@ async def update_ops_mode_response(
     updated_by: str | None,
     session_factory: SessionFactory,
 ) -> IngestionOpsModeResponse:
-    async for db in session_factory():
-        async with db.begin():
-            row = await db.scalar(
-                select(DBIngestionOpsControl).where(DBIngestionOpsControl.id == 1).limit(1)
-            )
-            if row is None:
-                row = DBIngestionOpsControl(id=1, mode="normal")
-                db.add(row)
-                await db.flush()
-            row.mode = mode
-            row.replay_window_start = replay_window_start
-            row.replay_window_end = replay_window_end
-            row.updated_by = updated_by
-            row.updated_at = datetime.now(UTC)
-        return to_ops_mode_response(row)
+    async with aclosing(session_factory()) as sessions:
+        async for db in sessions:
+            async with db.begin():
+                row = await db.scalar(
+                    select(DBIngestionOpsControl).where(DBIngestionOpsControl.id == 1).limit(1)
+                )
+                if row is None:
+                    row = DBIngestionOpsControl(id=1, mode="normal")
+                    db.add(row)
+                    await db.flush()
+                row.mode = mode
+                row.replay_window_start = replay_window_start
+                row.replay_window_end = replay_window_end
+                row.updated_by = updated_by
+                row.updated_at = datetime.now(UTC)
+            return to_ops_mode_response(row)
     raise RuntimeError("Unable to update ingestion ops mode.")
 
 
