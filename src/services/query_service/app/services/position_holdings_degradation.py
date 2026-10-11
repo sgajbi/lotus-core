@@ -44,6 +44,7 @@ def holdings_degradation_summary(
     latest_evidence_timestamp: datetime | None,
     reconciliation_scopes: HoldingsReconciliationScopes | None = None,
     reconciliation_controls: list[FinancialReconciliationControl] | None = None,
+    known_closed_cohort: bool = False,
 ) -> SourceDataDegradationSummary:
     details = (
         _reconciliation_degradation_details(
@@ -53,6 +54,8 @@ def holdings_degradation_summary(
         else []
     )
     if not positions:
+        if known_closed_cohort:
+            return _degradation_summary(details)
         details.append(
             _holdings_degradation_detail(
                 section="positions",

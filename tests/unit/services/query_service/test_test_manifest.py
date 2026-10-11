@@ -277,22 +277,26 @@ def test_cash_zero_manifest_guard_refuses_omission_and_duplicate(monkeypatch, su
         test_cash_zero_proof_is_admitted_once_in_owned_database_lanes(suite)
 
 
-def test_critical_db_coverage_executes_historical_holdings_completion_proof() -> None:
-    assert HOLDINGS_COMPLETION_CRITICAL_PROOF_FILE in get_suite("critical-db-coverage")
+@pytest.mark.parametrize("suite", ["critical-db-coverage", "query-authority-db-contract"])
+def test_critical_db_coverage_executes_historical_holdings_completion_proof(suite) -> None:
+    assert get_suite(suite).count(HOLDINGS_COMPLETION_CRITICAL_PROOF_FILE) == 1
 
 
-def test_holdings_completion_manifest_guard_rejects_missing_proof(monkeypatch) -> None:
+@pytest.mark.parametrize("suite", ["critical-db-coverage", "query-authority-db-contract"])
+@pytest.mark.parametrize("mutation", ["missing", "duplicate"])
+def test_holdings_completion_manifest_guard_rejects_missing_proof(
+    monkeypatch, suite, mutation
+) -> None:
+    paths = [path for path in get_suite(suite) if path != HOLDINGS_COMPLETION_CRITICAL_PROOF_FILE]
+    if mutation == "duplicate":
+        paths.extend([HOLDINGS_COMPLETION_CRITICAL_PROOF_FILE] * 2)
     monkeypatch.setitem(
         SUITES,
-        "critical-db-coverage",
-        [
-            path
-            for path in get_suite("critical-db-coverage")
-            if path != HOLDINGS_COMPLETION_CRITICAL_PROOF_FILE
-        ],
+        suite,
+        paths,
     )
     with pytest.raises(AssertionError):
-        test_critical_db_coverage_executes_historical_holdings_completion_proof()
+        test_critical_db_coverage_executes_historical_holdings_completion_proof(suite)
 
 
 MODEL_DEFINITION_IDENTITY_CRITICAL_PROOF_NODE = (
@@ -537,6 +541,7 @@ def test_critical_lifecycle_suite_has_repository_native_make_target() -> None:
 
 def test_query_authority_db_contract_executes_tenant_and_service_regressions() -> None:
     assert get_suite("query-authority-db-contract") == [
+        HOLDINGS_COMPLETION_CRITICAL_PROOF_FILE,
         CASH_ZERO_PROOF_FILE,
         "tests/integration/services/query_control_plane_service/test_analytics_tenant_postgresql.py",
         "tests/integration/services/ingestion_service/"
