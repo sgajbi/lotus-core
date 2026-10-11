@@ -34,6 +34,7 @@ class ReportingSnapshotRow:
     portfolio: Portfolio
     snapshot: DailyPositionSnapshot
     instrument: Instrument | None
+    position_state: PositionState | None = None
 
 
 @dataclass(frozen=True)
@@ -201,11 +202,17 @@ class ReportingRepository:
         as_of_date: date,
         instrument_asset_class: str | None = None,
         include_presence: bool = False,
+        include_zero_cash: bool = False,
     ) -> list[ReportingSnapshotRow]:
+        if include_zero_cash and include_presence:
+            raise ValueError("Cash evidence selection does not support aggregate presence.")
         history_security_id = func.trim(PositionHistory.security_id)
         state_security_id = func.trim(PositionState.security_id)
         snapshot_security_id = func.trim(DailyPositionSnapshot.security_id)
         instrument_security_id = func.trim(Instrument.security_id)
+        cash_security_ids = select(instrument_security_id).where(
+            func.upper(func.trim(Instrument.asset_class)) == "CASH"
+        )
         latest_history_stmt = select(
             PositionHistory.portfolio_id.label("portfolio_id"),
             history_security_id.label("security_id"),
@@ -246,11 +253,21 @@ class ReportingRepository:
             PositionHistory.portfolio_id.in_(portfolio_ids),
             PositionHistory.position_date <= as_of_date,
         ).subquery()
+        history_quantity_filter = latest_history_subq.c.quantity != 0
+        latest_quantity_filter = DailyPositionSnapshot.quantity != 0
+        if include_zero_cash:
+            history_quantity_filter = or_(
+                history_quantity_filter,
+                latest_history_subq.c.security_id.in_(cash_security_ids),
+            )
+            latest_quantity_filter = or_(
+                latest_quantity_filter, snapshot_security_id.in_(cash_security_ids)
+            )
         latest_open_history_subq = (
             select(latest_history_subq)
             .where(
                 latest_history_subq.c.rn == 1,
-                latest_history_subq.c.quantity != 0,
+                history_quantity_filter,
             )
             .subquery()
         )
@@ -280,7 +297,7 @@ class ReportingRepository:
             .where(
                 DailyPositionSnapshot.portfolio_id.in_(portfolio_ids),
                 DailyPositionSnapshot.date <= as_of_date,
-                DailyPositionSnapshot.quantity != 0,
+                latest_quantity_filter,
             )
             .subquery()
         )
@@ -302,6 +319,26 @@ class ReportingRepository:
                     snapshot_security_id.asc(),
                 )
             )
+            if include_zero_cash:
+                stmt = stmt.add_columns(PositionState).join(
+                    PositionState,
+                    and_(
+                        PositionState.portfolio_id == DailyPositionSnapshot.portfolio_id,
+                        state_security_id == snapshot_security_id,
+                        PositionState.epoch == DailyPositionSnapshot.epoch,
+                    ),
+                )
+                return [
+                    ReportingSnapshotRow(
+                        portfolio=portfolio,
+                        snapshot=snapshot,
+                        instrument=instrument,
+                        position_state=state,
+                    )
+                    for portfolio, snapshot, instrument, state in (
+                        await self.db.execute(stmt)
+                    ).all()
+                ]
             rows = (await self.db.execute(stmt)).all()
             return [
                 ReportingSnapshotRow(portfolio=portfolio, snapshot=snapshot, instrument=instrument)

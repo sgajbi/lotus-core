@@ -254,6 +254,28 @@ HOLDINGS_COMPLETION_CRITICAL_PROOF_FILE = (
     "tests/integration/services/query_service/test_holdings_reconciliation_completion_postgresql.py"
 )
 
+CASH_ZERO_PROOF_FILE = (
+    "tests/integration/services/query_service/test_cash_balance_evidence_postgresql.py"
+)
+
+
+@pytest.mark.parametrize("suite", ["critical-db-coverage", "query-authority-db-contract"])
+def test_cash_zero_proof_is_admitted_once_in_owned_database_lanes(suite: str) -> None:
+    assert get_suite(suite).count(CASH_ZERO_PROOF_FILE) == 1
+    assert SUITE_ENV_PROFILE[suite] == "integration"
+    assert SUITE_RUNTIME_MODE[suite] == "db_direct"
+
+
+@pytest.mark.parametrize("suite", ["critical-db-coverage", "query-authority-db-contract"])
+@pytest.mark.parametrize("mutation", ["missing", "duplicate"])
+def test_cash_zero_manifest_guard_refuses_omission_and_duplicate(monkeypatch, suite, mutation):
+    paths = [path for path in get_suite(suite) if path != CASH_ZERO_PROOF_FILE]
+    if mutation == "duplicate":
+        paths.extend([CASH_ZERO_PROOF_FILE, CASH_ZERO_PROOF_FILE])
+    monkeypatch.setitem(SUITES, suite, paths)
+    with pytest.raises(AssertionError):
+        test_cash_zero_proof_is_admitted_once_in_owned_database_lanes(suite)
+
 
 def test_critical_db_coverage_executes_historical_holdings_completion_proof() -> None:
     assert HOLDINGS_COMPLETION_CRITICAL_PROOF_FILE in get_suite("critical-db-coverage")
@@ -515,6 +537,7 @@ def test_critical_lifecycle_suite_has_repository_native_make_target() -> None:
 
 def test_query_authority_db_contract_executes_tenant_and_service_regressions() -> None:
     assert get_suite("query-authority-db-contract") == [
+        CASH_ZERO_PROOF_FILE,
         "tests/integration/services/query_control_plane_service/test_analytics_tenant_postgresql.py",
         "tests/integration/services/ingestion_service/"
         "test_model_portfolio_effective_windows_postgresql.py",

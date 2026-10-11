@@ -95,6 +95,7 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/services/persistence_service/test_fx_source_admission_postgresql.py",
         "tests/integration/services/query_service/"
         "test_holdings_reconciliation_completion_postgresql.py",
+        "tests/integration/services/query_service/test_cash_balance_evidence_postgresql.py",
         "tests/integration/services/ingestion_service/"
         "test_model_definition_identity_postgresql.py::"
         "test_model_definition_identity_refusal_has_no_job_or_database_side_effects",
@@ -170,6 +171,7 @@ SUITES: dict[str, list[str]] = {
     ],
     "critical-lifecycle-db": ["tests/integration"],
     "query-authority-db-contract": [
+        "tests/integration/services/query_service/test_cash_balance_evidence_postgresql.py",
         "tests/integration/services/query_control_plane_service/test_analytics_tenant_postgresql.py",
         "tests/integration/services/ingestion_service/"
         "test_model_portfolio_effective_windows_postgresql.py",

@@ -7,7 +7,6 @@ from typing import Any, Awaitable, Callable, cast
 
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.domain.tenant import TenantContext
-from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from portfolio_common.reconstruction_identity import (
     CURRENT_RESTATEMENT_VERSION,
     ProductReconstructionScope,
@@ -17,13 +16,15 @@ from portfolio_common.request_fingerprints import request_fingerprint
 from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..application.cash_balance_evidence import cash_balance_evidence, cash_balance_scopes
+from ..application.holdings_reconciliation import FinancialReconciliationControl
 from ..domain.strict_decimal import decimal_or_zero
 from ..dtos.reporting_dto import CashAccountBalanceRecord, CashBalancesResponse, CashBalancesTotals
 from ..repositories.identifier_normalization import normalize_security_id
+from ..repositories.position_repository import PositionRepository
 from ..repositories.reporting_repository import ReportingRepository
 from .control_code_normalization import normalize_control_code
 from .fx_conversion import CachedFxRateConverter
-from .snapshot_evidence import latest_snapshot_evidence_timestamp
 
 ZERO = Decimal("0")
 CASH_ASSET_CLASS = "CASH"
@@ -56,6 +57,7 @@ class CashBalanceResolver:
         reporting_currency: str,
         rows: list[Any],
         expected_open_position_count: int,
+        reconciliation_controls: list[FinancialReconciliationControl] | None = None,
     ) -> CashBalancesResponse:
         portfolio_currency = normalize_currency_code(str(portfolio.base_currency))
         reporting_currency = normalize_currency_code(reporting_currency)
@@ -80,7 +82,15 @@ class CashBalanceResolver:
             resolved_as_of_date=resolved_as_of_date,
             expected_open_position_count=expected_open_position_count,
         )
-        latest_evidence_timestamp = latest_snapshot_evidence_timestamp(rows)
+        evidence = cash_balance_evidence(
+            rows=rows,
+            account_records=account_records,
+            resolved_as_of_date=resolved_as_of_date,
+            portfolio_currency=portfolio_currency,
+            expected_open_position_count=expected_open_position_count,
+            controls=reconciliation_controls or [],
+        )
+        latest_evidence_timestamp = evidence.latest_evidence_timestamp
         source_fingerprint = _cash_balance_source_fingerprint(
             portfolio_id=portfolio.portfolio_id,
             resolved_as_of_date=resolved_as_of_date,
@@ -91,6 +101,7 @@ class CashBalanceResolver:
             cash_weight_evidence=cash_weight_evidence,
             account_records=account_records,
             latest_evidence_timestamp=latest_evidence_timestamp,
+            evidence_content_hash=evidence.content_hash,
         )
         content_hash = f"sha256:{source_fingerprint}"
         policy_version = "holdings-as-of-cash-balances-v1"
@@ -135,10 +146,9 @@ class CashBalanceResolver:
             cash_accounts=account_records,
             **source_data_product_runtime_metadata(
                 as_of_date=resolved_as_of_date,
-                data_quality_status=self.data_quality_status(
-                    cash_rows=cash_rows,
-                    account_records=account_records,
-                ),
+                data_quality_status=evidence.data_quality_status,
+                reconciliation_status=evidence.reconciliation_status,
+                source_evidence_current=evidence.source_evidence_current,
                 latest_evidence_timestamp=latest_evidence_timestamp,
                 snapshot_id=f"holdings_as_of_cash_balances:{source_fingerprint}",
                 policy_version=policy_version,
@@ -235,11 +245,9 @@ class CashBalanceResolver:
             native_balance = ZERO
             portfolio_balance = ZERO
         else:
-            native_source_value = (
-                snapshot_row.snapshot.market_value_local
-                or snapshot_row.snapshot.market_value
-                or ZERO
-            )
+            native_source_value = snapshot_row.snapshot.market_value_local
+            if native_source_value is None:
+                native_source_value = snapshot_row.snapshot.market_value
             native_balance = decimal_or_zero(native_source_value)
             portfolio_balance = decimal_or_zero(snapshot_row.snapshot.market_value)
         reporting_balance = await self._convert_amount(
@@ -266,21 +274,6 @@ class CashBalanceResolver:
             row.instrument is not None
             and normalize_control_code(row.instrument.asset_class) == CASH_ASSET_CLASS
         )
-
-    @staticmethod
-    def data_quality_status(
-        *,
-        cash_rows: list[Any],
-        account_records: list[CashAccountBalanceRecord],
-    ) -> str:
-        if not account_records:
-            return cast(str, UNKNOWN)
-        if any(
-            record.cash_account_id_source == CASH_SECURITY_FALLBACK_SOURCE
-            for record in account_records
-        ):
-            return cast(str, PARTIAL)
-        return cast(str, COMPLETE if cash_rows else UNKNOWN)
 
 
 def _cash_security_ids(cash_rows: list[Any]) -> list[str]:
@@ -384,7 +377,8 @@ def _denominator_evidence_missing(
 ) -> bool:
     return (
         not rows
-        or len(rows) < expected_open_position_count
+        or sum(getattr(row.snapshot, "quantity", None) != ZERO for row in rows)
+        < expected_open_position_count
         or any(row.snapshot.market_value is None for row in rows)
     )
 
@@ -416,11 +410,13 @@ def _cash_balance_source_fingerprint(
     cash_weight_evidence: _CashWeightEvidence,
     account_records: list[CashAccountBalanceRecord],
     latest_evidence_timestamp: Any,
+    evidence_content_hash: str,
 ) -> str:
     return request_fingerprint(
         {
             "source_data_product": "HoldingsAsOf:v1",
             "mode": "cash_balances",
+            "qualification_evidence": evidence_content_hash,
             "portfolio_id": portfolio_id,
             "as_of_date": resolved_as_of_date.isoformat(),
             "portfolio_currency": portfolio_currency,
@@ -649,6 +645,7 @@ def _fallback_record_inputs(
 class CashBalanceService:
     def __init__(self, db: AsyncSession):
         self.repo = ReportingRepository(db)
+        self._position_repo = PositionRepository(db)
         self._fx_converter = CachedFxRateConverter(self.repo)
         self._resolver = CashBalanceResolver(repo=self.repo, convert_amount=self._convert_amount)
 
@@ -677,19 +674,27 @@ class CashBalanceService:
         rows = await self.repo.list_latest_snapshot_rows(
             portfolio_ids=[portfolio.portfolio_id],
             as_of_date=resolved_as_of_date,
+            include_zero_cash=True,
         )
         expected_open_position_count = await self.repo.count_latest_open_position_keys(
             portfolio_id=portfolio.portfolio_id,
             as_of_date=resolved_as_of_date,
         )
         if not isinstance(expected_open_position_count, int):
-            expected_open_position_count = len(rows)
+            expected_open_position_count = sum(
+                getattr(row.snapshot, "quantity", None) != ZERO for row in rows
+            )
+        controls = await self._position_repo.get_holdings_reconciliation_controls(
+            portfolio_id=portfolio.portfolio_id,
+            scopes=cash_balance_scopes(rows).items,
+        )
         return await self._resolver.build_cash_balances_response(
             portfolio=portfolio,
             resolved_as_of_date=resolved_as_of_date,
             reporting_currency=effective_reporting_currency,
             rows=rows,
             expected_open_position_count=expected_open_position_count,
+            reconciliation_controls=controls,
         )
 
     async def _convert_amount(
