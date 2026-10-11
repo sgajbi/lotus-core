@@ -232,3 +232,46 @@ async def test_mode_operation_closes_provider_before_propagating_failure(operati
     if outcome == "exception":
         assert caught.value is sentinel
     assert closed == [session]
+
+
+@pytest.mark.parametrize("operation", ["read", "update"])
+async def test_mode_operation_refuses_empty_provider_after_finalization(operation):
+    closed = []
+
+    async def sessions():
+        try:
+            for session in ():
+                yield session
+        finally:
+            closed.append(True)
+
+    with pytest.raises(RuntimeError) as caught:
+        await _invoke_mode_operation(operation, sessions)
+
+    assert str(caught.value) == f"Unable to {operation} ingestion ops mode."
+    assert closed == [True]
+
+
+async def test_update_ops_mode_bootstraps_and_applies_requested_control_fields():
+    session = _FakeSession()
+    window_start = datetime(2026, 6, 17, 2, 0, tzinfo=UTC)
+    window_end = datetime(2026, 6, 17, 3, 0, tzinfo=UTC)
+    before = datetime.now(UTC)
+
+    response = await update_ops_mode_response(
+        mode="drain",
+        replay_window_start=window_start,
+        replay_window_end=window_end,
+        updated_by="bootstrap-operator",
+        session_factory=_session_factory(session),
+    )
+
+    assert len(session.added) == 1
+    assert session.row is session.added[0]
+    assert session.row.id == 1
+    assert session.flush_count == 1
+    assert response.mode == session.row.mode == "drain"
+    assert response.replay_window_start == session.row.replay_window_start == window_start
+    assert response.replay_window_end == session.row.replay_window_end == window_end
+    assert response.updated_by == session.row.updated_by == "bootstrap-operator"
+    assert before <= response.updated_at == session.row.updated_at <= datetime.now(UTC)
