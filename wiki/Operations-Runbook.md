@@ -16,6 +16,21 @@ themselves certify a particular environment, production capacity, or downstream 
 
 ## Financial Source Observation Refusals
 
+Ordinary positions displays nonzero holdings, but reconciliation must inspect the complete dated
+history/snapshot/state cohort. Fully spent cash and closed noncash positions can carry the newest
+collective epoch. Diagnose the exact source cohort before inspecting its portfolio-day control;
+do not select an older epoch from displayed equity or the highest stored completed control.
+Missing history/snapshot, epoch disagreement, replaying state or unvalued zero evidence remains
+unqualified. Malformed persisted source/reporting, instrument or portfolio currency codes leave
+zero evidence unscoped and reconciliation unknown; they must not fail the holdings request.
+Shared completion timestamps cannot stale unchanged economic facts.
+An entirely closed, valued zero cohort can qualify an empty positions array only with its exact
+completed controls. Missing source rows or a master-only empty display cannot establish closure.
+Projected reads without an explicit date retain future zero evidence; explicit dates remain caps.
+For an observed fully closed projected cohort, the response date is its latest business date.
+Portfolio-currency reference corrections participate in freshness and material identity; a newly
+matching currency needs controls completed after the correction, not reused older proof.
+
 For cash-balance qualification, distinguish a persisted explicit-zero cash snapshot from a
 master-only account whose displayed balance defaults to zero. Inspect the selected history,
 snapshot and position-state epochs, same-date `VALUED_CURRENT` amounts and persisted currency/FX

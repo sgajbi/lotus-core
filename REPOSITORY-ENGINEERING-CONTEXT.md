@@ -551,10 +551,18 @@ production consistency boundary lives in dependency wiring, not a mutable reposi
 - Source-effective valuation readiness is tied to current source facts, valuation epoch, and
   reconciliation state. Benign bookkeeping cannot invalidate unchanged facts; reprocessing,
   changed facts, or epoch mismatch cannot reuse stale evidence.
-- Historical position reads share one dated snapshot/history-and-instrument timestamp projection
+- Historical position reads share one dated snapshot/history, instrument and portfolio-reference timestamp projection
   for reconciliation scopes and public evidence identity; shared PositionState completion timestamps
   are excluded, while epoch/status qualification remains material. Exact control failures have
-  reconciliation-scoped degradation reasons. See the [Holdings As Of methodology](docs/methodologies/source-data-products/holdings-as-of.md);
+  reconciliation-scoped degradation reasons. Ordinary holdings derives authority from a separate
+  history/snapshot/state cohort bounded by the requested effective date, including zero/closed securities and dated orphan
+  state as invalid evidence, while its public positions remain nonzero. Never derive the collective
+  target from display rows or the highest stored completed control. Missing/mismatched newer facts
+  and unvalued zero snapshots fail closed. Projected reads without an explicit date keep that cohort
+  unbounded; observed fully closed projected responses use the latest cohort business date.
+  Portfolio-currency reference corrections date both scope freshness and material identity.
+  The registered holdings completion PostgreSQL proof
+  belongs to both critical DB and query-authority lanes. See the [Holdings As Of methodology](docs/methodologies/source-data-products/holdings-as-of.md);
   cash balances reuse the same projection and collective reconciliation policy. Their opt-in
   snapshot read includes explicit-zero CASH at the matching history/state epoch, while ordinary
   holdings stay nonzero. Master-only cash displays do not establish observed zero; missing

@@ -2,8 +2,11 @@ from datetime import date
 from typing import Any
 
 from ..application.holdings_reconciliation import (
-    holdings_reconciliation_scopes,
+    holdings_reconciliation_evidence_hash,
+    holdings_reconciliation_evidence_scopes,
     holdings_reconciliation_status,
+    is_qualified_closed_cohort,
+    latest_reconciliation_evidence_timestamp,
 )
 from ..dtos.position_dto import PortfolioPositionsResponse
 from .position_holdings import (
@@ -71,10 +74,21 @@ async def portfolio_holdings_response(
         positions=positions,
     )
 
+    reconciliation_evidence = await repository.get_holdings_reconciliation_evidence(
+        portfolio_id=portfolio_id,
+        as_of_date=effective_as_of_date,
+    )
+    reconciliation_scopes = holdings_reconciliation_evidence_scopes(reconciliation_evidence)
+    closed_cohort = is_qualified_closed_cohort(reconciliation_evidence, reconciliation_scopes)
     response_as_of_date = holdings_response_as_of_date(
         effective_as_of_date=effective_as_of_date,
         positions=positions,
     )
+    if effective_as_of_date is None and not positions and closed_cohort:
+        response_as_of_date = max(
+            (scope.business_date for scope in reconciliation_scopes.items),
+            default=response_as_of_date,
+        )
     latest_market_price_dates = await holdings_support_evidence(
         repository=repository,
         portfolio_id=portfolio_id,
@@ -91,7 +105,22 @@ async def portfolio_holdings_response(
         missing_currency_lineage_security_ids=missing_currency_lineage_security_ids,
     )
     latest_evidence_timestamp = latest_holdings_evidence_timestamp(db_results)
-    reconciliation_scopes = holdings_reconciliation_scopes(db_results)
+    if not positions and closed_cohort:
+        data_quality_status = "COMPLETE"
+    reconciliation_scope_hash = holdings_reconciliation_evidence_hash(
+        reconciliation_evidence, reconciliation_scopes
+    )
+    latest_evidence_timestamp = max(
+        (
+            timestamp
+            for timestamp in (
+                latest_evidence_timestamp,
+                latest_reconciliation_evidence_timestamp(reconciliation_evidence),
+            )
+            if timestamp is not None
+        ),
+        default=None,
+    )
     reconciliation_controls = await repository.get_holdings_reconciliation_controls(
         portfolio_id=portfolio_id,
         scopes=reconciliation_scopes.items,
@@ -106,7 +135,7 @@ async def portfolio_holdings_response(
             scopes=reconciliation_scopes,
             controls=reconciliation_controls,
         ),
-        reconciliation_scope_hash=reconciliation_scopes.content_hash(),
+        reconciliation_scope_hash=reconciliation_scope_hash,
         degradation=holdings_degradation_summary(
             positions=positions,
             history_supplements=history_supplements,
@@ -118,5 +147,6 @@ async def portfolio_holdings_response(
             latest_evidence_timestamp=latest_evidence_timestamp,
             reconciliation_scopes=reconciliation_scopes,
             reconciliation_controls=reconciliation_controls,
+            known_closed_cohort=closed_cohort,
         ),
     )

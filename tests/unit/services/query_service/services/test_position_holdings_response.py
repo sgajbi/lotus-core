@@ -12,6 +12,7 @@ from portfolio_common.database_models import (
 
 from src.services.query_service.app.application.holdings_reconciliation import (
     FinancialReconciliationControl,
+    HoldingsReconciliationEvidence,
 )
 from src.services.query_service.app.services.position_holdings_response import (
     portfolio_holdings_response,
@@ -55,6 +56,9 @@ async def test_portfolio_holdings_response_assembles_snapshot_holdings(control_m
         (snapshot, instrument, state)
     ]
     repository.get_latest_position_history_by_portfolio_as_of_date.return_value = []
+    repository.get_holdings_reconciliation_evidence.return_value = [
+        HoldingsReconciliationEvidence(snapshot, snapshot, instrument, state)
+    ]
     repository.get_latest_snapshot_valuation_map_as_of_date.return_value = {}
     repository.get_held_since_dates.return_value = {("SEC_A", 7): date(2024, 12, 31)}
     repository.get_latest_market_price_dates.return_value = {"SEC_A": date(2025, 1, 1)}
@@ -191,6 +195,9 @@ async def test_portfolio_holdings_response_marks_prior_date_fx_evidence_stale() 
         (snapshot, instrument, state)
     ]
     repository.get_latest_position_history_by_portfolio_as_of_date.return_value = []
+    repository.get_holdings_reconciliation_evidence.return_value = [
+        HoldingsReconciliationEvidence(snapshot, snapshot, instrument, state)
+    ]
     repository.get_held_since_dates.return_value = {("FX_A", 7): date(2024, 12, 31)}
     repository.get_latest_market_price_dates.return_value = {"FX_A": date(2025, 1, 2)}
     repository.get_holdings_reconciliation_controls.return_value = [
@@ -247,6 +254,9 @@ async def test_portfolio_holdings_response_fails_closed_for_legacy_currency_line
         (snapshot, instrument, state)
     ]
     repository.get_latest_position_history_by_portfolio_as_of_date.return_value = []
+    repository.get_holdings_reconciliation_evidence.return_value = [
+        HoldingsReconciliationEvidence(snapshot, snapshot, instrument, state)
+    ]
     repository.get_held_since_dates.return_value = {("LEGACY_A", 7): date(2024, 12, 31)}
     repository.get_latest_market_price_dates.return_value = {"LEGACY_A": date(2025, 1, 2)}
     repository.get_holdings_reconciliation_controls.return_value = [
@@ -301,6 +311,9 @@ async def test_portfolio_holdings_response_exposes_fallback_degradation_metadata
     repository.get_latest_positions_by_portfolio_as_of_date.return_value = []
     repository.get_latest_position_history_by_portfolio_as_of_date.return_value = [
         (history, instrument, state)
+    ]
+    repository.get_holdings_reconciliation_evidence.return_value = [
+        HoldingsReconciliationEvidence(history, None, instrument, state)
     ]
     repository.get_latest_snapshot_valuation_map_as_of_date.return_value = {
         "HIST_A": {
@@ -362,6 +375,9 @@ async def test_portfolio_holdings_response_preserves_unknown_for_fallback_missin
     repository.get_latest_positions_by_portfolio_as_of_date.return_value = []
     repository.get_latest_position_history_by_portfolio_as_of_date.return_value = [
         (history, instrument, state)
+    ]
+    repository.get_holdings_reconciliation_evidence.return_value = [
+        HoldingsReconciliationEvidence(history, None, instrument, state)
     ]
     repository.get_latest_snapshot_valuation_map_as_of_date.return_value = {
         "HIST_LEGACY": {

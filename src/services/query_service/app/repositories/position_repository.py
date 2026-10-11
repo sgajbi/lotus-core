@@ -22,8 +22,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..application.holdings_reconciliation import (
     FinancialReconciliationControl,
+    HoldingsReconciliationEvidence,
     HoldingsReconciliationScope,
 )
+from .holdings_reconciliation_evidence import read_holdings_reconciliation_evidence
 from .identifier_normalization import normalize_security_id
 from .portfolio_existence import portfolio_exists_for_tenant
 
@@ -64,6 +66,14 @@ class PositionRepository:
             )
         )
         return (await self.db.execute(stmt)).scalar_one_or_none()
+
+    async def get_holdings_reconciliation_evidence(
+        self, *, portfolio_id: str, as_of_date: date | None
+    ) -> list[HoldingsReconciliationEvidence]:
+        """Read source authority independently of public open-position eligibility."""
+        return await read_holdings_reconciliation_evidence(
+            self.db, portfolio_id=portfolio_id, as_of_date=as_of_date
+        )
 
     async def get_holdings_reconciliation_controls(
         self,

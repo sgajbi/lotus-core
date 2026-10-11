@@ -14,6 +14,7 @@ from portfolio_common.database_models import (
 
 from src.services.query_service.app.application.holdings_reconciliation import (
     FinancialReconciliationControl,
+    HoldingsReconciliationEvidence,
 )
 from src.services.query_service.app.repositories.position_repository import PositionRepository
 from src.services.query_service.app.services.position_holdings import (
@@ -31,6 +32,19 @@ def mock_position_repo() -> AsyncMock:
     repo = AsyncMock(spec=PositionRepository)
     repo.portfolio_exists.return_value = True
     repo.get_holdings_reconciliation_controls.return_value = []
+
+    async def scope_evidence(*, portfolio_id, as_of_date):
+        rows = repo.get_latest_positions_by_portfolio_as_of_date.return_value
+        history_rows = repo.get_latest_position_history_by_portfolio_as_of_date.return_value
+        return [
+            HoldingsReconciliationEvidence(row, row, instrument, state)
+            for row, instrument, state in rows
+        ] + [
+            HoldingsReconciliationEvidence(row, None, instrument, state)
+            for row, instrument, state in history_rows
+        ]
+
+    repo.get_holdings_reconciliation_evidence.side_effect = scope_evidence
 
     mock_history_obj = PositionHistory(
         transaction_id="T1",
