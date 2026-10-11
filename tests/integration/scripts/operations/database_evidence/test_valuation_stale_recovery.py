@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from portfolio_common.database_models import PortfolioValuationJob
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy import insert, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -13,14 +14,19 @@ from scripts.operations.database_evidence.runtime_fragments import publish_reque
 from scripts.operations.database_evidence.valuation_stale_recovery import (
     measure_valuation_stale_recovery,
 )
+from tests.test_support.valuation_job_roots import seed_valuation_portfolios
 
-pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db]
+pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db, pytest.mark.db_direct]
 
 CATALOG_PATH = Path("contracts/operations/database-hot-path-scenarios.v1.json")
 REFERENCE_NOW = datetime(2020, 1, 1, 12, tzinfo=UTC)
+TENANT = TenantId("plan-evidence-valuation-stale")
 
 
 async def _seed_stale_valuation_jobs(session: AsyncSession, *, count: int) -> None:
+    await seed_valuation_portfolios(
+        session, [f"PLAN-STALE-PORT-{index:03d}" for index in range(100)], tenant_id=TENANT
+    )
     batch_size = 1_000
     for start in range(0, count, batch_size):
         stop = min(start + batch_size, count)
@@ -28,6 +34,7 @@ async def _seed_stale_valuation_jobs(session: AsyncSession, *, count: int) -> No
             insert(PortfolioValuationJob),
             [
                 {
+                    "tenant_id": TENANT.value,
                     "portfolio_id": f"PLAN-STALE-PORT-{sequence % 100:03d}",
                     "security_id": f"PLAN-STALE-SEC-{sequence:05d}",
                     "valuation_date": date(2026, 1, 1) + timedelta(days=sequence % 200),
@@ -53,6 +60,7 @@ async def _valuation_authority_snapshot(
 ) -> list[tuple[object, ...]]:
     rows = await session.execute(
         select(
+            PortfolioValuationJob.tenant_id,
             PortfolioValuationJob.id,
             PortfolioValuationJob.status,
             PortfolioValuationJob.requeue_requested,
@@ -63,7 +71,7 @@ async def _valuation_authority_snapshot(
             PortfolioValuationJob.valuation_claim_token,
             PortfolioValuationJob.valuation_lease_expires_at,
             PortfolioValuationJob.updated_at,
-        ).order_by(PortfolioValuationJob.id)
+        ).order_by(PortfolioValuationJob.tenant_id, PortfolioValuationJob.id)
     )
     return [tuple(row) for row in rows]
 
@@ -78,7 +86,7 @@ async def test_valuation_stale_recovery_publishes_rollback_safe_evidence(
     assert scenarios["valuation_stale_reset"].seed_cardinality == seed_cardinality
     await _seed_stale_valuation_jobs(async_db_session, count=seed_cardinality)
     authority_before = await _valuation_authority_snapshot(async_db_session)
-    reset_job_ids = tuple(int(row[0]) for row in authority_before)[
+    reset_job_scopes = tuple((str(row[0]), int(row[1])) for row in authority_before)[
         : scenarios["valuation_stale_reset"].max_root_actual_rows
     ]
     await async_db_session.rollback()
@@ -87,7 +95,7 @@ async def test_valuation_stale_recovery_publishes_rollback_safe_evidence(
         async_db_session,
         scan_scenario=scenarios["valuation_stale_scan"],
         reset_scenario=scenarios["valuation_stale_reset"],
-        reset_job_ids=reset_job_ids,
+        reset_job_scopes=reset_job_scopes,
     )
     publish_requested_fragments((reset_result, scan_result))
 

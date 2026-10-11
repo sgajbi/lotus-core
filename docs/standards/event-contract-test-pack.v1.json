@@ -4,7 +4,8 @@
   "issue": "sgajbi/lotus-core#604",
   "gate_command": "make event-contract-test-pack-guard",
   "accepted_event_schema_versions": [
-    "1.0.0"
+    "1.0.0",
+    "1.1.0"
   ],
   "required_contract_dimensions": [
     "topic name and event family",
@@ -19,6 +20,18 @@
     "additive_change": "Allowed only when consumers tolerate the field through an explicit versioned compatibility contract; governed event models otherwise fail fast on unknown fields.",
     "breaking_change": "Requires a new schema version, updated event-family/direct-topic catalog entry, producer and consumer tests, DLQ/replay evidence, and downstream migration notes.",
     "unknown_field_policy": "forbid"
+  },
+  "transaction_supplier_lineage_compatibility": {
+    "issue": "sgajbi/lotus-core#1004",
+    "schema_model": "TransactionEvent",
+    "accepted_versions": ["1.0.0", "1.1.0"],
+    "extension_fields": ["source_record_id", "source_batch_id", "observed_at"],
+    "producer_policy": "Declare 1.1.0 when supplying extension fields; omit absent extension fields to preserve legacy request fingerprints and wire shapes.",
+    "rollout_policy": "Deploy compatible consumers before lineage-producing ingestion and processing services. Other event models retain their existing version allowlist.",
+    "evidence": [
+      "tests/unit/libs/portfolio-common/test_transaction_supplier_lineage.py",
+      "tests/integration/services/ingestion_service/test_transaction_supplier_lineage_postgresql.py"
+    ]
   },
   "evidence_profiles": {
     "fx_source_cut": {

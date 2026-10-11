@@ -7,7 +7,11 @@ from portfolio_common.domain.eventing import portfolio_security_partition_key
 from portfolio_common.events import CashflowCalculatedEvent
 from portfolio_common.ingestion_lineage import ingestion_job_scope
 from portfolio_common.logging_utils import traceparent_var
-from portfolio_common.outbox_repository import EVENT_SCHEMA_VERSION, OutboxRepository
+from portfolio_common.outbox_repository import (
+    EVENT_SCHEMA_VERSION,
+    OutboxRepository,
+    build_outbox_payload,
+)
 
 TRACEPARENT = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
 
@@ -248,3 +252,75 @@ async def test_enriched_payload_remains_compatible_with_event_models(
     assert parsed.transaction_id == "T1"
     assert event.payload["event_type"] == "CashflowCalculated"
     assert event.payload["schema_version"] == EVENT_SCHEMA_VERSION
+
+
+@pytest.mark.parametrize("payload", [None, [], "not-a-domain-object"])
+async def test_payload_builder_refuses_non_object_payload_before_enrichment(payload) -> None:
+    with pytest.raises(TypeError, match="payload must be a dict"):
+        build_outbox_payload(
+            payload=payload,
+            event_type="TransactionIngested",
+            correlation_id="corr-source",
+        )
+
+
+@pytest.mark.parametrize(
+    "event_type",
+    ["TransactionIngested", "RawTransactionPersisted", "ProcessedTransactionPersisted"],
+)
+async def test_transaction_outbox_refuses_unsupported_schema_without_staging(
+    repository: OutboxRepository, mock_db_session: AsyncMock, event_type: str
+) -> None:
+    payload = {"transaction_id": "TXN-SOURCE-1", "schema_version": "2.0.0"}
+    original = dict(payload)
+
+    with pytest.raises(ValueError, match="Unsupported transaction schema_version"):
+        await repository.create_outbox_event(
+            aggregate_type="Transaction",
+            aggregate_id="TXN-SOURCE-1",
+            event_type=event_type,
+            payload=payload,
+            topic="transactions.source",
+            correlation_id="corr-source",
+        )
+
+    assert payload == original
+    mock_db_session.add.assert_not_called()
+    mock_db_session.flush.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "event_type",
+    ["TransactionIngested", "RawTransactionPersisted", "ProcessedTransactionPersisted"],
+)
+@pytest.mark.parametrize("schema_version", ["1.0.0", "1.1.0"])
+async def test_transaction_outbox_accepts_supported_schema_and_preserves_source_payload(
+    repository: OutboxRepository, event_type: str, schema_version: str
+) -> None:
+    payload = {
+        "transaction_id": "TXN-SOURCE-1",
+        "schema_version": schema_version,
+        "event_type": event_type,
+    }
+    if schema_version == "1.1.0":
+        payload.update(source_record_id="REC-1", source_batch_id="BATCH-1")
+    original = dict(payload)
+
+    event = await repository.create_outbox_event(
+        aggregate_type="Transaction",
+        aggregate_id="TXN-SOURCE-1",
+        event_type=event_type,
+        payload=payload,
+        topic="transactions.source",
+        correlation_id="corr-source",
+        traceparent=TRACEPARENT,
+    )
+
+    assert event.payload == {
+        **original,
+        "correlation_id": "corr-source",
+        "traceparent": TRACEPARENT,
+    }
+    assert event.status == "PENDING"
+    assert event.aggregate_id == event.partition_key == "TXN-SOURCE-1"
+    assert payload == original

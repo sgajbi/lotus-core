@@ -186,6 +186,8 @@ async def test_get_transactions_success_with_sorting_and_filters(async_test_clie
     response = await client.get(
         "/portfolios/P1/transactions",
         params={
+            "source_system": "supplier-alpha",
+            "source_batch_id": "batch-2026-10-09",
             "instrument_id": "INST_1",
             "security_id": "SEC_1",
             "start_date": "2025-08-01",
@@ -218,6 +220,8 @@ async def test_get_transactions_success_with_sorting_and_filters(async_test_clie
     assert payload["transactions"][0]["net_interest_amount"] == "110.00"
     mock_service.get_transactions.assert_awaited_once_with(
         portfolio_id="P1",
+        source_system="supplier-alpha",
+        source_batch_id="batch-2026-10-09",
         instrument_id="INST_1",
         security_id="SEC_1",
         transaction_type=None,
@@ -369,6 +373,8 @@ async def test_get_transactions_forwards_as_of_and_include_projected(async_test_
     assert response.status_code == 200
     mock_service.get_transactions.assert_awaited_once_with(
         portfolio_id="P1",
+        source_system=None,
+        source_batch_id=None,
         instrument_id=None,
         security_id=None,
         transaction_type=None,
@@ -403,6 +409,8 @@ async def test_get_transactions_for_security_drill_down_defaults_to_latest_first
     assert response.status_code == 200
     mock_service.get_transactions.assert_awaited_once_with(
         portfolio_id="P1",
+        source_system=None,
+        source_batch_id=None,
         instrument_id=None,
         security_id="SEC-HOLDING-1",
         transaction_type=None,
@@ -446,6 +454,8 @@ async def test_get_transactions_forwards_fx_filters(async_test_client):
     assert response.status_code == 200
     mock_service.get_transactions.assert_awaited_once_with(
         portfolio_id="P1",
+        source_system=None,
+        source_batch_id=None,
         instrument_id=None,
         security_id=None,
         start_date=None,
@@ -478,6 +488,8 @@ async def test_get_transactions_forwards_reporting_currency(async_test_client):
     assert response.status_code == 200
     mock_service.get_transactions.assert_awaited_once_with(
         portfolio_id="P1",
+        source_system=None,
+        source_batch_id=None,
         instrument_id=None,
         security_id=None,
         transaction_type=None,

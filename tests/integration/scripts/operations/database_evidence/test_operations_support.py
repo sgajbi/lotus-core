@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from portfolio_common.database_models import PortfolioValuationJob
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy import insert, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,16 +14,19 @@ from scripts.operations.database_evidence.operations_support import (
     measure_operations_support_page,
 )
 from scripts.operations.database_evidence.runtime_fragments import publish_requested_fragments
+from tests.test_support.valuation_job_roots import seed_valuation_portfolios
 
-pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db]
+pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db, pytest.mark.db_direct]
 
 CATALOG_PATH = Path("contracts/operations/database-hot-path-scenarios.v1.json")
 TARGET_PORTFOLIO = "PLAN-EVIDENCE-OPERATIONS"
 NOISE_PORTFOLIO = "PLAN-EVIDENCE-OPERATIONS-NOISE"
+TENANT = TenantId("plan-evidence-operations")
 REFERENCE_NOW = datetime(2026, 8, 22, 12, tzinfo=UTC)
 
 
 async def _seed_valuation_jobs(session: AsyncSession, *, count: int) -> None:
+    await seed_valuation_portfolios(session, [TARGET_PORTFOLIO, NOISE_PORTFOLIO], tenant_id=TENANT)
     batch_size = 1_000
     for start in range(0, count, batch_size):
         stop = min(start + batch_size, count)
@@ -30,6 +34,7 @@ async def _seed_valuation_jobs(session: AsyncSession, *, count: int) -> None:
             insert(PortfolioValuationJob),
             [
                 {
+                    "tenant_id": TENANT.value,
                     "portfolio_id": (TARGET_PORTFOLIO if sequence < 1_000 else NOISE_PORTFOLIO),
                     "security_id": f"PLAN-OPS-SEC-{sequence:05d}",
                     "valuation_date": date(2026, 1, 1) + timedelta(days=sequence % 200),

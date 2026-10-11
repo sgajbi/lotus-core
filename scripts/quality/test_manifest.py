@@ -103,6 +103,9 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/libs/portfolio-common/test_latest_position_query_plans.py",
         "tests/integration/libs/portfolio-common/test_outbox_dispatcher.py",
         "tests/integration/test_valuation_job_hot_path_migration.py",
+        "tests/integration/scripts/operations/database_evidence/test_operations_support.py",
+        "tests/integration/scripts/operations/database_evidence/test_valuation_claim.py",
+        "tests/integration/scripts/operations/database_evidence/test_valuation_stale_recovery.py",
         "tests/integration/test_portfolio_valuation_book_scope_migration.py",
         "tests/integration/test_transaction_event_fence_tenant_migration.py",
         "tests/integration/test_transaction_payload_fingerprint_migration.py",
@@ -175,6 +178,8 @@ SUITES: dict[str, list[str]] = {
         "test_benchmark_market_currency_postgresql.py",
         "tests/integration/services/query_control_plane_service/"
         "test_classification_history_postgresql.py",
+        "tests/integration/services/ingestion_service/test_transaction_supplier_lineage_migration.py",
+        "tests/integration/services/ingestion_service/test_transaction_supplier_lineage_postgresql.py",
         "tests/integration/services/query_control_plane_service/"
         "test_source_receipt_http_restart_postgresql.py",
         "tests/integration/test_immutable_source_test_cleanup.py",
@@ -194,6 +199,9 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/services/persistence_service/"
         "test_transaction_source_correction_postgresql.py::"
         "test_actual_pg_source_confirmation_qcp_ledger_cut",
+        "tests/integration/services/persistence_service/"
+        "test_transaction_source_correction_postgresql.py::"
+        "test_source_confirmation_retains_original_supplier_batch_lineage",
         "tests/integration/services/query_control_plane_service/"
         "test_historical_fx_evidence_postgresql.py",
         "tests/integration/services/query_control_plane_service/"

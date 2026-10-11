@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import timedelta
 
 import pytest
@@ -229,6 +230,17 @@ def test_registry_fails_closed_for_unknown_endpoint_or_entity_mismatch() -> None
             "/ingest/transactions",
             entity_type="portfolio",
         )
+
+
+@pytest.mark.parametrize(
+    "endpoint", ["/ingest/transactions", "/ingest/portfolio-bundle", "/reprocess/transactions"]
+)
+def test_transaction_policy_refuses_missing_source_lineage_posture(endpoint: str) -> None:
+    policy = INGESTION_EVIDENCE_POLICY_REGISTRY.require(endpoint)
+    assert replace(policy) == policy
+    assert policy.source_lineage.source_batch_id is LineageFieldPosture.OPTIONAL
+    with pytest.raises(ValueError, match="explicit source-lineage posture"):
+        replace(policy, source_lineage=None)
 
 
 def test_policy_rejects_impossible_replay_posture() -> None:

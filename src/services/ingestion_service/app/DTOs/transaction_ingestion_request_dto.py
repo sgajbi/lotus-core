@@ -10,7 +10,8 @@ class TransactionIngestionRequest(BaseModel):
     transactions: List[Transaction] = Field(
         ...,
         description=(
-            "Canonical transaction records to ingest or upsert asynchronously. "
+            "Canonical transaction records to ingest asynchronously; changed economics "
+            "under an existing identity are fenced, never silently upserted. "
             "An empty list is accepted as a no-op batch for client workflow consistency."
         ),
         examples=[
@@ -30,6 +31,10 @@ class TransactionIngestionRequest(BaseModel):
                     "currency": "USD",
                     "trade_fee": "5.0",
                     "settlement_date": "2023-01-17T10:00:00Z",
+                    "source_system": "OMS_PRIMARY",
+                    "source_record_id": "OMS-TRADE-20230115-1842",
+                    "source_batch_id": "OMS-20230115-PM",
+                    "observed_at": "2023-01-15T10:02:00Z",
                 }
             ],
         ],

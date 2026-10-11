@@ -4256,6 +4256,11 @@
       ],
       "error_models": [
         {
+          "status_code": "400",
+          "schema": "none",
+          "description": "Supplier lineage is missing its source system, has an invalid identifier or an unknown lineage field."
+        },
+        {
           "status_code": "422",
           "schema": "HTTPValidationError",
           "description": "Validation Error"
@@ -4310,6 +4315,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "400",
+          "schema": "none",
+          "description": "Supplier lineage is missing its source system, has an invalid identifier or an unknown lineage field."
+        },
         {
           "status_code": "409",
           "schema": "none",

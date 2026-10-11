@@ -132,6 +132,9 @@ TRANSACTION_PAYLOAD_NON_MATERIAL_FIELDS = frozenset(
         # Tenant is part of the semantic key, not the economic payload.
         "tenant_id",
         # Attempt/serving chronology, not source economics.
+        "source_record_id",
+        "source_batch_id",
+        "observed_at",
         "created_at",
         "epoch",
         # Processor-owned outputs may be written after raw source acceptance.

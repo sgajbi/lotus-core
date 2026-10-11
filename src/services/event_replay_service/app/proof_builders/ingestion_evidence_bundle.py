@@ -16,6 +16,10 @@ from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
     stable_content_hash,
 )
+from portfolio_common.transaction_batch_lineage import (
+    TransactionBatchLineage,
+    transaction_batch_lineage_from_payload,
+)
 
 from src.services.ingestion_service.app.bookkeeping_recovery import (
     POST_BOOKKEEPING_FAILURE_PHASES,
@@ -61,6 +65,7 @@ class IngestionEvidenceBundleBuilder:
         consumer_dlq_events: list[ConsumerDlqEventResponse],
         request_payload: dict[str, Any] | None,
         evidence_complete: bool = True,
+        transaction_batch_lineage: dict[str, Any] | None = None,
     ) -> IngestionEvidenceBundleResponse:
         counts = _outcome_counts(
             job=job,
@@ -71,6 +76,15 @@ class IngestionEvidenceBundleBuilder:
             request_payload,
             payload_kind=job.entity_type,
             tenant_id=job.tenant_id,
+        )
+        retained_batch = (
+            (
+                TransactionBatchLineage.model_validate(transaction_batch_lineage)
+                if transaction_batch_lineage is not None
+                else transaction_batch_lineage_from_payload(request_payload or {})
+            )
+            if job.entity_type in {"transaction", "portfolio_bundle", "reprocessing_request"}
+            else None
         )
         validation_findings = _validation_finding_references(
             failures=failures,
@@ -83,6 +97,15 @@ class IngestionEvidenceBundleBuilder:
             consumer_dlq_events=consumer_dlq_events,
         )
         source_refs = _source_references(source_batch)
+        if retained_batch is not None:
+            source_refs = (
+                [
+                    f"source-batch:{retained_batch.source_system}:{retained_batch.source_batch_id}",
+                    f"source-system:{retained_batch.source_system}",
+                ]
+                if retained_batch.reason == "PROVEN"
+                else []
+            )
         bundle_id = build_ingestion_evidence_bundle_id(
             IngestionEvidenceBundleIdentityScope(
                 job_id=job.job_id,
@@ -176,7 +199,11 @@ class IngestionEvidenceBundleBuilder:
             ),
             latest_evidence_timestamp=latest_evidence_timestamp,
             source_batch_fingerprint=(
-                source_batch.source_batch_fingerprint if source_batch is not None else None
+                retained_batch.fingerprint(tenant_id=job.tenant_id)
+                if retained_batch is not None
+                else source_batch.source_batch_fingerprint
+                if source_batch is not None
+                else None
             ),
             snapshot_id=bundle_id,
             policy_version="ingestion-evidence.v1",
@@ -187,6 +214,7 @@ class IngestionEvidenceBundleBuilder:
                 "source_owner": "lotus-core",
                 "ingestion_job_id": job.job_id,
                 "ingestion_correlation_id": job.correlation_id,
+                **(retained_batch.lineage() if retained_batch is not None else {}),
             },
             source_evidence_current=False,
             freshness_status="UNAVAILABLE",
@@ -197,8 +225,20 @@ class IngestionEvidenceBundleBuilder:
             ingestion_outcome=outcome,
             replay_posture=replay_posture,
             repair_posture=repair_posture,
-            source_system=source_batch.source_system if source_batch is not None else None,
-            source_batch_id=source_batch.source_batch_id if source_batch is not None else None,
+            source_system=(
+                retained_batch.source_system
+                if retained_batch is not None
+                else source_batch.source_system
+                if source_batch is not None
+                else None
+            ),
+            source_batch_id=(
+                retained_batch.source_batch_id
+                if retained_batch is not None
+                else source_batch.source_batch_id
+                if source_batch is not None
+                else None
+            ),
             evidence_references=evidence_references,
             evidence_complete=evidence_complete,
             evidence_limit=_EVIDENCE_LIMIT,

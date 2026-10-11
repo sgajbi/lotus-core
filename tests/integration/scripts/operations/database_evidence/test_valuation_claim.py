@@ -5,19 +5,25 @@ from pathlib import Path
 
 import pytest
 from portfolio_common.database_models import PortfolioValuationJob
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy import insert, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from scripts.operations.database_evidence.contract import load_hot_path_scenario_catalog
 from scripts.operations.database_evidence.runtime_fragments import publish_requested_fragments
 from scripts.operations.database_evidence.valuation_claim import measure_valuation_job_claim
+from tests.test_support.valuation_job_roots import seed_valuation_portfolios
 
-pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db]
+pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db, pytest.mark.db_direct]
 
 CATALOG_PATH = Path("contracts/operations/database-hot-path-scenarios.v1.json")
+TENANT = TenantId("plan-evidence-valuation-claim")
 
 
 async def _seed_valuation_claims(session: AsyncSession, *, count: int) -> None:
+    await seed_valuation_portfolios(
+        session, [f"PLAN-CLAIM-PORT-{index:03d}" for index in range(100)], tenant_id=TENANT
+    )
     batch_size = 1_000
     for start in range(0, count, batch_size):
         stop = min(start + batch_size, count)
@@ -25,6 +31,7 @@ async def _seed_valuation_claims(session: AsyncSession, *, count: int) -> None:
             insert(PortfolioValuationJob),
             [
                 {
+                    "tenant_id": TENANT.value,
                     "portfolio_id": f"PLAN-CLAIM-PORT-{sequence % 100:03d}",
                     "security_id": f"PLAN-CLAIM-SEC-{sequence:05d}",
                     "valuation_date": date(2026, 1, 1) + timedelta(days=sequence % 200),

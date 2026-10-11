@@ -82,6 +82,26 @@ membership and BF/method approval remain separate owner responsibilities.
 
 ## Repository Role
 
+### Transaction supplier lineage practice
+
+Optional `source_record_id`, `source_batch_id` and aware `observed_at` retain upstream provenance
+through transaction ingress, events, processing commands, persistence and reads. They are transport
+lineage, not financial fingerprint inputs. `source_transaction_reference` remains a distinct
+material corporate-action child reference; never alias it. First accepted lineage is immutable,
+including legacy nulls, and metadata-only replay returns the original booking unchanged.
+Restricted job bodies remain absent and replay-ineligible; only a bounded transaction batch
+projection is retained. Ledger proof covers the complete filtered snapshot, not the returned page.
+Source-batch fingerprints identify declared supplier scope and never certify contents, completeness
+or monetary authority. See `docs/operations/transaction-supplier-lineage.md` for scope/reason codes,
+migration, event compatibility, commands and proof boundaries.
+
+Supplier-lineage revision `c186b2c3d547` follows valuation-tenant revision `c185b2c3d546`;
+never restore the original unmerged supplier migration as a second head. Keep source columns in
+`transaction_source_schema.py`, preserve the valuation schema owner and bank the combined ORM
+reduction in the module-size ratchet. Existing main CI jobs, protection and native Make
+coverage floors remain unchanged; image acquisition adoption is a separate operator-owned
+Platform #945/Core workstream, not a prerequisite introduced by supplier lineage.
+
 ### Financial-effect epoch binding practice
 
 Combined transaction processing binds an unversioned financial-effect transaction to the
