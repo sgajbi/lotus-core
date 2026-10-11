@@ -73,7 +73,11 @@ def validate_kafka_event_payload(
     """Validate a decoded Kafka payload against a governed event model."""
     accepted_versions = accepted_schema_versions
     if expected_event_type is not None and accepted_versions is None:
-        accepted_versions = DEFAULT_ACCEPTED_EVENT_SCHEMA_VERSIONS
+        accepted_versions = (
+            ("1.0.0", "1.1.0")
+            if event_model is TransactionEvent
+            else DEFAULT_ACCEPTED_EVENT_SCHEMA_VERSIONS
+        )
     if expected_event_type is not None:
         _require_expected_event_type(payload.data, expected_event_type)
     if accepted_versions is not None:
@@ -89,7 +93,12 @@ def outbox_event_payload(event: BaseModel) -> dict[str, Any]:
 def transaction_event_v1_payload(event: TransactionEvent) -> dict[str, Any]:
     """Serialize the v1 transaction contract without the staged tenant extension."""
 
-    return event.model_dump(mode="json", exclude={"tenant_id"})
+    absent_lineage = {
+        field
+        for field in ("source_record_id", "source_batch_id", "observed_at")
+        if getattr(event, field) is None
+    }
+    return event.model_dump(mode="json", exclude={"tenant_id", *absent_lineage})
 
 
 def _require_expected_event_type(data: dict[str, Any], expected_event_type: str) -> None:

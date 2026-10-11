@@ -99,6 +99,8 @@ class TransactionService:
         reporting_currency: Optional[str] = None,
         *,
         tenant_context: TenantContext,
+        source_system: str | None = None,
+        source_batch_id: str | None = None,
     ) -> PaginatedTransactionResponse:
         """
         Retrieves a paginated and filtered list of transactions for a portfolio.
@@ -137,6 +139,8 @@ class TransactionService:
         ledger_filters = transaction_ledger_filters(
             portfolio_id=portfolio_id,
             transaction_id=None,
+            source_system=source_system,
+            source_batch_id=source_batch_id,
             instrument_id=instrument_id,
             security_id=security_id,
             transaction_type=transaction_type,

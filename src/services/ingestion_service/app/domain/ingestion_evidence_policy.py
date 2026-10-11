@@ -52,6 +52,16 @@ class IngestionEvidencePolicy:
     retention_authority: str = RETENTION_AUTHORITY
 
     def __post_init__(self) -> None:
+        if (
+            self.endpoint
+            in {
+                "/ingest/transactions",
+                "/ingest/portfolio-bundle",
+                "/reprocess/transactions",
+            }
+            and self.source_lineage is None
+        ):
+            raise ValueError("Transaction ingestion requires an explicit source-lineage posture.")
         if not self.endpoint.startswith("/"):
             raise ValueError("Ingestion evidence policy endpoint must be absolute.")
         if not self.entity_type.strip():
@@ -114,6 +124,15 @@ _OPTIONAL_SOURCE_LINEAGE = SourceLineagePolicy(
     observed_at=LineageFieldPosture.OPTIONAL,
     quality_status=LineageFieldPosture.OPTIONAL,
     source_batch_id=LineageFieldPosture.NOT_APPLICABLE,
+    source_version=LineageFieldPosture.NOT_APPLICABLE,
+)
+
+_TRANSACTION_SOURCE_LINEAGE = SourceLineagePolicy(
+    source_system=LineageFieldPosture.OPTIONAL,
+    source_record_id=LineageFieldPosture.OPTIONAL,
+    observed_at=LineageFieldPosture.OPTIONAL,
+    quality_status=LineageFieldPosture.NOT_APPLICABLE,
+    source_batch_id=LineageFieldPosture.OPTIONAL,
     source_version=LineageFieldPosture.NOT_APPLICABLE,
 )
 
@@ -330,7 +349,10 @@ INGESTION_EVIDENCE_POLICY_REGISTRY = IngestionEvidencePolicyRegistry(
         _replay_policy("/ingest/market-prices", "market_price", partial_replay_eligible=False),
         _replay_policy("/ingest/fx-rates", "fx_rate", partial_replay_eligible=False),
         _fingerprint_policy(
-            "/ingest/transactions", "transaction", classification=PayloadClassification.RESTRICTED
+            "/ingest/transactions",
+            "transaction",
+            classification=PayloadClassification.RESTRICTED,
+            source_lineage=_TRANSACTION_SOURCE_LINEAGE,
         ),
         _fingerprint_policy(
             "/ingest/transactions/{transaction_id}/source-evidence",
@@ -342,11 +364,13 @@ INGESTION_EVIDENCE_POLICY_REGISTRY = IngestionEvidencePolicyRegistry(
             "/ingest/portfolio-bundle",
             "portfolio_bundle",
             classification=PayloadClassification.RESTRICTED,
+            source_lineage=_TRANSACTION_SOURCE_LINEAGE,
         ),
         _fingerprint_policy(
             "/reprocess/transactions",
             "reprocessing_request",
             classification=PayloadClassification.RESTRICTED,
+            source_lineage=_TRANSACTION_SOURCE_LINEAGE,
         ),
         _fingerprint_policy(
             "/ingest/fixed-income-book-cost-authorities",

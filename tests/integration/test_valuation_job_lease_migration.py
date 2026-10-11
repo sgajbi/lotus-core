@@ -13,7 +13,9 @@ from alembic.operations import Operations
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 
-pytestmark = [pytest.mark.integration_db, pytest.mark.db_direct]
+from tests.test_support.valuation_job_migration_dependencies import valuation_job_schema_semantics
+
+pytestmark = [pytest.mark.integration_db, pytest.mark.db_direct, pytest.mark.lifecycle]
 
 MIGRATION = (
     Path(__file__).resolve().parents[2]
@@ -71,9 +73,16 @@ def _lease_migration_predecessor(
         str(MIGRATION.with_name("c185b2c3d546_valuation_job_tenant_authority.py"))
     )
     _bind_operations(tenant_migration, connection)
+    schema_before = valuation_job_schema_semantics(connection)
+    connection.rollback()
+    tenant_downgraded = False
 
     try:
         tenant_migration["downgrade"]()
+        # c160 has its own MigrationContext: finish c185's transaction before
+        # entering concurrent-index autocommit, so cleanup cannot roll it back.
+        connection.commit()
+        tenant_downgraded = True
         hot_path_migration["downgrade"]()
         assert OLD_INDEX in _valuation_job_indexes(connection)
         assert NEW_INDEX not in _valuation_job_indexes(connection)
@@ -91,8 +100,10 @@ def _lease_migration_predecessor(
         assert NEW_INDEX not in _valuation_job_indexes(connection)
     finally:
         _restore_current_hot_path_index(hot_path_migration, connection)
-        tenant_migration["upgrade"]()
+        if tenant_downgraded:
+            tenant_migration["upgrade"]()
         connection.commit()
+        assert valuation_job_schema_semantics(connection) == schema_before
 
     assert NEW_INDEX in _valuation_job_indexes(connection)
     assert OLD_INDEX not in _valuation_job_indexes(connection)

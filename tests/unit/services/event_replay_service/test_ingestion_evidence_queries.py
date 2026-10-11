@@ -147,12 +147,11 @@ def test_builds_accepted_bundle_with_source_owned_batch_and_validation_profile()
     assert bundle.validation.profile_name == "transaction-ingestion"
     assert bundle.validation.profile_version == "v2"
     assert bundle.source_batch_fingerprint is not None
-    assert bundle.source_refs[:4] == [
+    assert bundle.source_refs[:2] == [
         "source-batch:custody-feed:batch-001",
-        "source-record:custody-feed:TXN-001",
-        "source-record:custody-feed:TXN-002",
         "source-system:custody-feed",
     ]
+    assert not any(reference.startswith("source-record:") for reference in bundle.source_refs)
     assert bundle.product_version == "v1"
     assert bundle.content_hash.startswith("sha256:")
     assert bundle.snapshot_id == bundle.evidence_bundle_id
