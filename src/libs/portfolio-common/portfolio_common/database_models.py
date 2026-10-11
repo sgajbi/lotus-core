@@ -65,6 +65,7 @@ from .transaction_source_revision_schema import (
     TransactionSourceRevisionColumns,
     transaction_source_revision_table_args,
 )
+from .transaction_source_schema import TransactionSourceColumns
 from .valuation_job_schema import portfolio_valuation_job_table_args
 
 _REPLAY_CONTROL_PATTERN = r"U&'[\0001-\001F\007F-\009F]'"
@@ -1871,7 +1872,7 @@ class InstrumentLookthroughComponent(Base):
     )
 
 
-class Transaction(Base):
+class Transaction(TransactionSourceColumns, Base):
     __tablename__ = "transactions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -1904,7 +1905,6 @@ class Transaction(Base):
     calculation_policy_id = Column(String, nullable=True)
     calculation_policy_version = Column(String, nullable=True)
     calculation_lineage = Column(JSON(none_as_null=True), nullable=True)
-    source_system = Column(String, nullable=True)
     cash_entry_mode = Column(String, nullable=True)
     external_cash_transaction_id = Column(String, nullable=True, index=True)
     settlement_cash_account_id = Column(String, nullable=True, index=True)
@@ -1956,9 +1956,7 @@ class Transaction(Base):
     child_role = Column(String, nullable=True)
     child_sequence_hint = Column(Integer, nullable=True)
     dependency_reference_ids = Column(JSON, nullable=True)
-    source_instrument_id = Column(String, nullable=True, index=True)
     target_instrument_id = Column(String, nullable=True, index=True)
-    source_transaction_reference = Column(String, nullable=True, index=True)
     target_transaction_reference = Column(String, nullable=True, index=True)
     external_destination_reference = Column(String, nullable=True)
     linked_cash_transaction_id = Column(String, nullable=True, index=True)
@@ -1996,6 +1994,7 @@ class Transaction(Base):
     )
 
     __table_args__ = (
+        Index("ix_transactions_source_batch", "source_system", "source_batch_id"),
         CheckConstraint(
             "payload_fingerprint ~ '^sha256:[0-9a-f]{64}$'",
             name="ck_transactions_payload_fingerprint",

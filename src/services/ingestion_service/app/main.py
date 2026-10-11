@@ -3,6 +3,8 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from portfolio_common.health import create_health_router
 from portfolio_common.http_app_bootstrap import configure_standard_http_app, include_routers
@@ -133,6 +135,26 @@ async def ingestion_idempotency_conflict_handler(
                 "endpoint": exc.endpoint,
                 "idempotency_key": exc.idempotency_key,
             }
+        },
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def transaction_lineage_validation_handler(
+    request: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
+    """Keep existing validation behavior except the governed supplier-lineage refusals."""
+    lineage_errors = [
+        error for error in exc.errors() if error["type"].startswith("transaction_lineage_")
+    ]
+    if not lineage_errors:
+        return await request_validation_exception_handler(request, exc)
+    error = lineage_errors[0]
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={
+            "detail": {"code": error["type"].upper(), "message": error["msg"]},
         },
     )
 

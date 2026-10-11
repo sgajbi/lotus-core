@@ -189,6 +189,36 @@ def test_critical_db_coverage_includes_changed_outbox_delivery_hot_path() -> Non
     )
 
 
+VALUATION_HOT_PATH_PROOF_FILES = tuple(
+    "tests/integration/scripts/operations/database_evidence/" + filename
+    for filename in (
+        "test_operations_support.py",
+        "test_valuation_claim.py",
+        "test_valuation_stale_recovery.py",
+    )
+)
+
+
+def test_valuation_hot_path_proof_has_exact_critical_db_membership() -> None:
+    for path in VALUATION_HOT_PATH_PROOF_FILES:
+        assert get_suite("critical-db-coverage").count(path) == 1
+    assert SUITE_RUNTIME_MODE["critical-db-coverage"] == "db_direct"
+    assert SUITE_ENV_PROFILE["critical-db-coverage"] == "integration"
+
+
+@pytest.mark.parametrize("path", VALUATION_HOT_PATH_PROOF_FILES)
+@pytest.mark.parametrize("mutation", ["missing", "duplicate"])
+def test_valuation_hot_path_manifest_rejects_missing_or_duplicate_proof(
+    monkeypatch, path, mutation
+) -> None:
+    paths = [entry for entry in get_suite("critical-db-coverage") if entry != path]
+    if mutation == "duplicate":
+        paths.extend([path, path])
+    monkeypatch.setitem(SUITES, "critical-db-coverage", paths)
+    with pytest.raises(AssertionError):
+        test_valuation_hot_path_proof_has_exact_critical_db_membership()
+
+
 SOURCE_LOT_ADMISSION_CRITICAL_PROOF_FILE = (
     "tests/integration/services/portfolio_transaction_processing_service/"
     "test_cost_basis_lot_disposal_admission_postgresql.py"
@@ -493,6 +523,8 @@ def test_query_authority_db_contract_executes_tenant_and_service_regressions() -
         "test_benchmark_market_currency_postgresql.py",
         "tests/integration/services/query_control_plane_service/"
         "test_classification_history_postgresql.py",
+        "tests/integration/services/ingestion_service/test_transaction_supplier_lineage_migration.py",
+        "tests/integration/services/ingestion_service/test_transaction_supplier_lineage_postgresql.py",
         "tests/integration/services/query_control_plane_service/"
         "test_source_receipt_http_restart_postgresql.py",
         "tests/integration/test_immutable_source_test_cleanup.py",
@@ -512,6 +544,9 @@ def test_query_authority_db_contract_executes_tenant_and_service_regressions() -
         "tests/integration/services/persistence_service/"
         "test_transaction_source_correction_postgresql.py::"
         "test_actual_pg_source_confirmation_qcp_ledger_cut",
+        "tests/integration/services/persistence_service/"
+        "test_transaction_source_correction_postgresql.py::"
+        "test_source_confirmation_retains_original_supplier_batch_lineage",
         "tests/integration/services/query_control_plane_service/"
         "test_historical_fx_evidence_postgresql.py",
         "tests/integration/services/query_control_plane_service/"

@@ -10,6 +10,7 @@ from portfolio_common.reconstruction_identity import (
     build_reconstruction_scope_evidence,
 )
 from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
+from portfolio_common.transaction_batch_lineage import TransactionBatchLineage
 
 from ..application.transaction_query import (
     TransactionLedgerFilters,
@@ -170,6 +171,9 @@ def _transaction_ledger_proof_fields(
     )
     if ledger_filters.transaction_id is not None:
         source_ref = f"{source_ref}/transactions/{ledger_filters.transaction_id}"
+    batch = input_evidence.transaction_batch_lineage or TransactionBatchLineage(
+        reason="LEGACY_UNKNOWN"
+    )
     return {
         **source_data_product_runtime_metadata(
             as_of_date=response_as_of_date,
@@ -181,6 +185,11 @@ def _transaction_ledger_proof_fields(
             ),
             latest_evidence_timestamp=latest_evidence_timestamp,
             snapshot_id=reconstruction_evidence.scope_id,
+            source_batch_fingerprint=(
+                batch.fingerprint(tenant_id=ledger_filters.tenant_id.value)
+                if ledger_filters.tenant_id is not None
+                else None
+            ),
             source_evidence_current=input_evidence.source_cut_sha256 is not None,
             freshness_status="CURRENT" if input_evidence.source_cut_sha256 else "UNAVAILABLE",
             policy_version=TRANSACTION_LEDGER_POLICY_VERSION,
@@ -190,6 +199,7 @@ def _transaction_ledger_proof_fields(
                 "source_product": "TransactionLedgerWindow",
                 "source_product_version": "v1",
                 **reconstruction_evidence.lineage(),
+                **batch.lineage(),
             },
         ),
         "source_cut_sha256": input_evidence.source_cut_sha256,
@@ -277,6 +287,19 @@ def _transaction_ledger_qualifiers(
         qualifiers = legacy_ledger_qualifiers
     else:
         qualifiers = (("transaction_id", ledger_filters.transaction_id), *legacy_ledger_qualifiers)
+    qualifiers = (
+        *(
+            (("source_system", ledger_filters.source_system),)
+            if ledger_filters.source_system
+            else ()
+        ),
+        *(
+            (("source_batch_id", ledger_filters.source_batch_id),)
+            if ledger_filters.source_batch_id
+            else ()
+        ),
+        *qualifiers,
+    )
     if ledger_filters.tenant_id is None:
         return qualifiers
     return (

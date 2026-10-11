@@ -29,6 +29,10 @@ class TransactionCostRecord(BaseModel):
 class TransactionRecord(BaseModel):
     """Represents a single detailed source-owned transaction record."""
 
+    source_record_id: str | None = Field(None, description="Retained supplier record identity.")
+    source_batch_id: str | None = Field(None, description="Retained supplier batch identity.")
+    observed_at: datetime | None = Field(None, description="Retained upstream observation time.")
+
     transaction_source_evidence: TransactionSourceEvidence | None = Field(
         None,
         description=(

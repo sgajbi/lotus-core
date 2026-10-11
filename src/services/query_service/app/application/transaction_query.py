@@ -5,6 +5,7 @@ from datetime import date, datetime
 
 from portfolio_common.api_contract.transaction_source_evidence import SourceEvidenceSelection
 from portfolio_common.domain.tenant import TenantId
+from portfolio_common.transaction_batch_lineage import TransactionBatchLineage
 
 from .transaction_sorting import normalize_transaction_sort
 
@@ -20,6 +21,8 @@ class TransactionLedgerFilters:
     source_evidence_selection: SourceEvidenceSelection = "current"
     source_revision_id: str | None = None
     transaction_id: str | None = None
+    source_system: str | None = None
+    source_batch_id: str | None = None
     instrument_id: str | None = None
     security_id: str | None = None
     transaction_type: str | None = None
@@ -45,6 +48,7 @@ class TransactionLedgerInputEvidence:
     selected_cashflow_digest: str | None
     selected_fx_rate_digest: str | None
     source_cut_sha256: str | None = None
+    transaction_batch_lineage: TransactionBatchLineage | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,10 +89,14 @@ def transaction_ledger_filters(
     end_date: date | None,
     as_of_date: date | None,
     transaction_id: str | None = None,
+    source_system: str | None = None,
+    source_batch_id: str | None = None,
 ) -> TransactionLedgerFilters:
     return TransactionLedgerFilters(
         portfolio_id=portfolio_id,
         transaction_id=transaction_id,
+        source_system=source_system,
+        source_batch_id=source_batch_id,
         instrument_id=instrument_id,
         security_id=security_id,
         transaction_type=transaction_type,

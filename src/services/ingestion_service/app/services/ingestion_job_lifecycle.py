@@ -13,6 +13,7 @@ from portfolio_common.monitoring import (
     INGESTION_JOBS_FAILED_TOTAL,
     INGESTION_JOBS_RETRIED_TOTAL,
 )
+from portfolio_common.transaction_batch_lineage import transaction_batch_lineage_from_payload
 from sqlalchemy import and_, desc, func, inspect, null, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -97,6 +98,7 @@ class IngestionJobReplayContext:
     request_payload_replay_expires_at: datetime | None
     request_payload_retention_authority: str
     submitted_at: datetime
+    transaction_batch_lineage: dict[str, Any] | None = None
 
 
 @dataclass(slots=True)
@@ -257,6 +259,16 @@ async def create_or_get_job_result(
                 request_id=request_id,
                 trace_id=trace_id,
                 request_payload=payload_evidence.request_payload,
+                transaction_batch_lineage=(
+                    transaction_batch_lineage_from_payload(request_payload or {}).model_dump()
+                    if endpoint
+                    in {
+                        "/ingest/transactions",
+                        "/ingest/portfolio-bundle",
+                        "/reprocess/transactions",
+                    }
+                    else None
+                ),
                 request_payload_fingerprint=payload_evidence.request_payload_fingerprint,
                 request_payload_policy_version=payload_evidence.policy_version,
                 request_payload_classification=payload_evidence.classification,
@@ -587,6 +599,7 @@ async def get_job_replay_context_response(
             accepted_count=row.accepted_count,
             idempotency_key=row.idempotency_key,
             request_payload=payload,
+            transaction_batch_lineage=row.transaction_batch_lineage,
             request_payload_policy_version=row.request_payload_policy_version,
             request_payload_representation=row.request_payload_representation,
             request_payload_replay_eligible=row.request_payload_replay_eligible,

@@ -1003,7 +1003,8 @@ async def test_openapi_describes_transaction_core_shared_schema(async_test_clien
         )
     assert transaction["properties"]["created_at"]["example"] == "2026-03-10T11:32:15Z"
     assert transaction_request["properties"]["transactions"]["description"] == (
-        "Canonical transaction records to ingest or upsert asynchronously. "
+        "Canonical transaction records to ingest asynchronously; changed economics under an "
+        "existing identity are fenced, never silently upserted. "
         "An empty list is accepted as a no-op batch for client workflow consistency."
     )
     assert transaction_request["properties"]["transactions"]["examples"] == [
@@ -1011,6 +1012,10 @@ async def test_openapi_describes_transaction_core_shared_schema(async_test_clien
         [
             {
                 "transaction_id": "TRN001",
+                "source_system": "OMS_PRIMARY",
+                "source_record_id": "OMS-TRADE-20230115-1842",
+                "source_batch_id": "OMS-20230115-PM",
+                "observed_at": "2023-01-15T10:02:00Z",
                 "portfolio_id": "PORT001",
                 "instrument_id": "AAPL",
                 "security_id": "SEC_AAPL",

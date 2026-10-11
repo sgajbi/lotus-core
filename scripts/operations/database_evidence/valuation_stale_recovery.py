@@ -17,7 +17,7 @@ async def measure_valuation_stale_recovery(
     *,
     scan_scenario: HotPathScenario,
     reset_scenario: HotPathScenario,
-    reset_job_ids: tuple[int, ...],
+    reset_job_scopes: tuple[tuple[str, int], ...],
 ) -> tuple[HotPathPlanResult, HotPathPlanResult]:
     """Measure exact stale selection and reset statements without retaining them."""
 
@@ -29,7 +29,7 @@ async def measure_valuation_stale_recovery(
     reset_plan = await capture_and_explain_rolled_back_statement(
         session,
         lambda evidence_session: ValuationRepository(evidence_session)._reset_retryable_stale_jobs(
-            list(reset_job_ids)
+            list(reset_job_scopes)
         ),
         statement_prefix="UPDATE",
     )

@@ -64,6 +64,9 @@ TRANSACTION_METADATA_FIELDS = (
     "calculation_policy_id",
     "calculation_policy_version",
     "source_system",
+    "source_record_id",
+    "source_batch_id",
+    "observed_at",
     "cash_entry_mode",
     "external_cash_transaction_id",
     "settlement_cash_account_id",
@@ -841,6 +844,7 @@ class SqlAlchemyCostBasisTransactionRepository:
         update_fields = [
             field_name
             for field_name in transaction_values
+            if field_name not in {"source_record_id", "source_batch_id", "observed_at"}
             if field_name not in {"id", "transaction_id"}
         ]
         update_dict = {field: getattr(stmt.excluded, field) for field in update_fields}
