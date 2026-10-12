@@ -281,6 +281,7 @@ def build_portfolio_seed_cleanup_sql(
     *,
     portfolio_id: str,
     preserve_valuation_authority_parents: bool = False,
+    financial_state_only: bool = False,
 ) -> str:
     """
     Build the destructive local reseed cleanup SQL for the canonical front-office seed.
@@ -290,10 +291,12 @@ def build_portfolio_seed_cleanup_sql(
     transaction-processing consumer claims the physical topic/partition/offset identity, so stale
     rows from another demo portfolio can collide before portfolio-scoped cleanup applies. Clear only
     the canonical seed topic/service fences that can block a deterministic front-office reseed.
+    financial_state_only instead retains every shared fence and reference row for an exclusive,
+    quiescent target-book replay without Kafka offset reset.
     """
     parent_cleanup = (
         []
-        if preserve_valuation_authority_parents
+        if preserve_valuation_authority_parents or financial_state_only
         else [
             f"delete from instruments where portfolio_id = '{portfolio_id}';",
             f"delete from portfolios where portfolio_id = '{portfolio_id}';",
@@ -338,34 +341,176 @@ def build_portfolio_seed_cleanup_sql(
                 f"(select transaction_id from transactions where portfolio_id = '{portfolio_id}');"
             ),
             f"delete from pipeline_stage_state where portfolio_id = '{portfolio_id}';",
-            (
-                "delete from processed_events "
-                "where service_name in "
-                f"({_sql_list(FRONT_OFFICE_RESEED_VOLATILE_EVENT_FENCE_SERVICES)}) "
-                "and ("
-                + _processed_event_topic_prefix_predicate(
-                    FRONT_OFFICE_RESEED_VOLATILE_EVENT_TOPIC_PREFIXES
-                )
-                + ");"
+            *(
+                []
+                if financial_state_only
+                else [
+                    (
+                        "delete from processed_events "
+                        "where service_name in "
+                        f"({_sql_list(FRONT_OFFICE_RESEED_VOLATILE_EVENT_FENCE_SERVICES)}) "
+                        "and ("
+                        + _processed_event_topic_prefix_predicate(
+                            FRONT_OFFICE_RESEED_VOLATILE_EVENT_TOPIC_PREFIXES
+                        )
+                        + ");"
+                    )
+                ]
             ),
             f"delete from processed_events where portfolio_id = '{portfolio_id}';",
-            f"delete from cash_account_masters where portfolio_id = '{portfolio_id}';",
-            f"delete from portfolio_party_role_assignments where portfolio_id = '{portfolio_id}';",
-            f"delete from portfolio_benchmark_assignments where portfolio_id = '{portfolio_id}';",
-            "delete from sustainability_preference_profiles "
-            f"where portfolio_id = '{portfolio_id}';",
-            f"delete from client_restriction_profiles where portfolio_id = '{portfolio_id}';",
-            f"delete from client_income_needs_schedules where portfolio_id = '{portfolio_id}';",
-            f"delete from client_tax_profiles where portfolio_id = '{portfolio_id}';",
-            f"delete from client_tax_rule_sets where portfolio_id = '{portfolio_id}';",
-            f"delete from liquidity_reserve_requirements where portfolio_id = '{portfolio_id}';",
-            f"delete from planned_withdrawal_schedules where portfolio_id = '{portfolio_id}';",
-            f"delete from portfolio_mandate_bindings where portfolio_id = '{portfolio_id}';",
-            "delete from instrument_eligibility_profiles "
-            "where source_system = 'LOTUS_FRONT_OFFICE_SEED';",
+            *(
+                []
+                if financial_state_only
+                else [
+                    f"delete from cash_account_masters where portfolio_id = '{portfolio_id}';",
+                    "delete from portfolio_party_role_assignments "
+                    f"where portfolio_id = '{portfolio_id}';",
+                    "delete from portfolio_benchmark_assignments "
+                    f"where portfolio_id = '{portfolio_id}';",
+                    "delete from sustainability_preference_profiles "
+                    f"where portfolio_id = '{portfolio_id}';",
+                    "delete from client_restriction_profiles "
+                    f"where portfolio_id = '{portfolio_id}';",
+                    "delete from client_income_needs_schedules "
+                    f"where portfolio_id = '{portfolio_id}';",
+                    f"delete from client_tax_profiles where portfolio_id = '{portfolio_id}';",
+                    f"delete from client_tax_rule_sets where portfolio_id = '{portfolio_id}';",
+                    "delete from liquidity_reserve_requirements "
+                    f"where portfolio_id = '{portfolio_id}';",
+                    "delete from planned_withdrawal_schedules "
+                    f"where portfolio_id = '{portfolio_id}';",
+                    "delete from portfolio_mandate_bindings "
+                    f"where portfolio_id = '{portfolio_id}';",
+                    "delete from instrument_eligibility_profiles "
+                    "where source_system = 'LOTUS_FRONT_OFFICE_SEED';",
+                ]
+            ),
             f"delete from transactions where portfolio_id = '{portfolio_id}';",
             *parent_cleanup,
         ]
+    )
+
+
+def _target_portfolio_replay_sql(*, portfolio_id: str) -> str:
+    """Replace only canonical synthetic financial state, retaining shared/reference authority."""
+    if portfolio_id != DEFAULT_PORTFOLIO_ID:
+        raise ValueError("Target portfolio replay is restricted to the canonical synthetic book")
+    return "\n".join(
+        [
+            "begin;",
+            build_portfolio_seed_cleanup_sql(portfolio_id=portfolio_id, financial_state_only=True),
+            # Old raw roots must not compete with the newly admitted synthetic source.
+            f"delete from outbox_events where payload->>'portfolio_id' = '{portfolio_id}';",
+            "commit;",
+        ]
+    )
+
+
+def _require_target_portfolio_replay(
+    *, postgres_container: str, portfolio_id: str, bundle: dict[str, Any]
+) -> None:
+    """Fail closed on foreign ownership, unexpected transactions or retained audit dependencies."""
+    if portfolio_id != DEFAULT_PORTFOLIO_ID:
+        raise ValueError("Target portfolio replay is restricted to the canonical synthetic book")
+    observed = _read_postgres_json(
+        postgres_container=postgres_container,
+        sql=f"""
+select json_build_object(
+  'tenant_id', (select tenant_id from portfolios where portfolio_id = '{portfolio_id}'),
+  'transaction_ids', (select coalesce(json_agg(transaction_id order by transaction_id), '[]'::json)
+    from transactions where portfolio_id = '{portfolio_id}'),
+  'raw_transactions', (select coalesce(json_agg(payload), '[]'::json) from outbox_events
+    where aggregate_type = 'RawTransaction' and payload->>'portfolio_id' = '{portfolio_id}'),
+  'unpublished_events', (select count(*) from outbox_events
+    where payload->>'portfolio_id' = '{portfolio_id}' and status <> 'PROCESSED'),
+  'source_revisions', (select count(*) from transaction_source_revisions
+    where portfolio_id = '{portfolio_id}'),
+  'recovery_audits', (select count(*) from outbox_recovery_audit where outbox_id in
+    (select id from outbox_events where payload->>'portfolio_id' = '{portfolio_id}'))
+)::text;
+""",
+    )
+    if (
+        not isinstance(observed, dict)
+        or observed.get("tenant_id") != FRONT_OFFICE_PORTFOLIO_TENANT_ID
+        or not _is_replayable_seed_transaction_set(observed.get("raw_transactions"), bundle)
+        or observed.get("transaction_ids")
+        != sorted(row["transaction_id"] for row in observed["raw_transactions"])
+        or any(
+            observed.get(key) != 0
+            for key in ("unpublished_events", "source_revisions", "recovery_audits")
+        )
+    ):
+        raise RuntimeError(
+            "Target portfolio replay requires a quiescent, unmodified synthetic seed"
+        )
+
+
+def _is_replayable_seed_transaction_set(raw: Any, bundle: dict[str, Any]) -> bool:
+    from portfolio_common.domain.transaction import transaction_payload_fingerprint
+    from portfolio_common.events import TransactionEvent
+
+    if not isinstance(raw, list) or len(raw) > len(bundle["transactions"]):
+        return False
+    expected = {row["transaction_id"]: dict(row) for row in bundle["transactions"]}
+    seen: set[str] = set()
+    for row in raw:
+        if (
+            not isinstance(row, dict)
+            or not isinstance(row.get("transaction_id"), str)
+            or row.get("transaction_id") not in expected
+            or row.get("tenant_id") != FRONT_OFFICE_PORTFOLIO_TENANT_ID
+        ):
+            return False
+        transaction_id = row["transaction_id"]
+        if transaction_id in seen:
+            return False
+        seen.add(transaction_id)
+        source = expected[transaction_id]
+        try:
+            if transaction_id == "TXN-DEP-USD-001" and datetime.fromisoformat(
+                row["transaction_date"]
+            ) == datetime(2025, 4, 1, 9, tzinfo=UTC):
+                if len(raw) != len(expected):
+                    return False
+                source["transaction_date"] = "2025-04-01T09:00:00Z"
+            observed = TransactionEvent.model_validate(row).model_dump()
+            original = TransactionEvent.model_validate(source).model_dump()
+        except (KeyError, TypeError, ValueError):
+            return False
+        if transaction_payload_fingerprint(observed) != transaction_payload_fingerprint(original):
+            return False
+    return True
+
+
+def _replay_target_portfolio(
+    *, postgres_container: str, ingestion_base_url: str, portfolio_id: str, bundle: dict[str, Any]
+) -> None:
+    _require_target_portfolio_replay(
+        postgres_container=postgres_container, portfolio_id=portfolio_id, bundle=bundle
+    )
+    # No session termination, global replay-fence reset, reference writes or retry amplification.
+    subprocess.run(
+        [
+            "docker",
+            "exec",
+            postgres_container,
+            "psql",
+            "-U",
+            "user",
+            "-d",
+            "portfolio_db",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-c",
+            _target_portfolio_replay_sql(portfolio_id=portfolio_id),
+        ],
+        check=True,
+    )
+    _request_json(
+        "POST",
+        f"{ingestion_base_url}/ingest/transactions",
+        payload={"transactions": bundle["transactions"]},
     )
 
 
@@ -1153,7 +1298,8 @@ def build_front_office_portfolio_bundle(
             portfolio_id=portfolio_id,
             instrument_id="USD-CASH",
             security_id="CASH_USD_BOOK_OPERATING",
-            when=tx_dt(1, 9),
+            # Fund the first governed business day; an empty book is not a return baseline.
+            when=tx_dt(0, 9),
             tx_type="DEPOSIT",
             quantity="900000",
             price="1",
@@ -3740,6 +3886,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ingest-only", action="store_true")
     parser.add_argument("--force-ingest", action="store_true")
     parser.add_argument(
+        "--target-portfolio-replay",
+        action="store_true",
+        help="Opt in to replacing only the original canonical synthetic book's financial state.",
+    )
+    parser.add_argument(
         "--skip-reprocess",
         action="store_true",
         help=(
@@ -3771,6 +3922,20 @@ def main() -> int:
     end_date = date.fromisoformat(args.end_date)
     benchmark_start_date = date.fromisoformat(args.benchmark_start_date)
     _require_governed_seed_end_date(end_date)
+    if args.target_portfolio_replay and (
+        args.verify_only
+        or args.skip_cleanup
+        or args.force_ingest
+        or args.reprocess_after_ingest
+        or args.portfolio_id != DEFAULT_PORTFOLIO_ID
+        or args.start_date != FRONT_OFFICE_SEED_CONTRACT.seed_start_date
+        or args.end_date != FRONT_OFFICE_SEED_CONTRACT.canonical_as_of_date
+        or args.benchmark_start_date != FRONT_OFFICE_SEED_CONTRACT.benchmark_start_date
+        or args.benchmark_id != DEFAULT_BENCHMARK_ID
+    ):
+        raise ValueError(
+            "Target portfolio replay requires the canonical scope and no replay overrides"
+        )
 
     ingestion_base_url = args.ingestion_base_url.rstrip("/")
     query_base_url = args.query_base_url.rstrip("/")
@@ -3797,17 +3962,32 @@ def main() -> int:
             postgres_container=args.postgres_container,
             bundle=bundle,
         )
-        if not args.skip_cleanup:
+        if args.target_portfolio_replay:
+            _validate_front_office_valuation_authority_for_reuse(
+                query_base_url=query_base_url,
+                postgres_container=args.postgres_container,
+                bundle=bundle,
+                portfolio_id=args.portfolio_id,
+                wait_seconds=args.wait_seconds,
+                poll_interval_seconds=args.poll_interval_seconds,
+            )
+            _replay_target_portfolio(
+                postgres_container=args.postgres_container,
+                ingestion_base_url=ingestion_base_url,
+                portfolio_id=args.portfolio_id,
+                bundle=bundle,
+            )
+        elif not args.skip_cleanup:
             _cleanup_existing_front_office_seed(
                 postgres_container=args.postgres_container,
                 portfolio_id=args.portfolio_id,
                 benchmark_id=args.benchmark_id,
                 max_business_date=end_date,
             )
-        should_ingest = args.force_ingest or not args.skip_cleanup
+        should_ingest = args.target_portfolio_replay or args.force_ingest or not args.skip_cleanup
         if not should_ingest:
             should_ingest = not _portfolio_exists(query_base_url, args.portfolio_id)
-        if should_ingest:
+        if should_ingest and not args.target_portfolio_replay:
             _ingest_front_office_core_data(
                 ingestion_base_url=ingestion_base_url,
                 query_base_url=query_base_url,
@@ -3817,7 +3997,7 @@ def main() -> int:
                 wait_seconds=args.wait_seconds,
                 poll_interval_seconds=args.poll_interval_seconds,
             )
-        else:
+        elif not args.target_portfolio_replay:
             _validate_front_office_valuation_authority_for_reuse(
                 query_base_url=query_base_url,
                 postgres_container=args.postgres_container,
@@ -3834,7 +4014,8 @@ def main() -> int:
                 wait_seconds=args.wait_seconds,
                 poll_interval_seconds=args.poll_interval_seconds,
             )
-        _ingest_reference_data(ingestion_base_url, bundle)
+        if not args.target_portfolio_replay:
+            _ingest_reference_data(ingestion_base_url, bundle)
         if _should_reprocess_after_ingest(
             should_ingest=should_ingest,
             reprocess_after_ingest=args.reprocess_after_ingest,

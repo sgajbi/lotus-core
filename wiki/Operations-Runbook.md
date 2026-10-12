@@ -7,6 +7,23 @@ recovery, and canonical seed operations. Commands and limits below are backed by
 contracts, tests, or the linked deep runbooks. They describe current Core behavior; they do not by
 themselves certify a particular environment, production capacity, or downstream product surface.
 
+## Canonical Opening Funding
+
+The canonical seed funds `PB_SG_GLOBAL_BAL_001` with USD 900,000 on the first governed
+business day of its analysis window, March 31, 2025. The opening observation has zero
+beginning value, USD 900,000 external BOD inflow and USD 900,000 closing cash value;
+the expected daily return is zero from real funded economics. Portfolio inception remains
+January 6, 2025. Missing funded-day observations still require a partial result.
+
+Replacing an existing synthetic seed requires shared-runtime owner review. Reuse cannot
+silently update a retained transaction date, and default blanket cleanup has broader scope
+than this portfolio. The explicit `--target-portfolio-replay` mode preserves shared replay
+fences and all reference data, validates native seed financial identities and audit dependencies,
+and admits only canonical portfolio transactions. Preserve original evidence and use the bounded replacement checklist in
+the [seed runbook](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/Front-Office-Portfolio-Seed-Runbook.md).
+Fixture tests establish source intent; live admission, 270-date coverage and full canonical
+validation remain separate acceptance evidence.
+
 | Reader | Start here | Escalate when |
 | --- | --- | --- |
 | Operations and support | Main operational surfaces, useful commands, and the affected runtime section | A source-safe failure persists after the documented bounded retry or recovery path |
