@@ -14,8 +14,13 @@ def build_lot_evidence_cleanup_statements(
     *,
     portfolio_selector: str,
     match: Literal["exact", "prefix"],
+    preserve_amortized_cost_authority: bool = False,
 ) -> tuple[str, ...]:
-    """Return the portfolio-scoped lot-evidence cleanup plan in dependency order."""
+    """Return the portfolio-scoped lot-evidence cleanup plan in dependency order.
+
+    Bounded replay preserves amortized-cost source/profile/period history and must refuse
+    retained authority before resetting its restrictive lot roots.
+    """
 
     if match not in {"exact", "prefix"}:
         raise ValueError(f"unsupported portfolio selector match: {match}")
@@ -41,12 +46,24 @@ def build_lot_evidence_cleanup_statements(
         f"where {predicate};",
         f"delete from lot_disposal_allocations where {predicate};",
         f"delete from lot_basis_transfer_allocations where {predicate};",
-        "delete from lot_amortized_cost_periods where (profile_id, profile_version) in "
-        f"({profile_scope});",
+        *(
+            ()
+            if preserve_amortized_cost_authority
+            else (
+                "delete from lot_amortized_cost_periods where (profile_id, profile_version) in "
+                f"({profile_scope});",
+            )
+        ),
         f"delete from lot_disposal_receipts where {predicate};",
         f"delete from lot_basis_transfer_receipts where {predicate};",
-        f"delete from lot_amortized_cost_authority where {predicate};",
-        f"delete from lot_amortized_cost_profiles where {predicate};",
+        *(
+            ()
+            if preserve_amortized_cost_authority
+            else (
+                f"delete from lot_amortized_cost_authority where {predicate};",
+                f"delete from lot_amortized_cost_profiles where {predicate};",
+            )
+        ),
     )
 
 

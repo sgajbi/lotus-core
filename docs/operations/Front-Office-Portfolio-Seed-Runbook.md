@@ -130,21 +130,32 @@ after shared-runtime owner review and exclusive, quiescent ownership of the affe
    before replacement; those live roots are deliberately removed to avoid competing source heads.
 2. The opt-in mode restricts replacement cleanup to this synthetic portfolio's transaction, cashflow,
    cost/lot, position/history, derived valuation/aggregation, reconciliation, stage and
-   portfolio-owned processed-event and outbox evidence needed for consistent fresh ingress. Review exact
+   financial-service processed receipts and admitted seed raw outbox roots needed for fresh ingress. Review exact
    row counts and dependencies first. Keep immutable valuation authority and reference
    parents, other portfolios, benchmark/index/FX/price sources and the business calendar.
+   Same-book simulation changes/sessions and analytics export jobs are retained operator work.
 3. Do not run the default blanket cleanup for this bounded repair: it additionally clears
    shared topic/service fences, instrument eligibility profiles, source-only candidate books
    and benchmark/model records. Its scope exceeds a one-portfolio funding replacement.
 4. The opt-in path validates retained valuation scope, prices and immutable authority before
    cleanup. It requires tenant ownership, matching native financial fingerprints for all
-   original raw transactions, no unpublished portfolio outbox events, source revisions or
-   outbox recovery-audit dependencies. Changed economics, foreign identities and duplicate
+   original raw transactions, no unpublished portfolio outbox events, source revisions,
+   seed-root recovery-audit dependencies or retained amortized-cost profiles/authority.
+   Lot authority and profiles have restrictive FKs to lot roots; this mode refuses their
+   presence and preserves them and their period history for separate owner-reviewed recovery.
+   Do not delete authority or fall back to broad reseeding to bypass a refusal.
+   Changed economics, foreign identities and duplicate
    raw roots fail before cleanup. It also accepts an empty or identical corrected subset
    after interrupted admission, once work is quiescent; partial original seed data is refused.
 5. Cleanup is one PostgreSQL transaction. It retains all reference data, including cash
    accounts, client profiles, mandates and assignments, and deletes only this portfolio's
-   financial/derived rows and old outbox roots. It neither terminates sessions nor retries
+   financial/derived rows, financial-service receipts and admitted raw seed roots. Outbox
+   deletion requires `RawTransaction` / `RawTransactionPersisted`, canonical tenant/source,
+   portfolio identity and a transaction ID in the preflight-qualified retained seed set.
+   Ownership is verified through the persisted portfolio, since native v1 raw serialization
+   omits tenant; an explicitly foreign tenant extension is refused. Expected fingerprints
+   use the native ingestion DTO/payload normalization.
+   Other same-book outbox work and reference-service receipts remain intact. It neither terminates sessions nor retries
    cleanup. A foreign-key or SQL failure rolls back and prevents ingress. After cleanup,
    it posts all 31 original identities to `/ingest/transactions`, with unchanged canonical
    window and benchmark. There are no reference writes or shared fence resets. Do not submit a duplicate funding ID,

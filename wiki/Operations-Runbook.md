@@ -23,6 +23,9 @@ and admits only canonical portfolio transactions. Preserve original evidence and
 the [seed runbook](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/Front-Office-Portfolio-Seed-Runbook.md).
 Fixture tests establish source intent; live admission, 270-date coverage and full canonical
 validation remain separate acceptance evidence.
+Retained simulations, export jobs and unrelated same-book outbox/receipt work are preserved.
+Existing amortized-cost authority or profiles refuse replay before mutation and require separate
+owner-reviewed recovery; their source/profile/period history must not be erased to force admission.
 
 | Reader | Start here | Escalate when |
 | --- | --- | --- |

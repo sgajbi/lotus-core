@@ -9,6 +9,8 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
+from portfolio_common.event_mapping import transaction_event_v1_payload
+from portfolio_common.events import TransactionEvent
 
 import tools.front_office_portfolio_seed as front_office_seed_module
 import tools.front_office_seed_contract as front_office_seed_contract_module
@@ -18,6 +20,10 @@ from src.services.ingestion_service.app.DTOs.market_price_dto import (
 )
 from src.services.ingestion_service.app.DTOs.reference_data_valuation_policy_dto import (
     InstrumentValuationPolicyAssignmentIngestionRequest,
+)
+from src.services.ingestion_service.app.DTOs.transaction_dto import Transaction
+from src.services.ingestion_service.app.services.ingestion_event_payloads import (
+    transaction_event_payload,
 )
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
@@ -148,9 +154,15 @@ def test_seed_analysis_window_opens_with_funded_unit_price_cash(start_date, open
 def _original_seed_replay_observation():
     bundle = _build_bundle()
     raw = copy.deepcopy(bundle["transactions"])
-    for row in raw:
-        row["tenant_id"] = "tenant-sg"
     raw[0]["transaction_date"] = "2025-04-01T09:00:00Z"
+    raw = [
+        transaction_event_v1_payload(
+            TransactionEvent.model_validate(
+                transaction_event_payload(Transaction.model_validate(row), tenant_id="tenant-sg")
+            )
+        )
+        for row in raw
+    ]
     return bundle, {
         "tenant_id": "tenant-sg",
         "transaction_ids": sorted(row["transaction_id"] for row in raw),
@@ -158,6 +170,8 @@ def _original_seed_replay_observation():
         "unpublished_events": 0,
         "source_revisions": 0,
         "recovery_audits": 0,
+        "amortized_cost_profiles": 0,
+        "amortized_cost_authority": 0,
     }
 
 
@@ -176,6 +190,8 @@ def _original_seed_replay_observation():
         "unpublished_events",
         "source_revisions",
         "recovery_audits",
+        "amortized_cost_profiles",
+        "amortized_cost_authority",
     ],
 )
 def test_target_portfolio_replay_rejects_unsafe_retained_state(monkeypatch, bad_input):
@@ -256,6 +272,59 @@ def test_target_portfolio_replay_can_resume_only_identical_corrected_ingress(mon
     )
 
 
+@pytest.mark.parametrize(
+    "retained_table", ["lot_amortized_cost_profiles", "lot_amortized_cost_authority"]
+)
+def test_target_replay_refuses_same_book_lot_authority_without_mutating_evidence(
+    monkeypatch, retained_table
+):
+    bundle, observed = _original_seed_replay_observation()
+    db = sqlite3.connect(":memory:")
+    db.execute("pragma foreign_keys = on")
+    db.execute(
+        "create table position_lot_state (lot_id text, portfolio_id text, security_id text, "
+        "primary key (lot_id, portfolio_id, security_id))"
+    )
+    # Minimal projection of the real restrictive lot-scope FK: retained source/profile authority
+    # depends on its lot root, so resetting the root is not permitted by this replay mode.
+    db.execute(
+        f"create table {retained_table} (lot_id text, portfolio_id text, security_id text, "
+        "source_evidence text, foreign key (lot_id, portfolio_id, security_id) "
+        "references position_lot_state on delete restrict)"
+    )
+    db.execute("insert into position_lot_state values ('LOT-1', 'PB_SG_GLOBAL_BAL_001', 'BOND-1')")
+    db.execute(
+        f"insert into {retained_table} values "
+        "('LOT-1', 'PB_SG_GLOBAL_BAL_001', 'BOND-1', 'retained-authority-hash')"
+    )
+    key = (
+        "amortized_cost_profiles"
+        if retained_table.endswith("profiles")
+        else "amortized_cost_authority"
+    )
+    observed[key] = db.execute(
+        f"select count(*) from {retained_table} where portfolio_id = 'PB_SG_GLOBAL_BAL_001'"
+    ).fetchone()[0]
+    before = db.execute(f"select * from {retained_table}").fetchall()
+    monkeypatch.setattr(front_office_seed_module, "_read_postgres_json", lambda **_: observed)
+    monkeypatch.setattr(subprocess, "run", lambda command, **_: db.executescript(command[-1]))
+    monkeypatch.setattr(
+        front_office_seed_module, "_request_json", lambda *_a, **_k: pytest.fail("no ingress")
+    )
+    with pytest.raises(RuntimeError, match="retain amortized-cost authority"):
+        front_office_seed_module._replay_target_portfolio(
+            postgres_container="postgres",
+            ingestion_base_url="http://ingestion",
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            bundle=bundle,
+        )
+    assert db.execute(f"select * from {retained_table}").fetchall() == before
+    assert db.execute("select * from position_lot_state").fetchall() == [
+        ("LOT-1", "PB_SG_GLOBAL_BAL_001", "BOND-1")
+    ]
+    db.close()
+
+
 def test_target_portfolio_replay_cleanup_failure_cannot_publish_transactions(monkeypatch):
     bundle, observed = _original_seed_replay_observation()
     monkeypatch.setattr(front_office_seed_module, "_read_postgres_json", lambda **_: observed)
@@ -308,7 +377,7 @@ def test_target_portfolio_mode_validates_references_and_avoids_all_other_write_p
 
 def test_target_portfolio_cleanup_preserves_other_books_and_all_reference_authority():
     sql = front_office_seed_module._target_portfolio_replay_sql(portfolio_id="PB_SG_GLOBAL_BAL_001")
-    tables = set(re.findall(r"(?:delete from|update|from) ([a-z_]+)", sql))
+    tables = set(re.findall(r"(?:delete from|update) ([a-z_]+)", sql))
     protected = {
         "cash_account_masters",
         "portfolio_benchmark_assignments",
@@ -321,12 +390,19 @@ def test_target_portfolio_cleanup_preserves_other_books_and_all_reference_author
         "market_price_source_facts",
         "instrument_valuation_policy_assignments",
         "fx_rates",
+        "simulation_changes",
+        "simulation_sessions",
+        "analytics_export_jobs",
+        "lot_amortized_cost_profiles",
+        "lot_amortized_cost_authority",
+        "lot_amortized_cost_periods",
     }
     assert not tables & protected
     db = sqlite3.connect(":memory:")
     columns = (
         "portfolio_id text, transaction_id text, profile_id text, profile_version text, "
-        "payload text, service_name text, event_id text, amortized_cost_profile_id text, "
+        "payload text, aggregate_type text, event_type text, tenant_id text, "
+        "service_name text, event_id text, amortized_cost_profile_id text, "
         "amortized_cost_profile_version text, amortized_cost_profile_content_hash text, "
         "amortized_cost_recognized_through text, amortized_cost_scheduled_local text, "
         "amortized_book_carrying_local text, amortized_book_carrying_base text, "
@@ -339,6 +415,10 @@ def test_target_portfolio_cleanup_preserves_other_books_and_all_reference_author
             "OTHER_BOOK",
             DPM_SOURCE_ONLY_CANDIDATE_PORTFOLIOS[0]["portfolio_id"],
         ]:
+            # Authority belongs to other books in a valid execution; same-book authority is
+            # exercised by the preflight refusal cases rather than bypassing real FK semantics.
+            if portfolio == "PB_SG_GLOBAL_BAL_001" and table.startswith("lot_amortized_cost_"):
+                continue
             db.execute(
                 f"insert into {table} "
                 "(portfolio_id, transaction_id, profile_id, profile_version, payload) "
@@ -348,14 +428,40 @@ def test_target_portfolio_cleanup_preserves_other_books_and_all_reference_author
                     portfolio + "-TXN",
                     portfolio,
                     "1",
-                    json.dumps({"portfolio_id": portfolio}),
+                    json.dumps(
+                        {
+                            "portfolio_id": portfolio,
+                            "source_system": "LOTUS_FRONT_OFFICE_SEED",
+                            "transaction_id": portfolio + "-TXN",
+                        }
+                    ),
                 ),
             )
     # A canonical-topic physical fence owned by another book must survive unchanged.
     db.execute(
-        "update processed_events set service_name = 'transaction_processing', "
+        "update processed_events set service_name = 'portfolio-transaction-processing', "
         "event_id = 'transactions.raw.received:0:17'"
     )
+    db.execute(
+        "update outbox_events set aggregate_type = 'RawTransaction', "
+        "event_type = 'RawTransactionPersisted'"
+    )
+    db.execute("update portfolios set tenant_id = 'tenant-sg'")
+    db.execute(
+        "insert into outbox_events (portfolio_id, payload, aggregate_type, event_type) "
+        "values ('PB_SG_GLOBAL_BAL_001', ?, 'Simulation', 'SimulationSaved')",
+        (json.dumps({"portfolio_id": "PB_SG_GLOBAL_BAL_001"}),),
+    )
+    db.execute(
+        "insert into processed_events (portfolio_id, service_name, event_id) "
+        "values ('PB_SG_GLOBAL_BAL_001', 'persistence-instruments', 'instruments.received-0-21')"
+    )
+    unrelated_outbox = db.execute(
+        "select * from outbox_events where aggregate_type = 'Simulation'"
+    ).fetchall()
+    unrelated_receipts = db.execute(
+        "select * from processed_events where service_name = 'persistence-instruments'"
+    ).fetchall()
     db.commit()
     before = {
         table: db.execute(
@@ -368,6 +474,7 @@ def test_target_portfolio_cleanup_preserves_other_books_and_all_reference_author
     }
     db.executescript(sql)
     for table in tables:
+        expected_retained = 1 if table in {"outbox_events", "processed_events"} else 0
         assert (
             db.execute(
                 f"select * from {table} where portfolio_id <> 'PB_SG_GLOBAL_BAL_001'"
@@ -378,8 +485,18 @@ def test_target_portfolio_cleanup_preserves_other_books_and_all_reference_author
             db.execute(
                 f"select count(*) from {table} where portfolio_id = 'PB_SG_GLOBAL_BAL_001'"
             ).fetchone()[0]
-            == 0
+            == expected_retained
         )
+    assert (
+        db.execute("select * from outbox_events where aggregate_type = 'Simulation'").fetchall()
+        == unrelated_outbox
+    )
+    assert (
+        db.execute(
+            "select * from processed_events where service_name = 'persistence-instruments'"
+        ).fetchall()
+        == unrelated_receipts
+    )
     for table in protected:
         assert db.execute(f"select * from {table}").fetchall() == protected_before[table]
     db.close()
