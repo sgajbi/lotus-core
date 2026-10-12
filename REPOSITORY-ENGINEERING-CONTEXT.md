@@ -682,7 +682,9 @@ structure and event-flow detail.
 The seed funds the first governed analysis business day. Existing retained synthetic books
 require explicit `--target-portfolio-replay` in `tools/front_office_portfolio_seed.py` to
 replace portfolio financial state through normal transaction ingress while preserving shared
-fences, reference data and immutable valuation authority. This opt-in mode requires Root's
+fences, reference data, operator simulations/exports and immutable valuation authority.
+Retained amortized-cost profiles/authority refuse replay before mutation; only admitted seed
+raw outbox roots and financial-service receipts are replaceable. This opt-in mode requires Root's
 exclusive quiescent runtime ownership and exact candidate/row-scope review; it is not an economic
 correction contract for bank records. Follow the OS-specific commands, refusal conditions,
 evidence preservation and interrupted-admission procedure in the

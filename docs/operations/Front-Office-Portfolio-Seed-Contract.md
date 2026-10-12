@@ -49,6 +49,7 @@ The seed must support:
   standing open date remains `2025-01-06`, and genuine missing funded-day data remains partial.
 - an opt-in target-portfolio replay preserves shared fences and reference/valuation authority;
   it refuses foreign or changed synthetic source and retained audit dependencies before cleanup.
+  Same-book operator work is preserved; retained amortized-cost authority/profiles refuse replay.
   It requires shared-runtime owner review and quiescence as described in the seed runbook.
 - the seed must not require `lotus-manage`
 

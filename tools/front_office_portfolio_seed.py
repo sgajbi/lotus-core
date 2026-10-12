@@ -193,6 +193,15 @@ FRONT_OFFICE_RESEED_VOLATILE_EVENT_TOPIC_PREFIXES = (
     "market_prices.persisted-",
     "valuation.job.requested-",
 )
+FRONT_OFFICE_TARGET_REPLAY_EVENT_FENCE_SERVICES = (
+    "persistence-transactions",
+    "portfolio-transaction-processing",
+    "cost-calculator",
+    "position-calculator",
+    "cashflow-calculator",
+    "pipeline-orchestrator-processed-txn",
+    "position-valuation-calculator",
+)
 
 
 @dataclass(frozen=True)
@@ -309,9 +318,15 @@ def build_portfolio_seed_cleanup_sql(
                 f"where portfolio_id = '{portfolio_id}';"
             ),
             (f"delete from financial_reconciliation_runs where portfolio_id = '{portfolio_id}';"),
-            f"delete from simulation_changes where portfolio_id = '{portfolio_id}';",
-            f"delete from simulation_sessions where portfolio_id = '{portfolio_id}';",
-            f"delete from analytics_export_jobs where portfolio_id = '{portfolio_id}';",
+            *(
+                []
+                if financial_state_only
+                else [
+                    f"delete from simulation_changes where portfolio_id = '{portfolio_id}';",
+                    f"delete from simulation_sessions where portfolio_id = '{portfolio_id}';",
+                    f"delete from analytics_export_jobs where portfolio_id = '{portfolio_id}';",
+                ]
+            ),
             (
                 "delete from portfolio_selected_history_valuation_states "
                 f"where portfolio_id = '{portfolio_id}';"
@@ -330,6 +345,7 @@ def build_portfolio_seed_cleanup_sql(
             *build_lot_evidence_cleanup_statements(
                 portfolio_selector=portfolio_id,
                 match="exact",
+                preserve_amortized_cost_authority=financial_state_only,
             ),
             f"delete from position_lot_state where portfolio_id = '{portfolio_id}';",
             f"delete from average_cost_pool_state where portfolio_id = '{portfolio_id}';",
@@ -357,7 +373,16 @@ def build_portfolio_seed_cleanup_sql(
                     )
                 ]
             ),
-            f"delete from processed_events where portfolio_id = '{portfolio_id}';",
+            (
+                f"delete from processed_events where portfolio_id = '{portfolio_id}'"
+                + (
+                    " and service_name in "
+                    f"({_sql_list(FRONT_OFFICE_TARGET_REPLAY_EVENT_FENCE_SERVICES)})"
+                    if financial_state_only
+                    else ""
+                )
+                + ";"
+            ),
             *(
                 []
                 if financial_state_only
@@ -391,6 +416,21 @@ def build_portfolio_seed_cleanup_sql(
     )
 
 
+def _seed_raw_outbox_predicate(portfolio_id: str) -> str:
+    return (
+        "aggregate_type = 'RawTransaction' and event_type = 'RawTransactionPersisted' "
+        f"and payload->>'portfolio_id' = '{portfolio_id}' "
+        "and (payload->>'tenant_id' is null or "
+        f"payload->>'tenant_id' = '{FRONT_OFFICE_PORTFOLIO_TENANT_ID}') "
+        "and exists (select 1 from portfolios "
+        f"where portfolio_id = '{portfolio_id}' "
+        f"and tenant_id = '{FRONT_OFFICE_PORTFOLIO_TENANT_ID}') "
+        f"and payload->>'source_system' = '{FRONT_OFFICE_VALUATION_SOURCE_SYSTEM}' "
+        "and payload->>'transaction_id' in "
+        f"(select transaction_id from transactions where portfolio_id = '{portfolio_id}')"
+    )
+
+
 def _target_portfolio_replay_sql(*, portfolio_id: str) -> str:
     """Replace only canonical synthetic financial state, retaining shared/reference authority."""
     if portfolio_id != DEFAULT_PORTFOLIO_ID:
@@ -398,9 +438,9 @@ def _target_portfolio_replay_sql(*, portfolio_id: str) -> str:
     return "\n".join(
         [
             "begin;",
-            build_portfolio_seed_cleanup_sql(portfolio_id=portfolio_id, financial_state_only=True),
             # Old raw roots must not compete with the newly admitted synthetic source.
-            f"delete from outbox_events where payload->>'portfolio_id' = '{portfolio_id}';",
+            f"delete from outbox_events where {_seed_raw_outbox_predicate(portfolio_id)};",
+            build_portfolio_seed_cleanup_sql(portfolio_id=portfolio_id, financial_state_only=True),
             "commit;",
         ]
     )
@@ -420,13 +460,18 @@ select json_build_object(
   'transaction_ids', (select coalesce(json_agg(transaction_id order by transaction_id), '[]'::json)
     from transactions where portfolio_id = '{portfolio_id}'),
   'raw_transactions', (select coalesce(json_agg(payload), '[]'::json) from outbox_events
-    where aggregate_type = 'RawTransaction' and payload->>'portfolio_id' = '{portfolio_id}'),
+    where aggregate_type = 'RawTransaction' and event_type = 'RawTransactionPersisted'
+      and payload->>'portfolio_id' = '{portfolio_id}'),
   'unpublished_events', (select count(*) from outbox_events
     where payload->>'portfolio_id' = '{portfolio_id}' and status <> 'PROCESSED'),
   'source_revisions', (select count(*) from transaction_source_revisions
     where portfolio_id = '{portfolio_id}'),
   'recovery_audits', (select count(*) from outbox_recovery_audit where outbox_id in
-    (select id from outbox_events where payload->>'portfolio_id' = '{portfolio_id}'))
+    (select id from outbox_events where {_seed_raw_outbox_predicate(portfolio_id)})),
+  'amortized_cost_profiles', (select count(*) from lot_amortized_cost_profiles
+    where portfolio_id = '{portfolio_id}'),
+  'amortized_cost_authority', (select count(*) from lot_amortized_cost_authority
+    where portfolio_id = '{portfolio_id}')
 )::text;
 """,
     )
@@ -438,17 +483,30 @@ select json_build_object(
         != sorted(row["transaction_id"] for row in observed["raw_transactions"])
         or any(
             observed.get(key) != 0
-            for key in ("unpublished_events", "source_revisions", "recovery_audits")
+            for key in (
+                "unpublished_events",
+                "source_revisions",
+                "recovery_audits",
+                "amortized_cost_profiles",
+                "amortized_cost_authority",
+            )
         )
     ):
         raise RuntimeError(
-            "Target portfolio replay requires a quiescent, unmodified synthetic seed"
+            "Target portfolio replay requires a quiescent, unmodified synthetic seed; "
+            "retain amortized-cost authority and recovery/source audits for separate owner review, "
+            "without broad reseed or authority deletion"
         )
 
 
 def _is_replayable_seed_transaction_set(raw: Any, bundle: dict[str, Any]) -> bool:
     from portfolio_common.domain.transaction import transaction_payload_fingerprint
     from portfolio_common.events import TransactionEvent
+
+    from src.services.ingestion_service.app.DTOs.transaction_dto import Transaction
+    from src.services.ingestion_service.app.services.ingestion_event_payloads import (
+        transaction_event_payload,
+    )
 
     if not isinstance(raw, list) or len(raw) > len(bundle["transactions"]):
         return False
@@ -459,7 +517,9 @@ def _is_replayable_seed_transaction_set(raw: Any, bundle: dict[str, Any]) -> boo
             not isinstance(row, dict)
             or not isinstance(row.get("transaction_id"), str)
             or row.get("transaction_id") not in expected
-            or row.get("tenant_id") != FRONT_OFFICE_PORTFOLIO_TENANT_ID
+            # Native v1 raw outbox serialization omits tenant; persisted portfolio ownership
+            # is checked by admission. An explicitly foreign extension is never accepted.
+            or row.get("tenant_id") not in (None, FRONT_OFFICE_PORTFOLIO_TENANT_ID)
         ):
             return False
         transaction_id = row["transaction_id"]
@@ -475,7 +535,11 @@ def _is_replayable_seed_transaction_set(raw: Any, bundle: dict[str, Any]) -> boo
                     return False
                 source["transaction_date"] = "2025-04-01T09:00:00Z"
             observed = TransactionEvent.model_validate(row).model_dump()
-            original = TransactionEvent.model_validate(source).model_dump()
+            original = TransactionEvent.model_validate(
+                transaction_event_payload(
+                    Transaction.model_validate(source), tenant_id=FRONT_OFFICE_PORTFOLIO_TENANT_ID
+                )
+            ).model_dump()
         except (KeyError, TypeError, ValueError):
             return False
         if transaction_payload_fingerprint(observed) != transaction_payload_fingerprint(original):
