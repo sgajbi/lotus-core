@@ -1,4 +1,7 @@
+import copy
 import json
+import re
+import sqlite3
 import subprocess
 import sys
 from dataclasses import replace
@@ -15,6 +18,11 @@ from src.services.ingestion_service.app.DTOs.market_price_dto import (
 )
 from src.services.ingestion_service.app.DTOs.reference_data_valuation_policy_dto import (
     InstrumentValuationPolicyAssignmentIngestionRequest,
+)
+from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
+from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
+    CashflowRule,
+    calculate_transaction_cashflow,
 )
 from tools.front_office_portfolio_seed import (
     DEFAULT_BENCHMARK_ID,
@@ -69,6 +77,332 @@ def _build_bundle():
         benchmark_start_date=date(2025, 1, 6),
         benchmark_id=DEFAULT_BENCHMARK_ID,
     )
+
+
+@pytest.mark.parametrize(
+    ("start_date", "opening_date"),
+    [
+        (date(2025, 3, 31), date(2025, 3, 31)),
+        (date(2025, 4, 2), date(2025, 4, 2)),
+        (date(2025, 4, 4), date(2025, 4, 4)),
+    ],
+)
+def test_seed_analysis_window_opens_with_funded_unit_price_cash(start_date, opening_date):
+    bundle = build_front_office_portfolio_bundle(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        start_date=start_date,
+        end_date=date(2026, 4, 10),
+    )
+    first_business_date = bundle["business_dates"][0]["business_date"]
+    opening_transactions = [
+        row for row in bundle["transactions"] if row["transaction_date"][:10] == first_business_date
+    ]
+    assert first_business_date == opening_date.isoformat()
+    assert [row["transaction_id"] for row in opening_transactions] == ["TXN-DEP-USD-001"]
+    funding = opening_transactions[0]
+    assert funding["transaction_type"] == "DEPOSIT"
+    assert funding["transaction_date"] == f"{opening_date.isoformat()}T09:00:00Z"
+    assert funding["settlement_cash_account_id"] == "CASH-ACC-USD-001"
+    assert funding["movement_direction"] == "INFLOW"
+    assert funding["source_system"] == "LOTUS_FRONT_OFFICE_SEED"
+    assert funding["trade_currency"] == funding["currency"] == "USD"
+    assert Decimal(funding["quantity"]) == Decimal(funding["gross_transaction_amount"]) == 900000
+    assert Decimal(funding.get("trade_fee", "0")) == 0
+    opening_price = next(
+        row
+        for row in bundle["market_price_source_facts"]
+        if row["security_id"] == funding["security_id"] and row["price_date"] == first_business_date
+    )
+    assert Decimal(opening_price["price"]) == Decimal(funding["price"]) == 1
+    assert opening_price["currency"] == "USD"
+    transaction = BookedTransaction(
+        transaction_id=funding["transaction_id"],
+        portfolio_id=funding["portfolio_id"],
+        instrument_id=funding["instrument_id"],
+        security_id=funding["security_id"],
+        transaction_date=datetime.fromisoformat(funding["transaction_date"]),
+        transaction_type=funding["transaction_type"],
+        quantity=Decimal(funding["quantity"]),
+        price=Decimal(funding["price"]),
+        gross_transaction_amount=Decimal(funding["gross_transaction_amount"]),
+        trade_currency=funding["trade_currency"],
+        currency=funding["currency"],
+        trade_fee=Decimal(funding.get("trade_fee", "0")),
+    )
+    cashflow = calculate_transaction_cashflow(
+        transaction,
+        CashflowRule("CASHFLOW_IN", "BOD", is_position_flow=True, is_portfolio_flow=True),
+    )
+    assert cashflow.cashflow_date == opening_date
+    assert cashflow.amount == 900000
+    assert cashflow.timing == "BOD"
+    assert cashflow.is_portfolio_flow is True
+    ending_value = transaction.quantity * Decimal(opening_price["price"])
+    # Independent opening-day economics, not a replacement Performance calculation.
+    beginning_value = Decimal(0)
+    assert (ending_value - beginning_value - cashflow.amount) / (
+        beginning_value + cashflow.amount
+    ) == 0
+
+
+def _original_seed_replay_observation():
+    bundle = _build_bundle()
+    raw = copy.deepcopy(bundle["transactions"])
+    for row in raw:
+        row["tenant_id"] = "tenant-sg"
+    raw[0]["transaction_date"] = "2025-04-01T09:00:00Z"
+    return bundle, {
+        "tenant_id": "tenant-sg",
+        "transaction_ids": sorted(row["transaction_id"] for row in raw),
+        "raw_transactions": raw,
+        "unpublished_events": 0,
+        "source_revisions": 0,
+        "recovery_audits": 0,
+    }
+
+
+@pytest.mark.parametrize(
+    "bad_input",
+    [
+        None,
+        "tenant",
+        "transactions",
+        "amount",
+        "extra_fee",
+        "raw_tenant",
+        "bad_date",
+        "partial_original",
+        "duplicate",
+        "unpublished_events",
+        "source_revisions",
+        "recovery_audits",
+    ],
+)
+def test_target_portfolio_replay_rejects_unsafe_retained_state(monkeypatch, bad_input):
+    bundle, observed = _original_seed_replay_observation()
+    if bad_input == "tenant":
+        observed["tenant_id"] = "other-tenant"
+    elif bad_input == "transactions":
+        observed["transaction_ids"].append("FOREIGN-TRANSACTION")
+    elif bad_input == "amount":
+        observed["raw_transactions"][0]["gross_transaction_amount"] = "800000"
+    elif bad_input == "extra_fee":
+        observed["raw_transactions"][0]["trade_fee"] = "25"
+    elif bad_input == "raw_tenant":
+        observed["raw_transactions"][0]["tenant_id"] = "other-tenant"
+    elif bad_input == "bad_date":
+        observed["raw_transactions"][0]["transaction_date"] = "invalid"
+    elif bad_input == "partial_original":
+        observed["raw_transactions"] = observed["raw_transactions"][:3]
+        observed["transaction_ids"] = sorted(
+            row["transaction_id"] for row in observed["raw_transactions"]
+        )
+    elif bad_input == "duplicate":
+        observed["raw_transactions"][-1] = observed["raw_transactions"][0]
+    elif bad_input:
+        observed[bad_input] = 1
+    else:
+        observed = None
+    monkeypatch.setattr(front_office_seed_module, "_read_postgres_json", lambda **_: observed)
+    monkeypatch.setattr(subprocess, "run", lambda *_args, **_kwargs: pytest.fail("unsafe cleanup"))
+    monkeypatch.setattr(
+        front_office_seed_module, "_request_json", lambda *_a, **_k: pytest.fail("unsafe ingress")
+    )
+    with pytest.raises(RuntimeError, match="unmodified synthetic seed"):
+        front_office_seed_module._replay_target_portfolio(
+            postgres_container="postgres",
+            ingestion_base_url="http://ingestion",
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            bundle=bundle,
+        )
+
+
+def test_target_portfolio_replay_accepts_original_seed_and_only_posts_transactions(monkeypatch):
+    bundle, observed = _original_seed_replay_observation()
+    monkeypatch.setattr(front_office_seed_module, "_read_postgres_json", lambda **_: observed)
+    timeline = []
+    monkeypatch.setattr(
+        subprocess, "run", lambda command, **kwargs: timeline.append(("cleanup", command, kwargs))
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_request_json",
+        lambda *a, **k: timeline.append(("ingress", a, k)),
+    )
+    front_office_seed_module._replay_target_portfolio(
+        postgres_container="postgres",
+        ingestion_base_url="http://ingestion",
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        bundle=bundle,
+    )
+    assert [step[0] for step in timeline] == ["cleanup", "ingress"]
+    assert timeline[0][2] == {"check": True}
+    assert timeline[1][1] == ("POST", "http://ingestion/ingest/transactions")
+    assert timeline[1][2] == {"payload": {"transactions": bundle["transactions"]}}
+
+
+@pytest.mark.parametrize("count", [0, 3, 31])
+def test_target_portfolio_replay_can_resume_only_identical_corrected_ingress(monkeypatch, count):
+    bundle, observed = _original_seed_replay_observation()
+    observed["raw_transactions"] = observed["raw_transactions"][:count]
+    if count:
+        observed["raw_transactions"][0]["transaction_date"] = "2025-03-31T09:00:00Z"
+    observed["transaction_ids"] = sorted(
+        row["transaction_id"] for row in observed["raw_transactions"]
+    )
+    monkeypatch.setattr(front_office_seed_module, "_read_postgres_json", lambda **_: observed)
+    front_office_seed_module._require_target_portfolio_replay(
+        postgres_container="postgres", portfolio_id="PB_SG_GLOBAL_BAL_001", bundle=bundle
+    )
+
+
+def test_target_portfolio_replay_cleanup_failure_cannot_publish_transactions(monkeypatch):
+    bundle, observed = _original_seed_replay_observation()
+    monkeypatch.setattr(front_office_seed_module, "_read_postgres_json", lambda **_: observed)
+
+    def fail_cleanup(*_args, **_kwargs):
+        raise subprocess.CalledProcessError(1, "psql")
+
+    monkeypatch.setattr(subprocess, "run", fail_cleanup)
+    monkeypatch.setattr(
+        front_office_seed_module, "_request_json", lambda *_a, **_k: pytest.fail("no ingress")
+    )
+    with pytest.raises(subprocess.CalledProcessError):
+        front_office_seed_module._replay_target_portfolio(
+            postgres_container="postgres",
+            ingestion_base_url="http://ingestion",
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            bundle=bundle,
+        )
+
+
+def test_target_portfolio_mode_validates_references_and_avoids_all_other_write_paths(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["seed", "--target-portfolio-replay", "--ingest-only"])
+    monkeypatch.setattr(front_office_seed_module, "_wait_ready", lambda *_: None)
+    timeline = []
+    for name in [
+        "_require_compatible_preserved_valuation_authority",
+        "_validate_front_office_valuation_authority_for_reuse",
+        "_replay_target_portfolio",
+    ]:
+        monkeypatch.setattr(
+            front_office_seed_module, name, lambda _name=name, **_: timeline.append(_name)
+        )
+    for name in [
+        "_cleanup_existing_front_office_seed",
+        "_ingest_front_office_core_data",
+        "_ingest_cash_account_masters",
+        "_ingest_reference_data",
+        "_reprocess_front_office_transactions",
+    ]:
+        monkeypatch.setattr(
+            front_office_seed_module, name, lambda *_a, **_k: pytest.fail("unexpected write path")
+        )
+    assert front_office_seed_module.main() == 0
+    assert timeline == [
+        "_require_compatible_preserved_valuation_authority",
+        "_validate_front_office_valuation_authority_for_reuse",
+        "_replay_target_portfolio",
+    ]
+
+
+def test_target_portfolio_cleanup_preserves_other_books_and_all_reference_authority():
+    sql = front_office_seed_module._target_portfolio_replay_sql(portfolio_id="PB_SG_GLOBAL_BAL_001")
+    tables = set(re.findall(r"(?:delete from|update|from) ([a-z_]+)", sql))
+    protected = {
+        "cash_account_masters",
+        "portfolio_benchmark_assignments",
+        "portfolios",
+        "instruments",
+        "instrument_eligibility_profiles",
+        "business_dates",
+        "benchmark_definitions",
+        "model_portfolio_definitions",
+        "market_price_source_facts",
+        "instrument_valuation_policy_assignments",
+        "fx_rates",
+    }
+    assert not tables & protected
+    db = sqlite3.connect(":memory:")
+    columns = (
+        "portfolio_id text, transaction_id text, profile_id text, profile_version text, "
+        "payload text, service_name text, event_id text, amortized_cost_profile_id text, "
+        "amortized_cost_profile_version text, amortized_cost_profile_content_hash text, "
+        "amortized_cost_recognized_through text, amortized_cost_scheduled_local text, "
+        "amortized_book_carrying_local text, amortized_book_carrying_base text, "
+        "amortized_cost_book_fx_rate_to_base text"
+    )
+    for table in tables | protected:
+        db.execute(f"create table {table} ({columns})")
+        for portfolio in [
+            "PB_SG_GLOBAL_BAL_001",
+            "OTHER_BOOK",
+            DPM_SOURCE_ONLY_CANDIDATE_PORTFOLIOS[0]["portfolio_id"],
+        ]:
+            db.execute(
+                f"insert into {table} "
+                "(portfolio_id, transaction_id, profile_id, profile_version, payload) "
+                "values (?, ?, ?, ?, ?)",
+                (
+                    portfolio,
+                    portfolio + "-TXN",
+                    portfolio,
+                    "1",
+                    json.dumps({"portfolio_id": portfolio}),
+                ),
+            )
+    # A canonical-topic physical fence owned by another book must survive unchanged.
+    db.execute(
+        "update processed_events set service_name = 'transaction_processing', "
+        "event_id = 'transactions.raw.received:0:17'"
+    )
+    db.commit()
+    before = {
+        table: db.execute(
+            f"select * from {table} where portfolio_id <> 'PB_SG_GLOBAL_BAL_001'"
+        ).fetchall()
+        for table in tables
+    }
+    protected_before = {
+        table: db.execute(f"select * from {table}").fetchall() for table in protected
+    }
+    db.executescript(sql)
+    for table in tables:
+        assert (
+            db.execute(
+                f"select * from {table} where portfolio_id <> 'PB_SG_GLOBAL_BAL_001'"
+            ).fetchall()
+            == before[table]
+        )
+        assert (
+            db.execute(
+                f"select count(*) from {table} where portfolio_id = 'PB_SG_GLOBAL_BAL_001'"
+            ).fetchone()[0]
+            == 0
+        )
+    for table in protected:
+        assert db.execute(f"select * from {table}").fetchall() == protected_before[table]
+    db.close()
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        "--skip-cleanup",
+        "--force-ingest",
+        "--verify-only",
+        "--reprocess-after-ingest",
+        "--portfolio-id=OTHER",
+        "--start-date=2025-04-02",
+        "--end-date=2026-04-09",
+        "--benchmark-id=OTHER",
+    ],
+)
+def test_target_portfolio_replay_rejects_scope_overrides_before_io(monkeypatch, override):
+    monkeypatch.setattr(sys, "argv", ["seed", "--target-portfolio-replay", override])
+    monkeypatch.setattr(front_office_seed_module, "_wait_ready", lambda *_: pytest.fail("no IO"))
+    with pytest.raises(ValueError, match="canonical scope"):
+        front_office_seed_module.main()
 
 
 def test_front_office_verification_evidence_is_machine_readable_and_content_bound(tmp_path):

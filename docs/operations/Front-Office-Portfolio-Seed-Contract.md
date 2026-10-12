@@ -41,6 +41,15 @@ The seed must support:
 - seeded instrument and cash market-price observations must use that same governed weekday
   calendar. FX and benchmark reference coverage may extend over a wider calendar horizon, but
   non-business price points must not create partial position-valuation days.
+- the first USD deposit funds the first governed business day in the requested seed window.
+  For the canonical start, `TXN-DEP-USD-001` is dated `2025-03-31T09:00:00Z`: USD 900,000
+  external BOD inflow, zero opening value and USD 900,000 closing unit-price cash value.
+  Its expected opening daily return is zero because closing value equals invested funding;
+  this is a funded observation, not an invented return for an empty book. The portfolio's
+  standing open date remains `2025-01-06`, and genuine missing funded-day data remains partial.
+- an opt-in target-portfolio replay preserves shared fences and reference/valuation authority;
+  it refuses foreign or changed synthetic source and retained audit dependencies before cleanup.
+  It requires shared-runtime owner review and quiescence as described in the seed runbook.
 - the seed must not require `lotus-manage`
 
 ## Recommended Reference Scenario

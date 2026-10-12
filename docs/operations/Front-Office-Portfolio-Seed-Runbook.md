@@ -101,6 +101,90 @@ seed. Governed Workbench and platform QA startup must run `lotus-core` with
 
 ## Operator Command
 
+### Opening funding and existing synthetic books
+
+The first USD deposit now occurs on the first governed weekday of `--start-date`, rather
+than one calendar day later. For the canonical window this moves only
+`TXN-DEP-USD-001.transaction_date` from April 1 to March 31, 2025, at 09:00 UTC.
+The USD 900,000 amount, transaction identity, cash account, EUR deposit, other transactions,
+benchmark, portfolio open date and requested window are unchanged. Cash price/source-fact
+authority already covers March 31. With external BOD funding of USD 900,000, beginning value
+zero and closing cash value USD 900,000, the expected funded opening return is zero.
+Native worker and downstream live proof are still required; fixture tests alone do not
+certify a running environment.
+
+For an already seeded local synthetic book, ordinary ingestion cannot silently overwrite
+the retained transaction date. `--skip-cleanup` reuse does not update the opening deposit;
+adding `--force-ingest` cannot bypass its financial identity fence. Preserve the old source
+and calculation evidence before any deliberate demo replacement.
+
+The existing transaction source-evidence command confirms missing FX evidence only; it
+cannot correct a transaction date. Transaction reprocessing also retains original economics.
+Use the seed's explicit `--target-portfolio-replay` mode for this synthetic replacement,
+after shared-runtime owner review and exclusive, quiescent ownership of the affected book:
+
+1. Pin the accepted seed source, tenant `tenant-sg`, portfolio `PB_SG_GLOBAL_BAL_001`, old
+   transaction fingerprint and the one-field old/new payload difference. Retain the prior
+   incomplete calculation and source reads separately. Export the affected portfolio-owned
+   rows, including original raw outbox payloads and processed receipts, with counts and hashes
+   before replacement; those live roots are deliberately removed to avoid competing source heads.
+2. The opt-in mode restricts replacement cleanup to this synthetic portfolio's transaction, cashflow,
+   cost/lot, position/history, derived valuation/aggregation, reconciliation, stage and
+   portfolio-owned processed-event and outbox evidence needed for consistent fresh ingress. Review exact
+   row counts and dependencies first. Keep immutable valuation authority and reference
+   parents, other portfolios, benchmark/index/FX/price sources and the business calendar.
+3. Do not run the default blanket cleanup for this bounded repair: it additionally clears
+   shared topic/service fences, instrument eligibility profiles, source-only candidate books
+   and benchmark/model records. Its scope exceeds a one-portfolio funding replacement.
+4. The opt-in path validates retained valuation scope, prices and immutable authority before
+   cleanup. It requires tenant ownership, matching native financial fingerprints for all
+   original raw transactions, no unpublished portfolio outbox events, source revisions or
+   outbox recovery-audit dependencies. Changed economics, foreign identities and duplicate
+   raw roots fail before cleanup. It also accepts an empty or identical corrected subset
+   after interrupted admission, once work is quiescent; partial original seed data is refused.
+5. Cleanup is one PostgreSQL transaction. It retains all reference data, including cash
+   accounts, client profiles, mandates and assignments, and deletes only this portfolio's
+   financial/derived rows and old outbox roots. It neither terminates sessions nor retries
+   cleanup. A foreign-key or SQL failure rolls back and prevents ingress. After cleanup,
+   it posts all 31 original identities to `/ingest/transactions`, with unchanged canonical
+   window and benchmark. There are no reference writes or shared fence resets. Do not submit a duplicate funding ID,
+   hand-write valuations or queue `--reprocess-after-ingest` during normal fresh admission.
+6. Require March 31 cash quantity/value USD 900,000, external BOD flow USD 900,000, beginning
+   value zero, completed current-epoch control and no duplicate funding. Then require all
+   270 canonical portfolio and benchmark observations, truthful missing-data diagnostics,
+   and the full canonical validator. Retain the stack and refresh only affected code when
+   needed; no Docker teardown or volume reset is part of this procedure.
+
+After candidate and row-scope approval, run from the accepted `lotus-core` checkout root.
+The flags below deliberately use the canonical contract defaults; supply the existing
+runtime's service URLs/container name only when they differ from defaults.
+
+PowerShell:
+
+```powershell
+python scripts/development/repository_python.py tools/front_office_portfolio_seed.py `
+  --target-portfolio-replay `
+  --evidence-output output/front-office-qa/opening-funding-verification.json
+```
+
+Bash:
+
+```bash
+python scripts/development/repository_python.py tools/front_office_portfolio_seed.py \
+  --target-portfolio-replay \
+  --evidence-output output/front-office-qa/opening-funding-verification.json
+```
+
+Do not combine this mode with cleanup/force/reprocess overrides or a different canonical
+scope. Cleanup and HTTP admission are separate operations. If ingress fails, preserve the
+failure and inspect the retained state before rerunning this same bounded mode; it accepts
+only the empty or financially identical corrected state described above. Root must establish
+Kafka/worker and valuation/aggregation quiescence before execution; a preflight read is not
+a concurrency fence. No live execution or 270-date qualification is implied by this runbook.
+
+This changes synthetic demo chronology only. It is not a historical bank-record correction
+or an exception to production analytics missing-data semantics.
+
 Run from the `lotus-core` repo root:
 
 ```powershell

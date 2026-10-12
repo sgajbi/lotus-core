@@ -677,6 +677,17 @@ structure and event-flow detail.
 | Operations and incidents | [Operations runbook](docs/operations/runbook.md), [observability](docs/operations/observability.md), and incident playbooks |
 | Documentation or wiki | [Docs index](docs/README.md), front-door contract, and Platform documentation-layering guidance |
 
+## Canonical synthetic funding replay practice
+
+The seed funds the first governed analysis business day. Existing retained synthetic books
+require explicit `--target-portfolio-replay` in `tools/front_office_portfolio_seed.py` to
+replace portfolio financial state through normal transaction ingress while preserving shared
+fences, reference data and immutable valuation authority. This opt-in mode requires Root's
+exclusive quiescent runtime ownership and exact candidate/row-scope review; it is not an economic
+correction contract for bank records. Follow the OS-specific commands, refusal conditions,
+evidence preservation and interrupted-admission procedure in the
+[seed runbook](docs/operations/Front-Office-Portfolio-Seed-Runbook.md#opening-funding-and-existing-synthetic-books).
+
 ## Repo-Native Commands
 
 Run from the `lotus-core` repository root:
