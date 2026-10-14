@@ -478,3 +478,98 @@ async def test_existing_read_port_projects_only_current_consumer_bound_receipt(
         consumer_id=consumer,
     )
     assert rejected.cash is None and rejected.fact_verification_status == "UNAVAILABLE"
+
+
+@pytest.mark.parametrize("funding_state", ["valid", "missing", "unsigned", "revoked", "wrong_pin"])
+@pytest.mark.asyncio
+async def test_two_selected_families_require_every_receipt_and_immutable_pin(
+    monkeypatch, funding_state
+):
+    from src.services.query_control_plane_service.app.application import (
+        portfolio_source_observations as app,
+    )
+    from src.services.query_control_plane_service.app.contracts import (
+        portfolio_source_observations as contracts,
+    )
+    from src.services.query_control_plane_service.app.ports.portfolio_source_observations import (
+        PersistedSourceObservation,
+    )
+
+    class Clock:
+        @staticmethod
+        def now(zone):
+            return NOW
+
+    monkeypatch.setattr(app, "datetime", Clock)
+    cash = CashAvailabilityObservation(ENVELOPE, "SGD", Decimal("0"), None, Decimal("2.5"))
+    funding = FundingInvestmentObservation(
+        replace(ENVELOPE, source_record_id="synthetic-funding"), None, False
+    )
+    facts = (cash, funding)
+    expected = tuple(subject(fact) for fact in facts)
+    keys = (key(expected[0]), replace(key(expected[1]), key_id="synthetic-funding-key"))
+    signed = (
+        receipt(expected[0]),
+        sign(receipt(expected[1]).claims.model_copy(update={"key_id": keys[1].key_id})),
+    )
+    if funding_state == "revoked":
+        keys = (keys[0], replace(keys[1], revoked_at=NOW))
+    trusted = ObservationVerificationAuthority(
+        ObservationReceiptVerifier(keys),
+        tuple(authority(item).cuts[0] for item in expected),
+    )
+    records = tuple(
+        PersistedSourceObservation(
+            fact, fact.content_hash, NOW, f"synthetic-job-{index}", "unqualified", (signed[index],)
+        )
+        for index, fact in enumerate(facts)
+    )
+    funding_record = records[1]
+    if funding_state == "missing":
+        funding_record = None
+    elif funding_state == "unsigned":
+        funding_record = replace(funding_record, verification_receipts=())
+
+    class Reader:
+        async def read_snapshot(self, **scope):
+            return records[0], funding_record
+
+    selectors = tuple(
+        contracts.ObservationSelector(
+            producer_id=fact.envelope.producer_id,
+            source_record_id=fact.envelope.source_record_id,
+            observation_id=fact.content_hash,
+            content_hash=fact.content_hash,
+            source_cut_id=fact.envelope.source_cut_id,
+            source_version=fact.envelope.source_revision,
+        )
+        for fact in facts
+    )
+    funding_selector = selectors[1]
+    if funding_state == "wrong_pin":
+        funding_selector = funding_selector.model_copy(update={"source_cut_id": "foreign-cut"})
+    result = await app.PortfolioSourceObservationsService(Reader(), trusted).query(
+        tenant_id=ENVELOPE.tenant_id,
+        portfolio_id=ENVELOPE.portfolio_id,
+        request=contracts.PortfolioSourceObservationsRequest(
+            as_of_date=expected[0].as_of_date,
+            cash=selectors[0],
+            funding_investment=funding_selector,
+        ),
+        consumer_id=expected[0].consumer_id,
+    )
+    verified = funding_state == "valid"
+    assert result.fact_verification_status == ("FACT_VERIFIED" if verified else "UNAVAILABLE")
+    assert result.cash.verification_receipt == (signed[0] if verified else None)
+    assert result.cash.settled_amount == Decimal("0") and result.cash.encumbered_amount is None
+    assert result.cash.content_hash == cash.content_hash
+    if funding_state in ("missing", "wrong_pin"):
+        assert result.funding_investment is None
+    else:
+        assert result.funding_investment.verification_receipt == (signed[1] if verified else None)
+        assert result.funding_investment.content_hash == funding.content_hash
+        assert result.funding_investment.funded is None
+        assert result.funding_investment.invested is False
+        assert result.funding_investment.qualification == "unqualified"
+    assert result.cash.qualification == "unqualified"
+    assert result.authoritative_state == result.compatibility == "UNAVAILABLE"
