@@ -13,6 +13,7 @@ from decimal import Decimal
 import httpx
 import pytest
 from portfolio_common.database_models import IngestionOpsControl
+from portfolio_common.domain.portfolio_source_observations import FundingInvestmentObservation
 
 from scripts.development.repository_python import repository_environment
 from tests.integration.services.ingestion_service import (
@@ -110,12 +111,21 @@ def deployment(facts):
     return environment, signed
 
 
-async def test_registered_receipt_http_restart_keeps_original_and_corrected_pins(observation_lease):
+@pytest.mark.parametrize("family", ["cash", "funding_investment"])
+async def test_registered_receipt_http_restart_keeps_original_and_corrected_pins(
+    observation_lease, family
+):
     lease = observation_lease
     original = lease.cash()
+    if family == "funding_investment":
+        original = FundingInvestmentObservation(
+            replace(original.envelope, source_record_id="funding"), None, False
+        )
     correction = replace(
         original,
-        available=Decimal("3"),
+        **(
+            {"available": Decimal("3")} if family == "cash" else {"funded": False, "invested": None}
+        ),
         envelope=replace(
             original.envelope,
             source_revision=2,
@@ -133,7 +143,7 @@ async def test_registered_receipt_http_restart_keeps_original_and_corrected_pins
         response = await client.post(
             query,
             headers=routes._headers(tenant or lease.tenant, routes.READ_CAP, producer=consumer),
-            json={"as_of_date": "2026-03-01", "cash": routes._pin(fact)},
+            json={"as_of_date": "2026-03-01", family: routes._pin(fact)},
         )
         assert response.status_code == 200
         return response.json()
@@ -141,33 +151,45 @@ async def test_registered_receipt_http_restart_keeps_original_and_corrected_pins
     async with http_generation(lease, environment) as (client, first_pid):
         before = []
         for index, fact in enumerate((original, correction)):
-            payload = routes._payload(fact)
+            payload = _receipt_payload(fact)
             payload["observations"][0]["verification_receipt"] = signed[index]
-            headers = routes._headers(lease.tenant, routes.WRITE_CAP)
+            capability = routes.WRITE_CAP if family == "cash" else routes.FUNDING_CAP
+            headers = routes._headers(lease.tenant, capability)
             headers["X-Idempotency-Key"] = f"synthetic-receipt-http-{index}"
             response = await client.post(
-                "/ingest/portfolio-cash-availability-observations", headers=headers, json=payload
+                (
+                    "/ingest/portfolio-cash-availability-observations"
+                    if family == "cash"
+                    else "/ingest/portfolio-funding-investment-observations"
+                ),
+                headers=headers,
+                json=payload,
             )
             assert response.status_code == 200
             assert response.json()["status"] == "completed"
             before.append(await read(client, fact))
         # Original pins stay readable after a supported correction in the same process.
-        assert (await read(client, original))["cash"] == before[0]["cash"]
+        assert (await read(client, original))[family] == before[0][family]
+        if family == "funding_investment":
+            assert before[0][family]["funded"] is None
+            assert before[0][family]["invested"] is False
+            assert before[1][family]["funded"] is False
+            assert before[1][family]["invested"] is None
     async with http_generation(lease, environment) as (client, second_pid):
         assert len({os.getpid(), first_pid, second_pid}) == 3
         for index, fact in enumerate((original, correction)):
             result = await read(client, fact)
-            assert result["cash"] == before[index]["cash"]
-            assert result["cash"]["verification_receipt"] == signed[index]
+            assert result[family] == before[index][family]
+            assert result[family]["verification_receipt"] == signed[index]
             assert result["fact_verification_status"] == "FACT_VERIFIED"
             assert result["authoritative_state"] == result["compatibility"] == "UNAVAILABLE"
             foreign = await read(client, fact, consumer="foreign-consumer")
             # Legacy HTTP omits unverified extension fields rather than adding defaults.
             assert "fact_verification_status" not in foreign
-            assert "verification_receipt" not in foreign["cash"]
-            assert foreign["cash"]["content_hash"] == fact.content_hash
+            assert "verification_receipt" not in foreign[family]
+            assert foreign[family]["content_hash"] == fact.content_hash
         foreign = await read(client, original, tenant="foreign-tenant")
-        assert foreign["cash"] is None and "fact_verification_status" not in foreign
+        assert foreign[family] is None and "fact_verification_status" not in foreign
     keys = json.loads(environment["LOTUS_PORTFOLIO_FACT_VERIFICATION_KEYS"])
     keys[0]["revoked_at"] = datetime.now(UTC).isoformat()
     environment["LOTUS_PORTFOLIO_FACT_VERIFICATION_KEYS"] = json.dumps(keys)
@@ -175,19 +197,25 @@ async def test_registered_receipt_http_restart_keeps_original_and_corrected_pins
         for index, fact in enumerate((original, correction)):
             refused = await read(client, fact)
             assert "fact_verification_status" not in refused
-            assert "verification_receipt" not in refused["cash"]
-            economic = dict(before[index]["cash"])
+            assert "verification_receipt" not in refused[family]
+            economic = dict(before[index][family])
             economic.pop("verification_receipt")
-            assert refused["cash"] == economic
+            assert refused[family] == economic
     environment["LOTUS_PORTFOLIO_FACT_VERIFICATION_KEYS"] = "[]"
     environment["LOTUS_PORTFOLIO_FACT_VERIFICATION_CUTS"] = "[]"
     async with http_generation(lease, environment) as (client, unconfigured_pid):
         for index, fact in enumerate((original, correction)):
             unavailable = await read(client, fact)
             assert "fact_verification_status" not in unavailable
-            economic = dict(before[index]["cash"])
+            economic = dict(before[index][family])
             economic.pop("verification_receipt")
-            assert unavailable["cash"] == economic
+            assert unavailable[family] == economic
     pids = (first_pid, second_pid, revoked_pid, unconfigured_pid)
     assert len({os.getpid(), *pids}) == 5
     print(f"receipt HTTP generations={pids}; all exited=0")
+
+
+def _receipt_payload(fact):
+    if not isinstance(fact, FundingInvestmentObservation):
+        return routes._payload(fact)
+    return routes._funding_payload(fact)
