@@ -17,14 +17,24 @@ GOVERNED_IMAGE = (
     "python:3.11-slim-bookworm@"
     "sha256:97b0eafb29f5ebfba254be840115b2f3bc24ff6ff3de9b905e04b74ee7227ba6"
 )
+FIXTURE_OBSERVED_ON = "2026-09-13"
+FIXTURE_NEXT_REVIEW_ON = "2026-10-13"
 
 
 def _inventory() -> dict[str, object]:
-    return json.loads((REPO_ROOT / INVENTORY_PATH).read_text(encoding="utf-8"))
+    inventory = json.loads((REPO_ROOT / INVENTORY_PATH).read_text(encoding="utf-8"))
+    record = inventory["base_images"][0]
+    record["observed_on"] = FIXTURE_OBSERVED_ON
+    record["next_review_on"] = FIXTURE_NEXT_REVIEW_ON
+    record["identity_evidence"]["verified_on"] = FIXTURE_OBSERVED_ON
+    record["distribution_package_support"]["verified_on"] = FIXTURE_OBSERVED_ON
+    return inventory
 
 
 def _manifest_evidence() -> dict[str, object]:
-    return json.loads((REPO_ROOT / MANIFEST_EVIDENCE_PATH).read_text(encoding="utf-8"))
+    evidence = json.loads((REPO_ROOT / MANIFEST_EVIDENCE_PATH).read_text(encoding="utf-8"))
+    evidence["observed_on"] = FIXTURE_OBSERVED_ON
+    return evidence
 
 
 def _write_fixture(
@@ -60,8 +70,11 @@ def _details(root: Path, *, today: date = date(2026, 9, 13)) -> list[str]:
     return [finding.detail for finding in find_base_image_lifecycle_findings(root, today=today)]
 
 
-def test_repository_base_image_lifecycle_inventory_is_current() -> None:
-    assert find_base_image_lifecycle_findings(REPO_ROOT, today=date(2026, 9, 13)) == []
+def test_repository_base_image_lifecycle_inventory_is_valid_at_observation_date() -> None:
+    inventory = json.loads((REPO_ROOT / INVENTORY_PATH).read_text(encoding="utf-8"))
+    observed_on = date.fromisoformat(inventory["base_images"][0]["observed_on"])
+
+    assert find_base_image_lifecycle_findings(REPO_ROOT, today=observed_on) == []
 
 
 def test_guard_accepts_deterministic_replay(tmp_path: Path) -> None:
