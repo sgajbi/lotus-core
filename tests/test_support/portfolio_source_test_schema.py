@@ -22,6 +22,9 @@ from tests.test_support.db_cleanup import (
 
 _VERSIONS = Path(__file__).resolve().parents[2] / "alembic/versions"
 _TABLES = (
+    "portfolio_flow_source_cuts",
+    "portfolio_flow_event_observation_heads",
+    "portfolio_flow_event_observations",
     "portfolio_source_fact_verifications",
     "portfolio_cash_availability_observation_heads",
     "portfolio_funding_investment_observation_heads",
@@ -46,11 +49,20 @@ def fact_verification_migration(connection: Connection) -> dict:
     return module
 
 
+def flow_observation_migration(connection: Connection) -> dict:
+    """Bind the real flow migration, retaining its empty-history downgrade guards."""
+    module = runpy.run_path(str(_VERSIONS / "c187b2c3d548_portfolio_flow_source_observations.py"))
+    assert module["revision"] == "c187b2c3d548"
+    assert module["down_revision"] == "c186b2c3d547"
+    module["upgrade"].__globals__["op"] = Operations(MigrationContext.configure(connection))
+    return module
+
+
 @contextmanager
 def recreate_source_test_dependencies(
     connection: Connection, *, authorization: DatabaseCleanupAuthorization
 ) -> Iterator[None]:
-    """Reset only the five immutable tables on an exact factory-owned test target.
+    """Reset only the eight source tables on an exact factory-owned test target.
 
     No CASCADE on DDL: an unknown dependent object refuses teardown. Recreate from
     frozen real migrations, including original foreign keys, indexes and triggers.
@@ -60,11 +72,12 @@ def recreate_source_test_dependencies(
     identity = connection.execute(text("SELECT current_database(), session_user")).one()
     owned = connection.scalar(
         text(
-            "SELECT count(*) = 5 AND bool_and(pg_get_userbyid(c.relowner) = session_user) "
+            "SELECT count(*) = :table_count "
+            "AND bool_and(pg_get_userbyid(c.relowner) = session_user) "
             "FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
             "WHERE n.nspname='public' AND c.relkind='r' AND c.relname = ANY(:tables)"
         ),
-        {"tables": list(_TABLES)},
+        {"tables": list(_TABLES), "table_count": len(_TABLES)},
     )
     if (
         tuple(identity) != (authorization.target.database, authorization.target.username)
@@ -88,4 +101,7 @@ def recreate_source_test_dependencies(
     )
     observations["upgrade"].__globals__["op"] = Operations(MigrationContext.configure(connection))
     observations["upgrade"]()
+    require_database_cleanup_authorization(authorization, engine=connection.engine)
     fact_verification_migration(connection)["upgrade"]()
+    require_database_cleanup_authorization(authorization, engine=connection.engine)
+    flow_observation_migration(connection)["upgrade"]()

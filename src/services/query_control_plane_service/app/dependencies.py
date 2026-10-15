@@ -110,6 +110,24 @@ from .infrastructure.transaction_economics_sources import (
 from .settings import load_query_control_plane_settings
 
 
+def get_portfolio_flow_observations_service(db: AsyncSession = Depends(get_async_db_session)):
+    from .application.portfolio_flow_source_observations import PortfolioFlowObservationsService
+    from .infrastructure.portfolio_flow_source_observation_sources import (
+        SqlAlchemyPortfolioFlowObservationReader,
+    )
+
+    settings = load_query_control_plane_settings()
+    return PortfolioFlowObservationsService(
+        SqlAlchemyPortfolioFlowObservationReader(db),
+        PageTokenCodec(
+            secret=settings.page_token_secret,
+            active_kid=settings.page_token_key_id,
+            previous_secrets=settings.page_token_previous_keys,
+            ttl_seconds=settings.page_token_ttl_seconds,
+        ),
+    )
+
+
 def get_security_audit_query_service() -> SecurityAuditQueryService:
     return SecurityAuditQueryService(store=PostgresSecurityAuditStore())
 

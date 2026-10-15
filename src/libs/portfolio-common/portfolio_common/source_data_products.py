@@ -64,6 +64,21 @@ class SourceDataProductDefinition:
 
 SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
     SourceDataProductDefinition(
+        product_name="PortfolioFinancialFlowObservations",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=(
+            "/integration/financial-source-observations/flow-events/query",
+            "/integration/financial-source-observations/flow-events/versions/{flow_source_record_revision}",
+        ),
+        notes="Unqualified explicit flow evidence and actual native receipts. Exact "
+        "immutable cuts; independent whole-assembly verification remains "
+        "downstream.",
+    ),
+    SourceDataProductDefinition(
         product_name="PortfolioFinancialSourceObservations",
         product_version="v1",
         route_family=ANALYTICS_INPUT,

@@ -3738,6 +3738,96 @@
     {
       "service_app": "ingestion_service",
       "method": "POST",
+      "path": "/ingest/portfolio-flow-event-observations",
+      "route_key": "POST /ingest/portfolio-flow-event-observations",
+      "operation_id": "ingest_portfolio_flow_event_observations_ingest_portfolio_flow_event_observations_post",
+      "summary": "Retain explicit portfolio flow event source observations",
+      "tags": [
+        "Reference Data"
+      ],
+      "route_family": "Write Ingress",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "ingestion_service",
+      "auth_requirement": "governed-enterprise-readiness",
+      "audit_requirement": "audit-required",
+      "request_schema": "FlowEventObservationIngestionRequest",
+      "response_schemas": [
+        {
+          "status_code": "200",
+          "schema": "IngestionJobResponse",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        }
+      ],
+      "pagination": [],
+      "filtering": [],
+      "sorting": [],
+      "idempotency_behavior": "ingestion-job-idempotency-supported-where-header-present",
+      "downstream_consumers": [
+        "source-adapters",
+        "operations"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "ingestion_service",
+      "method": "POST",
+      "path": "/ingest/portfolio-flow-source-cuts",
+      "route_key": "POST /ingest/portfolio-flow-source-cuts",
+      "operation_id": "ingest_portfolio_flow_source_cut_ingest_portfolio_flow_source_cuts_post",
+      "summary": "Publish an immutable complete portfolio flow source manifest",
+      "tags": [
+        "Reference Data"
+      ],
+      "route_family": "Write Ingress",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "ingestion_service",
+      "auth_requirement": "governed-enterprise-readiness",
+      "audit_requirement": "audit-required",
+      "request_schema": "FlowSourceCutIngestionRequest",
+      "response_schemas": [
+        {
+          "status_code": "200",
+          "schema": "IngestionJobResponse",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        }
+      ],
+      "pagination": [],
+      "filtering": [],
+      "sorting": [],
+      "idempotency_behavior": "ingestion-job-idempotency-supported-where-header-present",
+      "downstream_consumers": [
+        "source-adapters",
+        "operations"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "ingestion_service",
+      "method": "POST",
       "path": "/ingest/portfolio-funding-investment-observations",
       "route_key": "POST /ingest/portfolio-funding-investment-observations",
       "operation_id": "ingest_portfolio_funding_investment_observations_ingest_portfolio_funding_investment_observations_post",
@@ -6086,6 +6176,128 @@
         "lotus-performance",
         "lotus-risk",
         "lotus-workbench"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "query_control_plane_service",
+      "method": "POST",
+      "path": "/integration/financial-source-observations/flow-events/query",
+      "route_key": "POST /integration/financial-source-observations/flow-events/query",
+      "operation_id": "query_flow_source_integration_financial_source_observations_flow_events_query_post",
+      "summary": "Read an exact portfolio flow source window",
+      "tags": [
+        "Integration"
+      ],
+      "route_family": "Analytics Input",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "query_control_plane_service",
+      "auth_requirement": "not-declared-in-openapi",
+      "audit_requirement": "mutation-audit-required",
+      "request_schema": "PortfolioFlowObservationsRequest",
+      "response_schemas": [
+        {
+          "status_code": "200",
+          "schema": "PortfolioFlowObservationsResponse",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Requested tenant does not match admitted tenant authority."
+        },
+        {
+          "status_code": "404",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Exact immutable flow source absent."
+        },
+        {
+          "status_code": "409",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Flow source or cursor did not reconcile."
+        },
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        }
+      ],
+      "pagination": [],
+      "filtering": [
+        "portfolio_id"
+      ],
+      "sorting": [],
+      "idempotency_behavior": "not-declared",
+      "downstream_consumers": [
+        "lotus-manage"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "query_control_plane_service",
+      "method": "GET",
+      "path": "/integration/financial-source-observations/flow-events/versions/{flow_source_record_revision}",
+      "route_key": "GET /integration/financial-source-observations/flow-events/versions/{flow_source_record_revision}",
+      "operation_id": "get_flow_event_revision_integration_financial_source_observations_flow_events_versions__flow_source_record_revision__get",
+      "summary": "Discover a retained flow event revision pin",
+      "tags": [
+        "Integration"
+      ],
+      "route_family": "Analytics Input",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "query_control_plane_service",
+      "auth_requirement": "not-declared-in-openapi",
+      "audit_requirement": "read-audit-where-policy-requires",
+      "request_schema": null,
+      "response_schemas": [
+        {
+          "status_code": "200",
+          "schema": "FlowEventRevisionResponse",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Requested tenant does not match admitted tenant authority."
+        },
+        {
+          "status_code": "404",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Exact immutable flow source absent."
+        },
+        {
+          "status_code": "409",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Flow source or cursor did not reconcile."
+        },
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        }
+      ],
+      "pagination": [],
+      "filtering": [
+        "portfolio_id"
+      ],
+      "sorting": [],
+      "idempotency_behavior": "safe-read",
+      "downstream_consumers": [
+        "lotus-manage"
       ],
       "deprecated_alias_metadata": {
         "is_deprecated": false,

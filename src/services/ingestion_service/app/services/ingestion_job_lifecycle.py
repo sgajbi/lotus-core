@@ -50,6 +50,8 @@ _SYNCHRONOUS_OBSERVATION_ENDPOINTS = frozenset(
     {
         "/ingest/portfolio-cash-availability-observations",
         "/ingest/portfolio-funding-investment-observations",
+        "/ingest/portfolio-flow-event-observations",
+        "/ingest/portfolio-flow-source-cuts",
     }
 )
 

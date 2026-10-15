@@ -147,7 +147,12 @@ def _policy_shape_findings(policy: dict[str, Any]) -> list[str]:
 
 
 def _endpoint_findings(policy: dict[str, Any], router_endpoints: set[str]) -> list[str]:
-    contract_endpoints = set(policy.get("required_endpoint_templates", []))
+    templates = policy.get("required_endpoint_templates")
+    if type(templates) is not list or any(type(value) is not str for value in templates):
+        return ["required_endpoint_templates must be a list of strings"]
+    if len(templates) != len(set(templates)):
+        return ["required_endpoint_templates must contain unique templates"]
+    contract_endpoints = set(templates)
     findings: list[str] = []
     missing = sorted(router_endpoints - contract_endpoints)
     stale = sorted(contract_endpoints - router_endpoints)

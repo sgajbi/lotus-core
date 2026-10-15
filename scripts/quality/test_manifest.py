@@ -71,6 +71,21 @@ SUITES: dict[str, list[str]] = {
     ],
     "critical-db-coverage": [
         "tests/integration/services/ingestion_service/"
+        "test_portfolio_flow_source_observations_postgresql.py::"
+        "test_populated_upgrade_keeps_legacy_and_retains_original_corrected_and_reversal",
+        "tests/integration/services/ingestion_service/"
+        "test_portfolio_flow_source_observations_postgresql.py::"
+        "test_cas_race_and_rollback_leave_one_correction_and_no_orphan_receipt",
+        "tests/integration/services/ingestion_service/"
+        "test_portfolio_flow_source_observations_postgresql.py::"
+        "test_empty_upgrade_round_trip_and_append_only_guards",
+        "tests/integration/services/ingestion_service/"
+        "test_portfolio_flow_source_observations_postgresql.py::"
+        "test_concurrent_arrival_is_visible_after_publication_lock_wait",
+        "tests/integration/services/ingestion_service/"
+        "test_portfolio_flow_source_observations_postgresql.py::"
+        "test_retained_empty_cut_replay_survives_late_arrival_without_rewriting_receipt",
+        "tests/integration/services/ingestion_service/"
         "test_portfolio_source_verification_postgresql.py",
         "tests/integration/services/persistence_service/test_fx_rate_source_revision_postgresql.py",
         "tests/integration/services/ingestion_service/test_fx_source_cut_postgresql.py",
@@ -171,6 +186,8 @@ SUITES: dict[str, list[str]] = {
     ],
     "critical-lifecycle-db": ["tests/integration"],
     "query-authority-db-contract": [
+        "tests/integration/services/ingestion_service/"
+        "test_portfolio_flow_source_observations_postgresql.py",
         "tests/integration/services/query_service/"
         "test_holdings_reconciliation_completion_postgresql.py",
         "tests/integration/services/query_service/test_cash_balance_evidence_postgresql.py",

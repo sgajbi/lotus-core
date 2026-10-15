@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -21,6 +21,8 @@ from src.services.ingestion_service.app.domain.ingestion_evidence_policy import 
 def test_every_reference_family_has_one_explicit_lineage_and_payload_policy() -> None:
     commands = REFERENCE_DATA_INGESTION_REGISTRY.all_commands()
     versioned_endpoints = {
+        "/ingest/portfolio-flow-event-observations",
+        "/ingest/portfolio-flow-source-cuts",
         "/ingest/portfolio-cash-availability-observations",
         "/ingest/portfolio-funding-investment-observations",
         "/ingest/benchmark-assignments",
@@ -29,7 +31,7 @@ def test_every_reference_family_has_one_explicit_lineage_and_payload_policy() ->
         "/ingest/portfolio-party-role-assignments",
     }
 
-    assert len(commands) == 27
+    assert len(commands) == 29
     for command in commands:
         policy = INGESTION_EVIDENCE_POLICY_REGISTRY.require(
             command.endpoint,
@@ -42,7 +44,7 @@ def test_every_reference_family_has_one_explicit_lineage_and_payload_policy() ->
         assert policy.source_lineage.source_batch_id is LineageFieldPosture.NOT_APPLICABLE
         if command.endpoint not in versioned_endpoints:
             assert policy.source_lineage.source_version is LineageFieldPosture.NOT_APPLICABLE
-        assert set(policy.source_lineage.__dataclass_fields__) == {
+        fields = {
             "source_system",
             "source_record_id",
             "observed_at",
@@ -50,11 +52,24 @@ def test_every_reference_family_has_one_explicit_lineage_and_payload_policy() ->
             "source_batch_id",
             "source_version",
         }
+        if command.endpoint in {
+            "/ingest/portfolio-flow-event-observations",
+            "/ingest/portfolio-flow-source-cuts",
+        }:
+            fields.add("flow_source_record_revision")
+        assert set(policy.source_lineage.__dataclass_fields__) == fields
 
 
-@pytest.mark.parametrize("family", ["cash-availability", "funding-investment"])
-def test_observations_are_restricted_fingerprint_only_without_quality_approval(family):
-    endpoint = f"/ingest/portfolio-{family}-observations"
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "/ingest/portfolio-cash-availability-observations",
+        "/ingest/portfolio-funding-investment-observations",
+        "/ingest/portfolio-flow-event-observations",
+        "/ingest/portfolio-flow-source-cuts",
+    ],
+)
+def test_observations_are_restricted_fingerprint_only_without_quality_approval(endpoint):
     policy = INGESTION_EVIDENCE_POLICY_REGISTRY.require(endpoint)
     assert policy.classification is PayloadClassification.RESTRICTED
     assert policy.durable_representation is DurablePayloadRepresentation.FINGERPRINT_ONLY
@@ -62,8 +77,19 @@ def test_observations_are_restricted_fingerprint_only_without_quality_approval(f
     assert not policy.partial_replay_eligible
     assert policy.replay_ttl is None
     assert policy.source_lineage.quality_status is LineageFieldPosture.NOT_APPLICABLE
-    for field in ("source_system", "source_record_id", "source_version", "observed_at"):
+    flow = endpoint in {
+        "/ingest/portfolio-flow-event-observations",
+        "/ingest/portfolio-flow-source-cuts",
+    }
+    identity_fields = (
+        ("source_record_id", "flow_source_record_revision")
+        if flow
+        else ("source_record_id", "source_version")
+    )
+    for field in ("source_system", *identity_fields, "observed_at"):
         assert getattr(policy.source_lineage, field) is LineageFieldPosture.REQUIRED
+    if flow:
+        assert policy.source_lineage.source_version is LineageFieldPosture.NOT_APPLICABLE
     with pytest.raises(ValueError, match="entity mismatch"):
         INGESTION_EVIDENCE_POLICY_REGISTRY.require(endpoint, entity_type="portfolio")
 
@@ -89,6 +115,44 @@ def test_registry_covers_every_job_creating_endpoint_family() -> None:
     assert {
         policy.endpoint for policy in INGESTION_EVIDENCE_POLICY_REGISTRY.all_policies()
     } == reference_endpoints | generic_job_endpoints
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "entity_type"),
+    [
+        ("/ingest/portfolio-flow-event-observations", "portfolio_flow_event_observation"),
+        ("/ingest/portfolio-flow-source-cuts", "portfolio_flow_source_cut"),
+    ],
+)
+def test_flow_native_receipt_payload_is_classified_without_retaining_body(endpoint, entity_type):
+    from src.services.ingestion_service.app.services.ingestion_payload_evidence import (
+        build_ingestion_payload_evidence,
+        ingestion_payload_fingerprint_matches,
+    )
+
+    payload = {"source_record_id": "synthetic-flow", "amount": "10.25"}
+    evidence = build_ingestion_payload_evidence(
+        endpoint=endpoint,
+        entity_type=entity_type,
+        payload=payload,
+        observed_at=datetime(2026, 10, 15, tzinfo=UTC),
+        fingerprint_key_id="synthetic-key",
+        fingerprint_hmac_secret="synthetic-evidence-secret",
+    )
+    assert evidence.classification == "restricted"
+    assert evidence.durable_representation == "fingerprint_only"
+    assert evidence.request_payload is None and evidence.replay_expires_at is None
+    assert not evidence.replay_eligible and not evidence.partial_replay_eligible
+    assert ingestion_payload_fingerprint_matches(
+        stored_fingerprint=evidence.request_payload_fingerprint,
+        payload=payload,
+        secrets_by_key_id={"synthetic-key": "synthetic-evidence-secret"},
+    )
+    assert not ingestion_payload_fingerprint_matches(
+        stored_fingerprint=evidence.request_payload_fingerprint,
+        payload={**payload, "amount": "10.26"},
+        secrets_by_key_id={"synthetic-key": "synthetic-evidence-secret"},
+    )
 
 
 def test_canonical_fx_cut_is_explicit_fingerprint_only_without_legacy_replay() -> None:

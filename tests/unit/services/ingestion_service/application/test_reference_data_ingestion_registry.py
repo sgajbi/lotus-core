@@ -18,6 +18,18 @@ from src.services.ingestion_service.app.DTOs.reference_data_support_dto import (
 from tests.test_support.classification_history import source_cut
 
 EXPECTED_COMMANDS = {
+    "portfolio_flow_event_observation": (
+        "/ingest/portfolio-flow-event-observations",
+        "portfolio_flow_event_observation",
+        "observations",
+        "append",
+    ),
+    "portfolio_flow_source_cut": (
+        "/ingest/portfolio-flow-source-cuts",
+        "portfolio_flow_source_cut",
+        "cuts",
+        "append_cut",
+    ),
     "portfolio_cash_availability_observation": (
         "/ingest/portfolio-cash-availability-observations",
         "portfolio_cash_availability_observation",

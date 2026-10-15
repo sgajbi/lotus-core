@@ -1138,9 +1138,27 @@ python scripts/development/repository_python.py -m pytest tests/unit/contracts/t
 
 ## Portfolio Source Observation Practice
 
+The sibling `PortfolioFinancialFlowObservations` v1 product owns explicit stable flow event IDs,
+source financial declarations, actual first admitted Core receipt and complete producer/window
+manifests. See [its methodology](docs/methodologies/source-data-products/portfolio-financial-flow-observations.md)
+for the observations-first, exact-pin discovery, cut-publication and exact-cut read sequence.
+Existing cash/funding v1 defaults, hashes and receipts remain unchanged. No economic writer changes.
+Both event append and first cut publication use the same producer scope lock under READ COMMITTED;
+exact cut replay precedes current membership validation. Public server grants require independent
+trusted identity binding and are forwarded only to ingestion in canonical Compose. Migration
+`c187b2c3d548` adds immutable evidence without legacy backfill. Unit/contract proof does not establish
+PostgreSQL, registered runtime or restart/source-withdrawal support; those require separate owning
+execution. Whole-assembly qualification remains downstream, with no source signing keys in Manage.
+
+Reversals require an exact retained target observation/hash/version pin. Required ordered
+dependency pins retain cross-window and multi-hop targets separately from complete in-window
+membership; dependency amounts never enter the window event count. Combined evidence is bounded
+to 1,000 pins, with reachable closure, nonfuture business dates and source-event cycle refusal.
+Original target revisions survive late correction; signed page cursors bind both evidence sets.
+
 The `PortfolioFinancialSourceObservations` product retains independent cash-availability and
 funding/investment assertions. Submission requires a verified identity, the exact family write
-capability, and a separate server-owned tenant/portfolio/producer grant; deployed grants are empty.
+capability, and a separate server-owned tenant/portfolio/producer grant; grants default to empty.
 Admission does not qualify a bank feed. Amounts remain independent nullable exact decimals and
 flags remain independent nullable booleans; no available-cash formula or lifecycle inference is
 owned here. See [the methodology](docs/methodologies/source-data-products/portfolio-financial-source-observations.md).

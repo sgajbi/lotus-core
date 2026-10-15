@@ -32,7 +32,9 @@
         "historical-classification-custody",
         "analytics-degraded-source-data",
         "analytics-pagination-filtering-sorting",
-        "portfolio-source-observations-diagnostic"
+        "portfolio-source-observations-diagnostic",
+        "portfolio-flow-source-complete-unqualified",
+        "portfolio-flow-source-cross-window-reversal"
       ]
     },
     {
@@ -52,6 +54,394 @@
     }
   ],
   "examples": [
+    {
+      "id": "portfolio-flow-source-cross-window-reversal",
+      "category": "success",
+      "service": "query_control_plane_service",
+      "family": "Analytics Input",
+      "method": "POST",
+      "path": "/integration/financial-source-observations/flow-events/query",
+      "sourceTests": [
+        "tests/unit/services/query_control_plane_service/application/test_portfolio_flow_reversal_dependencies.py"
+      ],
+      "request": {
+        "query": {
+          "portfolio_id": "portfolio-synthetic"
+        },
+        "body": {
+          "source_system": "producer-synthetic",
+          "source_cut_id": "source-cut",
+          "cut_revision": 1,
+          "manifest_hash": "086baf9a14790b60bc235d771d16a2923c853a829ffd43b9c1253deecaeadb52",
+          "window": {
+            "from_date": "2026-01-01",
+            "to_date": "2026-01-31"
+          },
+          "currency": "SGD",
+          "page": {
+            "page_size": 250,
+            "page_token": null
+          }
+        },
+        "authorityBoundary": "Actual query application and complete serializer with synthetic typed port evidence. December target amounts are separate dependencies, excluded from January event membership. No PostgreSQL, native HTTP or whole-assembly certification is established."
+      },
+      "dynamicFieldPointers": [
+        "/generated_at"
+      ],
+      "response": {
+        "status": 200,
+        "body": {
+          "tenant_id": "tenant-synthetic",
+          "generated_at": "2026-10-15T00:00:00Z",
+          "as_of_date": "2026-01-31",
+          "restatement_version": "current",
+          "reconciliation_status": "UNKNOWN",
+          "data_quality_status": "UNAVAILABLE",
+          "latest_evidence_timestamp": null,
+          "source_cut_id": "source-cut",
+          "source_batch_fingerprint": null,
+          "snapshot_id": null,
+          "content_hash": "086baf9a14790b60bc235d771d16a2923c853a829ffd43b9c1253deecaeadb52",
+          "source_digest": "086baf9a14790b60bc235d771d16a2923c853a829ffd43b9c1253deecaeadb52",
+          "source_refs": [
+            "lotus-core://source/PortfolioFinancialFlowObservations/portfolio-synthetic/086baf9a14790b60bc235d771d16a2923c853a829ffd43b9c1253deecaeadb52"
+          ],
+          "source_lineage": {
+            "source_owner": "lotus-core",
+            "qualification": "unqualified"
+          },
+          "degradation": {
+            "status": "UNAVAILABLE",
+            "reason_codes": [
+              "SOURCE_PRODUCER_UNQUALIFIED",
+              "WHOLE_ASSEMBLY_VERIFICATION_NOT_ESTABLISHED"
+            ],
+            "details": []
+          },
+          "source_evidence_current": false,
+          "freshness_status": "UNAVAILABLE",
+          "policy_version": null,
+          "correlation_id": "synthetic-correlation",
+          "product_name": "PortfolioFinancialFlowObservations",
+          "product_version": "v1",
+          "portfolio_id": "portfolio-synthetic",
+          "source_system": "producer-synthetic",
+          "cut_revision": 1,
+          "manifest_hash": "086baf9a14790b60bc235d771d16a2923c853a829ffd43b9c1253deecaeadb52",
+          "definition_version": "v1",
+          "currency": "SGD",
+          "window": {
+            "from_date": "2026-01-01",
+            "to_date": "2026-01-31"
+          },
+          "coverage": "complete",
+          "qualification": "unqualified",
+          "source_fields_available": true,
+          "authoritative_use_available": false,
+          "reason_codes": [
+            "SOURCE_PRODUCER_UNQUALIFIED",
+            "WHOLE_ASSEMBLY_VERIFICATION_NOT_ESTABLISHED"
+          ],
+          "receipt_job_id": "cut-receipt",
+          "received_at": "2026-10-15T00:00:00Z",
+          "predecessor_cut_hash": null,
+          "expected_head_hash": null,
+          "pagination": {
+            "total_count": 2,
+            "returned_count": 2,
+            "offset": 0,
+            "next_page_token": null,
+            "ordered_set_hash": "a2fa2da58a840b12a2fd765b6f3ffba2f541cb37f4fc2ebd66966277a8501dc9",
+            "dependency_count": 1,
+            "dependency_set_hash": "414b50b9eaee985213205cd8e9d966fe0a50b4d56e2a247814fa21a504f053c1"
+          },
+          "events": [
+            {
+              "product_name": "PortfolioFinancialFlowObservations",
+              "product_version": "v1",
+              "source_record_id": "january-cash",
+              "business_date": "2026-01-02",
+              "received_at": "2026-10-15T00:00:00Z",
+              "currency": "SGD",
+              "amount": "25",
+              "classification": "EXTERNAL_CASH",
+              "posting_state": "POSTED",
+              "reversal_state": "NONE",
+              "reverses_source_record_id": null,
+              "reversal_target": null,
+              "economic_event_id": null,
+              "transaction_id": null,
+              "observation_id": "f1b48e898e25b6050438aa323915787c505af4694ebda04a618c0aacf3141879",
+              "content_hash": "f1b48e898e25b6050438aa323915787c505af4694ebda04a618c0aacf3141879",
+              "source_system": "producer-synthetic",
+              "flow_source_record_revision": 1,
+              "source_cut_id": "source-cut",
+              "definition_version": "v1",
+              "predecessor_id": null,
+              "expected_head_hash": null,
+              "receipt_job_id": "receipt-january-cash",
+              "coverage": "complete",
+              "qualification": "unqualified"
+            },
+            {
+              "product_name": "PortfolioFinancialFlowObservations",
+              "product_version": "v1",
+              "source_record_id": "january-reversal",
+              "business_date": "2026-01-02",
+              "received_at": "2026-10-15T00:00:00Z",
+              "currency": "SGD",
+              "amount": "-7.50",
+              "classification": "REVERSAL",
+              "posting_state": "POSTED",
+              "reversal_state": "REVERSES",
+              "reverses_source_record_id": "december",
+              "reversal_target": {
+                "source_record_id": "december",
+                "observation_id": "c4a42244999947c33f4a89b53181c0c893037c1d10e07cfd4115841fdab268e3",
+                "content_hash": "c4a42244999947c33f4a89b53181c0c893037c1d10e07cfd4115841fdab268e3",
+                "flow_source_record_revision": 1
+              },
+              "economic_event_id": null,
+              "transaction_id": null,
+              "observation_id": "9875233cb39d730a5cc11b5f552534d876c9fc5c62c7e1e1955824566b7df3b3",
+              "content_hash": "9875233cb39d730a5cc11b5f552534d876c9fc5c62c7e1e1955824566b7df3b3",
+              "source_system": "producer-synthetic",
+              "flow_source_record_revision": 1,
+              "source_cut_id": "source-cut",
+              "definition_version": "v1",
+              "predecessor_id": null,
+              "expected_head_hash": null,
+              "receipt_job_id": "receipt-january-reversal",
+              "coverage": "complete",
+              "qualification": "unqualified"
+            }
+          ],
+          "reversal_dependencies": [
+            {
+              "product_name": "PortfolioFinancialFlowObservations",
+              "product_version": "v1",
+              "source_record_id": "december",
+              "business_date": "2025-12-15",
+              "received_at": "2026-10-15T00:00:00Z",
+              "currency": "SGD",
+              "amount": "9000",
+              "classification": "EXTERNAL_CASH",
+              "posting_state": "POSTED",
+              "reversal_state": "NONE",
+              "reverses_source_record_id": null,
+              "reversal_target": null,
+              "economic_event_id": null,
+              "transaction_id": null,
+              "observation_id": "c4a42244999947c33f4a89b53181c0c893037c1d10e07cfd4115841fdab268e3",
+              "content_hash": "c4a42244999947c33f4a89b53181c0c893037c1d10e07cfd4115841fdab268e3",
+              "source_system": "producer-synthetic",
+              "flow_source_record_revision": 1,
+              "source_cut_id": "source-cut",
+              "definition_version": "v1",
+              "predecessor_id": null,
+              "expected_head_hash": null,
+              "receipt_job_id": "december-receipt",
+              "coverage": "complete",
+              "qualification": "unqualified"
+            }
+          ]
+        }
+      },
+      "sensitivity": {
+        "syntheticOnly": true
+      }
+    },
+    {
+      "id": "portfolio-flow-source-complete-unqualified",
+      "category": "success",
+      "service": "query_control_plane_service",
+      "family": "Analytics Input",
+      "method": "POST",
+      "path": "/integration/financial-source-observations/flow-events/query",
+      "sourceTests": [
+        "tests/unit/services/query_control_plane_service/application/test_portfolio_flow_source_observations.py"
+      ],
+      "request": {
+        "query": {
+          "portfolio_id": "portfolio-synthetic"
+        },
+        "body": {
+          "source_system": "producer-synthetic",
+          "source_cut_id": "source-cut",
+          "cut_revision": 1,
+          "manifest_hash": "9066b46ba40b8efaf034c01ed41d09d26eb8c35d077c981056fb5bd214547cba",
+          "window": {
+            "from_date": "2026-01-01",
+            "to_date": "2026-01-31"
+          },
+          "currency": "SGD",
+          "page": {
+            "page_size": 250,
+            "page_token": null
+          }
+        },
+        "authorityBoundary": "Actual application service and complete response serializer with synthetic typed port evidence. This does not prove PostgreSQL, HTTP runtime, external institution completeness or whole-assembly verification."
+      },
+      "dynamicFieldPointers": [
+        "/generated_at"
+      ],
+      "response": {
+        "status": 200,
+        "body": {
+          "tenant_id": "tenant-synthetic",
+          "generated_at": "2026-10-15T00:00:00Z",
+          "as_of_date": "2026-01-31",
+          "restatement_version": "current",
+          "reconciliation_status": "UNKNOWN",
+          "data_quality_status": "UNAVAILABLE",
+          "latest_evidence_timestamp": null,
+          "source_cut_id": "source-cut",
+          "source_batch_fingerprint": null,
+          "snapshot_id": null,
+          "content_hash": "9066b46ba40b8efaf034c01ed41d09d26eb8c35d077c981056fb5bd214547cba",
+          "source_digest": "9066b46ba40b8efaf034c01ed41d09d26eb8c35d077c981056fb5bd214547cba",
+          "source_refs": [
+            "lotus-core://source/PortfolioFinancialFlowObservations/portfolio-synthetic/9066b46ba40b8efaf034c01ed41d09d26eb8c35d077c981056fb5bd214547cba"
+          ],
+          "source_lineage": {
+            "source_owner": "lotus-core",
+            "qualification": "unqualified"
+          },
+          "degradation": {
+            "status": "UNAVAILABLE",
+            "reason_codes": [
+              "SOURCE_PRODUCER_UNQUALIFIED",
+              "WHOLE_ASSEMBLY_VERIFICATION_NOT_ESTABLISHED"
+            ],
+            "details": []
+          },
+          "source_evidence_current": false,
+          "freshness_status": "UNAVAILABLE",
+          "policy_version": null,
+          "correlation_id": "synthetic-correlation",
+          "product_name": "PortfolioFinancialFlowObservations",
+          "product_version": "v1",
+          "portfolio_id": "portfolio-synthetic",
+          "source_system": "producer-synthetic",
+          "cut_revision": 1,
+          "manifest_hash": "9066b46ba40b8efaf034c01ed41d09d26eb8c35d077c981056fb5bd214547cba",
+          "definition_version": "v1",
+          "currency": "SGD",
+          "window": {
+            "from_date": "2026-01-01",
+            "to_date": "2026-01-31"
+          },
+          "coverage": "complete",
+          "qualification": "unqualified",
+          "source_fields_available": true,
+          "authoritative_use_available": false,
+          "reason_codes": [
+            "SOURCE_PRODUCER_UNQUALIFIED",
+            "WHOLE_ASSEMBLY_VERIFICATION_NOT_ESTABLISHED"
+          ],
+          "receipt_job_id": "cut-receipt",
+          "received_at": "2026-10-15T00:00:00Z",
+          "predecessor_cut_hash": null,
+          "expected_head_hash": null,
+          "pagination": {
+            "total_count": 3,
+            "returned_count": 3,
+            "offset": 0,
+            "next_page_token": null,
+            "ordered_set_hash": "2d5013147514d69281fb097fdbf635632e1175610420c84f57c10179d9b6bf39",
+            "dependency_count": 0,
+            "dependency_set_hash": "d7f365642c876945801815f0d2bc4a9e827be119a740d364aeb97cd744c35d88"
+          },
+          "events": [
+            {
+              "product_name": "PortfolioFinancialFlowObservations",
+              "product_version": "v1",
+              "source_record_id": "a",
+              "business_date": "2026-01-02",
+              "received_at": "2026-10-15T00:00:00Z",
+              "currency": "SGD",
+              "amount": "10.001000000000000000001",
+              "classification": "EXTERNAL_CASH",
+              "posting_state": "POSTED",
+              "reversal_state": "NONE",
+              "reverses_source_record_id": null,
+              "reversal_target": null,
+              "economic_event_id": null,
+              "transaction_id": null,
+              "observation_id": "b8a00e49ac3da06114a5ee56c5538943dbe7c38d6d8122d3ef0b930aeb20b06b",
+              "content_hash": "b8a00e49ac3da06114a5ee56c5538943dbe7c38d6d8122d3ef0b930aeb20b06b",
+              "source_system": "producer-synthetic",
+              "flow_source_record_revision": 1,
+              "source_cut_id": "source-cut",
+              "definition_version": "v1",
+              "predecessor_id": null,
+              "expected_head_hash": null,
+              "receipt_job_id": "receipt-a",
+              "coverage": "complete",
+              "qualification": "unqualified"
+            },
+            {
+              "product_name": "PortfolioFinancialFlowObservations",
+              "product_version": "v1",
+              "source_record_id": "b",
+              "business_date": "2026-01-02",
+              "received_at": "2026-10-15T00:00:00Z",
+              "currency": "SGD",
+              "amount": "10.001000000000000000001",
+              "classification": "EXTERNAL_CASH",
+              "posting_state": "POSTED",
+              "reversal_state": "NONE",
+              "reverses_source_record_id": null,
+              "reversal_target": null,
+              "economic_event_id": null,
+              "transaction_id": null,
+              "observation_id": "6679ae3696cb427adbae68562f44098c2b27eca8d1b495b2de419337dcb37744",
+              "content_hash": "6679ae3696cb427adbae68562f44098c2b27eca8d1b495b2de419337dcb37744",
+              "source_system": "producer-synthetic",
+              "flow_source_record_revision": 1,
+              "source_cut_id": "source-cut",
+              "definition_version": "v1",
+              "predecessor_id": null,
+              "expected_head_hash": null,
+              "receipt_job_id": "receipt-b",
+              "coverage": "complete",
+              "qualification": "unqualified"
+            },
+            {
+              "product_name": "PortfolioFinancialFlowObservations",
+              "product_version": "v1",
+              "source_record_id": "c",
+              "business_date": "2026-01-02",
+              "received_at": "2026-10-15T00:00:00Z",
+              "currency": "SGD",
+              "amount": "10.001000000000000000001",
+              "classification": "EXTERNAL_CASH",
+              "posting_state": "POSTED",
+              "reversal_state": "NONE",
+              "reverses_source_record_id": null,
+              "reversal_target": null,
+              "economic_event_id": null,
+              "transaction_id": null,
+              "observation_id": "ee1f91c3e992edc7b545d1fb99e5be3cfdcba2241c413dfae33cdbaaab25814a",
+              "content_hash": "ee1f91c3e992edc7b545d1fb99e5be3cfdcba2241c413dfae33cdbaaab25814a",
+              "source_system": "producer-synthetic",
+              "flow_source_record_revision": 1,
+              "source_cut_id": "source-cut",
+              "definition_version": "v1",
+              "predecessor_id": null,
+              "expected_head_hash": null,
+              "receipt_job_id": "receipt-c",
+              "coverage": "complete",
+              "qualification": "unqualified"
+            }
+          ],
+          "reversal_dependencies": []
+        }
+      },
+      "sensitivity": {
+        "syntheticOnly": true
+      }
+    },
     {
       "id": "historical-classification-custody",
       "category": "success",

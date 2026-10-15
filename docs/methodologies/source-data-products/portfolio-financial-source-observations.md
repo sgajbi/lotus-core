@@ -5,6 +5,9 @@ portfolio eligibility, funding policy or a composite readiness decision. Core pr
 admission and historical-read structure. No institutionally qualified producer is configured;
 authoritative consumption and joined-cut compatibility remain `UNAVAILABLE`.
 
+The sibling [flow source product](portfolio-financial-flow-observations.md) retains explicit flow
+events and complete window manifests through separate named routes. It preserves this v1 response.
+
 ## Ownership and supported boundaries
 
 | Family | Producer-owned facts | Core must not infer |

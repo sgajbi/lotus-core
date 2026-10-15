@@ -206,7 +206,9 @@ async def _retained(session):
         CashAccountMaster,
     ):
         result = await session.execute(
-            select(model.__table__).where(model.portfolio_id == PORTFOLIO)
+            select(model.__table__)
+            .where(model.portfolio_id == PORTFOLIO)
+            .order_by(*model.__table__.primary_key.columns)
         )
         rows.extend(dict(row) for row in result.mappings())
     return rows

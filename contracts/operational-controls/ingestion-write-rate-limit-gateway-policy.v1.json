@@ -51,6 +51,8 @@
     "/ingest/planned-withdrawal-schedules",
     "/ingest/portfolio-bundle",
     "/ingest/portfolio-cash-availability-observations",
+    "/ingest/portfolio-flow-event-observations",
+    "/ingest/portfolio-flow-source-cuts",
     "/ingest/portfolio-funding-investment-observations",
     "/ingest/portfolio-party-role-assignments",
     "/ingest/portfolios",

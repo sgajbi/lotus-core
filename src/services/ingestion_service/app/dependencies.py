@@ -155,12 +155,16 @@ def get_reference_data_ingestion_command_handler(
 
 
 def get_portfolio_source_observation_authority():
+    import os
+
     from portfolio_common.portfolio_source_observation_qualification import (
         UnqualifiedProducerAuthority,
+        parse_submission_grants,
     )
 
-    # No production submission grants or qualified providers are introduced.
-    return UnqualifiedProducerAuthority()
+    return UnqualifiedProducerAuthority(
+        parse_submission_grants(os.environ.get("LOTUS_PORTFOLIO_SOURCE_SUBMISSION_GRANTS_JSON", ""))
+    )
 
 
 def get_portfolio_source_observation_commands(

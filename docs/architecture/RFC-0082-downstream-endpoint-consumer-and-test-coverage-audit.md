@@ -13,6 +13,22 @@ The source of truth for product identity, route family, route ownership, paging/
 
 ## Summary
 
+### Retained Financial Flow Source Evidence
+
+`PortfolioFinancialFlowObservations:v1` supplies `lotus-manage` with complete pinned
+window events and their immutable reversal dependencies through
+`POST /integration/financial-source-observations/flow-events/query`.
+`GET /integration/financial-source-observations/flow-events/versions/{flow_source_record_revision}`
+discovers exact retained revisions. Both reads require opaque `portfolio_id` query scope;
+revision lookup also requires exact `source_system` and `source_record_id` query identities.
+The native ingestion endpoints retain assertions and
+publish immutable cuts; they do not certify economic authority or joined-cut compatibility.
+The original bounded unit evidence is source proof only. At signed source `3cc2b7308`,
+the seven registered hosted PostgreSQL cases executed and failed endpoint classification;
+the broader database cohorts also exposed a test cleanup dependency omission. Those failures
+remain recorded under Core #1227; local native PostgreSQL has not been executed. This audit
+does not claim downstream assembly, restart or banking qualification.
+
 ### Structural Financial Source Observations — Not Downstream Certification
 
 `PortfolioFinancialSourceObservations` exposes

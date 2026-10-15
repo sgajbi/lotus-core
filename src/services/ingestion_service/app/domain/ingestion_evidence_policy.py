@@ -39,6 +39,13 @@ class SourceLineagePolicy:
 
 
 @dataclass(frozen=True, slots=True)
+class FlowRecordLineagePolicy(SourceLineagePolicy):
+    """Dedicated record identity/revision; existing source_version keeps its meaning."""
+
+    flow_source_record_revision: LineageFieldPosture
+
+
+@dataclass(frozen=True, slots=True)
 class IngestionEvidencePolicy:
     endpoint: str
     entity_type: str
@@ -321,14 +328,28 @@ _REFERENCE_POLICIES = tuple(
     for endpoint, entity_type, classification in _REFERENCE_FAMILIES
 )
 
+_FLOW_SOURCE_LINEAGE = FlowRecordLineagePolicy(
+    source_system=LineageFieldPosture.REQUIRED,
+    source_record_id=LineageFieldPosture.REQUIRED,
+    observed_at=LineageFieldPosture.REQUIRED,
+    quality_status=LineageFieldPosture.NOT_APPLICABLE,
+    source_batch_id=LineageFieldPosture.NOT_APPLICABLE,
+    source_version=LineageFieldPosture.NOT_APPLICABLE,
+    flow_source_record_revision=LineageFieldPosture.REQUIRED,
+)
+
 _OBSERVATION_POLICIES = tuple(
     _fingerprint_policy(
         endpoint,
         entity_type,
         classification=PayloadClassification.RESTRICTED,
-        source_lineage=_STRONG_AUTHORITY_SOURCE_LINEAGE,
+        source_lineage=_FLOW_SOURCE_LINEAGE
+        if entity_type in {"portfolio_flow_event_observation", "portfolio_flow_source_cut"}
+        else _STRONG_AUTHORITY_SOURCE_LINEAGE,
     )
     for endpoint, entity_type in (
+        ("/ingest/portfolio-flow-event-observations", "portfolio_flow_event_observation"),
+        ("/ingest/portfolio-flow-source-cuts", "portfolio_flow_source_cut"),
         (
             "/ingest/portfolio-cash-availability-observations",
             "portfolio_cash_availability_observation",
