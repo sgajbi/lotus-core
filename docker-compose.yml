@@ -176,6 +176,7 @@ services:
     environment:
       <<: *shared_python_env
       SERVICE_NAME: ingestion-service
+      LOTUS_PORTFOLIO_SOURCE_SUBMISSION_GRANTS_JSON: ${LOTUS_PORTFOLIO_SOURCE_SUBMISSION_GRANTS_JSON:-}
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       LOTUS_CORE_INGEST_RATE_LIMIT_WINDOW_SECONDS: ${LOTUS_CORE_INGEST_RATE_LIMIT_WINDOW_SECONDS:-60}

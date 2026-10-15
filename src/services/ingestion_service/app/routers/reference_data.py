@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from portfolio_common.domain.portfolio_source_observations import ObservationConflict
@@ -19,6 +20,8 @@ from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
 from ..DTOs.ingestion_job_dto import IngestionJobResponse
 from ..DTOs.portfolio_source_observation_dto import (
     CashAvailabilityObservationIngestionRequest,
+    FlowEventObservationIngestionRequest,
+    FlowSourceCutIngestionRequest,
     FundingInvestmentObservationIngestionRequest,
 )
 from ..DTOs.reference_data_dto import (
@@ -70,7 +73,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-async def _handle_observation_submission(http_request, request, commands):
+async def _handle_observation_submission(http_request, request, commands, *, received_at=None):
     key = resolve_idempotency_key(http_request)
     if key is None:
         raise HTTPException(
@@ -86,6 +89,7 @@ async def _handle_observation_submission(http_request, request, commands):
                 tenant_context=http_request.state.tenant_context,
                 request=request,
                 idempotency_key=key,
+                received_at=received_at,
             )
         )
     except IngestionIdempotencyConflictError as exc:
@@ -156,6 +160,65 @@ async def ingest_portfolio_funding_investment_observations(
     ),
 ) -> IngestionJobResponse:
     return await _handle_observation_submission(http_request, request, commands)
+
+
+@router.post(
+    "/ingest/portfolio-flow-event-observations",
+    response_model=IngestionJobResponse,
+    tags=["Reference Data"],
+    summary="Retain explicit portfolio flow event source observations",
+    description=(
+        "What: retain producer event identity, exact amount and explicit posting/reversal state. "
+        "How: authenticated producer grant and source CAS commit facts, first admitted UTC ingress "
+        "time and terminal receipt atomically. When: new unqualified source "
+        "evidence, without booking "
+        "financial transactions. Read retained observation pins before publishing a "
+        "flow source cut."
+    ),
+)
+async def ingest_portfolio_flow_event_observations(
+    request: FlowEventObservationIngestionRequest,
+    http_request: Request,
+    commands: PortfolioSourceObservationCommands = Depends(
+        get_portfolio_source_observation_commands
+    ),
+) -> IngestionJobResponse:
+    received_at = datetime.now(UTC)
+    return await _handle_observation_submission(
+        http_request,
+        request,
+        commands,
+        received_at=received_at,
+    )
+
+
+@router.post(
+    "/ingest/portfolio-flow-source-cuts",
+    response_model=IngestionJobResponse,
+    tags=["Reference Data"],
+    summary="Publish an immutable complete portfolio flow source manifest",
+    description=(
+        "What: retain one ordered source window manifest including cancelled and reversal events. "
+        "How: exact previously admitted event pins, producer grant and cut revision CAS commit "
+        "with one terminal receipt. When: after event ingestion; complete empty manifests are "
+        "explicit zero events, while absent or partial coverage cannot imply zero. Unqualified "
+        "evidence never certifies a monthly assembly or bank authority."
+    ),
+)
+async def ingest_portfolio_flow_source_cut(
+    request: FlowSourceCutIngestionRequest,
+    http_request: Request,
+    commands: PortfolioSourceObservationCommands = Depends(
+        get_portfolio_source_observation_commands
+    ),
+) -> IngestionJobResponse:
+    received_at = datetime.now(UTC)
+    return await _handle_observation_submission(
+        http_request,
+        request,
+        commands,
+        received_at=received_at,
+    )
 
 
 REFERENCE_MODE_BLOCKED_EXAMPLE = {

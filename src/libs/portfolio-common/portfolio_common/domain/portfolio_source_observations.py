@@ -14,6 +14,7 @@ from .financial.precision import EXACT_UNBOUNDED
 class ObservationFamily(StrEnum):
     CASH_AVAILABILITY = "cash_availability"
     FUNDING_INVESTMENT = "funding_investment"
+    FLOW_EVENT = "flow_event"
 
 
 class ObservationCoverage(StrEnum):

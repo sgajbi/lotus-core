@@ -13,6 +13,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from tests import conftest as harness
 from tests.integration.services.ingestion_service import (
+    test_portfolio_flow_source_observations_postgresql as flow_proof,
+)
+from tests.integration.services.ingestion_service import (
     test_portfolio_source_observation_admission_postgresql as observation_proof,
 )
 from tests.integration.services.ingestion_service import (
@@ -58,14 +61,46 @@ def receipt_schema_signature(engine):
         assert len(triggers) == 2 and all(row[1] == "O" for row in triggers)
         assert sum("FOREIGN KEY" in row[1] for row in constraints) == 2
         assert all(row[2] for row in constraints)
-        return observations, constraints, triggers
+        flow = []
+        for table in (
+            "portfolio_flow_event_observations",
+            "portfolio_flow_event_observation_heads",
+            "portfolio_flow_source_cuts",
+        ):
+            checks = tuple(
+                tuple(row)
+                for row in connection.execute(
+                    text(
+                        "SELECT conname, pg_get_constraintdef(oid), convalidated "
+                        "FROM pg_constraint WHERE conrelid=to_regclass(:table) ORDER BY conname"
+                    ),
+                    {"table": f"public.{table}"},
+                )
+            )
+            guards = tuple(
+                tuple(row)
+                for row in connection.execute(
+                    text(
+                        "SELECT tgname, tgenabled, pg_get_triggerdef(oid) FROM pg_trigger "
+                        "WHERE tgrelid=to_regclass(:table) AND NOT tgisinternal ORDER BY tgname"
+                    ),
+                    {"table": f"public.{table}"},
+                )
+            )
+            assert checks and all(row[2] for row in checks)
+            assert len(guards) == (1 if table.endswith("heads") else 2)
+            assert all(row[1] == "O" for row in guards)
+            flow.append((table, checks, guards))
+        return observations, constraints, triggers, tuple(flow)
 
 
 @pytest.mark.parametrize("scope", ["function", "module"])
-@pytest.mark.parametrize("populated", [False, True], ids=["empty", "populated"])
+@pytest.mark.parametrize("population", ["empty", "receipt-only", "flow-and-receipt"])
 async def test_native_cleanup_recreates_complete_immutable_dependency(
-    db_engine, clean_db, scope, populated
+    db_engine, clean_db, scope, population
 ):
+    populated = population != "empty"
+    flow_populated = population == "flow-and-receipt"
     before = receipt_schema_signature(db_engine)
     engine = create_async_database_engine(
         runtime_identity="lotus-core-test",
@@ -101,6 +136,10 @@ async def test_native_cleanup_recreates_complete_immutable_dependency(
             await lease.create(
                 fact, callback=verification_proof.stager(fact, authority, receipt).stage
             )
+            if flow_populated:
+                flow = flow_proof.fact_for(lease)
+                await flow_proof.create(lease, flow)
+                await flow_proof.create(lease, flow_proof.manifest_for(lease, flow), is_cut=True)
         # Ordinary mutation is still refused, including statement TRUNCATE when empty.
         operations = ["TRUNCATE public.portfolio_source_fact_verifications"]
         if populated:
@@ -112,12 +151,46 @@ async def test_native_cleanup_recreates_complete_immutable_dependency(
             with pytest.raises(DBAPIError, match="SOURCE_FACT_VERIFICATION_IMMUTABLE"):
                 with db_engine.begin() as connection:
                     connection.execute(text(sql))
+        if flow_populated:
+            flow_operations = (
+                (
+                    "DELETE FROM public.portfolio_flow_event_observations",
+                    "portfolio source observations are immutable",
+                ),
+                (
+                    # Include the referencing heads so PostgreSQL reaches the history guard.
+                    "TRUNCATE public.portfolio_flow_event_observations, "
+                    "public.portfolio_flow_event_observation_heads",
+                    "nonempty portfolio source observations cannot be truncated",
+                ),
+                (
+                    "DELETE FROM public.portfolio_flow_source_cuts",
+                    "portfolio source observations are immutable",
+                ),
+                (
+                    "TRUNCATE public.portfolio_flow_source_cuts",
+                    "nonempty portfolio source observations cannot be truncated",
+                ),
+            )
+            for sql, message in flow_operations:
+                with pytest.raises(DBAPIError, match=message) as refused:
+                    with db_engine.begin() as connection:
+                        connection.execute(text(sql))
+                assert refused.value.orig.pgcode == "23514"
+                assert refused.value.orig.diag.message_primary == message
         fixture = harness.clean_db if scope == "function" else harness.clean_db_module
         if populated and scope == "function":
-            with pytest.raises(DBAPIError, match="SOURCE_FACT_VERIFICATION_DOWNGRADE_NONEMPTY"):
+            history = source_history_signature(db_engine)
+            error, reason = (
+                (RuntimeError, "nonempty flow source history")
+                if flow_populated
+                else (DBAPIError, "SOURCE_FACT_VERIFICATION_DOWNGRADE_NONEMPTY")
+            )
+            with pytest.raises(error, match=reason):
                 with db_engine.begin() as connection:
                     downgrade_observation_schema(connection)
             assert receipt_schema_signature(db_engine) == before
+            assert source_history_signature(db_engine) == history
             authorization = authorize_database_cleanup(
                 runtime=harness._test_runtime, engine=db_engine
             )
@@ -135,6 +208,7 @@ async def test_native_cleanup_recreates_complete_immutable_dependency(
                     next(fixture.__wrapped__(db_engine))
                 # Unlisted dependency refuses DDL; prior receipt and guards survive rollback.
                 assert receipt_schema_signature(db_engine) == before
+                assert source_history_signature(db_engine) == history
                 with db_engine.begin() as connection:
                     assert (
                         connection.scalar(
@@ -158,6 +232,12 @@ async def test_native_cleanup_recreates_complete_immutable_dependency(
                 )
                 == 0
             )
+            for table in (
+                "portfolio_flow_event_observations",
+                "portfolio_flow_event_observation_heads",
+                "portfolio_flow_source_cuts",
+            ):
+                assert connection.scalar(text(f"SELECT count(*) FROM public.{table}")) == 0
             assert (
                 connection.scalar(
                     text("SELECT count(*) FROM public.portfolio_cash_availability_observations")
@@ -186,3 +266,53 @@ async def test_native_cleanup_recreates_complete_immutable_dependency(
                 connection.execute(text("TRUNCATE public.portfolio_source_fact_verifications"))
     finally:
         await engine.dispose()
+
+
+def source_history_signature(engine):
+    """Retain complete original evidence, including empty flow tables, across rollback."""
+    with engine.begin() as connection:
+        return tuple(
+            (
+                table,
+                tuple(
+                    connection.scalars(
+                        text(
+                            "SELECT row_to_json(retained)::text "
+                            f"FROM public.{table} AS retained ORDER BY 1"
+                        )
+                    )
+                ),
+            )
+            for table in (
+                "portfolio_source_fact_verifications",
+                "portfolio_cash_availability_observations",
+                "portfolio_cash_availability_observation_heads",
+                "portfolio_funding_investment_observations",
+                "portfolio_funding_investment_observation_heads",
+                "portfolio_flow_event_observations",
+                "portfolio_flow_event_observation_heads",
+                "portfolio_flow_source_cuts",
+            )
+        )
+
+
+async def test_unknown_flow_dependency_refuses_reset_and_rolls_back(db_engine, clean_db):
+    before = receipt_schema_signature(db_engine)
+    authorization = authorize_database_cleanup(runtime=harness._test_runtime, engine=db_engine)
+    view = "cleanup_flow_dependency_" + uuid4().hex
+    require_database_cleanup_authorization(authorization, engine=db_engine)
+    with db_engine.begin() as connection:
+        connection.execute(
+            text(
+                f"CREATE VIEW public.{view} AS "
+                "SELECT manifest_hash FROM public.portfolio_flow_source_cuts"
+            )
+        )
+    try:
+        with pytest.raises(DBAPIError, match="depend on it"):
+            next(harness.clean_db.__wrapped__(db_engine))
+        assert receipt_schema_signature(db_engine) == before
+    finally:
+        require_database_cleanup_authorization(authorization, engine=db_engine)
+        with db_engine.begin() as connection:
+            connection.execute(text(f"DROP VIEW public.{view}"))

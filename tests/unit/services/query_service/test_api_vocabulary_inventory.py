@@ -68,6 +68,28 @@ def test_composed_exact_decimal_schema_prefers_lexical_contract() -> None:
     assert _fallback_example("contract_rate", schema) == "1.2345"
 
 
+@pytest.mark.parametrize("composition", ["anyOf", "oneOf"])
+@pytest.mark.parametrize("primitive", ["string", "integer", "number", "boolean", "array"])
+def test_nullable_primitive_compositions_keep_actual_wire_type(composition, primitive) -> None:
+    schema = {composition: [{"type": primitive}, {"type": "null"}]}
+    assert _schema_type(schema) == primitive
+
+
+@pytest.mark.parametrize("composition", ["anyOf", "oneOf"])
+def test_composition_type_controls_preserve_lexical_objects_and_references(composition) -> None:
+    assert _schema_type({composition: [{"type": "integer"}, {"type": "string"}]}) == "string"
+    assert _schema_type({composition: [{"type": "object"}, {"type": "null"}]}) == "object"
+    assert _schema_type({composition: [{"type": "boolean"}, {"type": "string"}]}) == "object"
+    assert _schema_type({"type": "object", "properties": {"id": {"type": "string"}}}) == "object"
+    assert _schema_type({"$ref": "#/components/schemas/SourceIdentity"}) == "SourceIdentity"
+    assert (
+        _schema_type(
+            {composition: [{"$ref": "#/components/schemas/SourceIdentity"}, {"type": "null"}]}
+        )
+        == "object"
+    )
+
+
 def test_literal_and_source_authority_examples_are_contractual() -> None:
     assert _fallback_example("event_type", {"const": "corporate_action.manifest.received"}) == (
         "corporate_action.manifest.received"

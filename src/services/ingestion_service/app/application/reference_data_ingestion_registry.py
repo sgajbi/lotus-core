@@ -67,6 +67,20 @@ class ClassificationTaxonomyIngestionCommand(ReferenceDataIngestionCommand):
 REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
     [
         ReferenceDataIngestionCommand(
+            command_key="portfolio_flow_event_observation",
+            endpoint="/ingest/portfolio-flow-event-observations",
+            entity_type="portfolio_flow_event_observation",
+            records_attribute="observations",
+            persist_method_name="append",
+        ),
+        ReferenceDataIngestionCommand(
+            command_key="portfolio_flow_source_cut",
+            endpoint="/ingest/portfolio-flow-source-cuts",
+            entity_type="portfolio_flow_source_cut",
+            records_attribute="cuts",
+            persist_method_name="append_cut",
+        ),
+        ReferenceDataIngestionCommand(
             command_key="benchmark_assignment",
             endpoint="/ingest/benchmark-assignments",
             entity_type="benchmark_assignment",

@@ -1,5 +1,8 @@
 """Server-owned submission grants; no provider is institutionally qualified here."""
 
+from __future__ import annotations
+
+import json
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -9,6 +12,48 @@ from .domain.portfolio_source_observations import (
     require_observation_identity,
 )
 from .domain.tenant import TenantContext
+
+
+def parse_submission_grants(value: str) -> tuple[ProducerSubmissionGrant, ...]:
+    """Bounded public configuration; caller authentication remains independent."""
+    if value == "":
+        return ()
+    if len(value.encode("utf-8")) > 65536:
+        raise ValueError("producer grant configuration exceeds limit")
+
+    def unique_object(pairs):
+        result = {}
+        for key, item in pairs:
+            if key in result:
+                raise ValueError("duplicate grant field")
+            result[key] = item
+        return result
+
+    records = json.loads(value, object_pairs_hook=unique_object)
+    if type(records) is not list or len(records) > 100:
+        raise ValueError("producer grants require a bounded list")
+    grants = []
+    for record in records:
+        if type(record) is not dict or set(record) != {
+            "tenant_id",
+            "portfolio_id",
+            "producer_id",
+            "family",
+        }:
+            raise ValueError("producer grant fields must be explicit")
+        if any(type(item) is not str or "*" in item for item in record.values()):
+            raise ValueError("producer grant wildcard or untyped scope")
+        grants.append(
+            ProducerSubmissionGrant(
+                record["tenant_id"],
+                record["portfolio_id"],
+                record["producer_id"],
+                ObservationFamily(record["family"]),
+            )
+        )
+    result = tuple(grants)
+    UnqualifiedProducerAuthority(result)
+    return result
 
 
 @dataclass(frozen=True, slots=True)

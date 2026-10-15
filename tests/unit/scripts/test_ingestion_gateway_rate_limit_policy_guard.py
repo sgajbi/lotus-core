@@ -9,6 +9,34 @@ def test_gateway_rate_limit_policy_guard_accepts_current_truth() -> None:
     assert guard.evaluate_gateway_rate_limit_policy() == []
 
 
+@pytest.mark.parametrize("templates", [None, {}, "not-a-list", [None], [123], [["nested"]]])
+def test_gateway_policy_refuses_untyped_endpoint_configuration(templates) -> None:
+    policy = guard._load_policy()
+    policy["required_endpoint_templates"] = templates
+    findings = guard.evaluate_gateway_rate_limit_policy(policy=policy, required_phrases={})
+    assert findings == [{"endpoints": ["required_endpoint_templates must be a list of strings"]}]
+
+
+def test_gateway_policy_refuses_duplicate_flow_template_before_set_conversion() -> None:
+    policy = guard._load_policy()
+    policy["required_endpoint_templates"].append("/ingest/portfolio-flow-source-cuts")
+    assert guard.evaluate_gateway_rate_limit_policy(policy=policy, required_phrases={}) == [
+        {"endpoints": ["required_endpoint_templates must contain unique templates"]}
+    ]
+
+
+def test_gateway_policy_refuses_wrong_flow_template_without_relaxing_budget() -> None:
+    policy = guard._load_policy()
+    policy["required_endpoint_templates"] = [
+        "/ingest/portfolio-flow-source-cut" if e == "/ingest/portfolio-flow-source-cuts" else e
+        for e in policy["required_endpoint_templates"]
+    ]
+    findings = guard.evaluate_gateway_rate_limit_policy(policy=policy, required_phrases={})
+    assert findings and "missing router endpoint templates" in str(findings)
+    assert "not found in routers" in str(findings)
+    assert policy["rolling_window"] == guard._load_policy()["rolling_window"]
+
+
 @pytest.mark.parametrize(
     "missing_endpoint",
     [
@@ -16,6 +44,8 @@ def test_gateway_rate_limit_policy_guard_accepts_current_truth() -> None:
         "/ingest/transactions/{transaction_id}/source-evidence",
         "/ingest/portfolio-cash-availability-observations",
         "/ingest/portfolio-funding-investment-observations",
+        "/ingest/portfolio-flow-event-observations",
+        "/ingest/portfolio-flow-source-cuts",
     ],
 )
 def test_gateway_rate_limit_policy_guard_rejects_missing_endpoint(missing_endpoint: str) -> None:

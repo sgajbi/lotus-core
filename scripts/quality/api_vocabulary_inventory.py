@@ -285,6 +285,15 @@ def _schema_type(schema: dict[str, Any]) -> str:
             }
             if alternative_types == {"string", "integer"}:
                 return "string"
+            if len(alternative_types) == 1 and alternative_types <= {
+                "string",
+                "integer",
+                "number",
+                "boolean",
+                "array",
+                "object",
+            }:
+                return next(iter(alternative_types))
     return str(schema.get("type", "object"))
 
 

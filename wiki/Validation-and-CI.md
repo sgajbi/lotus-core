@@ -2,6 +2,23 @@
 
 ## Current Scope
 
+The new [flow source methodology](https://github.com/sgajbi/lotus-core/blob/main/docs/methodologies/source-data-products/portfolio-financial-flow-observations.md)
+defines the explicit flow event and complete-window contract. Its unit controls cover state,
+exact amount, admission time, public grant delivery, replay, membership and scoped pagination.
+Owning PostgreSQL controls cover migration preservation, CAS, rollback and retained reads when
+executed under an admitted database lease. Source/unit and migration-inventory checks do not prove
+registered runtime, restart or source-withdrawal support. Those proofs remain separate, and the
+neutral product does not certify a monthly assembly or institutional authority.
+
+Reversal controls include January-to-January, December-to-January and multi-hop retained target
+pins. The current window's count and amounts exclude dependency evidence; cursor verification
+binds both sets. On 15 October 2026, signed source
+`3cc2b7308b0f07d6f42ae5fdd64641bd28772e42` executed the seven owning cases in hosted PostgreSQL
+run `38722916686`; all FAILED missing native endpoint evidence-policy classification. The passing
+391 owning unit and 36 peer controls remain separate bounded source evidence. Local native
+PostgreSQL, HTTP and restart are unexecuted, and corrected live acceptance remains pending.
+These checks do not establish financial or production qualification.
+
 This page maps `lotus-core` validation commands to the contracts they protect. Use it to choose the
 smallest evidence command for a change, then cite generated artifacts from the relevant gate or from
 `make docs-evidence-pack`.

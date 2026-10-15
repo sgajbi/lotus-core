@@ -20,7 +20,55 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..application.reference_data_ingestion_registry import REFERENCE_DATA_INGESTION_REGISTRY
 from ..services.ingestion_job_lifecycle import complete_synchronous_observation_receipt
+from ..services.portfolio_flow_source_observation_writer import PortfolioFlowSourceObservationWriter
 from ..services.portfolio_source_observation_writer import PortfolioSourceObservationWriter
+
+
+@dataclass(frozen=True, slots=True)
+class PortfolioFlowSourceObservationStager:
+    facts: tuple
+    admissions: tuple[UnqualifiedProducerAdmission, ...]
+    received_at: datetime
+    cut_request: bool
+
+    async def stage(self, session: AsyncSession, receipt: IngestionJob) -> None:
+        key = (
+            "portfolio_flow_source_cut" if self.cut_request else "portfolio_flow_event_observation"
+        )
+        command = REFERENCE_DATA_INGESTION_REGISTRY.require(key)
+        tenants = [f.tenant_id if self.cut_request else f.envelope.tenant_id for f in self.facts]
+        if (
+            not self.facts
+            or receipt.endpoint != command.endpoint
+            or receipt.entity_type != command.entity_type
+            or receipt.accepted_count != len(self.facts)
+            or any(t != receipt.tenant_id for t in tenants)
+            or self.received_at.utcoffset() is None
+        ):
+            raise ValueError("flow creation effect does not match its receipt")
+        writer = PortfolioFlowSourceObservationWriter(session)
+        if self.cut_request:
+            if len(self.facts) != 1 or len(self.admissions) != 1:
+                raise ValueError("one atomic cut required")
+            await writer.append_cut(
+                self.facts[0],
+                self.admissions[0],
+                receipt_job_id=receipt.job_id,
+                received_at=self.received_at,
+            )
+        else:
+            await writer.append(
+                self.facts,
+                self.admissions,
+                receipt_job_id=receipt.job_id,
+                received_at=self.received_at,
+            )
+        await complete_synchronous_observation_receipt(
+            session,
+            receipt,
+            tenant_id=receipt.tenant_id,
+            job_id=receipt.job_id,
+        )
 
 
 @dataclass(frozen=True, slots=True)
