@@ -90,6 +90,7 @@ def test_historical_dependency_descent_refuses_before_migration(monkeypatch, inv
     migration = MagicMock()
     monkeypatch.setattr(harness, "_test_runtime", runtime)
     monkeypatch.setattr(dependencies, "fact_verification_migration", migration)
+    monkeypatch.setattr(dependencies, "financial_source_cut_migration", migration)
     try:
         if invalid == "wrong-target":
             connection.engine.url = make_url("postgresql://user:password@localhost:5432/foreign")
@@ -146,7 +147,9 @@ def test_complete_owned_reset_recreates_real_migration_order(monkeypatch):
 
         return {
             "revision": revision,
-            "down_revision": "c179b2c3d540" if revision == "c181b2c3d542" else "c186b2c3d547",
+            "down_revision": {"c181b2c3d542": "c179b2c3d540", "c188b2c3d549": "c187b2c3d548"}.get(
+                revision, "c186b2c3d547"
+            ),
             "upgrade": upgrade,
         }
 
@@ -162,17 +165,18 @@ def test_complete_owned_reset_recreates_real_migration_order(monkeypatch):
         connection.scalar.return_value = True
         with recreate_source_test_dependencies(connection, authorization=authorization):
             assert migrated == []
-        assert migrated == ["c178b2c3d539", "c181b2c3d542", "c187b2c3d548"]
+        assert migrated == ["c178b2c3d539", "c181b2c3d542", "c187b2c3d548", "c188b2c3d549"]
         tables = connection.scalar.call_args.args[1]
-        assert tables["table_count"] == len(tables["tables"]) == 8
+        assert tables["table_count"] == len(tables["tables"]) == 17
         statements = [str(call.args[0]) for call in connection.execute.call_args_list]
         drops = [sql for sql in statements if sql.startswith("DROP TABLE")]
-        assert drops[:3] == [
+        assert drops[9:12] == [
             "DROP TABLE public.portfolio_flow_source_cuts",
             "DROP TABLE public.portfolio_flow_event_observation_heads",
             "DROP TABLE public.portfolio_flow_event_observations",
         ]
-        assert len(drops) == 8
+        assert len(drops) == 17
+        assert drops[:9] == ["DROP TABLE public." + name for name in source_schema._TABLES[:9]]
         assert not any("CASCADE" in sql for sql in statements)
         assert statements.index(drops[-1]) < next(
             i for i, sql in enumerate(statements) if sql.startswith("DROP FUNCTION")
@@ -236,6 +240,7 @@ def test_historical_descent_and_restore_order_preserves_flow_guard(monkeypatch):
 
     monkeypatch.setattr(harness, "_test_runtime", runtime)
     monkeypatch.setattr(dependencies, "flow_observation_migration", lambda _: module("flow"))
+    monkeypatch.setattr(dependencies, "financial_source_cut_migration", lambda _: module("neutral"))
     monkeypatch.setattr(dependencies, "fact_verification_migration", lambda _: module("receipt"))
     monkeypatch.setattr(dependencies.runpy, "run_path", lambda _: module("observation"))
     monkeypatch.setattr(dependencies.MigrationContext, "configure", lambda _: MagicMock())
@@ -244,12 +249,14 @@ def test_historical_descent_and_restore_order_preserves_flow_guard(monkeypatch):
         migration = dependencies.downgrade_observation_schema(connection)
         dependencies.restore_observation_schema(migration, connection)
         assert actions == [
+            ("neutral", "downgrade"),
             ("flow", "downgrade"),
             ("receipt", "downgrade"),
             ("observation", "downgrade"),
             ("observation", "upgrade"),
             ("receipt", "upgrade"),
             ("flow", "upgrade"),
+            ("neutral", "upgrade"),
         ]
         actions.clear()
 
@@ -264,6 +271,21 @@ def test_historical_descent_and_restore_order_preserves_flow_guard(monkeypatch):
 
         monkeypatch.setattr(dependencies, "flow_observation_migration", refuse_nonempty)
         with pytest.raises(RuntimeError, match="nonempty flow"):
+            dependencies.downgrade_observation_schema(connection)
+        assert actions == [("neutral", "downgrade")]
+        actions.clear()
+
+        def refuse_neutral(_):
+            result = module("neutral")
+
+            def refuse():
+                raise RuntimeError("nonempty neutral source custody cannot be downgraded")
+
+            result["downgrade"] = refuse
+            return result
+
+        monkeypatch.setattr(dependencies, "financial_source_cut_migration", refuse_neutral)
+        with pytest.raises(RuntimeError, match="nonempty neutral"):
             dependencies.downgrade_observation_schema(connection)
         assert actions == []
     finally:

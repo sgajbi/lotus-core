@@ -251,6 +251,48 @@ def test_combined_coverage_runs_selected_history_migration_on_postgresql() -> No
     assert command.count("-m") == 1  # Python's module invocation, not a pytest marker filter.
 
 
+NEUTRAL_POSTGRESQL_MODULES = (
+    "tests/integration/services/ingestion_service/"
+    "test_portfolio_financial_source_cuts_postgresql.py",
+    "tests/integration/services/query_control_plane_service/"
+    "test_portfolio_financial_source_cuts_postgresql.py",
+)
+
+
+def _assert_neutral_custody_coverage_selection() -> None:
+    suite = test_manifest.get_suite("critical-db-coverage")
+    for module in NEUTRAL_POSTGRESQL_MODULES:
+        assert suite.count(module) == 1
+    command = test_manifest.suite_pytest_command("critical-db-coverage", with_coverage=True)
+    assert set(NEUTRAL_POSTGRESQL_MODULES) <= set(command)
+    assert any(argument.startswith("--cov=") for argument in command)
+    assert "--cov-report=" in command
+    assert command.count("-m") == 1  # Only Python's module invocation; no pytest filter.
+    assert "lifecycle" not in command
+    assert test_manifest.SUITE_ENV_PROFILE["critical-db-coverage"] == "integration"
+    assert test_manifest.SUITE_RUNTIME_MODE["critical-db-coverage"] == "db_direct"
+
+
+def test_combined_coverage_executes_both_neutral_postgresql_modules() -> None:
+    _assert_neutral_custody_coverage_selection()
+
+
+@pytest.mark.parametrize("module", NEUTRAL_POSTGRESQL_MODULES)
+@pytest.mark.parametrize("mutation", ["deleted", "substituted"])
+def test_neutral_native_coverage_contract_refuses_missing_or_substituted_module(
+    monkeypatch, module, mutation
+) -> None:
+    suite = list(test_manifest.get_suite("critical-db-coverage"))
+    index = suite.index(module)
+    if mutation == "deleted":
+        suite.pop(index)
+    else:
+        suite[index] = "tests/integration/services/ingestion_service/test_ingestion_routers.py"
+    monkeypatch.setitem(test_manifest.SUITES, "critical-db-coverage", suite)
+    with pytest.raises(AssertionError):
+        _assert_neutral_custody_coverage_selection()
+
+
 def test_coverage_scope_adds_current_changed_critical_sources(monkeypatch, tmp_path: Path) -> None:
     _redirect_coverage_output(monkeypatch, tmp_path)
     contract_path = tmp_path / critical_guard.CONTRACT_PATH

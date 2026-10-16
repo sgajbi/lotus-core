@@ -22,6 +22,15 @@ from tests.test_support.db_cleanup import (
 
 _VERSIONS = Path(__file__).resolve().parents[2] / "alembic/versions"
 _TABLES = (
+    "portfolio_financial_source_capture_links",
+    "portfolio_financial_source_capture_segments",
+    "portfolio_financial_source_cut_work",
+    "portfolio_financial_source_cut_heads",
+    "portfolio_financial_source_cut_inputs",
+    "portfolio_historical_registry_members",
+    "portfolio_financial_source_cut_chunks",
+    "portfolio_financial_source_captures",
+    "portfolio_financial_source_cut_manifests",
     "portfolio_flow_source_cuts",
     "portfolio_flow_event_observation_heads",
     "portfolio_flow_event_observations",
@@ -58,11 +67,20 @@ def flow_observation_migration(connection: Connection) -> dict:
     return module
 
 
+def financial_source_cut_migration(connection: Connection) -> dict:
+    """Replay only the frozen neutral custody DDL on the capability-owned namespace."""
+    module = runpy.run_path(str(_VERSIONS / "c188b2c3d549_portfolio_financial_source_cuts.py"))
+    assert module["revision"] == "c188b2c3d549"
+    assert module["down_revision"] == "c187b2c3d548"
+    module["upgrade"].__globals__["op"] = Operations(MigrationContext.configure(connection))
+    return module
+
+
 @contextmanager
 def recreate_source_test_dependencies(
     connection: Connection, *, authorization: DatabaseCleanupAuthorization
 ) -> Iterator[None]:
-    """Reset only the eight source tables on an exact factory-owned test target.
+    """Reset only the seventeen source tables on an exact factory-owned test target.
 
     No CASCADE on DDL: an unknown dependent object refuses teardown. Recreate from
     frozen real migrations, including original foreign keys, indexes and triggers.
@@ -105,3 +123,5 @@ def recreate_source_test_dependencies(
     fact_verification_migration(connection)["upgrade"]()
     require_database_cleanup_authorization(authorization, engine=connection.engine)
     flow_observation_migration(connection)["upgrade"]()
+    require_database_cleanup_authorization(authorization, engine=connection.engine)
+    financial_source_cut_migration(connection)["upgrade"]()

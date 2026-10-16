@@ -193,7 +193,12 @@ def test_governed_transport_rejects_missing_or_unrelated_versions(model, event_t
 
 def test_supplier_migration_composes_merged_tenant_history_without_forking():
     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
-    assert scripts.get_heads() == ["c187b2c3d548"]
+    heads = scripts.get_heads()
+    assert len(heads) == 1
+    assert "c187b2c3d548" in {
+        revision.revision for revision in scripts.walk_revisions(base="base", head=heads[0])
+    }
+    assert scripts.get_revision("c188b2c3d549").down_revision == "c187b2c3d548"
     assert scripts.get_revision("c187b2c3d548").down_revision == "c186b2c3d547"
     successor = scripts.get_revision("c186b2c3d547")
     assert successor is not None

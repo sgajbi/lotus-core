@@ -64,6 +64,28 @@ class SourceDataProductDefinition:
 
 SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
     SourceDataProductDefinition(
+        product_name="PortfolioHistoricalRegistry",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/portfolio-historical-registries/query",),
+        notes="Exact retained registry custody; unavailable by default. Completion remains "
+        "unqualified and population unverified; no bank or supplier authority is conferred.",
+    ),
+    SourceDataProductDefinition(
+        product_name="PortfolioFinancialSourceCut",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-manage",),
+        current_routes=("/integration/financial-source-cuts/query",),
+        notes="Exact retained batch manifest and independent selected five-role graph; "
+        "unavailable by default. Native custody grants no financial qualification.",
+    ),
+    SourceDataProductDefinition(
         product_name="PortfolioFinancialFlowObservations",
         product_version="v1",
         route_family=ANALYTICS_INPUT,

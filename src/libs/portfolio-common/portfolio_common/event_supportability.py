@@ -93,6 +93,21 @@ class DirectKafkaTopicDefinition:
 
 EVENT_FAMILY_DEFINITIONS: tuple[EventFamilyDefinition, ...] = (
     EventFamilyDefinition(
+        event_type="PortfolioFinancialSourceCutCompleted",
+        schema_model="PortfolioFinancialSourceCutCompletedEvent",
+        family=DOMAIN_STATE_EVENT,
+        direction=OUTBOUND_EVENT,
+        aggregate_type="portfolio_financial_source_cut",
+        topic="portfolio.financial_source_cuts.completed",
+        producer_service="persistence_service",
+        consumer_services=(),
+        idempotency_required=True,
+        correlation_required=True,
+        schema_version_required=True,
+        runtime_active=False,
+        supportability_evidence=(INGESTION_EVIDENCE_BUNDLE,),
+    ),
+    EventFamilyDefinition(
         event_type="TransactionSourceCorrectionRequested",
         schema_model="TransactionSourceCorrectionRequestedEvent",
         family=RECONCILIATION_CONTROL_EVENT,

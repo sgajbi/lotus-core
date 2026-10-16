@@ -24,6 +24,22 @@ def test_source_data_product_catalog_is_valid() -> None:
     validate_source_data_product_catalog()
 
 
+@pytest.mark.parametrize(
+    "product,path",
+    [
+        ("PortfolioHistoricalRegistry", "/integration/portfolio-historical-registries/query"),
+        ("PortfolioFinancialSourceCut", "/integration/financial-source-cuts/query"),
+    ],
+)
+def test_neutral_custody_catalog_is_explicit_unqualified_and_paged(product, path):
+    definition = get_source_data_product(product)
+    assert definition.current_routes == (path,)
+    assert definition.serving_plane == QUERY_CONTROL_PLANE_SERVICE
+    assert definition.consumers == ("lotus-manage",)
+    assert definition.paging_mode == "inline_paged"
+    assert "unavailable by default" in definition.notes.lower()
+
+
 def test_catalog_contains_priority_rfc_0083_products() -> None:
     product_names = {product.product_name for product in SOURCE_DATA_PRODUCT_CATALOG}
 

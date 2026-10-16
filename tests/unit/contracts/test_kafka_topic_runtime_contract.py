@@ -61,6 +61,22 @@ def test_contract_records_ordering_replay_and_tenant_truth() -> None:
         assert topic["replay_contract"]
 
 
+def test_neutral_cut_notification_truthfully_has_a_producer_and_no_runtime_subscriber():
+    entry = next(
+        t
+        for t in _contract()["topics"]
+        if t["topic"] == "portfolio.financial_source_cuts.completed"
+    )
+    assert entry["producer_services"] == ["persistence_service"]
+    assert entry["consumer_groups"] == [] and entry["consumer_max_in_flight"] == 0
+    assert entry["replay_contract"] == "no_active_runtime_consumer"
+    assert entry["current_key"] == (
+        "canonical_content_hash({tenant_id,product_name,source_system,"
+        "registry_scope_id,source_cut_id})"
+    )
+    assert "pinned_HTTP" in entry["authoritative_read_contract"]
+
+
 def test_market_price_capacity_bounds_canonical_key_skew() -> None:
     topics = {topic["topic"]: topic for topic in _contract()["topics"]}
     raw = topics["market_prices.raw.received"]
@@ -80,7 +96,7 @@ def test_partition_migration_contract_proves_historical_crc32_remapping() -> Non
     migration = contract["partition_migrations"]["eight_to_twelve_v1"]
     topics = {topic["topic"]: topic for topic in contract["topics"]}
 
-    assert contract["contract_version"] == "1.4.0"
+    assert contract["contract_version"] == "1.5.0"
     assert migration["status"] == "implemented_pending_final_runtime_revalidation"
     assert migration["source_partition_count"] == 8
     assert migration["target_partition_count"] == 12

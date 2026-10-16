@@ -37,6 +37,7 @@ def test_control_plane_settings_parse_defaults(monkeypatch) -> None:
         "LOTUS_CORE_ANALYTICS_EXPORT_EXECUTION_TIMEOUT_SECONDS",
         "LOTUS_CORE_INTEGRATION_SNAPSHOT_POLICY_JSON",
         "LOTUS_CORE_POLICY_VERSION",
+        "PORTFOLIO_NEUTRAL_SOURCE_READ_GRANTS_JSON",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -61,6 +62,63 @@ def test_control_plane_settings_parse_defaults(monkeypatch) -> None:
     assert settings.page_token_key_id == "local-dev"
     assert settings.page_token_previous_keys == {}
     assert settings.page_token_ttl_seconds == 900
+    assert settings.neutral_source_read_grants_json == "[]"
+
+
+def test_neutral_source_read_settings_default_denies_and_preserves_valid_closed_policy(monkeypatch):
+    import json
+
+    from src.services.query_control_plane_service.app.dependencies import (
+        get_neutral_source_read_grants,
+    )
+
+    monkeypatch.delenv("PORTFOLIO_NEUTRAL_SOURCE_READ_GRANTS_JSON", raising=False)
+    assert get_neutral_source_read_grants() == ()
+    raw = json.dumps(
+        [
+            dict(
+                service_identity="lotus-manage",
+                tenant_id="tenant",
+                source_system="producer",
+                registry_scope_id="registry",
+                products=["PortfolioHistoricalRegistry"],
+            )
+        ]
+    )
+    monkeypatch.setenv("PORTFOLIO_NEUTRAL_SOURCE_READ_GRANTS_JSON", raw)
+    assert load_query_control_plane_settings().neutral_source_read_grants_json == raw
+    (grant,) = get_neutral_source_read_grants()
+    assert grant.service_identity == "lotus-manage" and grant.scope.tenant_id == "tenant"
+    assert grant.scope.products == frozenset({"PortfolioHistoricalRegistry"})
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "",
+        "{}",
+        '{"private-policy":true}',
+        '[{"tenant_id":"tenant"}]',
+        pytest.param("[" * 1500 + "0" + "]" * 1500, id="deep-malformed-3001-bytes"),
+    ],
+)
+def test_neutral_source_read_malformed_policy_retains_source_safe_unavailable_refusal(
+    monkeypatch, raw
+):
+    from src.services.query_control_plane_service.app.dependencies import (
+        get_neutral_source_read_grants,
+    )
+    from src.services.query_control_plane_service.app.routers.response_helpers import (
+        QueryControlPlaneProblem,
+    )
+
+    monkeypatch.setenv("PORTFOLIO_NEUTRAL_SOURCE_READ_GRANTS_JSON", raw)
+    assert load_query_control_plane_settings().neutral_source_read_grants_json == raw
+    with pytest.raises(QueryControlPlaneProblem) as failure:
+        get_neutral_source_read_grants()
+    assert failure.value.status_code == 503
+    assert failure.value.error_code == "QCP_SOURCE_CUT_UNAVAILABLE"
+    assert "private-policy" not in str(failure.value)
 
 
 def test_control_plane_settings_enable_production_security_profile(monkeypatch) -> None:

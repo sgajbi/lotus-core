@@ -14,6 +14,12 @@ Consumers should use Core contracts rather than re-derive source truth.
 
 ## Capabilities
 
+Neutral historical-registry and selected financial-cut custody retains immutable declarations,
+original receipts and independently reconstructible source captures. Its unqualified posture,
+default-unavailable reads and validation boundary are described in the
+[source custody methodology](docs/methodologies/source-data-products/portfolio-financial-source-cuts.md)
+and [operating runbook](docs/operations/portfolio-financial-source-cuts.md).
+
 | Capability | Financial outcome |
 | --- | --- |
 | Portfolio and account records | Maintains source-owned portfolios plus foundational account, holding, mandate, instrument, and lineage records. |

@@ -31,7 +31,7 @@ def test_every_reference_family_has_one_explicit_lineage_and_payload_policy() ->
         "/ingest/portfolio-party-role-assignments",
     }
 
-    assert len(commands) == 29
+    assert len(commands) == 33
     for command in commands:
         policy = INGESTION_EVIDENCE_POLICY_REGISTRY.require(
             command.endpoint,
@@ -57,6 +57,13 @@ def test_every_reference_family_has_one_explicit_lineage_and_payload_policy() ->
             "/ingest/portfolio-flow-source-cuts",
         }:
             fields.add("flow_source_record_revision")
+        if command.command_key in {
+            "portfolio_historical_registry",
+            "portfolio_historical_registry_chunk",
+            "portfolio_financial_source_cut",
+            "portfolio_financial_source_cut_chunk",
+        }:
+            fields.update({"registry_scope_id", "source_cut_id", "revision"})
         assert set(policy.source_lineage.__dataclass_fields__) == fields
 
 

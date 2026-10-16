@@ -17,6 +17,7 @@ from tests.test_support.db_cleanup import (
 )
 from tests.test_support.portfolio_source_test_schema import (
     fact_verification_migration,
+    financial_source_cut_migration,
     flow_observation_migration,
 )
 
@@ -125,6 +126,9 @@ def downgrade_observation_schema(connection: Connection) -> dict[str, Any]:
         runtime=harness._test_runtime, engine=connection.engine
     )
     require_database_cleanup_authorization(authorization, engine=connection.engine)
+    neutral = financial_source_cut_migration(connection)
+    neutral["downgrade"]()
+    require_database_cleanup_authorization(authorization, engine=connection.engine)
     flow = flow_observation_migration(connection)
     flow["downgrade"]()
     require_database_cleanup_authorization(authorization, engine=connection.engine)
@@ -141,6 +145,7 @@ def downgrade_observation_schema(connection: Connection) -> dict[str, Any]:
     migration["_test_observation_upgrade"] = migration["upgrade"]
     migration["_test_receipt_upgrade"] = receipts["upgrade"]
     migration["_test_flow_upgrade"] = flow["upgrade"]
+    migration["_test_neutral_upgrade"] = neutral["upgrade"]
     migration["_test_cleanup_authorization"] = authorization
 
     def restore_dependencies() -> None:
@@ -159,7 +164,12 @@ def restore_observation_schema(migration: dict[str, Any], connection: Connection
     # Some lock/cutover proofs commit the historical state, then restore through
     # a new connection to the SAME currently authorized owned runtime.
     operations = Operations(MigrationContext.configure(connection))
-    for key in ("_test_observation_upgrade", "_test_receipt_upgrade", "_test_flow_upgrade"):
+    for key in (
+        "_test_observation_upgrade",
+        "_test_receipt_upgrade",
+        "_test_flow_upgrade",
+        "_test_neutral_upgrade",
+    ):
         require_database_cleanup_authorization(
             migration["_test_cleanup_authorization"], engine=connection.engine
         )

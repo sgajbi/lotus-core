@@ -5,6 +5,15 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from portfolio_common.domain.portfolio_source_observations import require_observation_identity
+from portfolio_common.portfolio_financial_source_cut_admission import (
+    PRODUCTS as NEUTRAL_SOURCE_PRODUCTS,
+)
+from portfolio_common.portfolio_financial_source_cut_admission import (
+    RegistrySourceGrant,
+    closed_source_json,
+    require_registry_source_grant,
+)
 from portfolio_common.source_data_products import (
     ANALYTICS_INPUT,
     CONTROL_PLANE_AND_POLICY,
@@ -32,6 +41,86 @@ AUDIT_READ_AND_EXPORT = "audit_read_and_export"
 AUDIT_OPERATOR_ACCESS = "audit_operator_access"
 AUDIT_SYSTEM_ACCESS = "audit_system_access"
 SOURCE_DATA_READ_METHODS = ("GET", "POST")
+
+NEUTRAL_SOURCE_READ_FEATURES = {
+    "PortfolioHistoricalRegistry": "lotus_core.source_data.portfolio_historical_registry.read",
+    "PortfolioFinancialSourceCut": "lotus_core.source_data.portfolio_financial_source_cut.read",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class NeutralSourceReadGrant:
+    service_identity: str
+    scope: RegistrySourceGrant
+
+    def __post_init__(self):
+        require_observation_identity(self.service_identity, "exact retained read service")
+        if "*" in self.service_identity or type(self.scope) is not RegistrySourceGrant:
+            raise ValueError("exact retained read grant required")
+        RegistrySourceGrant.__post_init__(self.scope)
+
+
+def parse_neutral_source_read_grants(raw: str) -> tuple[NeutralSourceReadGrant, ...]:
+    """Independent consumer grants; producer write grants never authorize these reads."""
+    if type(raw) is not str or len(raw.encode("utf-8")) > 65_536:
+        raise ValueError("bounded neutral read grant configuration required")
+    rows = closed_source_json(raw)
+    if type(rows) is not list:
+        raise ValueError("explicit neutral read grant list required")
+    grants, seen = [], set()
+    for row in rows:
+        if type(row) is not dict or set(row) != {
+            "service_identity",
+            "tenant_id",
+            "source_system",
+            "registry_scope_id",
+            "products",
+        }:
+            raise ValueError("closed neutral read grant required")
+        products = row["products"]
+        if (
+            type(products) is not list
+            or any(type(p) is not str for p in products)
+            or len(set(products)) != len(products)
+        ):
+            raise ValueError("unique supported read products required")
+        scope = RegistrySourceGrant(
+            row["tenant_id"], row["source_system"], row["registry_scope_id"], frozenset(products)
+        )
+        grant = NeutralSourceReadGrant(row["service_identity"], scope)
+        key = (
+            grant.service_identity,
+            scope.tenant_id,
+            scope.source_system,
+            scope.registry_scope_id,
+        )
+        if key in seen:
+            raise ValueError("duplicate neutral read grant")
+        seen.add(key)
+        grants.append(grant)
+    return tuple(grants)
+
+
+def require_neutral_source_read_grant(
+    grants, *, service_identity, tenant_id, source_system, registry_scope_id, product
+):
+    if product not in NEUTRAL_SOURCE_PRODUCTS:
+        raise PermissionError("unsupported neutral read product")
+    selected = []
+    for grant in grants:
+        if type(grant) is not NeutralSourceReadGrant:
+            raise PermissionError("governed neutral read grant required")
+        NeutralSourceReadGrant.__post_init__(grant)
+        if grant.service_identity == service_identity:
+            selected.append(grant.scope)
+    require_registry_source_grant(
+        selected,
+        tenant_id=tenant_id,
+        source_system=source_system,
+        registry_scope_id=registry_scope_id,
+        product=product,
+    )
+
 
 ACCESS_CLASSIFICATION_ROUTE_FAMILIES = {
     BUSINESS_CONSUMER_ACCESS: {OPERATIONAL_READ, SNAPSHOT_AND_SIMULATION},
@@ -81,6 +170,26 @@ class SourceDataSecurityProfile:
 
 
 SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
+    SourceDataSecurityProfile(
+        product_name="PortfolioHistoricalRegistry",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification=SYSTEM_ACCESS,
+        sensitivity_classification=CLIENT_SENSITIVE,
+        retention_requirement=RETAIN_FOR_CLIENT_RECORD,
+        audit_requirement=AUDIT_SYSTEM_ACCESS,
+        pii_fields=("source_member_id", "core_portfolio_id"),
+    ),
+    SourceDataSecurityProfile(
+        product_name="PortfolioFinancialSourceCut",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification=SYSTEM_ACCESS,
+        sensitivity_classification=CLIENT_SENSITIVE,
+        retention_requirement=RETAIN_FOR_CLIENT_RECORD,
+        audit_requirement=AUDIT_SYSTEM_ACCESS,
+        pii_fields=("portfolio_id",),
+    ),
     SourceDataSecurityProfile(
         product_name="PortfolioFinancialFlowObservations",
         tenant_required=True,

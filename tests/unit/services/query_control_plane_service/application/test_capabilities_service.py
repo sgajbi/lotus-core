@@ -4,6 +4,7 @@ import importlib
 from pathlib import Path
 
 import portfolio_common.db as db_module
+import pytest
 import sqlalchemy
 import sqlalchemy.ext.asyncio as sa_async
 
@@ -19,6 +20,43 @@ from src.services.query_control_plane_service.app.application.capability_policy 
     decode_tenant_overrides_payload,
     normalize_tenant_overrides,
 )
+
+
+@pytest.mark.parametrize(
+    "product,environment",
+    [
+        ("PortfolioHistoricalRegistry", "LOTUS_CORE_CAP_HISTORICAL_REGISTRY_READ_ENABLED"),
+        ("PortfolioFinancialSourceCut", "LOTUS_CORE_CAP_FINANCIAL_SOURCE_CUT_READ_ENABLED"),
+    ],
+)
+def test_neutral_custody_features_default_unavailable_and_publish_only_explicit_state(
+    monkeypatch, product, environment
+):
+    from portfolio_common.source_data_security import NEUTRAL_SOURCE_READ_FEATURES
+
+    monkeypatch.delenv(environment, raising=False)
+    monkeypatch.delenv("LOTUS_CORE_CAPABILITY_TENANT_OVERRIDES_JSON", raising=False)
+    key = NEUTRAL_SOURCE_READ_FEATURES[product]
+
+    def features(tenant):
+        response = CapabilitiesService().get_integration_capabilities(
+            consumer_system="lotus-manage", tenant_id=tenant
+        )
+        return {feature.key: feature.enabled for feature in response.features}
+
+    before = features("tenant")
+    assert before[key] is False
+    monkeypatch.setenv(environment, "true")
+    enabled = features("tenant")
+    assert enabled[key] is True
+    assert all(value == enabled[name] for name, value in before.items() if name != key)
+    import json
+
+    monkeypatch.setenv(
+        "LOTUS_CORE_CAPABILITY_TENANT_OVERRIDES_JSON",
+        json.dumps({"tenant": {"features": {key: False}}}),
+    )
+    assert features("tenant")[key] is False and features("other")[key] is True
 
 
 def test_capabilities_family_is_not_owned_by_query_service() -> None:

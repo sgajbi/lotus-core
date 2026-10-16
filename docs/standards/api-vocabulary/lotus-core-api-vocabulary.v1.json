@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-10-15T20:37:31.511960+00:00",
+  "generatedAt": "2026-10-16T13:41:38.196773+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -1670,6 +1670,20 @@
       ]
     },
     {
+      "semanticId": "lotus.calendar",
+      "canonicalTerm": "calendar",
+      "preferredName": "calendar",
+      "description": "registry seal input field: calendar.",
+      "example": "example_calendar",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.calendar_code",
       "canonicalTerm": "calendar_code",
       "preferredName": "calendar_code",
@@ -1970,6 +1984,48 @@
       ]
     },
     {
+      "semanticId": "lotus.chunk_count",
+      "canonicalTerm": "chunk_count",
+      "preferredName": "chunk_count",
+      "description": "registry seal input field: chunk count.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
+      ]
+    },
+    {
+      "semanticId": "lotus.chunk_index",
+      "canonicalTerm": "chunk_index",
+      "preferredName": "chunk_index",
+      "description": "registry chunk input field: chunk index.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
+      ]
+    },
+    {
+      "semanticId": "lotus.chunks_root",
+      "canonicalTerm": "chunks_root",
+      "preferredName": "chunks_root",
+      "description": "registry seal input field: chunks root.",
+      "example": "example_chunks_root",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.ci_pipeline_run_id",
       "canonicalTerm": "ci_pipeline_run_id",
       "preferredName": "ci_pipeline_run_id",
@@ -2105,6 +2161,35 @@
       ],
       "observedTypes": [
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.compatibility",
+      "canonicalTerm": "compatibility",
+      "preferredName": "compatibility",
+      "description": "financial input field: compatibility.",
+      "example": {
+        "source_system": "OMS_PRIMARY",
+        "scope_id": "SCOPE_001",
+        "definition_version": "example_definition_version",
+        "registry_root": "example_registry_root",
+        "role_roots": [
+          [
+            "value_example"
+          ]
+        ],
+        "coverage_from": "2026-02-27",
+        "coverage_to": "2026-02-27",
+        "currency": "USD",
+        "basis_reference": "example_basis_reference",
+        "original_evidence_digest": "example_original_evidence_digest"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -2504,6 +2589,20 @@
       ]
     },
     {
+      "semanticId": "lotus.core_portfolio_id",
+      "canonicalTerm": "core_portfolio_id",
+      "preferredName": "core_portfolio_id",
+      "description": "Unique core portfolio identifier.",
+      "example": "CORE_PORTFOLIO_001",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.corporate_action_event_id",
       "canonicalTerm": "corporate_action_event_id",
       "preferredName": "corporate_action_event_id",
@@ -2606,6 +2705,20 @@
       ],
       "observedTypes": [
         "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.count",
+      "canonicalTerm": "count",
+      "preferredName": "count",
+      "description": "expected population input field: count.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
       ]
     },
     {
@@ -2871,6 +2984,44 @@
       ],
       "observedTypes": [
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.declarations",
+      "canonicalTerm": "declarations",
+      "preferredName": "declarations",
+      "description": "registry member input field: declarations.",
+      "example": [
+        {
+          "effective_from": "2026-02-27",
+          "effective_to": "2026-02-27",
+          "definition_version": "example_definition_version",
+          "provenance_reference": "example_provenance_reference",
+          "currency": "USD",
+          "discretionary": true,
+          "included": true
+        }
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.declared_coverage",
+      "canonicalTerm": "declared_coverage",
+      "preferredName": "declared_coverage",
+      "description": "registry seal input field: declared coverage.",
+      "example": "COMPLETE",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "DeclaredCoverage"
       ]
     },
     {
@@ -3179,6 +3330,20 @@
       ],
       "observedTypes": [
         "FixedIncomeDiscountOrigin"
+      ]
+    },
+    {
+      "semanticId": "lotus.discretionary",
+      "canonicalTerm": "discretionary",
+      "preferredName": "discretionary",
+      "description": "effective declaration input field: discretionary.",
+      "example": true,
+      "type": "boolean",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "boolean"
       ]
     },
     {
@@ -3691,6 +3856,25 @@
       ],
       "observedTypes": [
         "integer"
+      ]
+    },
+    {
+      "semanticId": "lotus.expected_population",
+      "canonicalTerm": "expected_population",
+      "preferredName": "expected_population",
+      "description": "registry seal input field: expected population.",
+      "example": {
+        "reference": "example_reference",
+        "definition_version": "example_definition_version",
+        "count": 10,
+        "content_hash": "example_content_hash"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "ExpectedPopulationInput"
       ]
     },
     {
@@ -4419,6 +4603,20 @@
       "locations": [
         "body",
         "query"
+      ],
+      "observedTypes": [
+        "boolean"
+      ]
+    },
+    {
+      "semanticId": "lotus.included",
+      "canonicalTerm": "included",
+      "preferredName": "included",
+      "description": "effective declaration input field: included.",
+      "example": true,
+      "type": "boolean",
+      "locations": [
+        "body"
       ],
       "observedTypes": [
         "boolean"
@@ -5834,6 +6032,20 @@
       ]
     },
     {
+      "semanticId": "lotus.member_revision",
+      "canonicalTerm": "member_revision",
+      "preferredName": "member_revision",
+      "description": "registry member input field: member revision.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
+      ]
+    },
+    {
       "semanticId": "lotus.members",
       "canonicalTerm": "members",
       "preferredName": "members",
@@ -5858,6 +6070,20 @@
       ],
       "observedTypes": [
         "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.members_root",
+      "canonicalTerm": "members_root",
+      "preferredName": "members_root",
+      "description": "registry seal input field: members root.",
+      "example": "example_members_root",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -6053,6 +6279,20 @@
       ],
       "observedTypes": [
         "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.month_end_date",
+      "canonicalTerm": "month_end_date",
+      "preferredName": "month_end_date",
+      "description": "Business date for month end date.",
+      "example": "2026-02-27",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -7286,6 +7526,20 @@
       ]
     },
     {
+      "semanticId": "lotus.predecessor_hash",
+      "canonicalTerm": "predecessor_hash",
+      "preferredName": "predecessor_hash",
+      "description": "registry seal input field: predecessor hash.",
+      "example": "STANDARD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.predecessor_id",
       "canonicalTerm": "predecessor_id",
       "preferredName": "predecessor_id",
@@ -7458,6 +7712,20 @@
       ],
       "observedTypes": [
         "object",
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.prior_date",
+      "canonicalTerm": "prior_date",
+      "preferredName": "prior_date",
+      "description": "Business date for prior date.",
+      "example": "2026-02-27",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
         "string"
       ]
     },
@@ -7715,11 +7983,39 @@
       ]
     },
     {
+      "semanticId": "lotus.provenance_reference",
+      "canonicalTerm": "provenance_reference",
+      "preferredName": "provenance_reference",
+      "description": "effective declaration input field: provenance reference.",
+      "example": "example_provenance_reference",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.provider_id",
       "canonicalTerm": "provider_id",
       "preferredName": "provider_id",
       "description": "Unique provider identifier.",
       "example": "PROVIDER_001",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.provider_namespace",
+      "canonicalTerm": "provider_namespace",
+      "preferredName": "provider_namespace",
+      "description": "registry member input field: provider namespace.",
+      "example": "example_provider_namespace",
       "type": "string",
       "locations": [
         "body"
@@ -8267,6 +8563,20 @@
       ]
     },
     {
+      "semanticId": "lotus.receipt_job_id",
+      "canonicalTerm": "receipt_job_id",
+      "preferredName": "receipt_job_id",
+      "description": "Unique receipt job identifier.",
+      "example": "RECEIPT_JOB_001",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.receipt_version",
       "canonicalTerm": "receipt_version",
       "preferredName": "receipt_version",
@@ -8384,6 +8694,48 @@
       "preferredName": "redemption_value_local",
       "description": "Monetary value for redemption value local.",
       "example": "STANDARD",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.reference",
+      "canonicalTerm": "reference",
+      "preferredName": "reference",
+      "description": "expected population input field: reference.",
+      "example": "example_reference",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.registry_root",
+      "canonicalTerm": "registry_root",
+      "preferredName": "registry_root",
+      "description": "financial input field: registry root.",
+      "example": "example_registry_root",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.registry_scope_id",
+      "canonicalTerm": "registry_scope_id",
+      "preferredName": "registry_scope_id",
+      "description": "Unique registry scope identifier.",
+      "example": "REGISTRY_SCOPE_001",
       "type": "string",
       "locations": [
         "body"
@@ -9078,6 +9430,20 @@
       ]
     },
     {
+      "semanticId": "lotus.revision",
+      "canonicalTerm": "revision",
+      "preferredName": "revision",
+      "description": "registry chunk input field: revision.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
+      ]
+    },
+    {
       "semanticId": "lotus.risk_exposure",
       "canonicalTerm": "risk_exposure",
       "preferredName": "risk_exposure",
@@ -9140,6 +9506,20 @@
       ],
       "observedTypes": [
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.role",
+      "canonicalTerm": "role",
+      "preferredName": "role",
+      "description": "product selection input field: role.",
+      "example": "PRIOR_ASSETS",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "InputRole"
       ]
     },
     {
@@ -9472,6 +9852,140 @@
       ]
     },
     {
+      "semanticId": "lotus.selection_count",
+      "canonicalTerm": "selection_count",
+      "preferredName": "selection_count",
+      "description": "financial seal input field: selection count.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
+      ]
+    },
+    {
+      "semanticId": "lotus.selections",
+      "canonicalTerm": "selections",
+      "preferredName": "selections",
+      "description": "financial chunk input field: selections.",
+      "example": [
+        {
+          "portfolio_id": "DEMO_DPM_EUR_001",
+          "currency": "USD",
+          "prior_date": "2026-02-27",
+          "month_end_date": "2026-02-27",
+          "registry_root": "example_registry_root",
+          "member_revision": 10,
+          "selections": [
+            {
+              "role": "PRIOR_ASSETS",
+              "product_name": "example_product_name",
+              "product_version": "example_product_version",
+              "selector": {
+                "kind": "VALUATION",
+                "as_of_date": "2026-02-27",
+                "from_date": "2026-02-27",
+                "to_date": "2026-02-27",
+                "reporting_currency": "USD",
+                "consumer_system": "lotus-manage",
+                "export_job_id": "example_value",
+                "export_content_hash": "example_value",
+                "refresh_of_job_id": "example_value"
+              },
+              "selector_hash": "example_selector_hash",
+              "content_hash": "example_content_hash",
+              "receipt_job_id": "RECEIPT_JOB_001",
+              "source_revision": "revision-1"
+            }
+          ],
+          "settled_unencumbered": {
+            "amount": "example_value",
+            "currency": "USD",
+            "business_date": "2026-02-27",
+            "semantic_definition": "example_semantic_definition",
+            "producer_revision": "example_producer_revision"
+          },
+          "compatibility": {
+            "source_system": "OMS_PRIMARY",
+            "scope_id": "SCOPE_001",
+            "definition_version": "example_definition_version",
+            "registry_root": "example_registry_root",
+            "role_roots": [
+              [
+                "value_example"
+              ]
+            ],
+            "coverage_from": "2026-02-27",
+            "coverage_to": "2026-02-27",
+            "currency": "USD",
+            "basis_reference": "example_basis_reference",
+            "original_evidence_digest": "example_original_evidence_digest"
+          }
+        }
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.selections_root",
+      "canonicalTerm": "selections_root",
+      "preferredName": "selections_root",
+      "description": "financial seal input field: selections root.",
+      "example": "example_selections_root",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.selector",
+      "canonicalTerm": "selector",
+      "preferredName": "selector",
+      "description": "product selection input field: selector.",
+      "example": {
+        "kind": "VALUATION",
+        "as_of_date": "2026-02-27",
+        "from_date": "2026-02-27",
+        "to_date": "2026-02-27",
+        "reporting_currency": "USD",
+        "consumer_system": "lotus-manage",
+        "export_job_id": "example_value",
+        "export_content_hash": "example_value",
+        "refresh_of_job_id": "example_value"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.selector_hash",
+      "canonicalTerm": "selector_hash",
+      "preferredName": "selector_hash",
+      "description": "product selection input field: selector hash.",
+      "example": "example_selector_hash",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.sell_allowed",
       "canonicalTerm": "sell_allowed",
       "preferredName": "sell_allowed",
@@ -9623,6 +10137,26 @@
       "preferredName": "settled_amount",
       "description": "Independent settled amount; null is unobserved.",
       "example": 125000.5,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.settled_unencumbered",
+      "canonicalTerm": "settled_unencumbered",
+      "preferredName": "settled_unencumbered",
+      "description": "financial input field: settled unencumbered.",
+      "example": {
+        "amount": "example_value",
+        "currency": "USD",
+        "business_date": "2026-02-27",
+        "semantic_definition": "example_semantic_definition",
+        "producer_revision": "example_producer_revision"
+      },
       "type": "object",
       "locations": [
         "body"
@@ -10225,6 +10759,20 @@
       ]
     },
     {
+      "semanticId": "lotus.source_member_id",
+      "canonicalTerm": "source_member_id",
+      "preferredName": "source_member_id",
+      "description": "Unique source member identifier.",
+      "example": "SOURCE_MEMBER_001",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.source_observed_at",
       "canonicalTerm": "source_observed_at",
       "preferredName": "source_observed_at",
@@ -10646,6 +11194,20 @@
       ],
       "observedTypes": [
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.supplied_count",
+      "canonicalTerm": "supplied_count",
+      "preferredName": "supplied_count",
+      "description": "registry seal input field: supplied count.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
       ]
     },
     {
@@ -12048,6 +12610,20 @@
       ],
       "observedTypes": [
         "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.typed_content_hash",
+      "canonicalTerm": "typed_content_hash",
+      "preferredName": "typed_content_hash",
+      "description": "registry chunk input field: typed content hash.",
+      "example": "example_typed_content_hash",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -15434,6 +16010,66 @@
       "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
       "example": "tenant-sg",
       "behaviorImpact": "Affects ingest_instrument_lookthrough_components_ingest_reference_instrument_lookthrough_components_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_registry_chunk_ingest_portfolio_historical_registry_chunks_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_registry_cut_ingest_portfolio_historical_registry_cuts_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_financial_chunk_ingest_portfolio_financial_source_cut_chunks_post request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "X-Tenant-Id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned tenant authority for this request. Missing or blank values fail closed before protected route execution.",
+      "example": "tenant-sg",
+      "behaviorImpact": "Affects ingest_financial_cut_ingest_portfolio_financial_source_cuts_post request behavior.",
       "exposure": "consumer_visible",
       "canonicalTerm": "x_tenant_id",
       "semanticId": "lotus.x_tenant_id"
@@ -44150,6 +44786,1165 @@
             "type": "string",
             "semanticId": "lotus.source_record_id",
             "attributeRef": "lotus.source_record_id"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 202,
+        "model": "BatchIngestionAcceptedResponse",
+        "fields": [
+          {
+            "name": "message",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.message",
+            "attributeRef": "lotus.message"
+          },
+          {
+            "name": "entity_type",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.entity_type",
+            "attributeRef": "lotus.entity_type"
+          },
+          {
+            "name": "accepted_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.accepted_count",
+            "attributeRef": "lotus.accepted_count"
+          },
+          {
+            "name": "correlation_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.correlation_id",
+            "attributeRef": "lotus.correlation_id"
+          },
+          {
+            "name": "request_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.request_id",
+            "attributeRef": "lotus.request_id"
+          },
+          {
+            "name": "trace_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.trace_id",
+            "attributeRef": "lotus.trace_id"
+          },
+          {
+            "name": "idempotency_key",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.idempotency_key",
+            "attributeRef": "lotus.idempotency_key"
+          },
+          {
+            "name": "job_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.job_id",
+            "attributeRef": "lotus.job_id"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "ingest_registry_chunk_ingest_portfolio_historical_registry_chunks_post",
+      "method": "POST",
+      "path": "/ingest/portfolio-historical-registry-chunks",
+      "domain": "portfolio_source_custody",
+      "serviceGroup": "ingestion",
+      "tags": [
+        "Portfolio Source Custody"
+      ],
+      "summary": "Ingest Registry Chunk",
+      "description": "What: Retain a bounded historical registry membership chunk as neutral source custody. How: Admit closed input under exact verified tenant/source grants and preserve raw and typed identity; exact replay returns the original native receipt. When: Submit chunks before their registry seal and poll the returned native job; acceptance does not qualify the source or establish bank authority.",
+      "naming": {
+        "boundedContext": "portfolio_source_custody",
+        "canonicalTerms": [
+          "accepted_count",
+          "chunk_index",
+          "core_portfolio_id",
+          "correlation_id",
+          "currency",
+          "declarations",
+          "definition_version",
+          "discretionary",
+          "effective_from",
+          "effective_to",
+          "entity_type",
+          "idempotency_key",
+          "included",
+          "job_id",
+          "member_revision",
+          "members",
+          "message",
+          "provenance_reference",
+          "provider_namespace",
+          "registry_scope_id",
+          "request_id",
+          "revision",
+          "source_cut_id",
+          "source_member_id",
+          "source_system",
+          "trace_id",
+          "typed_content_hash",
+          "x_tenant_id"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
+          {
+            "name": "source_system",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "registry_scope_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.registry_scope_id",
+            "attributeRef": "lotus.registry_scope_id"
+          },
+          {
+            "name": "source_cut_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_cut_id",
+            "attributeRef": "lotus.source_cut_id"
+          },
+          {
+            "name": "revision",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.revision",
+            "attributeRef": "lotus.revision"
+          },
+          {
+            "name": "chunk_index",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.chunk_index",
+            "attributeRef": "lotus.chunk_index"
+          },
+          {
+            "name": "members",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.members",
+            "attributeRef": "lotus.members"
+          },
+          {
+            "name": "members[].source_member_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_member_id",
+            "attributeRef": "lotus.source_member_id"
+          },
+          {
+            "name": "members[].provider_namespace",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.provider_namespace",
+            "attributeRef": "lotus.provider_namespace"
+          },
+          {
+            "name": "members[].core_portfolio_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.core_portfolio_id",
+            "attributeRef": "lotus.core_portfolio_id"
+          },
+          {
+            "name": "members[].member_revision",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.member_revision",
+            "attributeRef": "lotus.member_revision"
+          },
+          {
+            "name": "members[].declarations",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.declarations",
+            "attributeRef": "lotus.declarations"
+          },
+          {
+            "name": "members[].declarations[].effective_from",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.effective_from",
+            "attributeRef": "lotus.effective_from"
+          },
+          {
+            "name": "members[].declarations[].effective_to",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.effective_to",
+            "attributeRef": "lotus.effective_to"
+          },
+          {
+            "name": "members[].declarations[].definition_version",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.definition_version",
+            "attributeRef": "lotus.definition_version"
+          },
+          {
+            "name": "members[].declarations[].provenance_reference",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.provenance_reference",
+            "attributeRef": "lotus.provenance_reference"
+          },
+          {
+            "name": "members[].declarations[].currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.currency",
+            "attributeRef": "lotus.currency"
+          },
+          {
+            "name": "members[].declarations[].discretionary",
+            "location": "body",
+            "required": true,
+            "type": "boolean",
+            "semanticId": "lotus.discretionary",
+            "attributeRef": "lotus.discretionary"
+          },
+          {
+            "name": "members[].declarations[].included",
+            "location": "body",
+            "required": true,
+            "type": "boolean",
+            "semanticId": "lotus.included",
+            "attributeRef": "lotus.included"
+          },
+          {
+            "name": "typed_content_hash",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.typed_content_hash",
+            "attributeRef": "lotus.typed_content_hash"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 202,
+        "model": "BatchIngestionAcceptedResponse",
+        "fields": [
+          {
+            "name": "message",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.message",
+            "attributeRef": "lotus.message"
+          },
+          {
+            "name": "entity_type",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.entity_type",
+            "attributeRef": "lotus.entity_type"
+          },
+          {
+            "name": "accepted_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.accepted_count",
+            "attributeRef": "lotus.accepted_count"
+          },
+          {
+            "name": "correlation_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.correlation_id",
+            "attributeRef": "lotus.correlation_id"
+          },
+          {
+            "name": "request_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.request_id",
+            "attributeRef": "lotus.request_id"
+          },
+          {
+            "name": "trace_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.trace_id",
+            "attributeRef": "lotus.trace_id"
+          },
+          {
+            "name": "idempotency_key",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.idempotency_key",
+            "attributeRef": "lotus.idempotency_key"
+          },
+          {
+            "name": "job_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.job_id",
+            "attributeRef": "lotus.job_id"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "ingest_registry_cut_ingest_portfolio_historical_registry_cuts_post",
+      "method": "POST",
+      "path": "/ingest/portfolio-historical-registry-cuts",
+      "domain": "portfolio_source_custody",
+      "serviceGroup": "ingestion",
+      "tags": [
+        "Portfolio Source Custody"
+      ],
+      "summary": "Ingest Registry Cut",
+      "description": "What: Seal a declared historical registry revision, including complete-empty coverage. How: Admit closed input under exact verified tenant/source grants and compare the declared head; fenced workers reconcile retained chunks before terminal completion. When: Submit after all declared chunks and poll the original native job; custody does not verify the independent population or establish bank authority.",
+      "naming": {
+        "boundedContext": "portfolio_source_custody",
+        "canonicalTerms": [
+          "accepted_count",
+          "calendar",
+          "chunk_count",
+          "chunks_root",
+          "content_hash",
+          "correlation_id",
+          "count",
+          "coverage_from",
+          "coverage_to",
+          "declared_coverage",
+          "definition_version",
+          "entity_type",
+          "expected_head_hash",
+          "expected_population",
+          "generated_at",
+          "idempotency_key",
+          "job_id",
+          "members_root",
+          "message",
+          "observed_at",
+          "predecessor_hash",
+          "reference",
+          "registry_scope_id",
+          "request_id",
+          "revision",
+          "source_cut_id",
+          "source_system",
+          "supplied_count",
+          "trace_id",
+          "x_tenant_id"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
+          {
+            "name": "source_system",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "registry_scope_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.registry_scope_id",
+            "attributeRef": "lotus.registry_scope_id"
+          },
+          {
+            "name": "source_cut_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_cut_id",
+            "attributeRef": "lotus.source_cut_id"
+          },
+          {
+            "name": "revision",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.revision",
+            "attributeRef": "lotus.revision"
+          },
+          {
+            "name": "definition_version",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.definition_version",
+            "attributeRef": "lotus.definition_version"
+          },
+          {
+            "name": "coverage_from",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.coverage_from",
+            "attributeRef": "lotus.coverage_from"
+          },
+          {
+            "name": "coverage_to",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.coverage_to",
+            "attributeRef": "lotus.coverage_to"
+          },
+          {
+            "name": "calendar",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.calendar",
+            "attributeRef": "lotus.calendar"
+          },
+          {
+            "name": "observed_at",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "generated_at",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.generated_at",
+            "attributeRef": "lotus.generated_at"
+          },
+          {
+            "name": "predecessor_hash",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.predecessor_hash",
+            "attributeRef": "lotus.predecessor_hash"
+          },
+          {
+            "name": "expected_head_hash",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.expected_head_hash",
+            "attributeRef": "lotus.expected_head_hash"
+          },
+          {
+            "name": "expected_population",
+            "location": "body",
+            "required": true,
+            "type": "ExpectedPopulationInput",
+            "semanticId": "lotus.expected_population",
+            "attributeRef": "lotus.expected_population"
+          },
+          {
+            "name": "expected_population.reference",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.reference",
+            "attributeRef": "lotus.reference"
+          },
+          {
+            "name": "expected_population.definition_version",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.definition_version",
+            "attributeRef": "lotus.definition_version"
+          },
+          {
+            "name": "expected_population.count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.count",
+            "attributeRef": "lotus.count"
+          },
+          {
+            "name": "expected_population.content_hash",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.content_hash",
+            "attributeRef": "lotus.content_hash"
+          },
+          {
+            "name": "declared_coverage",
+            "location": "body",
+            "required": true,
+            "type": "DeclaredCoverage",
+            "semanticId": "lotus.declared_coverage",
+            "attributeRef": "lotus.declared_coverage"
+          },
+          {
+            "name": "supplied_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.supplied_count",
+            "attributeRef": "lotus.supplied_count"
+          },
+          {
+            "name": "members_root",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.members_root",
+            "attributeRef": "lotus.members_root"
+          },
+          {
+            "name": "chunk_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.chunk_count",
+            "attributeRef": "lotus.chunk_count"
+          },
+          {
+            "name": "chunks_root",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.chunks_root",
+            "attributeRef": "lotus.chunks_root"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 202,
+        "model": "BatchIngestionAcceptedResponse",
+        "fields": [
+          {
+            "name": "message",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.message",
+            "attributeRef": "lotus.message"
+          },
+          {
+            "name": "entity_type",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.entity_type",
+            "attributeRef": "lotus.entity_type"
+          },
+          {
+            "name": "accepted_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.accepted_count",
+            "attributeRef": "lotus.accepted_count"
+          },
+          {
+            "name": "correlation_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.correlation_id",
+            "attributeRef": "lotus.correlation_id"
+          },
+          {
+            "name": "request_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.request_id",
+            "attributeRef": "lotus.request_id"
+          },
+          {
+            "name": "trace_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.trace_id",
+            "attributeRef": "lotus.trace_id"
+          },
+          {
+            "name": "idempotency_key",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.idempotency_key",
+            "attributeRef": "lotus.idempotency_key"
+          },
+          {
+            "name": "job_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.job_id",
+            "attributeRef": "lotus.job_id"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "ingest_financial_chunk_ingest_portfolio_financial_source_cut_chunks_post",
+      "method": "POST",
+      "path": "/ingest/portfolio-financial-source-cut-chunks",
+      "domain": "portfolio_source_custody",
+      "serviceGroup": "ingestion",
+      "tags": [
+        "Portfolio Source Custody"
+      ],
+      "summary": "Ingest Financial Chunk",
+      "description": "What: Retain a bounded chunk of selected native financial source references. How: Admit closed input under exact verified tenant/source grants and preserve raw and typed identity; exact replay returns the original native receipt. When: Submit chunks before their financial cut seal and poll the returned native job; custody performs no financial calculation or source qualification.",
+      "naming": {
+        "boundedContext": "portfolio_source_custody",
+        "canonicalTerms": [
+          "accepted_count",
+          "chunk_index",
+          "compatibility",
+          "content_hash",
+          "correlation_id",
+          "currency",
+          "entity_type",
+          "idempotency_key",
+          "job_id",
+          "member_revision",
+          "message",
+          "month_end_date",
+          "portfolio_id",
+          "prior_date",
+          "product_name",
+          "product_version",
+          "receipt_job_id",
+          "registry_root",
+          "registry_scope_id",
+          "request_id",
+          "revision",
+          "role",
+          "selections",
+          "selector",
+          "selector_hash",
+          "settled_unencumbered",
+          "source_cut_id",
+          "source_revision",
+          "source_system",
+          "trace_id",
+          "typed_content_hash",
+          "x_tenant_id"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
+          {
+            "name": "source_system",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "registry_scope_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.registry_scope_id",
+            "attributeRef": "lotus.registry_scope_id"
+          },
+          {
+            "name": "source_cut_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_cut_id",
+            "attributeRef": "lotus.source_cut_id"
+          },
+          {
+            "name": "revision",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.revision",
+            "attributeRef": "lotus.revision"
+          },
+          {
+            "name": "chunk_index",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.chunk_index",
+            "attributeRef": "lotus.chunk_index"
+          },
+          {
+            "name": "selections",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.selections",
+            "attributeRef": "lotus.selections"
+          },
+          {
+            "name": "selections[].portfolio_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "selections[].currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.currency",
+            "attributeRef": "lotus.currency"
+          },
+          {
+            "name": "selections[].prior_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.prior_date",
+            "attributeRef": "lotus.prior_date"
+          },
+          {
+            "name": "selections[].month_end_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.month_end_date",
+            "attributeRef": "lotus.month_end_date"
+          },
+          {
+            "name": "selections[].registry_root",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.registry_root",
+            "attributeRef": "lotus.registry_root"
+          },
+          {
+            "name": "selections[].member_revision",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.member_revision",
+            "attributeRef": "lotus.member_revision"
+          },
+          {
+            "name": "selections[].selections",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.selections",
+            "attributeRef": "lotus.selections"
+          },
+          {
+            "name": "selections[].selections[].role",
+            "location": "body",
+            "required": true,
+            "type": "InputRole",
+            "semanticId": "lotus.role",
+            "attributeRef": "lotus.role"
+          },
+          {
+            "name": "selections[].selections[].product_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.product_name",
+            "attributeRef": "lotus.product_name"
+          },
+          {
+            "name": "selections[].selections[].product_version",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.product_version",
+            "attributeRef": "lotus.product_version"
+          },
+          {
+            "name": "selections[].selections[].selector",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.selector",
+            "attributeRef": "lotus.selector"
+          },
+          {
+            "name": "selections[].selections[].selector_hash",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.selector_hash",
+            "attributeRef": "lotus.selector_hash"
+          },
+          {
+            "name": "selections[].selections[].content_hash",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.content_hash",
+            "attributeRef": "lotus.content_hash"
+          },
+          {
+            "name": "selections[].selections[].receipt_job_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.receipt_job_id",
+            "attributeRef": "lotus.receipt_job_id"
+          },
+          {
+            "name": "selections[].selections[].source_revision",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_revision",
+            "attributeRef": "lotus.source_revision"
+          },
+          {
+            "name": "selections[].settled_unencumbered",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.settled_unencumbered",
+            "attributeRef": "lotus.settled_unencumbered"
+          },
+          {
+            "name": "selections[].compatibility",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.compatibility",
+            "attributeRef": "lotus.compatibility"
+          },
+          {
+            "name": "typed_content_hash",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.typed_content_hash",
+            "attributeRef": "lotus.typed_content_hash"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 202,
+        "model": "BatchIngestionAcceptedResponse",
+        "fields": [
+          {
+            "name": "message",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.message",
+            "attributeRef": "lotus.message"
+          },
+          {
+            "name": "entity_type",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.entity_type",
+            "attributeRef": "lotus.entity_type"
+          },
+          {
+            "name": "accepted_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.accepted_count",
+            "attributeRef": "lotus.accepted_count"
+          },
+          {
+            "name": "correlation_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.correlation_id",
+            "attributeRef": "lotus.correlation_id"
+          },
+          {
+            "name": "request_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.request_id",
+            "attributeRef": "lotus.request_id"
+          },
+          {
+            "name": "trace_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.trace_id",
+            "attributeRef": "lotus.trace_id"
+          },
+          {
+            "name": "idempotency_key",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.idempotency_key",
+            "attributeRef": "lotus.idempotency_key"
+          },
+          {
+            "name": "job_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.job_id",
+            "attributeRef": "lotus.job_id"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "ingest_financial_cut_ingest_portfolio_financial_source_cuts_post",
+      "method": "POST",
+      "path": "/ingest/portfolio-financial-source-cuts",
+      "domain": "portfolio_source_custody",
+      "serviceGroup": "ingestion",
+      "tags": [
+        "Portfolio Source Custody"
+      ],
+      "summary": "Ingest Financial Cut",
+      "description": "What: Seal a declared financial source cut revision for retained consumer reads. How: Admit closed input under exact verified tenant/source grants and compare the declared head; fenced workers reconcile selections and acquire pinned native captures. When: Submit after all declared chunks and poll the original native job for completion; retained integrity does not verify cross-family compatibility or establish bank authority.",
+      "naming": {
+        "boundedContext": "portfolio_source_custody",
+        "canonicalTerms": [
+          "accepted_count",
+          "calendar",
+          "chunk_count",
+          "chunks_root",
+          "correlation_id",
+          "coverage_from",
+          "coverage_to",
+          "definition_version",
+          "entity_type",
+          "expected_head_hash",
+          "generated_at",
+          "idempotency_key",
+          "job_id",
+          "message",
+          "observed_at",
+          "predecessor_hash",
+          "registry_scope_id",
+          "request_id",
+          "revision",
+          "selection_count",
+          "selections_root",
+          "source_cut_id",
+          "source_system",
+          "trace_id",
+          "x_tenant_id"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "X-Tenant-Id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
+          },
+          {
+            "name": "source_system",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "registry_scope_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.registry_scope_id",
+            "attributeRef": "lotus.registry_scope_id"
+          },
+          {
+            "name": "source_cut_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_cut_id",
+            "attributeRef": "lotus.source_cut_id"
+          },
+          {
+            "name": "revision",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.revision",
+            "attributeRef": "lotus.revision"
+          },
+          {
+            "name": "definition_version",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.definition_version",
+            "attributeRef": "lotus.definition_version"
+          },
+          {
+            "name": "coverage_from",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.coverage_from",
+            "attributeRef": "lotus.coverage_from"
+          },
+          {
+            "name": "coverage_to",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.coverage_to",
+            "attributeRef": "lotus.coverage_to"
+          },
+          {
+            "name": "calendar",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.calendar",
+            "attributeRef": "lotus.calendar"
+          },
+          {
+            "name": "observed_at",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "generated_at",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.generated_at",
+            "attributeRef": "lotus.generated_at"
+          },
+          {
+            "name": "predecessor_hash",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.predecessor_hash",
+            "attributeRef": "lotus.predecessor_hash"
+          },
+          {
+            "name": "expected_head_hash",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.expected_head_hash",
+            "attributeRef": "lotus.expected_head_hash"
+          },
+          {
+            "name": "selection_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.selection_count",
+            "attributeRef": "lotus.selection_count"
+          },
+          {
+            "name": "selections_root",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.selections_root",
+            "attributeRef": "lotus.selections_root"
+          },
+          {
+            "name": "chunk_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.chunk_count",
+            "attributeRef": "lotus.chunk_count"
+          },
+          {
+            "name": "chunks_root",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.chunks_root",
+            "attributeRef": "lotus.chunks_root"
           }
         ]
       },

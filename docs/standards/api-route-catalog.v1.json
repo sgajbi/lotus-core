@@ -3738,6 +3738,96 @@
     {
       "service_app": "ingestion_service",
       "method": "POST",
+      "path": "/ingest/portfolio-financial-source-cut-chunks",
+      "route_key": "POST /ingest/portfolio-financial-source-cut-chunks",
+      "operation_id": "ingest_financial_chunk_ingest_portfolio_financial_source_cut_chunks_post",
+      "summary": "Ingest Financial Chunk",
+      "tags": [
+        "Portfolio Source Custody"
+      ],
+      "route_family": "Write Ingress",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "ingestion_service",
+      "auth_requirement": "governed-enterprise-readiness",
+      "audit_requirement": "audit-required",
+      "request_schema": "FinancialChunkInput",
+      "response_schemas": [
+        {
+          "status_code": "202",
+          "schema": "BatchIngestionAcceptedResponse",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        }
+      ],
+      "pagination": [],
+      "filtering": [],
+      "sorting": [],
+      "idempotency_behavior": "ingestion-job-idempotency-supported-where-header-present",
+      "downstream_consumers": [
+        "source-adapters",
+        "operations"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "ingestion_service",
+      "method": "POST",
+      "path": "/ingest/portfolio-financial-source-cuts",
+      "route_key": "POST /ingest/portfolio-financial-source-cuts",
+      "operation_id": "ingest_financial_cut_ingest_portfolio_financial_source_cuts_post",
+      "summary": "Ingest Financial Cut",
+      "tags": [
+        "Portfolio Source Custody"
+      ],
+      "route_family": "Write Ingress",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "ingestion_service",
+      "auth_requirement": "governed-enterprise-readiness",
+      "audit_requirement": "audit-required",
+      "request_schema": "FinancialSealInput",
+      "response_schemas": [
+        {
+          "status_code": "202",
+          "schema": "BatchIngestionAcceptedResponse",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        }
+      ],
+      "pagination": [],
+      "filtering": [],
+      "sorting": [],
+      "idempotency_behavior": "ingestion-job-idempotency-supported-where-header-present",
+      "downstream_consumers": [
+        "source-adapters",
+        "operations"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "ingestion_service",
+      "method": "POST",
       "path": "/ingest/portfolio-flow-event-observations",
       "route_key": "POST /ingest/portfolio-flow-event-observations",
       "operation_id": "ingest_portfolio_flow_event_observations_ingest_portfolio_flow_event_observations_post",
@@ -3846,6 +3936,96 @@
         {
           "status_code": "200",
           "schema": "IngestionJobResponse",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        }
+      ],
+      "pagination": [],
+      "filtering": [],
+      "sorting": [],
+      "idempotency_behavior": "ingestion-job-idempotency-supported-where-header-present",
+      "downstream_consumers": [
+        "source-adapters",
+        "operations"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "ingestion_service",
+      "method": "POST",
+      "path": "/ingest/portfolio-historical-registry-chunks",
+      "route_key": "POST /ingest/portfolio-historical-registry-chunks",
+      "operation_id": "ingest_registry_chunk_ingest_portfolio_historical_registry_chunks_post",
+      "summary": "Ingest Registry Chunk",
+      "tags": [
+        "Portfolio Source Custody"
+      ],
+      "route_family": "Write Ingress",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "ingestion_service",
+      "auth_requirement": "governed-enterprise-readiness",
+      "audit_requirement": "audit-required",
+      "request_schema": "RegistryChunkInput",
+      "response_schemas": [
+        {
+          "status_code": "202",
+          "schema": "BatchIngestionAcceptedResponse",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        }
+      ],
+      "pagination": [],
+      "filtering": [],
+      "sorting": [],
+      "idempotency_behavior": "ingestion-job-idempotency-supported-where-header-present",
+      "downstream_consumers": [
+        "source-adapters",
+        "operations"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "ingestion_service",
+      "method": "POST",
+      "path": "/ingest/portfolio-historical-registry-cuts",
+      "route_key": "POST /ingest/portfolio-historical-registry-cuts",
+      "operation_id": "ingest_registry_cut_ingest_portfolio_historical_registry_cuts_post",
+      "summary": "Ingest Registry Cut",
+      "tags": [
+        "Portfolio Source Custody"
+      ],
+      "route_family": "Write Ingress",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "ingestion_service",
+      "auth_requirement": "governed-enterprise-readiness",
+      "audit_requirement": "audit-required",
+      "request_schema": "RegistrySealInput",
+      "response_schemas": [
+        {
+          "status_code": "202",
+          "schema": "BatchIngestionAcceptedResponse",
           "description": "Successful Response"
         }
       ],
@@ -6186,6 +6366,70 @@
     {
       "service_app": "query_control_plane_service",
       "method": "POST",
+      "path": "/integration/financial-source-cuts/query",
+      "route_key": "POST /integration/financial-source-cuts/query",
+      "operation_id": "query_financial_source_cut_integration_financial_source_cuts_query_post",
+      "summary": "Read an exact retained financial source cut",
+      "tags": [
+        "Integration"
+      ],
+      "route_family": "Analytics Input",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "query_control_plane_service",
+      "auth_requirement": "not-declared-in-openapi",
+      "audit_requirement": "mutation-audit-required",
+      "request_schema": "FinancialSourceCutQuery",
+      "response_schemas": [
+        {
+          "status_code": "200",
+          "schema": "FinancialSourceCutReadResponse",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Verified service, tenant, product and registry read authority is required."
+        },
+        {
+          "status_code": "404",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "The exact retained source cut or selected input is absent."
+        },
+        {
+          "status_code": "409",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Retained receipt, source roots, capture catalog or continuation did not reconcile."
+        },
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        },
+        {
+          "status_code": "503",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "The retained source read capability is unavailable."
+        }
+      ],
+      "pagination": [],
+      "filtering": [],
+      "sorting": [],
+      "idempotency_behavior": "not-declared",
+      "downstream_consumers": [
+        "lotus-manage"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "query_control_plane_service",
+      "method": "POST",
       "path": "/integration/financial-source-observations/flow-events/query",
       "route_key": "POST /integration/financial-source-observations/flow-events/query",
       "operation_id": "query_flow_source_integration_financial_source_observations_flow_events_query_post",
@@ -6775,6 +7019,70 @@
         "lotus-gateway",
         "lotus-workbench",
         "operations"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "query_control_plane_service",
+      "method": "POST",
+      "path": "/integration/portfolio-historical-registries/query",
+      "route_key": "POST /integration/portfolio-historical-registries/query",
+      "operation_id": "query_historical_registry_integration_portfolio_historical_registries_query_post",
+      "summary": "Read an exact retained historical registry",
+      "tags": [
+        "Integration"
+      ],
+      "route_family": "Analytics Input",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "query_control_plane_service",
+      "auth_requirement": "not-declared-in-openapi",
+      "audit_requirement": "mutation-audit-required",
+      "request_schema": "HistoricalRegistryQuery",
+      "response_schemas": [
+        {
+          "status_code": "200",
+          "schema": "HistoricalRegistryReadResponse",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "403",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Verified service, tenant, product and registry read authority is required."
+        },
+        {
+          "status_code": "404",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "The exact retained source cut or selected input is absent."
+        },
+        {
+          "status_code": "409",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Retained receipt, source roots, capture catalog or continuation did not reconcile."
+        },
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        },
+        {
+          "status_code": "503",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "The retained source read capability is unavailable."
+        }
+      ],
+      "pagination": [],
+      "filtering": [],
+      "sorting": [],
+      "idempotency_behavior": "not-declared",
+      "downstream_consumers": [
+        "lotus-manage"
       ],
       "deprecated_alias_metadata": {
         "is_deprecated": false,

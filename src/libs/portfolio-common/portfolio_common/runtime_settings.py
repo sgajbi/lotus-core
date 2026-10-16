@@ -42,6 +42,13 @@ class KafkaConnectionSecuritySettings:
     sasl_password: str
 
 
+def portfolio_registry_source_grants():
+    """Separate exact registry grant parser, loaded at the approved configuration boundary."""
+    from .portfolio_financial_source_cut_admission import parse_registry_source_grants
+
+    return parse_registry_source_grants(env_str("LOTUS_PORTFOLIO_REGISTRY_SOURCE_GRANTS_JSON", ""))
+
+
 def kafka_connection_security_settings() -> KafkaConnectionSecuritySettings:
     """Load Kafka transport settings without validating adapter-specific policy."""
 
@@ -56,6 +63,44 @@ def kafka_connection_security_settings() -> KafkaConnectionSecuritySettings:
 
 class RuntimeConfigurationError(ValueError):
     """Raised when strict runtime configuration validation rejects an env value."""
+
+
+@dataclass(frozen=True, slots=True)
+class FinancialSourceCutWorkerSettings:
+    worker_count: int
+    lease_seconds: int
+    retry_seconds: int
+    idle_milliseconds: int
+
+
+def financial_source_cut_worker_settings() -> FinancialSourceCutWorkerSettings:
+    service = "persistence_service"
+    return FinancialSourceCutWorkerSettings(
+        worker_count=env_int(
+            "LOTUS_FINANCIAL_SOURCE_CUT_WORKERS", 1, service_name=service, minimum=1, maximum=8
+        ),
+        lease_seconds=env_int(
+            "LOTUS_FINANCIAL_SOURCE_CUT_LEASE_SECONDS",
+            30,
+            service_name=service,
+            minimum=10,
+            maximum=300,
+        ),
+        retry_seconds=env_int(
+            "LOTUS_FINANCIAL_SOURCE_CUT_RETRY_SECONDS",
+            5,
+            service_name=service,
+            minimum=1,
+            maximum=60,
+        ),
+        idle_milliseconds=env_int(
+            "LOTUS_FINANCIAL_SOURCE_CUT_IDLE_MILLISECONDS",
+            500,
+            service_name=service,
+            minimum=50,
+            maximum=10000,
+        ),
+    )
 
 
 def runtime_environment_name() -> str:

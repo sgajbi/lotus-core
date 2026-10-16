@@ -28,6 +28,34 @@ CONFIG_SOURCE = (
 )
 
 
+def test_neutral_source_completion_has_one_fact_topic_and_exact_runtime_override(monkeypatch):
+    from portfolio_common import config
+
+    def definition():
+        found = [
+            t
+            for t in config.KAFKA_TOPIC_DEFINITIONS
+            if t.canonical_name == "portfolio.financial_source_cuts.completed"
+        ]
+        assert len(found) == 1
+        return found[0]
+
+    original = definition()
+    assert original.semantic_type == "fact" and original.partition_count == 12
+    assert original.scope == "tenant_portfolio_registry_source_cut"
+    try:
+        with monkeypatch.context() as scoped:
+            scoped.setenv(
+                "KAFKA_PORTFOLIO_FINANCIAL_SOURCE_CUTS_COMPLETED_TOPIC",
+                "isolated.neutral.completed",
+            )
+            importlib.reload(config)
+            assert definition().runtime_name == "isolated.neutral.completed"
+            assert config.KAFKA_TOPIC_PARTITION_COUNTS[definition().runtime_name] == 12
+    finally:
+        importlib.reload(config)
+
+
 def test_shared_config_does_not_publish_unused_mongodb_credentials() -> None:
     source = CONFIG_SOURCE.read_text(encoding="utf-8")
 

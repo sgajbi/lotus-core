@@ -18,6 +18,30 @@ from src.services.ingestion_service.app.DTOs.reference_data_support_dto import (
 from tests.test_support.classification_history import source_cut
 
 EXPECTED_COMMANDS = {
+    "portfolio_historical_registry_chunk": (
+        "/ingest/portfolio-historical-registry-chunks",
+        "portfolio_historical_registry_chunk",
+        "members",
+        "stage",
+    ),
+    "portfolio_historical_registry": (
+        "/ingest/portfolio-historical-registry-cuts",
+        "portfolio_historical_registry",
+        "",
+        "stage",
+    ),
+    "portfolio_financial_source_cut_chunk": (
+        "/ingest/portfolio-financial-source-cut-chunks",
+        "portfolio_financial_source_cut_chunk",
+        "selections",
+        "stage",
+    ),
+    "portfolio_financial_source_cut": (
+        "/ingest/portfolio-financial-source-cuts",
+        "portfolio_financial_source_cut",
+        "",
+        "stage",
+    ),
     "portfolio_flow_event_observation": (
         "/ingest/portfolio-flow-event-observations",
         "portfolio_flow_event_observation",

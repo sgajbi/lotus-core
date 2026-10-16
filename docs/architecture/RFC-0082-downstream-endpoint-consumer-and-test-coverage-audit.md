@@ -13,6 +13,18 @@ The source of truth for product identity, route family, route ownership, paging/
 
 ## Summary
 
+### Neutral Historical Registry And Financial Cut Custody
+
+`PortfolioHistoricalRegistry:v1` exposes `POST /integration/portfolio-historical-registries/query`;
+`PortfolioFinancialSourceCut:v1` exposes `POST /integration/financial-source-cuts/query`.
+Both QCP products name `lotus-manage` as the intended consumer. They retain historical registry,
+manifest and selected graph custody with exact source references and default unavailability
+when grants or retained evidence are absent. Completion remains `UNQUALIFIED` and population
+verification remains `UNVERIFIED`. Registration and source-level tests establish no qualified
+provider, bank authority, financial authority or joined-source compatibility. Native PostgreSQL
+execution and downstream consumer certification require separate evidence; the historical live
+proof below does not cover these products.
+
 ### Retained Financial Flow Source Evidence
 
 `PortfolioFinancialFlowObservations:v1` supplies `lotus-manage` with complete pinned

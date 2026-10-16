@@ -46,6 +46,15 @@ class FlowRecordLineagePolicy(SourceLineagePolicy):
 
 
 @dataclass(frozen=True, slots=True)
+class NeutralSourceCutLineagePolicy(SourceLineagePolicy):
+    """Neutral registry scope and cut revision keep their distinct wire meanings."""
+
+    registry_scope_id: LineageFieldPosture
+    source_cut_id: LineageFieldPosture
+    revision: LineageFieldPosture
+
+
+@dataclass(frozen=True, slots=True)
 class IngestionEvidencePolicy:
     endpoint: str
     entity_type: str
@@ -363,6 +372,36 @@ _OBSERVATION_POLICIES = tuple(
 
 INGESTION_EVIDENCE_POLICY_REGISTRY = IngestionEvidencePolicyRegistry(
     (
+        *(
+            _fingerprint_policy(
+                endpoint,
+                entity,
+                classification=PayloadClassification.RESTRICTED,
+                source_lineage=NeutralSourceCutLineagePolicy(
+                    source_system=LineageFieldPosture.REQUIRED,
+                    source_record_id=LineageFieldPosture.NOT_APPLICABLE,
+                    observed_at=LineageFieldPosture.OPTIONAL,
+                    quality_status=LineageFieldPosture.NOT_APPLICABLE,
+                    source_batch_id=LineageFieldPosture.NOT_APPLICABLE,
+                    source_version=LineageFieldPosture.NOT_APPLICABLE,
+                    registry_scope_id=LineageFieldPosture.REQUIRED,
+                    source_cut_id=LineageFieldPosture.REQUIRED,
+                    revision=LineageFieldPosture.REQUIRED,
+                ),
+            )
+            for endpoint, entity in (
+                (
+                    "/ingest/portfolio-historical-registry-chunks",
+                    "portfolio_historical_registry_chunk",
+                ),
+                ("/ingest/portfolio-historical-registry-cuts", "portfolio_historical_registry"),
+                (
+                    "/ingest/portfolio-financial-source-cut-chunks",
+                    "portfolio_financial_source_cut_chunk",
+                ),
+                ("/ingest/portfolio-financial-source-cuts", "portfolio_financial_source_cut"),
+            )
+        ),
         _fingerprint_policy(
             "/ingest/portfolios", "portfolio", classification=PayloadClassification.RESTRICTED
         ),
