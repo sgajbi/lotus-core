@@ -296,8 +296,12 @@ every runtime omission. Final closure still requires exact-main and published-wi
 The `automerge` label is consumed only by the small PR Auto Merge workflow. Applying that label
 does not route to, cancel, or duplicate the full Pull Request Merge Gate for an unchanged head SHA.
 Code-changing `synchronize` events still invalidate stale-head work and run the complete protected
-gate for the new immutable head. Opened, reopened, and ready-for-review events retain their current
-governed-job behavior with fresh change classification. PR Auto Merge
+gate for the new immutable head. Opened and reopened events run PR Merge Gate and Quality Baseline
+with fresh change classification, including draft PRs; merge-group and manual validation remain
+available. Marking an unchanged draft ready does not start or cancel either full matrix, and its
+exact-head required checks remain valid. The native required-check guard enforces the three PR
+event types. The separate PR Auto Merge workflow still observes `ready_for_review` and requires
+a non-draft PR before queueing. PR Auto Merge
 uses the explicit `LOTUS_AUTOMERGE_TOKEN` under read-only workflow permissions and safely stops when
 the secret is absent. It never falls back to `github.token`.
 

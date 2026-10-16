@@ -763,6 +763,24 @@ correction contract for bank records. Follow the OS-specific commands, refusal c
 evidence preservation and interrupted-admission procedure in the
 [seed runbook](docs/operations/Front-Office-Portfolio-Seed-Runbook.md#opening-funding-and-existing-synthetic-books).
 
+## Complete API Vocabulary Practice
+
+API vocabulary generation uses `scripts/quality/openapi_quality_gate.py::service_schemas`, the
+same HTTP application authority as the route catalog. Do not introduce a query/ingestion-only
+service list or drop replay, query-control-plane, reconciliation, or worker web operations during
+inventory refresh. The gate compares each service, method, path, and operation ID with that
+authority independently of committed-file parity. Shared operational paths retain their distinct
+service identities; existing `query` / `ingestion` groups remain stable. Preserve source semantic
+failures instead of renaming fields, changing examples, or suppressing applications to force a
+complete inventory green. See the [inventory workflow](docs/standards/api-vocabulary/README.md).
+
+The exact replay attributes `ingestion_job_id` (nullable related job owner) and
+`ingestion_outcome` (five-value source-batch disposition) are domain-qualified terms, not serving
+service prefixes. They retain their existing `lotus.*` semantic IDs and never alias primary
+`job_id`, event identity, correlation, execution status, or qualification. All unapproved prefix
+names and near matches remain blocked. The inventory workflow records the current app-owner
+interpretation and actual DTO/OpenAPI controls; do not turn it into a general prefix exemption.
+
 ## Repo-Native Commands
 
 Run from the `lotus-core` repository root:
@@ -826,6 +844,13 @@ dependencies, fixtures, contract, and environment are unchanged.
 Workflow optimizations must preserve required checks, exact-source identity, warning and coverage
 policies, complete main certification, and final wiki parity. A merged-and-validated slice—not a
 passing narrow test or issue count—is the unit of delivery.
+
+PR Merge Gate and Quality Baseline run for `opened`, `synchronize` and `reopened` PR events,
+including drafts, plus their existing merge-group and manual triggers. An unchanged draft-to-ready
+transition retains its exact-head required checks without starting or cancelling a full matrix.
+The native required-check guard enforces that exact PR event set. PR Auto Merge separately retains
+`ready_for_review` eligibility; source-changing `synchronize` events still cancel stale PR Merge
+work and validate the new head. Preserve both boundaries when changing event routing.
 
 PR change selection is owned by `scripts/quality/change_classification.py` and the fixed native
 dispatchers in `scripts/quality/pr_validation/`. Only allowlisted regular authored Markdown can

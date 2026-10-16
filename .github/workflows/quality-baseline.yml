@@ -3,7 +3,7 @@ name: Quality Baseline Report
 on:
   pull_request:
     branches: ["main"]
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened]
   merge_group:
     branches: ["main"]
   workflow_dispatch:

@@ -37,6 +37,20 @@ checked by `make api-route-catalog-guard`.
 | Copy-paste examples | Verified API examples catalog | Guarded by `make api-example-catalog-guard`. |
 | Human navigation | This wiki page | Keep prose focused on usage and route-family orientation. |
 
+The RFC-0067 [API vocabulary inventory](https://github.com/sgajbi/lotus-core/blob/main/docs/standards/api-vocabulary/README.md)
+uses the same supported HTTP application authority as the route catalog. Its gate checks complete
+per-service operation coverage as well as committed semantic parity. Query-control-plane, replay,
+reconciliation, and worker web contracts must remain represented when the native inventory is
+refreshed. Shared health and version paths retain separate service ownership; source-contract
+semantic failures block generation rather than silently removing an application.
+
+The replay vocabulary preserves two domain-qualified relationships: `ingestion_job_id` is the
+nullable original job-owner reference on a consumer DLQ event, and `ingestion_outcome` is the
+evidence bundle's five-value source-batch disposition. They do not alias job/event identity,
+correlation, execution status, or source qualification. The
+[native inventory guide](https://github.com/sgajbi/lotus-core/blob/main/docs/standards/api-vocabulary/README.md#domain-qualified-business-terms)
+defines the exact classification; implementation prefixes and near matches remain blocked.
+
 All non-public operations require a normalized, non-blank `X-Tenant-Id` header. The requirement is
 independent of whether signed enterprise authorization is enabled; an unsigned header establishes
 request scope but is not authenticated tenant identity. Core returns a source-safe RFC 9457-style

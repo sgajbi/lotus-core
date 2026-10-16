@@ -37,6 +37,10 @@ for lib_dir in LIBS_ROOT.glob("*"):
 ALLOWED_METHODS = {"get", "post", "put", "patch", "delete"}
 LEGACY_TERM_MAP: dict[str, str] = {}
 BANNED_NAME_PREFIXES = ("query_", "ingestion_", "dto_", "db_")
+# These exact public business terms describe a related ingestion-job owner and a
+# source-batch disposition, not the implementation of the serving replay service.
+# Their meanings and app-owner classification are governed in the inventory README.
+DOMAIN_QUALIFIED_BUSINESS_TERMS = frozenset({"ingestion_job_id", "ingestion_outcome"})
 EXAMPLE_BY_KEY = {
     "amount": 125000.5,
     "asset_class": "EQUITY",
@@ -486,6 +490,13 @@ def _derive_domain(path: str, tags: list[str]) -> str:
     return _to_snake_case(segment)
 
 
+def _service_group(service_name: str) -> str:
+    """Preserve established groups without conflating independently owned HTTP apps."""
+    return {"query_service": "query", "ingestion_service": "ingestion"}.get(
+        service_name, service_name
+    )
+
+
 def _extract_service_inventory(
     service_name: str,
     schema: dict[str, Any],
@@ -511,7 +522,7 @@ def _extract_service_inventory(
                 "method": method.upper(),
                 "path": path,
                 "domain": _derive_domain(path, operation.get("tags", [])),
-                "serviceGroup": "query" if "query" in service_name else "ingestion",
+                "serviceGroup": _service_group(service_name),
                 "tags": operation.get("tags", []),
                 "summary": operation.get("summary", ""),
                 "description": operation.get("description", ""),
@@ -708,21 +719,31 @@ def _default_server_side_controls() -> list[dict[str, Any]]:
     ]
 
 
-def generate_inventory() -> dict[str, Any]:
-    from src.services.ingestion_service.app.main import app as ingestion_app
-    from src.services.query_service.app.main import app as query_app
+def _load_service_schemas() -> dict[str, dict[str, Any]]:
+    from scripts.quality.openapi_quality_gate import service_schemas
 
-    query_schema = query_app.openapi()
-    ingestion_schema = ingestion_app.openapi()
+    return cast(dict[str, dict[str, Any]], service_schemas())
 
-    query_endpoints, query_controls = _extract_service_inventory("query_service", query_schema)
-    ingestion_endpoints, ingestion_controls = _extract_service_inventory(
-        "ingestion_service", ingestion_schema
+
+def generate_inventory(
+    schemas: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Inventory the same supported HTTP apps as the OpenAPI and route-catalog gates."""
+    schemas = _load_service_schemas() if schemas is None else schemas
+    # Catalog descriptions/examples retain established query-then-ingestion precedence.
+    service_names = sorted(
+        schemas, key=lambda name: {"query": 0, "ingestion": 1}.get(_service_group(name), 2)
     )
+    endpoints: list[dict[str, Any]] = []
+    controls: list[dict[str, Any]] = []
+    for service_name in service_names:
+        schema = schemas[service_name]
+        service_endpoints, service_controls = _extract_service_inventory(service_name, schema)
+        endpoints.extend(service_endpoints)
+        controls.extend(service_controls)
 
-    endpoints = query_endpoints + ingestion_endpoints
     attribute_catalog, _semantic_drift = _build_attribute_catalog(endpoints)
-    controls = query_controls + ingestion_controls + _default_server_side_controls()
+    controls.extend(_default_server_side_controls())
     linked_endpoints = _link_endpoint_fields_to_catalog(endpoints)
 
     return {
@@ -730,21 +751,121 @@ def generate_inventory() -> dict[str, Any]:
         "application": "lotus-core",
         "sourceOpenApi": [
             {
-                "service": "query_service",
-                "version": query_schema.get("info", {}).get("version", ""),
-                "openApiVersion": query_schema.get("openapi", ""),
-            },
-            {
-                "service": "ingestion_service",
-                "version": ingestion_schema.get("info", {}).get("version", ""),
-                "openApiVersion": ingestion_schema.get("openapi", ""),
-            },
+                "service": service_name,
+                "version": schemas[service_name].get("info", {}).get("version", ""),
+                "openApiVersion": schemas[service_name].get("openapi", ""),
+            }
+            for service_name in service_names
         ],
         "generatedAt": datetime.now(UTC).isoformat(),
         "attributeCatalog": attribute_catalog,
         "controlsCatalog": controls,
         "endpoints": linked_endpoints,
     }
+
+
+def _service_declaration_errors(
+    inventory: dict[str, Any], schemas: dict[str, dict[str, Any]]
+) -> list[str]:
+    sources = inventory.get("sourceOpenApi")
+    if not isinstance(sources, list) or not sources:
+        return ["inventory.sourceOpenApi must be a non-empty list"]
+    errors: list[str] = []
+    declared: set[str] = set()
+    for source in sources:
+        if not isinstance(source, dict) or not isinstance(source.get("service"), str):
+            errors.append("inventory.sourceOpenApi entries must identify a service")
+            continue
+        name = source["service"]
+        if name in declared:
+            errors.append(f"duplicate sourceOpenApi service: {name}")
+        declared.add(name)
+        schema = schemas.get(name)
+        if schema is not None and (
+            source.get("version") != schema.get("info", {}).get("version", "")
+            or source.get("openApiVersion") != schema.get("openapi", "")
+        ):
+            errors.append(f"sourceOpenApi metadata differs from current service: {name}")
+    for name in sorted(set(schemas) - declared):
+        errors.append(f"inventory missing supported OpenAPI service: {name}")
+    for name in sorted(declared - set(schemas)):
+        errors.append(f"inventory contains unknown OpenAPI service: {name}")
+    return errors
+
+
+def _openapi_operation_ids(
+    schemas: dict[str, dict[str, Any]],
+) -> dict[tuple[str, str, str], Any]:
+    return {
+        (_service_group(name), method.upper(), path): operation.get("operationId")
+        for name, schema in schemas.items()
+        for path, methods in schema.get("paths", {}).items()
+        if isinstance(methods, dict)
+        for method, operation in methods.items()
+        if method.lower() in ALLOWED_METHODS and isinstance(operation, dict)
+    }
+
+
+def _operation_coverage_errors(
+    inventory: dict[str, Any], expected: dict[tuple[str, str, str], Any]
+) -> list[str]:
+    endpoints = inventory.get("endpoints")
+    if not isinstance(endpoints, list):
+        return ["inventory.endpoints must be a list"]
+    errors: list[str] = []
+    actual: set[tuple[str, str, str]] = set()
+    operation_ids: set[tuple[str, str]] = set()
+    for endpoint in endpoints:
+        if not isinstance(endpoint, dict):
+            errors.append("inventory.endpoints entries must be objects")
+            continue
+        key = tuple(str(endpoint.get(field, "")) for field in ("serviceGroup", "method", "path"))
+        group, method, path = key
+        route_key = (group, method, path)
+        operation_key = (group, str(endpoint.get("operationId", "")))
+        if route_key in actual:
+            errors.append(f"duplicate inventory operation: {group} {method} {path}")
+        if operation_key in operation_ids:
+            errors.append(f"duplicate inventory operationId in {group}: {operation_key[1]}")
+        actual.add(route_key)
+        operation_ids.add(operation_key)
+        if route_key in expected and endpoint.get("operationId") != expected[route_key]:
+            errors.append(f"inventory operationId differs from OpenAPI: {group} {method} {path}")
+    for group, method, path in sorted(set(expected) - actual):
+        errors.append(f"inventory missing OpenAPI operation: {group} {method} {path}")
+    for group, method, path in sorted(actual - set(expected)):
+        errors.append(f"inventory contains unknown OpenAPI operation: {group} {method} {path}")
+    return errors
+
+
+def validate_service_coverage(
+    inventory: dict[str, Any], schemas: dict[str, dict[str, Any]]
+) -> list[str]:
+    """Compare service and operation identities directly with the complete OpenAPI authority."""
+    if not schemas:
+        return ["OpenAPI service authority must be non-empty"]
+    expected = _openapi_operation_ids(schemas)
+    represented_groups = {group for group, _, _ in expected}
+    empty_services = [
+        f"OpenAPI service has no supported HTTP operations: {name}"
+        for name in schemas
+        if _service_group(name) not in represented_groups
+    ]
+    return (
+        empty_services
+        + _service_declaration_errors(inventory, schemas)
+        + _operation_coverage_errors(inventory, expected)
+    )
+
+
+def _domain_qualified_binding_error(name: str, semantic_id: str) -> str | None:
+    """Preserve exact domain-role names without aliasing primary identities or namespaces."""
+    if name in DOMAIN_QUALIFIED_BUSINESS_TERMS and semantic_id != _semantic_id(name):
+        return f"domain-qualified term '{name}' must retain semanticId '{_semantic_id(name)}'"
+    for term in DOMAIN_QUALIFIED_BUSINESS_TERMS:
+        if semantic_id == _semantic_id(term) and name != term:
+            return f"domain-qualified semanticId '{semantic_id}' must retain name '{term}'"
+    return None
 
 
 def validate_inventory(inventory: dict[str, Any]) -> list[str]:
@@ -792,11 +913,16 @@ def validate_inventory(inventory: dict[str, Any]) -> list[str]:
             errors.append(f"attribute '{semantic_id}' preferredName must match canonicalTerm")
         if canonical_term in LEGACY_TERM_MAP:
             errors.append(f"attribute '{semantic_id}' uses legacy term '{canonical_term}'")
-        if any(canonical_term.startswith(prefix) for prefix in BANNED_NAME_PREFIXES):
+        if (
+            any(canonical_term.startswith(prefix) for prefix in BANNED_NAME_PREFIXES)
+            and canonical_term not in DOMAIN_QUALIFIED_BUSINESS_TERMS
+        ):
             errors.append(
                 f"attribute '{semantic_id}' uses implementation-specific "
                 f"prefix in '{canonical_term}'"
             )
+        if binding_error := _domain_qualified_binding_error(canonical_term, str(semantic_id)):
+            errors.append(binding_error)
         description = str(attribute.get("description", "")).strip()
         if len(description) < 12:
             errors.append(f"attribute '{semantic_id}' description is too short for WM standard")
@@ -819,6 +945,10 @@ def validate_inventory(inventory: dict[str, Any]) -> list[str]:
                         f"{endpoint.get('operationId')} field '{field.get('name')}' missing {key}"
                     )
             semantic_id = field.get("semanticId")
+            if binding_error := _domain_qualified_binding_error(
+                _leaf_name(str(field.get("name", ""))), str(semantic_id)
+            ):
+                errors.append(binding_error)
             if semantic_id and semantic_id not in attribute_ids:
                 errors.append(
                     f"{endpoint.get('operationId')} field '{field.get('name')}' "
@@ -958,8 +1088,9 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    inventory = generate_inventory()
-    errors = validate_inventory(inventory)
+    schemas = _load_service_schemas()
+    inventory = generate_inventory(schemas)
+    errors = validate_inventory(inventory) + validate_service_coverage(inventory, schemas)
 
     if errors:
         print("API vocabulary inventory validation failed:")

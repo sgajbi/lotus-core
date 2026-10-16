@@ -531,19 +531,28 @@ def test_scheduled_main_gate_coverage_audit_is_fail_closed_and_retained() -> Non
 
 
 def test_automerge_label_event_does_not_restart_the_full_pr_merge_gate() -> None:
-    merge_gate = yaml.safe_load(
-        Path(".github/workflows/pr-merge-gate.yml").read_text(encoding="utf-8")
-    )
+    for filename in ("pr-merge-gate.yml", "quality-baseline.yml"):
+        workflow = yaml.safe_load(Path(".github/workflows", filename).read_text(encoding="utf-8"))
+        assert workflow[True]["pull_request"]["types"] == [
+            "opened",
+            "synchronize",
+            "reopened",
+        ], filename
+
+
+def test_draft_source_validation_and_ready_automerge_have_separate_triggers() -> None:
+    for filename in ("pr-merge-gate.yml", "quality-baseline.yml"):
+        workflow = yaml.safe_load(Path(".github/workflows", filename).read_text(encoding="utf-8"))
+        triggers = workflow[True]
+        assert triggers["pull_request"]["branches"] == ["main"], filename
+        assert triggers["merge_group"] == {"branches": ["main"]}, filename
+        assert "workflow_dispatch" in triggers, filename
+        for job in workflow["jobs"].values():
+            assert "github.event.pull_request.draft" not in str(job.get("if", "")), filename
+
     auto_merge = yaml.safe_load(
         Path(".github/workflows/pr-auto-merge.yml").read_text(encoding="utf-8")
     )
-
-    assert merge_gate[True]["pull_request"]["types"] == [
-        "opened",
-        "synchronize",
-        "reopened",
-        "ready_for_review",
-    ]
     assert auto_merge[True]["pull_request_target"]["types"] == [
         "opened",
         "reopened",
@@ -551,6 +560,8 @@ def test_automerge_label_event_does_not_restart_the_full_pr_merge_gate() -> None
         "ready_for_review",
         "labeled",
     ]
+    eligibility = auto_merge["jobs"]["queue-auto-merge"]["if"]
+    assert "github.event.pull_request.draft == false" in eligibility
 
 
 def test_pr_merge_gate_cancels_only_stale_work_for_a_new_pr_head() -> None:

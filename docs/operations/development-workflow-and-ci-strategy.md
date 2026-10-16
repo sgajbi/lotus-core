@@ -28,9 +28,11 @@ Define a repeatable, single-developer-friendly workflow that preserves instituti
    the protected PR Merge Gate is running must not start or cancel that full gate for the unchanged
    head SHA. Apply it whenever the PR is ready to queue; existing exact-head checks remain valid.
 6. A `synchronize` event is different: it means the PR head changed. The PR Merge Gate must validate
-   the new head and may cancel stale work for the prior PR ref. Opened, reopened, and
-   ready-for-review events enter the governed gate with fresh classification; broader same-head evidence reuse for
-   those lifecycle events remains separately governed.
+   the new head and may cancel stale work for the prior PR ref. Opened and reopened events also
+   enter the governed PR Merge Gate and Quality Baseline with fresh classification, including
+   draft PRs. Marking an unchanged draft ready does not start either full matrix or cancel its
+   existing run; exact-head required checks remain valid. The separate PR Auto Merge workflow
+   still observes `ready_for_review` and requires a non-draft PR before queueing.
 7. PR Auto Merge uses the repository-scoped `LOTUS_AUTOMERGE_TOKEN` under read-only workflow
    permissions. When that credential is absent, the workflow warns and stops; it never falls back
    to `github.token`, whose merges can suppress the post-merge evidence workflow.

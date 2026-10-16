@@ -37,7 +37,7 @@ _CANONICAL_TRIGGERS_YAML = (
     "on:\n"
     "  pull_request:\n"
     "    branches: [main]\n"
-    "    types: [opened, synchronize, reopened, ready_for_review]\n"
+    "    types: [opened, synchronize, reopened]\n"
     "  merge_group:\n"
     "    branches: [main]\n"
 )
@@ -4154,6 +4154,6 @@ def test_every_required_check_workflow_runs_for_canonical_prs_and_merge_groups()
 
         assert triggers["pull_request"] == {
             "branches": ["main"],
-            "types": ["opened", "synchronize", "reopened", "ready_for_review"],
+            "types": ["opened", "synchronize", "reopened"],
         }, policy.path
         assert triggers["merge_group"] == {"branches": ["main"]}, policy.path
