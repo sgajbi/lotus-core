@@ -225,11 +225,29 @@ def test_repository_launcher_requires_a_command() -> None:
 
 
 def test_make_python_recipes_use_repository_launcher() -> None:
+    import base64
+
+    from scripts.validation.qualify_source_receipts import SOURCE_SEED
+
     makefile_lines = Path("Makefile").read_text(encoding="utf-8").splitlines()
 
     assert (
         "override REPOSITORY_PYTHON := python scripts/development/repository_python.py"
         in makefile_lines
     )
-    assert not [line for line in makefile_lines if line.startswith("\tpython ")]
+    isolated_profile_recipe = (
+        "\tpython -I -B -c \"exec(__import__('base64').b64decode('"
+        + base64.b64encode(SOURCE_SEED.encode()).decode()
+        + '\'))" "$(CURDIR)" '
+        '"$(if $(filter command line,$(origin SOURCE_RECEIPT_BOOTSTRAP_BLOB)),'
+        '$(SOURCE_RECEIPT_BOOTSTRAP_BLOB),)" initial '
+        '--admission "$(SOURCE_RECEIPT_ADMISSION)" '
+        '--admission-sha256 "$(SOURCE_RECEIPT_ADMISSION_SHA256)" '
+        '--workspace-root "$(LOTUS_WORKSPACE_ROOT)"'
+    )
+    assert [line for line in makefile_lines if line.startswith("\tpython ")] == [
+        isolated_profile_recipe
+    ]
+    target = makefile_lines.index("qualify-source-receipts:")
+    assert makefile_lines[target + 1] == isolated_profile_recipe
     assert [line for line in makefile_lines if line.startswith("\t$(REPOSITORY_PYTHON) ")]

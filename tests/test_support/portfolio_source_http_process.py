@@ -1,14 +1,38 @@
 """Isolated TCP host for native source routes; no worker or production lifespan claim."""
 
-import asyncio
-import json
-import logging
 import os
-import socket
 import sys
 
 
+def profile_preflight():
+    if os.environ.get("LOTUS_OPERATOR_SOURCE_RECEIPT"):
+        if not (
+            sys.flags.isolated
+            and sys.flags.no_user_site
+            and sys.dont_write_bytecode
+            and globals().get("_SOURCE_RECEIPT_API_VERIFIED")
+        ):
+            raise ValueError("isolated profile startup required")
+
+
+if __name__ == "__main__":
+    try:
+        profile_preflight()
+    except Exception:
+        raise SystemExit(2) from None
+
+import asyncio  # noqa: E402
+import json  # noqa: E402
+import logging  # noqa: E402
+import socket  # noqa: E402
+
+
 async def serve(inputs):
+    operator = None
+    if os.environ.get("LOTUS_OPERATOR_SOURCE_RECEIPT"):
+        from tests.test_support.operator_source_database import attach_api
+
+        operator = attach_api(inputs)
     # Configure deployment-owned trust before importing either registered application.
     os.environ.update(inputs["environment"])
     # Only the source-safe readiness envelope crosses the subprocess output pipe.
@@ -40,6 +64,9 @@ async def serve(inputs):
         pass
 
     def bind_namespace(session, transaction, connection):
+        if operator is not None:
+            connection.execute(text("SET LOCAL lock_timeout='1000ms'"))
+            operator.handshake(connection)
         connection.execute(text('SET LOCAL search_path TO "' + inputs["schema"] + '", pg_temp'))
 
     event.listen(OwnedSession, "after_begin", bind_namespace)
@@ -63,6 +90,17 @@ async def serve(inputs):
     jobs.get_async_db_session = sessions
 
     async def registered_apps(scope, receive, send):
+        if operator is not None and scope["type"] == "http":
+            from tests.test_support.operator_source_database import budget_event
+
+            allowed = (
+                "/ingest/portfolio-cash-availability-observations",
+                "/ingest/portfolio-funding-investment-observations",
+                f"/integration/portfolios/{inputs['portfolio']}/financial-source-observations/query",
+            )
+            if scope["method"] != "POST" or scope["path"] not in allowed:
+                raise RuntimeError("SOURCE_RECEIPT_ROUTE_REFUSED")
+            budget_event(inputs["schema"], "http_calls")
         app = writer if scope["path"].startswith("/ingest/") else reader
         await app(scope, receive, send)
 
@@ -79,6 +117,10 @@ async def serve(inputs):
                 await task
                 raise RuntimeError("native HTTP host stopped before startup")
             await asyncio.sleep(0.01)
+        if operator is not None:
+            from tests.test_support.operator_source_database import budget_event
+
+            budget_event(inputs["schema"], "ready", listener.getsockname()[1])
         print(
             "OWNED_HTTP=" + json.dumps({"pid": os.getpid(), "port": listener.getsockname()[1]}),
             flush=True,
@@ -96,4 +138,20 @@ async def serve(inputs):
 
 
 if __name__ == "__main__":
-    asyncio.run(serve(json.loads(sys.stdin.readline())))
+    try:
+        if os.environ.get("LOTUS_OPERATOR_SOURCE_RECEIPT"):
+            from tests.test_support.source_receipt_process_custody import read_launch_bound_private
+
+            descriptor = read_launch_bound_private(
+                sys.stdin.buffer, size=globals()["_SOURCE_RECEIPT_PRIVATE_SIZE"]
+            )
+        else:
+            descriptor = sys.stdin.readline(65537)
+            if len(descriptor.encode()) > 65536 or not descriptor.endswith("\n"):
+                raise ValueError("bounded private descriptor required")
+        asyncio.run(serve(json.loads(descriptor)))
+    except Exception:
+        # In operator mode even startup/SQL failures must not print private DSNs/claims.
+        if not os.environ.get("LOTUS_OPERATOR_SOURCE_RECEIPT"):
+            raise
+        raise SystemExit(2) from None

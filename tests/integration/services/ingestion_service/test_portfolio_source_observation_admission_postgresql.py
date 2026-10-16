@@ -139,7 +139,7 @@ class ObservationLease:
 
 
 @pytest.fixture
-def observation_schema(db_engine):
+def observation_schema(db_engine, request):
     """Adapt the native owned migration namespace pattern, never clean public."""
     from tests import conftest as harness
     from tests.test_support.db_cleanup import (
@@ -147,9 +147,14 @@ def observation_schema(db_engine):
         require_database_cleanup_authorization,
     )
 
-    authorization = authorize_database_cleanup(runtime=harness._test_runtime, engine=db_engine)
-    schema, marker = "core1227_" + uuid4().hex, "core1227-owned:" + uuid4().hex
-    require_database_cleanup_authorization(authorization, engine=db_engine)
+    operator = harness._operator_source_session
+    if operator is None:
+        authorization = authorize_database_cleanup(runtime=harness._test_runtime, engine=db_engine)
+        schema, marker = "core1227_" + uuid4().hex, "core1227-owned:" + uuid4().hex
+        require_database_cleanup_authorization(authorization, engine=db_engine)
+    else:
+        authorization = operator.authorize(db_engine, request.node.nodeid)
+        schema, marker = authorization.schema, authorization.marker
     with db_engine.begin() as connection:
         assert connection.scalar(text("SELECT current_database()")) == authorization.target.database
         assert connection.scalar(text("SELECT session_user")) == authorization.target.username
@@ -190,6 +195,9 @@ def observation_schema(db_engine):
     try:
         yield owned
     finally:
+        if operator is not None:
+            operator.cleanup(db_engine, authorization)
+            return
         # No inherited namespace, disabled trigger or public table teardown.
         require_database_cleanup_authorization(authorization, engine=db_engine)
         with db_engine.begin() as connection:
@@ -230,10 +238,17 @@ async def observation_lease(observation_schema):
     from sqlalchemy import event
     from sqlalchemy.orm import Session
 
+    from tests.test_support.operator_source_database import operator_session
+
     db_engine, _, schema, _ = observation_schema
+    operator = operator_session()
     engine = create_async_database_engine(
         runtime_identity="lotus-core-test",
-        database_url=db_engine.url.render_as_string(hide_password=False),
+        database_url=(
+            operator.connection_url(asynchronous=True)
+            if operator is not None
+            else db_engine.url.render_as_string(hide_password=False)
+        ),
         pool_mode=DatabasePoolMode.NULL,
     )
 
@@ -241,13 +256,16 @@ async def observation_lease(observation_schema):
         pass
 
     def bind_owned_namespace(session, transaction, connection):
+        if harness_operator := operator_session():
+            connection.execute(text("SET LOCAL lock_timeout='1000ms'"))
+            harness_operator.handshake(connection)
         connection.execute(text(f'SET LOCAL search_path TO "{schema}", pg_temp'))
 
     event.listen(OwnedObservationSession, "after_begin", bind_owned_namespace)
     sessions = async_sessionmaker(
         engine, expire_on_commit=False, sync_session_class=OwnedObservationSession
     )
-    identity = uuid4().hex
+    identity = schema.removeprefix("core1227_") if operator is not None else uuid4().hex
     lease = ObservationLease(sessions, f"observation-{identity}", f"portfolio-{identity}", schema)
     try:
         async with sessions.begin() as session:
