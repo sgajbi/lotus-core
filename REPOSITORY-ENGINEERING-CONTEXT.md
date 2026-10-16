@@ -10,6 +10,42 @@ and this file first. Then use the Platform
 [skill routing map](https://github.com/sgajbi/lotus-platform/blob/main/context/LOTUS-SKILL-ROUTING-MAP.md)
 and the task routes below to load only relevant specialist context.
 
+## Owned source-receipt launch binding practice
+
+`tests/test_support/source_receipt_process_custody.py` retains raw private bytes by default.
+Opt-in `run_owned(..., bind_launch=True)` assigns the still-suspended created process to the exact
+owned Job, captures controller/created PID, birth and executable-file hash from held handles,
+and encodes a closed launch envelope before resuming or delivering stdin. Identity and encoding
+consume the original deadline; the final envelope must fit the existing private-input cap.
+`read_launch_bound_private` requires a pipe and current Job, verifies the live controller and only
+the direct-created-worker or exactly bound created-parent relationship, then returns payload bytes.
+The controller remains the authority when a pinned interpreter introduces an intermediate process.
+`scripts/validation/qualify_source_receipts.py` opts both the normal and recovery nested
+launches into this contract. Its internal `--child` and `--cleanup-child` entries authenticate
+the launch before decoding private JSON; the top-level operator entry retains raw private input.
+The former environment PID comparison is replaced by the bound controller/created relationship,
+while child Job checks, environment selection, original deadlines and caps remain unchanged.
+Do not replace expected identities with an arbitrary observed parent, weaken Job/pipe admission,
+change interpreter/environment selection, or treat same-user cooperative custody as cryptographic
+authentication. Hashes describe immutable on-disk image files, not a mapped-memory attestation.
+
+Focused mock controls are in `tests/unit/test_support/test_source_receipt_launch_binding.py`.
+The resource-free Windows contract is deliberately standalone to avoid application conftest/plugins.
+From the repository root on Windows, with `LOTUS_WORKSPACE_ROOT` set to the directory holding
+the checkouts and its Core Python3.11.9 interpreter separately reviewed:
+
+```powershell
+$taskPython = Join-Path $env:LOTUS_WORKSPACE_ROOT 'lotus-core/.venv/Scripts/python.exe'
+& $taskPython -I -B tests/integration/test_support/test_source_receipt_launch_binding_windows.py
+```
+
+It runs one owned dummy chain at a time, with child timeouts at most10s, capture4096bytes, and an
+aggregate180s acceptance budget plus the unchanged custody retirement/drain grace. Unknown or failed
+retirement stops further execution. It creates no temporary files and provides no backend/profile,
+financial, production or institutional acceptance. Linux can run the mock controls; the native
+module is Windows-only. External source-bound adapters require separately reviewed successor pins;
+this contract does not mutate or authorize retry of any prior sealed adapter or failed proof.
+
 ## Valuation-job ownership practice
 
 Portfolio valuation jobs derive `tenant_id` from the exact persisted portfolio root.
@@ -1137,6 +1173,98 @@ python scripts/development/repository_python.py -m pytest tests/unit/contracts/t
 ```
 
 ## Portfolio Source Observation Practice
+
+The explicit `operator-source-receipt-db/v1` candidate test profile uses a separately
+operator-provisioned disposable database on an existing PostgreSQL Docker server.
+It has Windows-only finite process custody and a distinct exact-schema capability;
+it never satisfies managed-Compose/broad cleanup authority or changes default CI.
+Run only the fixed source-receipt invocation with a reviewed admission/hash, private
+stdin credentials and current parent reservation. Actual database acceptance remains
+separately admitted; offline controls do not qualify a financial source. See
+[the disposable database procedure](docs/operations/source-receipt-disposable-database.md).
+
+The supported profile entry and both nested normal/recovery commands use the selected
+qualified Python with `-I -B` and the absolute runner script. Its stdlib bootstrap checks
+isolation/environment before first-party imports or private dispatch, reuses the
+existing canonical roots/import fence, and forwards only the canonical Python path with
+user-site and unsafe current-directory startup disabled. The operator API descendant uses
+the absolute fixed script with `-I -B` and the same source policy before private input.
+Ordinary API test mode keeps its module entry. Internal function imports by external adapters do not
+establish this supported-entry proof and require separate reviewed integration.
+Docker observations reject inherited client overrides, pin `--context default`, and require
+the exact Windows local pipe `npipe:////./pipe/docker_engine` before the container projection.
+Both admission/DSN require exactly127.0.0.1. These controls retain the original private
+launch/custody/deadline/SQL boundaries on a trusted cooperative host/venv; they do not
+attest hostile host state or establish live acceptance. Ordinary repository launch behavior
+is unchanged.
+An interpreter-injected `PYTHONUSERBASE` is ignored only when actual `no_user_site` is1,
+never resolved/used, and removed from forwarded snapshots; otherwise its presence refuses.
+There are no Store-path heuristics or changes to ordinary repository launch behavior.
+
+Operator entry starts with an independently reviewed stdlib `-I -B -c` seed from a
+verified Makefile export and an independently Root-reviewed public committed CLI blob pin
+(`SOURCE_RECEIPT_BOOTSTRAP_BLOB`). Unqualified working Makefiles/scripts, HEAD-derived
+pins and inherited pin authority do not establish initial trust. The seed verifies and
+executes the same captured CLI bytes; bootstrap cross-checks the admitted committed identity.
+Child, cleanup and API launches transport qualified snapshots over existing owned stdin,
+with finite5s seed reads and a closed length prefix. The complete prefix/private envelope
+must fit65536bytes before resume. API snapshot verification precedes execution; its bound
+private reader leaves the existing stop line intact. Existing Job/controller identities,
+retirement/drain and admission deadlines remain; these are cooperative-host controls.
+Operator API readiness verifies the reported live worker against the exact still-held
+API Job through limited-access handles, strict identities and a finite5s deadline;
+the interpreter's intermediate worker is supported. Ordinary mode retains exact PID equality.
+The selected launch chain requires separate resource-free exact-Job capability proof before
+real private admission. Version and supplier alone are insufficient; refuse incapable launches
+without path heuristics or automatic runtime substitution. A task-only capability runtime does
+not qualify operator dependencies or any private invocation.
+Protected environment case collisions refuse; unrelated POSIX proxy pairs remain unchanged.
+
+The profile's stdlib-only bootstrap performs fixed read-only Git observations before
+repository imports, retaining5s/65536-byte bounds and the original absolute deadline.
+Git 2.50.1 is the supported operator and complete native provenance unit-test minimum
+on developer/CI hosts. Native controls check the actual binary without spoofing or silent
+skips. Unit, warning and coverage consumers use existing Feature/PR/main lanes; no workflow
+installer is required. Synthetic admission clocks start at each test's setup with the
+original windows; Linux import controls do not claim Windows process custody.
+A fixed bounded `git --version` check
+precedes version-dependent flags; older, malformed and prerelease versions refuse.
+Explicit physical worktree anchoring and disabled fsmonitor/clean filters prevent local
+Git redirection or helper execution. Replacement objects and lazy remote fetching are
+disabled. Core imports compile admitted committed source after blob verification;
+normal caches remain, while ignored bytecode/package/namespace shadows
+are refused. Public `--help` is stdlib-only and does not qualify source.
+Bootstrap verifies the fixed direct-migration closure, c178 and c181, before private
+input. Operator-only HTTP fixture bindings execute verified source snapshots with
+run-path module globals and unchanged Alembic operations/SQL. Hidden index flags cannot
+substitute working code, nor can later pathname mutation change the captured snapshot.
+Ordinary fixture aliases remain unchanged; no recursive index scan or Git capture-cap
+increase is used. The tracked `alembic/` migration storage is distinct from the installed
+Alembic package; any imported origin inside Core still requires committed-source proof.
+The mandatory independently reviewed `platform_source_sha` pins the reservation helper.
+Core is qualified first; workspace identity derives from its common primary checkout,
+including managed worktrees. Platform HEAD and normalized helper bytes must match that pin;
+only committed helper bytes execute. Reservation project paths and Platform source must
+match these checkouts; canonical Core source may differ from candidate Core source.
+Older admissions require fresh review rather than an implicit pin upgrade.
+
+Source qualification refuses inherited `GIT_*` variables by presence, including empty
+values and Windows case variants, before any source-identity Git observation. This covers
+discovery/worktree, index/object and configuration overrides without returning names or values.
+The native observation boundary validates one environment snapshot and passes that exact
+snapshot to owned custody; direct qualification and normal/recovery/API admission retain the
+same fail-closed policy. Clear these variables in the operator's process rather than changing
+global Git configuration. Resource-free controls include dirty actual versus clean foreign
+temporary Git roots; they do not qualify the database profile.
+
+Operator qualification validates the whole PostgreSQL binding list as one exact
+`127.0.0.1`/admitted-port binding, with unchanged container ID/birth/running pins.
+The DDL boundary requires one complete frozen fixture/c178/c181 clause and finite
+parent ALTER forms. It refuses trailing statements, masked tails and malformed
+delimiters before driver dispatch while preserving quoted semicolons and the three
+actual dollar-quoted function bodies, including internal comments. Owning unit controls
+compile the real fixture and migrations offline; no Docker or PostgreSQL acceptance
+is inferred, and schema/OID/marker/transaction/cleanup custody stays unchanged.
 
 The sibling `PortfolioFinancialFlowObservations` v1 product owns explicit stable flow event IDs,
 source financial declarations, actual first admitted Core receipt and complete producer/window

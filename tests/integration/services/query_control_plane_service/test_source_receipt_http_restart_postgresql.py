@@ -29,18 +29,68 @@ observation_lease = routes.observation_lease
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db, pytest.mark.db_direct]
 
 
+if os.environ.get("LOTUS_OPERATOR_SOURCE_RECEIPT"):
+
+    @pytest.fixture
+    def preverification_observation_schema(db_engine, request, monkeypatch):
+        from tests.test_support.operator_source_database import operator_migration
+
+        monkeypatch.setattr(
+            routes.admission_proof,
+            "observation_migration",
+            lambda connection: operator_migration(
+                connection, "c178b2c3d539_add_portfolio_source_observations.py"
+            ),
+        )
+        yield from routes.preverification_observation_schema.__wrapped__(db_engine, request)
+
+    @pytest.fixture
+    def observation_schema(preverification_observation_schema, monkeypatch):
+        from tests.test_support.operator_source_database import operator_migration
+
+        monkeypatch.setattr(
+            routes,
+            "fact_verification_migration",
+            lambda connection: operator_migration(
+                connection, "c181b2c3d542_add_portfolio_source_fact_verifications.py"
+            ),
+        )
+        return routes.observation_schema.__wrapped__(preverification_observation_schema)
+
+
 @asynccontextmanager
 async def http_generation(lease, environment):
-    process = subprocess.Popen(
-        [sys.executable, "-m", "tests.test_support.portfolio_source_http_process"],
-        env=repository_environment(),
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
+    command = [sys.executable, "-m", "tests.test_support.portfolio_source_http_process"]
+    job, launch_options = None, {}
+    if os.environ.get("LOTUS_OPERATOR_SOURCE_RECEIPT"):
+        import time
+
+        from scripts.validation.qualify_source_receipts import snapshot_launch
+        from tests.test_support.source_receipt_process_custody import (
+            WindowsJob,
+            bind_source_process,
+            require_owned_api_worker,
+        )
+
+        command, snapshots = snapshot_launch("api")
+        job = WindowsJob()
+        launch_options["creationflags"] = 0x4 | 0x08000000
     try:
-        process.stdin.write(
+        process = subprocess.Popen(
+            command,
+            env=repository_environment(),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            **launch_options,
+        )
+    except Exception:
+        if job is not None:
+            job.close()
+        raise
+    try:
+        descriptor = (
             json.dumps(
                 {
                     "database_url": lease.sessions.kw["bind"].url.render_as_string(
@@ -54,12 +104,22 @@ async def http_generation(lease, environment):
             )
             + "\n"
         )
+        if job is not None:
+            wire = bind_source_process(
+                process, job, descriptor.encode(), snapshots, time.monotonic() + 5
+            )
+            process.stdin.buffer.write(wire)
+        else:
+            process.stdin.write(descriptor)
         process.stdin.flush()
         line = await asyncio.wait_for(asyncio.to_thread(process.stdout.readline), timeout=30)
         # Never publish connection, trust configuration or request payload on failure.
         assert line.startswith("OWNED_HTTP="), "native HTTP process did not report readiness"
         identity = json.loads(line.removeprefix("OWNED_HTTP="))
-        assert identity["pid"] == process.pid
+        if job is not None:
+            require_owned_api_worker(process, job, identity["pid"], time.monotonic() + 5)
+        else:
+            assert identity["pid"] == process.pid
         async with httpx.AsyncClient(
             base_url=f"http://127.0.0.1:{identity['port']}", timeout=10, trust_env=False
         ) as client:
@@ -69,6 +129,11 @@ async def http_generation(lease, environment):
         await asyncio.wait_for(asyncio.to_thread(process.wait), timeout=15)
         assert process.returncode == 0, "native HTTP process failed during shutdown"
     finally:
+        if job is not None:
+            try:
+                assert job.retire(), "native HTTP process retirement unknown"
+            finally:
+                job.close()
         if process.poll() is None:
             process.terminate()
             await asyncio.wait_for(asyncio.to_thread(process.wait), timeout=10)

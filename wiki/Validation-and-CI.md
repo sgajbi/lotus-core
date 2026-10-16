@@ -1,5 +1,100 @@
 # Validation and CI
 
+## Operator-owned source-receipt database profile
+
+The supported entry uses the reviewed Python with an independently reviewed stdlib
+`-I -B -c` seed from a verified Makefile export and a separately Root-reviewed public
+committed CLI blob pin (`SOURCE_RECEIPT_BOOTSTRAP_BLOB`). Working-script/Makefile or
+unqualified HEAD-derived trust is unsupported. The seed authenticates captured CLI bytes
+before execution, then bootstrap cross-checks the admitted committed identity.
+The stdlib bootstrap validates isolation/environment before source imports
+or private dispatch, then reuses the existing canonical roots and import fence.
+Normal/recovery/API children receive qualified captured CLI/API source over owned stdin;
+the seed enforces finite5s prefix reads. API bytes authenticate before their first instruction.
+The total public prefix/private envelope fits the original65536-byte cap before resume.
+The API bound private reader preserves the later stop line. The API descendant applies the same
+policy to readiness: strict live process/image identity and membership in the exact held
+API Job admit an interpreter intermediate worker; ordinary mode keeps exact PID equality.
+Limited-access handles and a finite5s deadline apply, with handles closed on all paths.
+The selected launch chain must pass separately reviewed resource-free exact-Job capability
+qualification before real private admission. Version/supplier alone are insufficient; an
+incapable launch refuses without path heuristics or automatic interpreter substitution.
+An isolated task runtime's capability proof does not qualify operator dependencies/admission.
+source policy before private input, and retains the
+original custody/deadline/SQL boundaries. Internal function imports by external adapters
+do not earn this supported-entry proof. Ordinary repository launch behavior is unchanged.
+Docker observations pin explicit default context and its exact reviewed local Windows
+pipe `npipe:////./pipe/docker_engine`; inherited client overrides and remote/malformed
+endpoints refuse before container inspection. Admission and DSN require exactly127.0.0.1,
+matching the complete single published IPv4 binding. These are cooperative-host controls,
+not hostile-host attestation or live financial acceptance.
+`PYTHONUSERBASE` is inert only with actual `no_user_site` flag1 and is removed from
+forwarded snapshots without resolving its value; otherwise presence refuses. No
+Store-path exception or userbase-only historical execution claim is introduced.
+
+Before repository imports, a stdlib-only exception performs fixed read-only Git observations
+with5s/65536-byte bounds and the original deadline. Explicit physical checkout anchoring
+prevents local `core.worktree` redirection; fsmonitor, clean filters and optional index locks
+are disabled, along with replacement objects and lazy remote fetching. Core imports compile
+blob-verified admitted source, preserving normal caches
+while refusing ignored bytecode, packages, namespaces and transitive shadows. Public
+`--help` is stdlib-only and establishes no qualification.
+The operator and complete native provenance unit controls require actual Git 2.50.1 or
+newer on developer/CI hosts; tests neither spoof old binaries nor silently skip controls.
+Existing Feature warning/PR unit/main unit lanes consume these tests; no Git installer or
+workflow edit is required. Synthetic admissions start at test setup with unchanged windows;
+Linux import controls remain separate from actual Windows pipe/Job proof. A bounded fixed
+`git --version` check precedes version-dependent flags; older, malformed and prerelease
+versions refuse before private/resource work. Bootstrap also verifies the two directly
+executed migrations, c178 and c181. Operator fixtures execute the verified snapshot
+with unchanged module globals/filename/Alembic binding, so hidden index flags or later
+pathname mutation cannot substitute code. Ordinary fixture aliases and SQL/DDL remain
+unchanged; the Git capture cap is not raised or used for a recursive metadata scan.
+Admission now requires the independently reviewed full `platform_source_sha`; older envelopes
+are not upgraded implicitly. Core qualification precedes helper loading. Workspace identity
+comes from Core's common primary checkout, supporting managed worktrees. Platform HEAD and
+normalized helper bytes must match the pin, and only committed helper bytes execute.
+Reservation Core/Platform project paths and Platform source must match the verified checkouts;
+the canonical reservation's Core source may differ from the candidate. Book reads stay read-only.
+
+The candidate `operator-source-receipt-db/v1` profile runs the fixed receipt
+HTTP/process test on Windows against an explicitly operator-provisioned disposable
+database. It uses a separately reviewed admission/hash, exact source/target/role/OID/
+nonce inventory, effective privilege checks and schema-only cleanup authority.
+Managed Compose and closed #824 broad cleanup controls remain separate and unchanged.
+No Docker lifecycle, public initialization, financial database cleanup or synthetic
+trust deployment is supported by this profile. Offline/native process controls are
+not PostgreSQL acceptance. Actual runtime execution and subsequent publication need
+separate review. From the admitted Core checkout, the native entry is
+`make --file=<independently-reviewed-export> qualify-source-receipts` with explicit public
+bootstrap pin/admission variables and private stdin;
+see [the full operator procedure](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/source-receipt-disposable-database.md)
+for runnable PowerShell/Bash-on-Windows commands, ownership and residue limits.
+
+The normal and recovery nested launches use source-owned launch-bound private input.
+Both internal child entries verify controller/created-process identities, Job and pipe custody
+before decoding private JSON, including the pinned interpreter's intermediate-parent case.
+The top-level operator input stays raw; original timeout, capture and cleanup limits remain.
+Resource-free caller controls use dummy admission/dispatch and do not qualify the database profile.
+Case collisions refuse only for protected Git/Docker/PG/Python/explicit override/root
+authority. Unrelated POSIX `HTTP_PROXY`/`http_proxy` pairs retain their original values.
+
+The profile refuses all inherited `GIT_*` variables, including empty values and Windows
+case variants, before source-identity Git observation. Clear discovery/worktree, index/object
+and configuration overrides in the operator process; do not change global Git settings.
+Direct qualification and normal/recovery/API admission share the fail-closed policy,
+and owned observations use the exact validated environment snapshot. Failures expose
+no variable names or values. Temporary Git-root regression controls prove the source
+boundary without qualifying PostgreSQL or the live operator profile.
+
+The complete PostgreSQL binding list must contain one explicit `127.0.0.1` binding at
+the admitted port; wildcard, mixed, IPv6 and malformed bindings are refused before
+engine creation. The DDL guard consumes one complete fixed fixture/c178/c181 clause,
+refusing trailing statements and malformed/masked tails before driver dispatch.
+Quoted semicolons and internal comments in the three approved dollar-quoted functions
+remain supported. Actual offline fixture/migration compilation and registered fence
+controls establish only the guard boundary, with existing schema cleanup custody intact.
+
 ## Current Scope
 
 The new [flow source methodology](https://github.com/sgajbi/lotus-core/blob/main/docs/methodologies/source-data-products/portfolio-financial-flow-observations.md)

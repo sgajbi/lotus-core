@@ -1,8 +1,15 @@
 # tests/conftest.py
+# ruff: noqa: E402
+# Admission must be checked before importing any engine-backed application dependency.
 import os
 import sys
 import time
 from typing import Any, Callable
+
+from tests.test_support.operator_source_database import operator_session, validate_collection
+
+# The explicit operator launcher issues admission before pytest/application imports.
+_operator_source_session = operator_session()
 
 import pytest
 import pytest_asyncio
@@ -51,12 +58,17 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-_test_runtime = prepare_test_runtime(
-    profile=os.getenv("LOTUS_TEST_ENV_PROFILE", infer_test_profile()),
-    scope=os.getenv("LOTUS_TEST_SCOPE", "pytest"),
-    preserve_existing=True,
+_test_runtime = (
+    None
+    if _operator_source_session is not None
+    else prepare_test_runtime(
+        profile=os.getenv("LOTUS_TEST_ENV_PROFILE", infer_test_profile()),
+        scope=os.getenv("LOTUS_TEST_SCOPE", "pytest"),
+        preserve_existing=True,
+    )
 )
-_test_runtime.export_to(os.environ)
+if _test_runtime is not None:
+    _test_runtime.export_to(os.environ)
 
 _REAL_CREATE_ENGINE = sqlalchemy.create_engine
 _REAL_CREATE_ASYNC_ENGINE = sa_async.create_async_engine
@@ -98,7 +110,8 @@ def restore_reloaded_database_module_bindings():
 def _release_test_runtime_port_reservation() -> None:
     """Release process-owned test ports from every pytest lifecycle path."""
 
-    _test_runtime.port_reservation.release()
+    if _test_runtime is not None:
+        _test_runtime.port_reservation.release()
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # noqa: ARG001
@@ -186,6 +199,7 @@ def _test_services_for_scope(scope: str) -> list[str]:
 
 
 def pytest_collection_modifyitems(config, items):
+    validate_collection(items)
     runtime_modes = detect_runtime_modes(
         (item.nodeid, (marker.name for marker in item.iter_markers())) for item in items
     )
@@ -219,6 +233,8 @@ def docker_services(request):  # noqa: ARG001
     Starts the Docker Compose stack using subprocess and waits for services to be healthy.
     This provides more control and resilience than the default testcontainers behavior.
     """
+    if _operator_source_session is not None:
+        pytest.fail("SOURCE_RECEIPT_COMPOSE_REFUSED")
     compose_file = resolve_compose_file(project_root)
     compose_retries = _env_int("LOTUS_TESTS_COMPOSE_UP_RETRIES", 3)
     compose_retry_wait = _env_int("LOTUS_TESTS_COMPOSE_RETRY_WAIT_SECONDS", 5)
@@ -353,10 +369,18 @@ def e2e_api_client(docker_services) -> E2EApiClient:
 
 
 @pytest.fixture(scope="session")
-def db_engine(docker_services):
+def db_engine(request):
     """
     Provides a SQLAlchemy Engine, ensuring the Docker services are running first.
     """
+    if _operator_source_session is not None:
+        engine = _operator_source_session.engine()
+        try:
+            yield engine
+        finally:
+            engine.dispose()
+        return
+    request.getfixturevalue("docker_services")
     db_url = os.getenv(
         "HOST_DATABASE_URL",
         _test_runtime.endpoints.host_database_url,

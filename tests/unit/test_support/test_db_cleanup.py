@@ -32,6 +32,42 @@ def _runtime(
     )
 
 
+def test_operator_schema_only_type_cannot_authorize_broad_cleanup():
+    from tests.test_support.operator_source_database import SourceReceiptSchemaAuthorization
+
+    schema_only = object.__new__(SourceReceiptSchemaAuthorization)
+    engine = MagicMock()
+    with pytest.raises(DatabaseCleanupAuthorizationError, match="invalid cleanup authorization"):
+        require_database_cleanup_authorization(schema_only, engine=engine)
+    engine.begin.assert_not_called()
+
+
+def test_db_engine_default_dispatch_preserves_managed_fixture(monkeypatch):
+    request, engine = MagicMock(), MagicMock()
+    monkeypatch.setattr(root_conftest, "_operator_source_session", None)
+    monkeypatch.setattr(root_conftest, "create_sync_database_engine", lambda **kw: engine)
+    generator = root_conftest.db_engine.__wrapped__(request)
+    assert next(generator) is engine
+    request.getfixturevalue.assert_called_once_with("docker_services")
+    with pytest.raises(StopIteration):
+        next(generator)
+    engine.dispose.assert_called_once()
+
+
+def test_operator_dispatch_never_requests_compose_or_managed_release(monkeypatch):
+    request, session, engine = MagicMock(), MagicMock(), MagicMock()
+    session.engine.return_value = engine
+    monkeypatch.setattr(root_conftest, "_operator_source_session", session)
+    monkeypatch.setattr(root_conftest, "_test_runtime", None)
+    generator = root_conftest.db_engine.__wrapped__(request)
+    assert next(generator) is engine
+    with pytest.raises(StopIteration):
+        next(generator)
+    root_conftest._release_test_runtime_port_reservation()
+    request.getfixturevalue.assert_not_called()
+    engine.dispose.assert_called_once()
+
+
 def _engine(database_url: str) -> MagicMock:
     engine = MagicMock()
     engine.url = make_url(database_url)
