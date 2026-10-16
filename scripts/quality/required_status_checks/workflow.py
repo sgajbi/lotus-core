@@ -34,7 +34,7 @@ from scripts.quality.required_status_checks.model import (
 
 _WORKFLOW_EXPRESSION = re.compile(r"\$\{\{.*?\}\}")
 _MATRIX_EXPRESSION = re.compile(r"\$\{\{\s*matrix\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
-_PULL_REQUEST_EVENT_TYPES = frozenset({"opened", "synchronize", "reopened", "ready_for_review"})
+_PULL_REQUEST_EVENT_TYPES = frozenset({"opened", "synchronize", "reopened"})
 
 
 def _matrix_name_expressions(name: str) -> tuple[re.Match[str], ...]:

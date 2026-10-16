@@ -145,6 +145,25 @@ def test_blocking_workflow_shape_mutations_fail_closed(job: dict[str, object], m
 @pytest.mark.parametrize(
     ("trigger_mutation", "match"),
     [
+        *[
+            (
+                {
+                    "pull_request": {"branches": ["main"], "types": event_types},
+                    "merge_group": {"branches": ["main"]},
+                },
+                "pull_request triggers",
+            )
+            for event_types in (
+                [],
+                ["opened", "reopened"],
+                ["synchronize", "reopened"],
+                ["opened", "synchronize"],
+                ["opened", "synchronize", "reopened", "synchronize"],
+                ["opened", "synchronize", "reopened", "ready_for_review"],
+                ["opened", "synchronize", "reopened", "labeled"],
+                ["opened", "synchronize", "reopened", "unknown"],
+            )
+        ],
         ({"merge_group": {"branches": ["main"]}}, "pull_request triggers"),
         (
             {
@@ -172,7 +191,7 @@ def test_blocking_workflow_shape_mutations_fail_closed(job: dict[str, object], m
             {
                 "pull_request": {
                     "branches": ["main"],
-                    "types": ["opened", "synchronize", "reopened", "ready_for_review"],
+                    "types": ["opened", "synchronize", "reopened"],
                     "paths-ignore": ["docs/**"],
                 },
                 "merge_group": {"branches": ["main"]},
@@ -183,7 +202,7 @@ def test_blocking_workflow_shape_mutations_fail_closed(job: dict[str, object], m
             {
                 "pull_request": {
                     "branches": ["main"],
-                    "types": ["opened", "synchronize", "reopened", "ready_for_review"],
+                    "types": ["opened", "synchronize", "reopened"],
                 },
                 "merge_group": {"branches": ["release"]},
             },
