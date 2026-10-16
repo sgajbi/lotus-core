@@ -179,6 +179,7 @@
     }
   },
   "event_families": [
+    {"event_type": "PortfolioFinancialSourceCutCompleted", "topic": "portfolio.financial_source_cuts.completed", "schema_model": "PortfolioFinancialSourceCutCompletedEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "canonical_content_hash({tenant_id,product_name,source_system,registry_scope_id,source_cut_id})", "runtime_consumer_status": "no_active_runtime_consumer", "owning_source_tests": ["tests/unit/services/persistence_service/repositories/test_financial_source_cut_work_repository.py", "tests/unit/libs/portfolio-common/test_event_supportability.py"], "acceptance_boundary": "source_unit_and_contract_evidence; no_native_delivery_or_financial_acceptance_claim"},
     {"event_type": "TransactionSourceCorrectionRequested", "topic": "transactions.source_correction.commands", "schema_model": "TransactionSourceCorrectionRequestedEvent", "evidence_profile": "transaction_source_confirmation", "partition_key_policy": "transaction_id"},
     {"event_type": "TransactionSourceEvidenceChanged", "topic": "transactions.source_evidence.changed", "schema_model": "TransactionSourceEvidenceChangedEvent", "evidence_profile": "transaction_source_confirmation", "partition_key_policy": "transaction_id"},
     {"event_type": "PortfolioIngested", "topic": "portfolio.ingested", "schema_model": "PortfolioEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from portfolio id"},

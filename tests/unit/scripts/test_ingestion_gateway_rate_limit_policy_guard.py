@@ -46,6 +46,10 @@ def test_gateway_policy_refuses_wrong_flow_template_without_relaxing_budget() ->
         "/ingest/portfolio-funding-investment-observations",
         "/ingest/portfolio-flow-event-observations",
         "/ingest/portfolio-flow-source-cuts",
+        "/ingest/portfolio-historical-registry-chunks",
+        "/ingest/portfolio-historical-registry-cuts",
+        "/ingest/portfolio-financial-source-cut-chunks",
+        "/ingest/portfolio-financial-source-cuts",
     ],
 )
 def test_gateway_rate_limit_policy_guard_rejects_missing_endpoint(missing_endpoint: str) -> None:

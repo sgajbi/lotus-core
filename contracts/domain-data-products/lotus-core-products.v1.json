@@ -6,6 +6,64 @@
   "authoritative_domain": "portfolio_state",
   "products": [
     {
+      "product_name": "PortfolioHistoricalRegistry",
+      "product_version": "v1",
+      "owner_repository": "lotus-core",
+      "product_family": "analytics_input",
+      "authoritative_domain": "portfolio_state",
+      "lifecycle_status": "active",
+      "request_scope": {"scope_level": "tenant", "supports_bulk": false},
+      "temporal_scope": {"primary_time_field": "observed_at", "freshness_basis": "source_cut", "supports_restatement": true},
+      "required_trust_metadata": [
+        "product_name", "product_version", "tenant_id", "generated_at", "as_of_date",
+        "restatement_version", "reconciliation_status", "data_quality_status",
+        "latest_evidence_timestamp", "source_batch_fingerprint", "snapshot_id",
+        "content_hash", "policy_version", "correlation_id"
+      ],
+      "serving_plane": "query_control_plane_service",
+      "current_routes": ["/integration/portfolio-historical-registries/query"],
+      "freshness_policy": {
+        "freshness_class": "event_driven",
+        "max_allowed_age_description": "Exact retained registry revision and original native receipts, not current membership. Read feature disabled and exact consumer grants empty by default. Source remains UNQUALIFIED; expected population and source freshness are unverified. Custody confers no bank or supplier authority."
+      },
+      "completeness_policy": {"default_status": "unknown", "partial_allowed": false},
+      "lineage_policy": {"lineage_required": true, "evidence_bundle_required": false, "evidence_access_class_ref": "operator_only"},
+      "security_profile_ref": "system_access:client_sensitive:retain_for_client_record:audit_system_access",
+      "approved_consumers": ["lotus-manage"],
+      "deprecation_policy": {"state": "not_deprecated", "successor_product": null},
+      "identifier_refs": ["tenant_id", "source_system"],
+      "temporal_semantics_ref": "observed_at"
+    },
+    {
+      "product_name": "PortfolioFinancialSourceCut",
+      "product_version": "v1",
+      "owner_repository": "lotus-core",
+      "product_family": "analytics_input",
+      "authoritative_domain": "portfolio_state",
+      "lifecycle_status": "active",
+      "request_scope": {"scope_level": "portfolio", "supports_bulk": false},
+      "temporal_scope": {"primary_time_field": "observed_at", "freshness_basis": "source_cut", "supports_restatement": true},
+      "required_trust_metadata": [
+        "product_name", "product_version", "tenant_id", "generated_at", "as_of_date",
+        "restatement_version", "reconciliation_status", "data_quality_status",
+        "latest_evidence_timestamp", "source_batch_fingerprint", "snapshot_id",
+        "content_hash", "policy_version", "correlation_id"
+      ],
+      "serving_plane": "query_control_plane_service",
+      "current_routes": ["/integration/financial-source-cuts/query"],
+      "freshness_policy": {
+        "freshness_class": "event_driven",
+        "max_allowed_age_description": "Exact retained batch manifest and independently reconstructed selected five-role graph with original native receipts and captures. Read feature disabled and exact consumer grants empty by default. Source remains UNQUALIFIED; compatibility is DECLARED_UNVERIFIED or UNAVAILABLE. Custody confers no bank, supplier or financial authority."
+      },
+      "completeness_policy": {"default_status": "unknown", "partial_allowed": false},
+      "lineage_policy": {"lineage_required": true, "evidence_bundle_required": false, "evidence_access_class_ref": "operator_only"},
+      "security_profile_ref": "system_access:client_sensitive:retain_for_client_record:audit_system_access",
+      "approved_consumers": ["lotus-manage"],
+      "deprecation_policy": {"state": "not_deprecated", "successor_product": null},
+      "identifier_refs": ["portfolio_id", "tenant_id", "source_system"],
+      "temporal_semantics_ref": "observed_at"
+    },
+    {
       "product_name": "PortfolioFinancialFlowObservations",
       "product_version": "v1",
       "owner_repository": "lotus-core",

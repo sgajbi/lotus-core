@@ -53,6 +53,32 @@ class _FakeFailingConsumer(_FakeSuccessConsumer):
         raise ValueError("simulated-persistence-consumer-failure")
 
 
+class _FakeSourceWorker:
+    def __init__(self):
+        self.started = asyncio.Event()
+        self.finished = asyncio.Event()
+        self.stop_called = False
+        self._stop_event = asyncio.Event()
+
+    async def run(self):
+        self.started.set()
+        try:
+            await self._stop_event.wait()
+        finally:
+            self.finished.set()
+
+    def stop(self):
+        self.stop_called = True
+        self._stop_event.set()
+
+
+class _FakeFailingSourceWorker(_FakeSourceWorker):
+    async def run(self):
+        self.started.set()
+        self.finished.set()
+        raise ValueError("simulated-source-worker-failure")
+
+
 @pytest.fixture
 def _patch_runtime(monkeypatch):
     ensured_topics: list[str] = []
@@ -65,6 +91,12 @@ def _patch_runtime(monkeypatch):
     monkeypatch.setattr(consumer_manager.signal, "signal", lambda *_: None)
     monkeypatch.setattr(consumer_manager, "create_kafka_producer", lambda **_: object())
     monkeypatch.setattr(consumer_manager, "OutboxDispatcher", _FakeDispatcher)
+    monkeypatch.setattr(
+        consumer_manager, "build_financial_source_cut_workers", lambda _: [_FakeSourceWorker()]
+    )
+    monkeypatch.setattr(
+        consumer_manager, "AsyncSessionLocal", lambda: pytest.fail("unit runtime accessed DB")
+    )
     monkeypatch.setattr(consumer_manager.uvicorn, "Config", lambda *args, **kwargs: object())
     monkeypatch.setattr(consumer_manager.uvicorn, "Server", _FakeServer)
     return ensured_topics
@@ -83,12 +115,15 @@ async def test_consumer_manager_graceful_shutdown(_patch_runtime, monkeypatch):
     manager = consumer_manager.ConsumerManager()
 
     run_task = asyncio.create_task(manager.run())
-    await asyncio.sleep(0.05)
+    await asyncio.wait_for(manager.source_cut_workers[0].started.wait(), timeout=2)
     manager._shutdown_event.set()
     await asyncio.wait_for(run_task, timeout=2)
 
     assert all(c.shutdown_called for c in manager.consumers)
     assert manager.dispatcher.stop_called is True
+    assert manager.source_cut_workers[0].stop_called is True
+    assert manager.source_cut_workers[0].finished.is_set()
+    assert all(task.done() for task in manager.tasks)
     assert KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC in _patch_runtime
 
 
@@ -108,3 +143,36 @@ async def test_consumer_manager_fails_fast_on_task_crash(_patch_runtime, monkeyp
         await asyncio.wait_for(manager.run(), timeout=2)
 
     assert manager.dispatcher.stop_called is True
+
+
+async def test_consumer_manager_fails_fast_on_source_worker_crash(_patch_runtime, monkeypatch):
+    for name in (
+        "PortfolioConsumer",
+        "TransactionPersistenceConsumer",
+        "InstrumentConsumer",
+        "MarketPriceConsumer",
+        "FxRateConsumer",
+        "BusinessDateConsumer",
+        "TransactionSourceCorrectionConsumer",
+    ):
+        monkeypatch.setattr(consumer_manager, name, _FakeSuccessConsumer)
+    failed_worker = _FakeFailingSourceWorker()
+    sibling = _FakeSourceWorker()
+    monkeypatch.setattr(
+        consumer_manager, "build_financial_source_cut_workers", lambda _: [failed_worker, sibling]
+    )
+    manager = consumer_manager.ConsumerManager()
+
+    with pytest.raises(RuntimeError, match="Critical service task") as failure:
+        await asyncio.wait_for(manager.run(), timeout=2)
+
+    assert isinstance(failure.value.__cause__, ValueError)
+    assert str(failure.value.__cause__) == "simulated-source-worker-failure"
+    assert failed_worker.started.is_set()
+    assert sibling.started.is_set()
+    assert all(
+        worker.stop_called and worker.finished.is_set() for worker in (failed_worker, sibling)
+    )
+    assert all(c.shutdown_called for c in manager.consumers)
+    assert manager.dispatcher.stop_called is True
+    assert all(task.done() for task in manager.tasks)

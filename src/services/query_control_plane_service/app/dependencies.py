@@ -110,6 +110,44 @@ from .infrastructure.transaction_economics_sources import (
 from .settings import load_query_control_plane_settings
 
 
+def get_neutral_source_read_grants():
+    from portfolio_common.source_data_security import parse_neutral_source_read_grants
+
+    from .routers.response_helpers import QueryControlPlaneProblem
+
+    try:
+        return parse_neutral_source_read_grants(
+            load_query_control_plane_settings().neutral_source_read_grants_json
+        )
+    except ValueError as error:
+        raise QueryControlPlaneProblem(
+            status_code=503,
+            title="Source custody reads unavailable",
+            detail="The retained source read policy is unavailable.",
+            error_code="QCP_SOURCE_CUT_UNAVAILABLE",
+        ) from error
+
+
+def get_portfolio_financial_source_cuts_service(db: AsyncSession = Depends(get_async_db_session)):
+    from .application.portfolio_financial_source_cuts import PortfolioFinancialSourceCutsService
+    from .infrastructure.portfolio_financial_source_cuts import (
+        RetainedSourceCaptureVerifier,
+        SqlAlchemyPortfolioFinancialSourceCutReader,
+    )
+
+    settings = load_query_control_plane_settings()
+    return PortfolioFinancialSourceCutsService(
+        SqlAlchemyPortfolioFinancialSourceCutReader(db),
+        PageTokenCodec(
+            secret=settings.page_token_secret,
+            active_kid=settings.page_token_key_id,
+            previous_secrets=settings.page_token_previous_keys,
+            ttl_seconds=settings.page_token_ttl_seconds,
+        ),
+        capture_verifier=RetainedSourceCaptureVerifier(),
+    )
+
+
 def get_portfolio_flow_observations_service(db: AsyncSession = Depends(get_async_db_session)):
     from .application.portfolio_flow_source_observations import PortfolioFlowObservationsService
     from .infrastructure.portfolio_flow_source_observation_sources import (

@@ -71,6 +71,10 @@ SUITES: dict[str, list[str]] = {
     ],
     "critical-db-coverage": [
         "tests/integration/services/ingestion_service/"
+        "test_portfolio_financial_source_cuts_postgresql.py",
+        "tests/integration/services/query_control_plane_service/"
+        "test_portfolio_financial_source_cuts_postgresql.py",
+        "tests/integration/services/ingestion_service/"
         "test_portfolio_flow_source_observations_postgresql.py::"
         "test_populated_upgrade_keeps_legacy_and_retains_original_corrected_and_reversal",
         "tests/integration/services/ingestion_service/"

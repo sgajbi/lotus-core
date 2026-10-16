@@ -2,7 +2,12 @@ from datetime import datetime, timezone
 
 import portfolio_common.event_supportability as event_supportability
 import pytest
-from portfolio_common import event_contracts, events, fx_source_events
+from portfolio_common import (
+    event_contracts,
+    events,
+    fx_source_events,
+    portfolio_financial_source_cut_events,
+)
 from portfolio_common.api_contract.async_commands import SourceEvidenceConfirmationInput
 from portfolio_common.command_authorization import (
     CommandAuthorizationClaims,
@@ -33,7 +38,12 @@ from portfolio_common.source_data_security import SourceDataSecurityProfile
 def test_event_supportability_catalog_validates_against_existing_event_models() -> None:
     available_models = {
         name
-        for module in (events, event_contracts, fx_source_events)
+        for module in (
+            events,
+            event_contracts,
+            fx_source_events,
+            portfolio_financial_source_cut_events,
+        )
         for name in dir(module)
         if name.endswith("Event") or name.endswith("EventModel")
     }
@@ -247,9 +257,28 @@ def test_cataloged_event_models_accept_governed_outbox_envelope_metadata() -> No
         "accepted_at": "2026-10-08T16:01:00Z",
     }
     for definition in EVENT_FAMILY_DEFINITIONS:
+        if definition.schema_model == "PortfolioFinancialSourceCutCompletedEvent":
+            sample_payloads_by_schema_model[definition.schema_model] = {
+                "tenant_id": "tenant",
+                "product_name": "PortfolioHistoricalRegistry",
+                "source_system": "producer",
+                "registry_scope_id": "scope",
+                "source_cut_id": "cut",
+                "revision": 1,
+                "content_hash": "a" * 64,
+                "predecessor_hash": None,
+                "receipt_job_id": "native-job",
+                "completed_at": "2026-10-16T08:00:00Z",
+                "compatibility_posture": "UNAVAILABLE",
+            }
         model_cls = next(
             getattr(module, definition.schema_model)
-            for module in (events, event_contracts, fx_source_events)
+            for module in (
+                events,
+                event_contracts,
+                fx_source_events,
+                portfolio_financial_source_cut_events,
+            )
             if hasattr(module, definition.schema_model)
         )
         payload = {

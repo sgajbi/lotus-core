@@ -1,7 +1,9 @@
 import logging
+from datetime import UTC, datetime
 from typing import Any, Callable
 
 from fastapi import Request
+from fastapi.responses import JSONResponse
 from portfolio_common.domain.security_audit import SecurityAuditComponent
 from portfolio_common.enterprise_readiness import (
     EnterpriseReadinessRuntime,
@@ -15,12 +17,34 @@ from portfolio_common.enterprise_readiness import (
 from portfolio_common.enterprise_readiness import (
     redact_sensitive as shared_redact_sensitive,
 )
+from portfolio_common.portfolio_financial_source_cut_admission import closed_source_json
 from portfolio_common.runtime_settings import env_bool, env_int
 
 SERVICE_NAME = "ingestion_service"
 logger = logging.getLogger("enterprise_readiness")
 
+NEUTRAL_SOURCE_WRITE_ENDPOINTS = frozenset(
+    {
+        "/ingest/portfolio-historical-registry-chunks",
+        "/ingest/portfolio-historical-registry-cuts",
+        "/ingest/portfolio-financial-source-cut-chunks",
+        "/ingest/portfolio-financial-source-cuts",
+    }
+)
+
 INGESTION_WRITE_CAPABILITY_RULES: dict[str, str] = {
+    "POST /ingest/portfolio-historical-registry-chunks": (
+        "ingestion.portfolio_historical_registries.write"
+    ),
+    "POST /ingest/portfolio-historical-registry-cuts": (
+        "ingestion.portfolio_historical_registries.write"
+    ),
+    "POST /ingest/portfolio-financial-source-cut-chunks": (
+        "ingestion.portfolio_financial_source_cuts.write"
+    ),
+    "POST /ingest/portfolio-financial-source-cuts": (
+        "ingestion.portfolio_financial_source_cuts.write"
+    ),
     "POST /ingest/portfolio-flow-event-observations": (
         "ingestion.portfolio_flow_event_observations.write"
     ),
@@ -162,10 +186,45 @@ def build_enterprise_audit_middleware() -> MiddlewareCallable:
 def build_ingestion_enterprise_audit_middleware(
     *, max_write_payload_bytes_resolver: Callable[[Request, int], int] | None
 ) -> MiddlewareCallable:
-    return build_shared_enterprise_audit_middleware(
+    shared = build_shared_enterprise_audit_middleware(
         runtime=_runtime,
         audit_emitter=lambda **kwargs: emit_audit_event(**kwargs),
         component=SecurityAuditComponent.INGESTION,
         audit_store=create_runtime_security_audit_store(service_name=SERVICE_NAME),
         max_write_payload_bytes_resolver=max_write_payload_bytes_resolver,
     )
+
+    async def middleware(request, call_next):
+        async def admitted_call_next(admitted_request):
+            if (
+                admitted_request.method == "POST"
+                and admitted_request.url.path in NEUTRAL_SOURCE_WRITE_ENDPOINTS
+            ):
+                refusal = await buffer_neutral_source_body(admitted_request)
+                if refusal is not None:
+                    return refusal
+            return await call_next(admitted_request)
+
+        return await shared(request, admitted_call_next)
+
+    return middleware
+
+
+async def buffer_neutral_source_body(request: Request):
+    """Bound actual uncompressed bytes before FastAPI materializes its typed body."""
+    if request.headers.get("content-encoding", "identity") != "identity":
+        return JSONResponse(status_code=415, content={"detail": "source_body_encoding_unsupported"})
+    request.state.neutral_source_received_at = datetime.now(UTC)
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > 1048576:
+            return JSONResponse(status_code=413, content={"detail": "source_body_byte_budget"})
+        body.extend(chunk)
+    # Starlette's cached body is replayed by BaseHTTPMiddleware to the typed route.
+    request._body = bytes(body)
+    try:
+        closed_source_json(request._body.decode("utf-8"))
+    except ValueError:
+        return JSONResponse(status_code=422, content={"detail": "SOURCE_CLOSED_JSON_REQUIRED"})
+    request.state.neutral_source_closed_json = True
+    return None

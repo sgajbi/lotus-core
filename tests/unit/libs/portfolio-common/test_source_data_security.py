@@ -26,6 +26,115 @@ def test_source_data_security_profiles_cover_product_catalog() -> None:
     validate_source_data_security_profiles()
 
 
+def test_neutral_reads_have_independent_exact_consumer_grants():
+    import json
+
+    from portfolio_common.source_data_security import (
+        parse_neutral_source_read_grants,
+        require_neutral_source_read_grant,
+    )
+
+    row = dict(
+        service_identity="lotus-manage",
+        tenant_id="tenant",
+        source_system="producer",
+        registry_scope_id="registry",
+        products=["PortfolioHistoricalRegistry"],
+    )
+    grants = parse_neutral_source_read_grants(json.dumps([row]))
+    args = dict(
+        service_identity="lotus-manage",
+        tenant_id="tenant",
+        source_system="producer",
+        registry_scope_id="registry",
+        product="PortfolioHistoricalRegistry",
+    )
+    require_neutral_source_read_grant(grants, **args)
+    for field, value in [
+        ("service_identity", "other"),
+        ("tenant_id", "other"),
+        ("source_system", "other"),
+        ("registry_scope_id", "other"),
+        ("product", "PortfolioFinancialSourceCut"),
+    ]:
+        with pytest.raises(PermissionError):
+            require_neutral_source_read_grant(grants, **(args | {field: value}))
+    for changed in [
+        row | {"service_identity": "*"},
+        row | {"registry_scope_id": "*"},
+        row | {"extra": True},
+        row | {"products": ["unknown"]},
+        row | {"products": ["PortfolioHistoricalRegistry", "PortfolioHistoricalRegistry"]},
+    ]:
+        with pytest.raises(ValueError):
+            parse_neutral_source_read_grants(json.dumps([changed]))
+    with pytest.raises(ValueError, match="duplicate"):
+        parse_neutral_source_read_grants(json.dumps([row, row]))
+    assert parse_neutral_source_read_grants("[]") == ()
+    with pytest.raises(PermissionError):
+        require_neutral_source_read_grant((), **args)
+
+
+@pytest.mark.parametrize(
+    "raw", [None, [], b"[]", "é" * 32769], ids=["null", "list", "bytes", "utf8-byte-overflow"]
+)
+def test_neutral_read_configuration_requires_string_with_utf8_byte_budget(raw):
+    from portfolio_common.source_data_security import parse_neutral_source_read_grants
+
+    with pytest.raises(ValueError, match="bounded neutral read grant configuration required"):
+        parse_neutral_source_read_grants(raw)
+
+
+def test_neutral_read_configuration_accepts_exact_utf8_byte_budget_without_granting_access():
+    from portfolio_common.source_data_security import parse_neutral_source_read_grants
+
+    raw = "[]" + " " * 65534
+    assert len(raw.encode("utf-8")) == 65536
+    assert parse_neutral_source_read_grants(raw) == ()
+
+
+@pytest.mark.parametrize(
+    ("grants", "product", "message"),
+    [
+        ((), "UnregisteredProduct", "unsupported neutral read product"),
+        ((object(),), "PortfolioHistoricalRegistry", "governed neutral read grant required"),
+        (
+            ({"service_identity": "lotus-manage"},),
+            "PortfolioHistoricalRegistry",
+            "governed neutral read grant required",
+        ),
+    ],
+)
+def test_neutral_reads_refuse_unsupported_product_and_non_governed_grants(grants, product, message):
+    from portfolio_common.source_data_security import require_neutral_source_read_grant
+
+    with pytest.raises(PermissionError, match=message):
+        require_neutral_source_read_grant(
+            grants,
+            service_identity="lotus-manage",
+            tenant_id="tenant",
+            source_system="producer",
+            registry_scope_id="registry",
+            product=product,
+        )
+
+
+@pytest.mark.parametrize(
+    "product,path",
+    [
+        ("PortfolioHistoricalRegistry", "/integration/portfolio-historical-registries/query"),
+        ("PortfolioFinancialSourceCut", "/integration/financial-source-cuts/query"),
+    ],
+)
+def test_neutral_read_products_require_system_capability_and_tenant(product, path):
+    profile = get_source_data_security_profile(product)
+    assert profile.tenant_required and profile.entitlement_required
+    assert profile.access_classification == SYSTEM_ACCESS and not profile.operator_only
+    assert source_data_capability_rules()["POST " + path] == required_source_data_capability(
+        product
+    )
+
+
 def test_dpm_planned_source_data_security_profiles_cover_planned_catalog() -> None:
     validate_dpm_planned_source_data_security_profiles()
 

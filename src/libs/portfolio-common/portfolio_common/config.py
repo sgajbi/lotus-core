@@ -100,6 +100,10 @@ KAFKA_TRANSACTIONS_SOURCE_CORRECTION_COMMANDS_TOPIC = os.getenv(
 KAFKA_TRANSACTIONS_SOURCE_EVIDENCE_CHANGED_TOPIC = os.getenv(
     "KAFKA_TRANSACTIONS_SOURCE_EVIDENCE_CHANGED_TOPIC", "transactions.source_evidence.changed"
 )
+KAFKA_PORTFOLIO_FINANCIAL_SOURCE_CUTS_COMPLETED_TOPIC = os.getenv(
+    "KAFKA_PORTFOLIO_FINANCIAL_SOURCE_CUTS_COMPLETED_TOPIC",
+    "portfolio.financial_source_cuts.completed",
+)
 KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC = os.getenv(
     "KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC", "transactions.cost.processed"
 )
@@ -275,6 +279,14 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="transaction",
+        partition_count=12,
+    ),
+    KafkaTopicDefinition(
+        canonical_name="portfolio.financial_source_cuts.completed",
+        runtime_name=KAFKA_PORTFOLIO_FINANCIAL_SOURCE_CUTS_COMPLETED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="fact",
+        scope="tenant_portfolio_registry_source_cut",
         partition_count=12,
     ),
     KafkaTopicDefinition(

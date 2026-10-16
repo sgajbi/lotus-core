@@ -9,7 +9,7 @@
   "entries": [
     {
       "path": "src/libs/portfolio-common/portfolio_common/database_models.py",
-      "lines": 5205,
+      "lines": 5204,
       "owner": "lotus-core maintainers",
       "rationale": "Legacy shared ORM monolith; bounded-context decomposition remains tracked by #462. Transaction source provenance columns and ingestion-job, portfolio-aggregation-job, portfolio-valuation-job, financial-reconciliation and consumer-DLQ constraints and indexes live in owning schema modules. Finite numeric checks remain directly visible to the persistence guard; the lower ceiling prevents extracted surfaces returning to the monolith.",
       "issue": "#462",

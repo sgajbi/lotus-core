@@ -1,6 +1,6 @@
 {
   "schema_version": "lotus-core.kafka-topic-runtime-contract.v1",
-  "contract_version": "1.4.0",
+  "contract_version": "1.5.0",
   "ordering_contract": "Kafka ordering is guaranteed only within a partition. Dates and epochs must not be key components for backdated corrections or restatements.",
   "keyed_partitioner": "consistent_random_crc32",
   "tenant_identity_status": "not_source_owned_in_current_event_family",
@@ -34,6 +34,19 @@
     }
   },
   "topics": [
+    {
+      "topic": "portfolio.financial_source_cuts.completed",
+      "partitions": 12,
+      "producer_services": ["persistence_service"],
+      "current_key": "canonical_content_hash({tenant_id,product_name,source_system,registry_scope_id,source_cut_id})",
+      "ordering_scope": "tenant_product_producer_registry_source_cut",
+      "consumer_groups": [],
+      "consumer_max_in_flight": 0,
+      "state_owner": "persistence_service.portfolio_financial_source_cut_work",
+      "duplicate_policy": "one_terminal_notice_per_immutable_batch_root_and_native_receipt_in_same_CoreDB_UOW",
+      "replay_contract": "no_active_runtime_consumer",
+      "authoritative_read_contract": "pinned_HTTP_neutral_source_queries; notice_is_not_source_qualification"
+    },
     {
       "topic": "transactions.source_correction.commands",
       "partitions": 12,

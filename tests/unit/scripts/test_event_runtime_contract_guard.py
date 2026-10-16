@@ -1,8 +1,36 @@
+from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 from portfolio_common.event_supportability import DirectKafkaTopicDefinition, EventFamilyDefinition
 
 from scripts.quality import event_runtime_contract_guard as guard
+
+
+def test_neutral_defining_schema_is_present_in_actual_runtime_guard_inventory():
+    errors = guard.evaluate_outbox_event_contracts()
+    assert not [error for error in errors if "PortfolioFinancialSourceCutCompletedEvent" in error]
+    assert (
+        "PortfolioFinancialSourceCutCompleted",
+        "portfolio.financial_source_cuts.completed",
+    ) in {(e.event_type, e.topic) for e in guard.discover_outbox_event_emissions()}
+
+
+def test_missing_neutral_schema_module_is_refused_without_an_inventory_exemption(monkeypatch):
+    monkeypatch.setattr(guard, "portfolio_financial_source_cut_events", SimpleNamespace())
+    errors = guard.evaluate_outbox_event_contracts()
+    assert any("PortfolioFinancialSourceCutCompletedEvent" in error for error in errors)
+
+
+def test_unknown_neutral_schema_model_remains_refused():
+    definitions = tuple(
+        replace(d, schema_model="UnknownNeutralEvent")
+        if d.event_type == "PortfolioFinancialSourceCutCompleted"
+        else d
+        for d in guard.EVENT_FAMILY_DEFINITIONS
+    )
+    errors = guard.evaluate_outbox_event_contracts(event_definitions=definitions)
+    assert any("UnknownNeutralEvent" in error for error in errors)
 
 
 def test_discover_outbox_event_emissions_finds_current_runtime_outbox_contracts() -> None:

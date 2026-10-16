@@ -64,8 +64,46 @@ class ClassificationTaxonomyIngestionCommand(ReferenceDataIngestionCommand):
             await super().persist(service, payload)
 
 
+class NeutralSourceCustodyIngestionCommand(ReferenceDataIngestionCommand):
+    """Custody persists only through the native receipt creation effect."""
+
+    def accepted_count(self, payload: ReferenceDataPayload) -> int:
+        return len(self._records(payload)) if self.records_attribute else 1
+
+    async def persist(self, service: Any, payload: ReferenceDataPayload) -> None:
+        raise RuntimeError("Neutral source custody requires its atomic receipt stager.")
+
+
 REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
     [
+        NeutralSourceCustodyIngestionCommand(
+            "portfolio_historical_registry_chunk",
+            "/ingest/portfolio-historical-registry-chunks",
+            "portfolio_historical_registry_chunk",
+            "members",
+            "stage",
+        ),
+        NeutralSourceCustodyIngestionCommand(
+            "portfolio_historical_registry",
+            "/ingest/portfolio-historical-registry-cuts",
+            "portfolio_historical_registry",
+            "",
+            "stage",
+        ),
+        NeutralSourceCustodyIngestionCommand(
+            "portfolio_financial_source_cut_chunk",
+            "/ingest/portfolio-financial-source-cut-chunks",
+            "portfolio_financial_source_cut_chunk",
+            "selections",
+            "stage",
+        ),
+        NeutralSourceCustodyIngestionCommand(
+            "portfolio_financial_source_cut",
+            "/ingest/portfolio-financial-source-cuts",
+            "portfolio_financial_source_cut",
+            "",
+            "stage",
+        ),
         ReferenceDataIngestionCommand(
             command_key="portfolio_flow_event_observation",
             endpoint="/ingest/portfolio-flow-event-observations",

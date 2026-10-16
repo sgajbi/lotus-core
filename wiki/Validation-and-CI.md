@@ -1,5 +1,16 @@
 # Validation and CI
 
+## Neutral Source Custody Evidence
+
+Owning unit controls cover strict declarations, independent graph/root reconstruction, exact
+raw/typed replay, actual streamed request budgets, correct-family source receipts, lease fencing
+and bounded capture persistence. The source methodology and
+[validation runbook](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/portfolio-financial-source-cuts.md#validation-commands)
+distinguish those checks from separately admitted PostgreSQL execution, live source-off replay,
+S/M/L/D/H capacity and downstream financial/operator acceptance. Fixed unqualified/unverified
+metadata cannot be promoted by synthetic fixtures. No new deployment or runtime Kafka consumer
+is required for the producer-only completion notice; authoritative reads are request-driven.
+
 ## Operator-owned source-receipt database profile
 
 The supported entry uses the reviewed Python with an independently reviewed stdlib

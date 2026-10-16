@@ -89,6 +89,34 @@ def test_current_event_contract_test_pack_is_valid() -> None:
     assert guard.validate_event_contract_test_pack(pack) == []
 
 
+def test_producer_only_neutral_entry_is_required_and_topic_model_drift_refuses():
+    original = json.loads((guard.REPO_ROOT / guard.PACK_PATH).read_text(encoding="utf-8"))
+    entry = next(
+        e
+        for e in original["event_families"]
+        if e["event_type"] == "PortfolioFinancialSourceCutCompleted"
+    )
+    assert entry["runtime_consumer_status"] == "no_active_runtime_consumer"
+    assert entry["evidence_profile"] == "governed_outbox_event"
+    omitted = copy.deepcopy(original)
+    omitted["event_families"] = [
+        e for e in omitted["event_families"] if e["event_type"] != entry["event_type"]
+    ]
+    assert any(
+        "event_families_missing_from_pack" in finding
+        for finding in guard.validate_event_contract_test_pack(omitted)
+    )
+    drift = copy.deepcopy(original)
+    changed = next(e for e in drift["event_families"] if e["event_type"] == entry["event_type"])
+    changed["schema_model"] = "UnknownNeutralEvent"
+    changed["topic"] = "transactions.source_evidence.changed"
+    findings = guard.validate_event_contract_test_pack(drift)
+    assert {f.get("field") for f in findings if f.get("event_type") == entry["event_type"]} >= {
+        "schema_model",
+        "topic",
+    }
+
+
 def test_guard_accepts_minimal_valid_pack(tmp_path: Path) -> None:
     _write_repo(tmp_path)
 

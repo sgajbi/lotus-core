@@ -130,6 +130,45 @@ def acquired(value, *, quality="COMPLETE"):
     )
 
 
+def test_shared_extraction_preserves_original_fixed_export_identity():
+    dataset = AnalyticsExportDataset(
+        [{"valuation_date": "2025-01-31", "eod_market_value": "100.00"}],
+        1,
+        AnalyticsExportSourceEvidence(
+            availability="RETAINED",
+            source_cut_status="AVAILABLE",
+            source_cut_id="cut",
+            source_evidence_current=True,
+            quality_statuses=["COMPLETE"],
+            freshness_statuses=["CURRENT"],
+            unavailable_reasons=[],
+            pages=[
+                AnalyticsExportPageEvidence(
+                    page_number=1,
+                    row_count=1,
+                    requested_scope={"as_of_date": "2025-01-31"},
+                    source_metadata={
+                        "tenant_id": "tenant",
+                        "snapshot_epoch": 7,
+                        "generated_at": "volatile",
+                        "correlation_id": "volatile",
+                        "lineage": {
+                            "generated_at": "volatile",
+                            "request_fingerprint": "volatile",
+                            "snapshot_epoch": 7,
+                        },
+                        "page": {"next_page_token": "volatile", "returned_count": 1},
+                    },
+                )
+            ],
+        ),
+    )
+    assert (
+        export_selection_digest(dataset)
+        == "sha256:a912b4ff2bcfe02e26f9c3d43a1d62892ec9098a3a5baf6c30ab3cc14bd712f9"
+    )
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("dataset", ["portfolio_timeseries", "position_timeseries"])
 @pytest.mark.parametrize("corrected_value,quality", [("120.00", "COMPLETE"), ("100.00", "PARTIAL")])

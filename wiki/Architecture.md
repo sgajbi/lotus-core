@@ -7,6 +7,12 @@ guards enforce the boundaries.
 
 ## Current scope and evidence
 
+Neutral historical registry and selected financial-cut custody uses the existing ingestion,
+persistence and QCP deployables. It retains independent batch/graph/typed/raw commitments and
+original native receipt context; Manage owns normalization/assembly decisions and Performance
+owns calculations. Source custody remains unqualified and does not verify an external expected
+population. See the [source custody methodology](https://github.com/sgajbi/lotus-core/blob/main/docs/methodologies/source-data-products/portfolio-financial-source-cuts.md).
+
 This page describes the implemented service and module boundaries on `main`. The ownership map is
 grounded in the runtime packages under `src/services/`, the repository layout, and the architecture
 catalog; it is not a target-state deployment or a bank-acceptance claim. Use the linked contracts and

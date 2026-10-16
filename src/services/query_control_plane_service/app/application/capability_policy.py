@@ -32,6 +32,14 @@ _FEATURE_ENV_DEFAULTS: dict[str, tuple[str, bool]] = {
         True,
     ),
     "lotus_core.simulation.what_if": ("LOTUS_CORE_CAP_SIMULATION_ENABLED", True),
+    "lotus_core.source_data.portfolio_historical_registry.read": (
+        "LOTUS_CORE_CAP_HISTORICAL_REGISTRY_READ_ENABLED",
+        False,
+    ),
+    "lotus_core.source_data.portfolio_financial_source_cut.read": (
+        "LOTUS_CORE_CAP_FINANCIAL_SOURCE_CUT_READ_ENABLED",
+        False,
+    ),
 }
 
 _WORKFLOW_DEPENDENCIES: dict[str, list[str]] = {
@@ -65,6 +73,14 @@ _FEATURE_DESCRIPTIONS: dict[str, str] = {
         "Portfolio bundle adapter endpoint for UI/manual onboarding workflows."
     ),
     "lotus_core.simulation.what_if": "Sandbox what-if simulation session APIs.",
+    "lotus_core.source_data.portfolio_historical_registry.read": (
+        "Unqualified retained registry custody reads; independent tenant, service, product "
+        "and registry grants remain required. Population verification is unavailable."
+    ),
+    "lotus_core.source_data.portfolio_financial_source_cut.read": (
+        "Unqualified retained financial batch and selected graph reads; independent tenant, "
+        "service, product and registry grants remain required. Financial authority is unavailable."
+    ),
 }
 
 _DEFAULT_INPUT_MODES_BY_CONSUMER: dict[str, list[str]] = {

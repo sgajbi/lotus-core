@@ -2,7 +2,7 @@
 
 from typing import cast
 
-from portfolio_common.source_data_product_metadata import stable_content_hash
+from portfolio_common.analytics_export_source_identity import export_source_selection_digest
 
 from ...contracts.analytics_inputs import AnalyticsExportCreateRequest
 from ...domain.analytics import AnalyticsExportJobRecord
@@ -40,34 +40,9 @@ def validate_export_refresh(
 
 
 def export_selection_digest(dataset: AnalyticsExportDataset) -> str:
-    pages = []
-    for page in dataset.source_evidence.pages:
-        metadata = dict(page.source_metadata)
-        metadata.pop("generated_at", None)
-        metadata.pop("correlation_id", None)
-        lineage = metadata.get("lineage")
-        if isinstance(lineage, dict):
-            metadata["lineage"] = {
-                key: value
-                for key, value in lineage.items()
-                if key not in {"generated_at", "request_fingerprint"}
-            }
-        paging = metadata.get("page")
-        if isinstance(paging, dict):
-            metadata["page"] = {
-                key: value for key, value in paging.items() if key != "next_page_token"
-            }
-        pages.append({**page.model_dump(mode="json"), "source_metadata": metadata})
     return cast(
         str,
-        stable_content_hash(
-            {
-                "identity_version": "analytics-export-selection-v1",
-                "rows": dataset.data_rows,
-                "source_evidence": dataset.source_evidence.model_dump(
-                    mode="json", exclude={"pages", "selection_digest"}
-                ),
-                "pages": pages,
-            }
+        export_source_selection_digest(
+            dataset.data_rows, dataset.source_evidence.model_dump(mode="json")
         ),
     )

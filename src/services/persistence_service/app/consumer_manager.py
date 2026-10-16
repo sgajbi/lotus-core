@@ -11,10 +11,12 @@ from portfolio_common.config import (
     KAFKA_INSTRUMENTS_RECEIVED_TOPIC,
     KAFKA_MARKET_PRICES_RAW_RECEIVED_TOPIC,
     KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
+    KAFKA_PORTFOLIO_FINANCIAL_SOURCE_CUTS_COMPLETED_TOPIC,
     KAFKA_PORTFOLIOS_RAW_RECEIVED_TOPIC,
     KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC,
     KAFKA_TRANSACTIONS_SOURCE_CORRECTION_COMMANDS_TOPIC,
 )
+from portfolio_common.db import AsyncSessionLocal
 from portfolio_common.health_server import health_probe_bind_host
 from portfolio_common.kafka_admin import ensure_topics_exist
 from portfolio_common.kafka_utils import create_kafka_producer
@@ -32,6 +34,7 @@ from .consumers.market_price_consumer import MarketPriceConsumer
 from .consumers.portfolio_consumer import PortfolioConsumer
 from .consumers.transaction_consumer import TransactionPersistenceConsumer
 from .consumers.transaction_source_correction_consumer import TransactionSourceCorrectionConsumer
+from .financial_source_cut_worker import build_financial_source_cut_workers
 from .monitoring import setup_metrics
 from .web import WORKER_READINESS_SERVICE_NAME
 from .web import app as web_app
@@ -129,6 +132,7 @@ class ConsumerManager:
         )
 
         self.dispatcher = OutboxDispatcher(kafka_producer=create_kafka_producer())
+        self.source_cut_workers = build_financial_source_cut_workers(AsyncSessionLocal)
 
         logger.info("ConsumerManager initialized", extra={"num_consumers": len(self.consumers)})
 
@@ -149,6 +153,7 @@ class ConsumerManager:
         required_topics = [
             *(consumer.topic for consumer in self.consumers),
             KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
+            KAFKA_PORTFOLIO_FINANCIAL_SOURCE_CUTS_COMPLETED_TOPIC,
         ]
         ensure_topics_exist(required_topics)
 
@@ -163,6 +168,7 @@ class ConsumerManager:
         logger.info("Starting all consumer tasks, the outbox dispatcher, and the web server...")
         self.tasks = [asyncio.create_task(c.run()) for c in self.consumers]
         self.tasks.append(asyncio.create_task(self.dispatcher.run()))
+        self.tasks.extend(asyncio.create_task(worker.run()) for worker in self.source_cut_workers)
         self.tasks.append(asyncio.create_task(server.serve()))
 
         logger.info("ConsumerManager is running. Press Ctrl+C to exit.")
@@ -177,7 +183,10 @@ class ConsumerManager:
         await shutdown_runtime_components(
             tasks=self.tasks,
             consumers=self.consumers,
-            stop_callbacks=[self.dispatcher.stop],
+            stop_callbacks=[
+                self.dispatcher.stop,
+                *(worker.stop for worker in self.source_cut_workers),
+            ],
             server=server,
             shutdown_timeout_seconds=self.dispatcher.shutdown_timeout_seconds,
         )

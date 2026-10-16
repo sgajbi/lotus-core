@@ -10,6 +10,43 @@ and this file first. Then use the Platform
 [skill routing map](https://github.com/sgajbi/lotus-platform/blob/main/context/LOTUS-SKILL-ROUTING-MAP.md)
 and the task routes below to load only relevant specialist context.
 
+## Neutral Source Custody Practice
+
+Historical registry and financial-cut custody belongs to the existing ingestion, persistence
+and QCP layers. Keep batch/CAS, selected input, selected graph, native typed and raw commitments
+distinct. Acquire existing immutable source models and completed native receipts outside write
+transactions; retain original bytes/context and unknowns. Registry grants and consumer read grants
+are separate, exact and empty by default. Cash/flow epochs stay null; valuation requires actual
+retained export page context. No financial calculation or bank authority is added by custody.
+
+Read [the methodology](docs/methodologies/source-data-products/portfolio-financial-source-cuts.md)
+and [operations](docs/operations/portfolio-financial-source-cuts.md) before extending this path.
+The persistence worker/read cache needs a session **context-manager** factory (`AsyncSessionLocal`);
+the ingestion receipt store keeps its existing dependency-generator factory (`get_async_db_session`).
+Do not interchange these protocols. Parent/partition checkpoint writes and segment commits require
+database-time fencing. New source formats must enter the explicit shared serializer catalog and
+have independent reconstruction vectors before a consumer treats them as supported.
+
+The shared declaration module owns historical declaration types; the financial-cut domain
+retains graph and hash semantics. Persistence claims owns database-time fencing, the capture
+repository owns immutable byte custody, and the work repository coordinates their phases.
+Keep these concerns inside the existing process; this decomposition adds no runtime service.
+
+Neutral declaration dataclasses stay independent of transport frameworks. Closed strict JSON
+reconstruction belongs to the shared source-cut decoding/admission boundary; retained financial
+graphs omit ingress-only selector payloads. QCP response annotations own nested validation and
+closed schemas while preserving actual domain instances and canonical hashes. Completion events
+belong to the shared transport module and remain covered by the event inventory guard. Manager
+unit fixtures must supply stoppable in-memory source workers and synchronize startup and shutdown
+with events, so the real supervisor can be tested without opening database sessions.
+
+Before publishing a PR or a fix-forward commit, map local validation to the current required
+PR workflow commands, including full `make lint`, `make typecheck` and `make architecture-guard`.
+Run them from this repository root, in PowerShell or Bash with the declared runtime on `PATH`.
+Focused mypy/Ruff checks support iteration but do not replace configured callers, ingestion
+What/How/When documentation or separate application/framework boundary enforcement. Distinguish
+cheap source gates from source-bound CI, network and native runtime evidence.
+
 ## Owned source-receipt launch binding practice
 
 `tests/test_support/source_receipt_process_custody.py` retains raw private bytes by default.

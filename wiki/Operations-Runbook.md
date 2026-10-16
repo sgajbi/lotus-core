@@ -2,6 +2,13 @@
 
 ## Current Scope And Evidence
 
+For neutral registry/financial-cut custody, use the
+[dedicated operating runbook](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/portfolio-financial-source-cuts.md).
+Exact producer/consumer grants and disabled-by-default read features are separate controls.
+202 acceptance is not completion; pending native sources remain unavailable. Corrections preserve
+original bytes and require predecessor/head CAS. Native PostgreSQL, source-off and target-scale
+qualification remain separate from source/unit evidence.
+
 This page is the first-response map for the Core app-local runtime, durable evidence, queue
 recovery, and canonical seed operations. Commands and limits below are backed by repository-owned
 contracts, tests, or the linked deep runbooks. They describe current Core behavior; they do not by

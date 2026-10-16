@@ -1,5 +1,5 @@
 from fastapi import Depends, HTTPException, status
-from portfolio_common.db import get_async_db_session
+from portfolio_common.db import AsyncSessionLocal, get_async_db_session
 from portfolio_common.event_publisher import EventPublisher, get_kafka_event_publisher
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -197,6 +197,33 @@ def get_portfolio_source_observation_commands(
         service_factory,
         idempotency_replay_reader,
         load_observation_verification_authority(),
+    )
+
+
+def get_portfolio_financial_source_cut_commands():
+    from portfolio_common.runtime_settings import portfolio_registry_source_grants
+
+    from .infrastructure.workflow_stores import SqlAlchemyIngestionJobStore
+    from .services.portfolio_financial_source_cut_commands import (
+        PortfolioFinancialSourceCutCommands,
+    )
+
+    def service_factory(stager):
+        evidence = get_ingestion_service_settings().evidence_hmac
+        return IngestionJobService(
+            job_store=SqlAlchemyIngestionJobStore(
+                session_factory=get_async_db_session,
+                fingerprint_key_id=evidence.key_id,
+                fingerprint_hmac_secret=evidence.hmac_secret,
+                fingerprint_previous_keys=evidence.previous_keys,
+                on_created=stager.stage,
+            )
+        )
+
+    return PortfolioFinancialSourceCutCommands(
+        portfolio_registry_source_grants(),
+        service_factory,
+        AsyncSessionLocal,
     )
 
 

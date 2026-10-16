@@ -23,6 +23,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
 from . import portfolio_aggregation_job_schema as job_schema
+from . import portfolio_financial_source_cut_models as _registered_custody_tables  # noqa: F401
 from . import source_lifecycle_predicates as lc
 from .consumer_dlq_schema import (
     consumer_dlq_event_table_args,
@@ -40,9 +41,7 @@ from .domain.portfolio_party_roles import (
     PortfolioPartyRoleType,
 )
 from .domain.transaction.payload_identity import transaction_payload_fingerprint_default
-from .financial_numeric import (
-    ExactNumeric,
-)
+from .financial_numeric import ExactNumeric
 from .financial_numeric import (
     finite_numeric_check_constraint as _finite_numeric_check_constraint,
 )

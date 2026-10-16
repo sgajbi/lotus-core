@@ -51,6 +51,10 @@
       "Write Ingress": [
         "POST /ingest/portfolio-cash-availability-observations",
         "POST /ingest/portfolio-funding-investment-observations",
+        "POST /ingest/portfolio-historical-registry-chunks",
+        "POST /ingest/portfolio-historical-registry-cuts",
+        "POST /ingest/portfolio-financial-source-cut-chunks",
+        "POST /ingest/portfolio-financial-source-cuts",
         "POST /ingest/portfolio-flow-event-observations",
         "POST /ingest/portfolio-flow-source-cuts",
         "POST /ingest/transactions/{transaction_id}/source-evidence",
@@ -96,6 +100,8 @@
     },
     "query_control_plane_service": {
       "Analytics Input": [
+        "POST /integration/portfolio-historical-registries/query",
+        "POST /integration/financial-source-cuts/query",
         "POST /integration/portfolios/{portfolio_id}/financial-source-observations/query",
         "POST /integration/financial-source-observations/flow-events/query",
         "GET /integration/financial-source-observations/flow-events/versions/{flow_source_record_revision}",

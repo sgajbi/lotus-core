@@ -12,6 +12,7 @@ from portfolio_common.kafka_utils import get_kafka_producer
 from portfolio_common.logging_utils import generate_correlation_id, setup_logging
 
 from .enterprise_readiness import (
+    NEUTRAL_SOURCE_WRITE_ENDPOINTS,
     build_ingestion_enterprise_audit_middleware,
     validate_enterprise_runtime_config,
 )
@@ -27,6 +28,7 @@ from .routers import (
     instruments,
     market_prices,
     portfolio_bundle,
+    portfolio_financial_source_cuts,
     portfolios,
     reference_data,
     reprocessing,
@@ -49,6 +51,8 @@ app_state = {}
 
 
 def _ingestion_write_payload_budget(request: Request, default_max_bytes: int) -> int:
+    if request.method == "POST" and request.url.path in NEUTRAL_SOURCE_WRITE_ENDPOINTS:
+        return min(default_max_bytes, 1048576)
     if request.method == "POST" and request.url.path in UPLOAD_WRITE_ENDPOINTS:
         upload_max_bytes = get_ingestion_service_settings().adapter_mode.upload_max_bytes
         return max(default_max_bytes, upload_max_bytes + UPLOAD_MULTIPART_OVERHEAD_BYTES)
@@ -176,4 +180,5 @@ include_routers(
     portfolio_bundle.router,
     uploads.router,
     reference_data.router,
+    portfolio_financial_source_cuts.router,
 )

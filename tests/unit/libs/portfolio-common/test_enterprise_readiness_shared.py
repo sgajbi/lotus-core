@@ -141,6 +141,256 @@ def _signed_enterprise_headers(
     return headers
 
 
+# Public synthetic known answers, independently derived from literal canonical bytes.
+# Contract: docs/governance/security.md#enterprise-service-context-hmac-v1.
+_AUTH_CONTEXT_PUBLIC_TEST_KEY = "public-synthetic-manage-core-hmac-v1-key"
+_AUTH_CONTEXT_TEST_SIGNATURE = "509f603c9e00d7db7939488c58155c31814373f3426c79c8d3242041c58d1228"
+_AUTH_CONTEXT_TEST_CAPABILITY = "source_data.portfolio_financial_source_cut.read"
+_AUTH_CONTEXT_TEST_TIME = 1792080000
+
+
+def _auth_context_known_answer_headers() -> dict[str, str]:
+    return {
+        "X-Enterprise-Auth-Key-Id": "synthetic-core-key-v1",
+        "X-Service-Identity": "lotus-manage",
+        "X-Actor-Id": "synthetic-manage-reader",
+        "X-Tenant-Id": "synthetic-tenant",
+        "X-Role": "system",
+        "X-Correlation-Id": "synthetic-correlation-001",
+        "X-Enterprise-Auth-Timestamp": "1792080000",
+        "X-Capabilities": (
+            "source_data.portfolio_historical_registry.read,"
+            "source_data.portfolio_financial_source_cut.read"
+        ),
+        "X-Enterprise-Auth-Signature": _AUTH_CONTEXT_TEST_SIGNATURE,
+    }
+
+
+def _auth_context_known_answer_runtime(
+    secret: str = _AUTH_CONTEXT_PUBLIC_TEST_KEY,
+) -> EnterpriseReadinessRuntime:
+    return _runtime(
+        settings=_Settings(
+            enterprise_primary_key_id="synthetic-core-key-v1",
+            enterprise_auth_context_hmac_secret=secret,
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("actor", "correlation", "signature"),
+    [
+        ("synthetic-manage-reader", "synthetic-correlation-001", _AUTH_CONTEXT_TEST_SIGNATURE),
+        (
+            "synthetic-caf\u00e9",
+            "synthetic-correlation-\u03a9",
+            "dc26eb3f661088a6c46227c2135fd175fb739686ac5fbb0efd511c76915f7290",
+        ),
+    ],
+    ids=["ascii", "utf8-primitive"],
+)
+def test_enterprise_auth_context_known_answer(actor: str, correlation: str, signature: str) -> None:
+    headers = _auth_context_known_answer_headers()
+    headers.update(
+        {
+            "X-Actor-Id": actor,
+            "X-Correlation-Id": correlation,
+            "X-Enterprise-Auth-Signature": signature,
+        }
+    )
+
+    assert (
+        _enterprise_auth_context_signature(
+            _normalize_headers(headers), _AUTH_CONTEXT_PUBLIC_TEST_KEY
+        )
+        == signature
+    )
+    runtime = _auth_context_known_answer_runtime()
+    with patch(
+        "portfolio_common.enterprise_readiness.time.time", return_value=_AUTH_CONTEXT_TEST_TIME
+    ):
+        assert runtime.authorize_capability(headers, _AUTH_CONTEXT_TEST_CAPABILITY) == (True, None)
+        # Freshness is not a single-use replay guard.
+        assert runtime.authorize_capability(headers, _AUTH_CONTEXT_TEST_CAPABILITY) == (True, None)
+
+
+def test_enterprise_auth_context_normalization_preserves_fixed_known_answer() -> None:
+    headers = {
+        name.swapcase(): f" \t{value}\t "
+        for name, value in _auth_context_known_answer_headers().items()
+    }
+    headers["X-Capabilities".swapcase()] = (
+        " source_data.portfolio_financial_source_cut.read, ,"
+        "source_data.portfolio_historical_registry.read,"
+        "source_data.portfolio_financial_source_cut.read "
+    )
+
+    assert (
+        _enterprise_auth_context_signature(
+            _normalize_headers(headers), _AUTH_CONTEXT_PUBLIC_TEST_KEY
+        )
+        == _AUTH_CONTEXT_TEST_SIGNATURE
+    )
+    with patch(
+        "portfolio_common.enterprise_readiness.time.time", return_value=_AUTH_CONTEXT_TEST_TIME
+    ):
+        assert _auth_context_known_answer_runtime().authorize_capability(
+            headers, _AUTH_CONTEXT_TEST_CAPABILITY
+        ) == (True, None)
+
+
+@pytest.mark.parametrize(
+    ("header", "value", "changed_signature", "reason"),
+    [
+        (
+            "X-Enterprise-Auth-Key-Id",
+            "synthetic-core-key-v1-mutant",
+            "a6a0fb0824ff34ab07b1767f9df36c61acf15e645972a6827ba88ff686f68dfc",
+            "invalid_auth_context_key_id",
+        ),
+        (
+            "X-Service-Identity",
+            "lotus-manage-mutant",
+            "30c9d6cfd8f1cad5f89464f60fd2999f534da639a56b855e4efd9f94f12a6d98",
+            "invalid_auth_context_signature",
+        ),
+        (
+            "X-Actor-Id",
+            "synthetic-manage-reader-mutant",
+            "12c727d7ebc654baea48a60a2eee567d7439b8bff22ef329c892b9e1e8d344f0",
+            "invalid_auth_context_signature",
+        ),
+        (
+            "X-Tenant-Id",
+            "synthetic-tenant-mutant",
+            "7390474e320756431a9d18999b359a316645b8389fe3d6f406ba524698b8c91f",
+            "invalid_auth_context_signature",
+        ),
+        (
+            "X-Role",
+            "system-mutant",
+            "fcf6d1c8533c38ad3c9a88be82ee124d09b4bce6528632cce11de34c9d3a92f1",
+            "invalid_auth_context_signature",
+        ),
+        (
+            "X-Correlation-Id",
+            "synthetic-correlation-001-mutant",
+            "155ac5f18c3ffc54ef546e7db8ead2ba0967f937e5b895fd98cd788e44cabfdb",
+            "invalid_auth_context_signature",
+        ),
+        (
+            "X-Enterprise-Auth-Timestamp",
+            "1792080001",
+            "cea7297b1d49cd76b4d15c0ad9509b9868bd13d7d7247b0639fc1329cd6f017a",
+            "invalid_auth_context_signature",
+        ),
+        (
+            "X-Capabilities",
+            "source_data.portfolio_historical_registry.read,"
+            "source_data.portfolio_financial_source_cut.read-mutant",
+            "3f98833dbf4c16da724f9d97e196bbdd50d4be9ce7149ecee6649b0d000bdf35",
+            "invalid_auth_context_signature",
+        ),
+    ],
+)
+def test_enterprise_auth_context_each_signed_field_has_fixed_changed_answer(
+    header: str, value: str, changed_signature: str, reason: str
+) -> None:
+    headers = _auth_context_known_answer_headers()
+    headers[header] = value
+
+    assert (
+        _enterprise_auth_context_signature(
+            _normalize_headers(headers), _AUTH_CONTEXT_PUBLIC_TEST_KEY
+        )
+        == changed_signature
+    )
+    # Keep the original fixed signature: independently changed claims must refuse.
+    with patch(
+        "portfolio_common.enterprise_readiness.time.time", return_value=_AUTH_CONTEXT_TEST_TIME
+    ):
+        assert _auth_context_known_answer_runtime().authorize_capability(
+            headers, _AUTH_CONTEXT_TEST_CAPABILITY
+        ) == (False, reason)
+
+
+@pytest.mark.parametrize(
+    ("clock", "expected"),
+    [
+        (1792079699, (False, "stale_auth_context")),
+        (1792079700, (True, None)),
+        (1792080300, (True, None)),
+        (1792080301, (False, "stale_auth_context")),
+    ],
+    ids=["future-301", "future-300", "past-300", "past-301"],
+)
+def test_enterprise_auth_context_fixed_signature_freshness_boundary(
+    clock: int, expected: tuple[bool, str | None]
+) -> None:
+    with patch("portfolio_common.enterprise_readiness.time.time", return_value=clock):
+        assert (
+            _auth_context_known_answer_runtime().authorize_capability(
+                _auth_context_known_answer_headers(), _AUTH_CONTEXT_TEST_CAPABILITY
+            )
+            == expected
+        )
+
+
+@pytest.mark.parametrize(
+    ("header", "value", "reason"),
+    [
+        ("X-Enterprise-Auth-Signature", "", "missing_auth_context_signature"),
+        ("X-Enterprise-Auth-Signature", "0" * 64, "invalid_auth_context_signature"),
+        (
+            "X-Enterprise-Auth-Signature",
+            _AUTH_CONTEXT_TEST_SIGNATURE.upper(),
+            "invalid_auth_context_signature",
+        ),
+        ("X-Enterprise-Auth-Timestamp", "not-integer", "invalid_auth_context_timestamp"),
+        ("X-Enterprise-Auth-Timestamp", "+1792080000", "invalid_auth_context_signature"),
+        ("X-Service-Identity", "", "missing_service_identity"),
+        ("X-Actor-Id", "a" * 129, "invalid_auth_context_field"),
+        ("X-Actor-Id", "", "missing_headers:x-actor-id"),
+        ("Authorization", "Bearer public-synthetic-token", "unverified_authorization_principal"),
+        ("Authorization", "Basic public-synthetic", "invalid_authorization_header"),
+    ],
+)
+def test_enterprise_auth_context_fixed_answer_refuses_invalid_context(
+    header: str, value: str, reason: str
+) -> None:
+    headers = _auth_context_known_answer_headers()
+    headers[header] = value
+
+    with patch(
+        "portfolio_common.enterprise_readiness.time.time", return_value=_AUTH_CONTEXT_TEST_TIME
+    ):
+        assert _auth_context_known_answer_runtime().authorize_capability(
+            headers, _AUTH_CONTEXT_TEST_CAPABILITY
+        ) == (False, reason)
+
+
+@pytest.mark.parametrize(
+    ("secret", "expected"),
+    [
+        ("", (False, "missing_verified_service_principal")),
+        ("different-public-synthetic-key", (False, "invalid_auth_context_signature")),
+        (f"  {_AUTH_CONTEXT_PUBLIC_TEST_KEY}  ", (True, None)),
+    ],
+)
+def test_enterprise_auth_context_fixed_answer_uses_effective_configured_secret(
+    secret: str, expected: tuple[bool, str | None]
+) -> None:
+    with patch(
+        "portfolio_common.enterprise_readiness.time.time", return_value=_AUTH_CONTEXT_TEST_TIME
+    ):
+        assert (
+            _auth_context_known_answer_runtime(secret).authorize_capability(
+                _auth_context_known_answer_headers(), _AUTH_CONTEXT_TEST_CAPABILITY
+            )
+            == expected
+        )
+
+
 def test_authorize_write_request_enforces_capability_rules() -> None:
     runtime = _runtime(
         authz_enabled=True,
