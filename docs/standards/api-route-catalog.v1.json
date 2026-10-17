@@ -6236,6 +6236,11 @@
           "description": "Invalid export request contract."
         },
         {
+          "status_code": "403",
+          "schema": "object",
+          "description": "Enterprise authorization refused before the export application executes."
+        },
+        {
           "status_code": "404",
           "schema": "QueryControlPlaneProblemDetails",
           "description": "Portfolio not found."
@@ -6287,6 +6292,11 @@
       ],
       "error_models": [
         {
+          "status_code": "403",
+          "schema": "object",
+          "description": "Enterprise authorization refused before the export application executes."
+        },
+        {
           "status_code": "404",
           "schema": "QueryControlPlaneProblemDetails",
           "description": "Export job not found."
@@ -6337,6 +6347,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "403",
+          "schema": "object",
+          "description": "Enterprise authorization refused before the export application executes."
+        },
         {
           "status_code": "404",
           "schema": "QueryControlPlaneProblemDetails",

@@ -1,9 +1,15 @@
 from copy import deepcopy
-from unittest.mock import patch
+from time import time
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
 import pytest_asyncio
+from portfolio_common.enterprise_readiness import (
+    _enterprise_auth_context_signature,
+    _normalize_headers,
+)
 from portfolio_common.source_data_products import (
     QUERY_CONTROL_PLANE_SERVICE,
     SOURCE_DATA_PRODUCT_CATALOG,
@@ -13,6 +19,9 @@ from portfolio_common.source_data_security import (
     required_source_data_capability,
 )
 
+from src.services.query_control_plane_service.app.dependencies import (
+    get_analytics_timeseries_service,
+)
 from src.services.query_control_plane_service.app.main import app, lifespan
 from tests.integration.services.query_control_plane_service.openapi_schema_contracts import (
     ANALYTICS_INPUT_SCHEMA_ROOTS,
@@ -50,6 +59,197 @@ SOURCE_PRODUCT_MATERIALIZATION_DESCRIPTION = (
     "source cut may publish that cut's latest source revision time instead of the "
     "transport-serving time; the product contract states which applies."
 )
+
+
+@pytest.fixture
+def export_policy_boundary(monkeypatch):
+    """Real registered middleware/handlers; replace only the DB-backed application dependency."""
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
+    monkeypatch.setenv("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "true")
+    monkeypatch.setenv("ENTERPRISE_PRIMARY_KEY_ID", "export-policy-test-key")
+    monkeypatch.setenv("ENTERPRISE_AUTH_CONTEXT_HMAC_SECRET", "export-policy-test-secret")
+    monkeypatch.delenv("ENTERPRISE_CAPABILITY_RULES_JSON", raising=False)
+    job = {
+        "job_id": "export-policy-job",
+        "dataset_type": "portfolio_timeseries",
+        "portfolio_id": "export-policy-portfolio",
+        "status": "completed",
+        "disposition": "created",
+        "request_fingerprint": "policy-only",
+        "result_available": True,
+        "result_endpoint": (
+            "/integration/exports/analytics-timeseries/jobs/export-policy-job/result"
+        ),
+        "result_format": "json",
+        "compression": "none",
+        "created_at": "2025-01-31T00:00:00Z",
+    }
+    result = {
+        "job_id": job["job_id"],
+        "dataset_type": job["dataset_type"],
+        "request_fingerprint": "policy-only",
+        "generated_at": "2025-01-31T00:00:00Z",
+        "contract_version": "policy-only",
+        "result_row_count": 0,
+        "data": [],
+    }
+    service = SimpleNamespace(
+        create_export_job=AsyncMock(return_value=job),
+        get_export_job=AsyncMock(return_value=job),
+        get_export_result_json=AsyncMock(return_value=result),
+        get_export_result_ndjson=AsyncMock(return_value=(b"{}\n", "application/x-ndjson", None)),
+    )
+    previous = dict(app.dependency_overrides)
+    app.dependency_overrides[get_analytics_timeseries_service] = lambda: service
+    try:
+        yield service
+    finally:
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(previous)
+
+
+def _export_policy_headers(capabilities, *, timestamp=None):
+    headers = {
+        "X-Actor-Id": "export-policy-test",
+        "X-Tenant-Id": "export-policy-tenant",
+        "X-Role": "analytics-service",
+        "X-Correlation-Id": "export-policy-correlation",
+        "X-Service-Identity": "lotus-performance",
+        "X-Capabilities": capabilities,
+        "X-Enterprise-Auth-Key-Id": "export-policy-test-key",
+        "X-Enterprise-Auth-Timestamp": str(int(time()) if timestamp is None else timestamp),
+    }
+    headers["X-Enterprise-Auth-Signature"] = _enterprise_auth_context_signature(
+        _normalize_headers(headers), "export-policy-test-secret"
+    )
+    return headers
+
+
+@pytest.mark.parametrize("dataset", ["portfolio_timeseries", "position_timeseries"])
+@pytest.mark.parametrize("refresh", [False, True])
+async def test_export_policy_registered_create_and_refresh_require_write(
+    async_test_client, export_policy_boundary, dataset, refresh
+):
+    payload = {
+        "portfolio_id": "export-policy-portfolio",
+        "dataset_type": dataset,
+        f"{dataset}_request": {"as_of_date": "2025-01-31", "period": "one_month"},
+    }
+    if refresh:
+        payload["refresh_of_job_id"] = "aexp_" + "0" * 24
+    path = "/integration/exports/analytics-timeseries/jobs"
+    denied = await async_test_client.post(
+        path, json=payload, headers=_export_policy_headers("core.analytics_exports.read")
+    )
+    assert denied.status_code == 403
+    assert denied.json()["reason"] == "missing_capability:core.analytics_exports.write"
+    export_policy_boundary.create_export_job.assert_not_awaited()
+    accepted = await async_test_client.post(
+        path, json=payload, headers=_export_policy_headers("core.analytics_exports.write")
+    )
+    assert accepted.status_code == 200
+    request = export_policy_boundary.create_export_job.await_args.args[0]
+    assert request.dataset_type == dataset
+    assert request.refresh_of_job_id == ("aexp_" + "0" * 24 if refresh else None)
+
+
+@pytest.mark.parametrize(
+    "suffix,called",
+    [
+        ("", "get_export_job"),
+        ("/result", "get_export_result_json"),
+        ("/result?result_format=ndjson", "get_export_result_ndjson"),
+        ("/result?result_format=ndjson&compression=gzip", "get_export_result_ndjson"),
+    ],
+)
+async def test_export_policy_registered_status_and_result_require_read(
+    async_test_client, export_policy_boundary, suffix, called
+):
+    path = "/integration/exports/analytics-timeseries/jobs/export-policy-job" + suffix
+    denied = await async_test_client.get(
+        path, headers=_export_policy_headers("core.analytics_exports.write")
+    )
+    assert denied.status_code == 403
+    assert denied.json()["reason"] == "missing_capability:core.analytics_exports.read"
+    getattr(export_policy_boundary, called).assert_not_awaited()
+    accepted = await async_test_client.get(
+        path, headers=_export_policy_headers("core.analytics_exports.read")
+    )
+    assert accepted.status_code == 200
+    getattr(export_policy_boundary, called).assert_awaited_once()
+    if called == "get_export_result_ndjson":
+        assert export_policy_boundary.get_export_result_ndjson.await_args.kwargs == {
+            "compression": "gzip" if "compression=gzip" in suffix else "none"
+        }
+
+
+@pytest.mark.parametrize("fault", ["missing", "tampered", "wrong-key", "stale"])
+async def test_export_policy_registered_refuses_unverified_context_before_application(
+    async_test_client, export_policy_boundary, fault
+):
+    headers = _export_policy_headers(
+        "core.analytics_exports.read", timestamp=0 if fault == "stale" else None
+    )
+    if fault == "missing":
+        headers = {}
+    elif fault == "tampered":
+        headers["X-Tenant-Id"] = "different-policy-tenant"
+    elif fault == "wrong-key":
+        headers["X-Enterprise-Auth-Signature"] = _enterprise_auth_context_signature(
+            _normalize_headers(headers), "different-test-secret"
+        )
+    response = await async_test_client.get(
+        "/integration/exports/analytics-timeseries/jobs/export-policy-job", headers=headers
+    )
+    assert response.status_code == (401 if fault == "missing" else 403)
+    if fault != "missing":
+        assert response.json()["reason"] == (
+            "stale_auth_context" if fault == "stale" else "invalid_auth_context_signature"
+        )
+    export_policy_boundary.get_export_job.assert_not_awaited()
+
+
+async def test_export_policy_registered_strict_unmapped_path_refuses_before_application(
+    async_test_client, export_policy_boundary
+):
+    response = await async_test_client.get(
+        "/integration/exports/analytics-timeseries/jobs/export-policy-job/result/extra",
+        headers=_export_policy_headers("core.analytics_exports.read,core.analytics_exports.write"),
+    )
+    assert response.status_code == 403
+    assert response.json()["reason"] == "missing_capability_rule"
+    export_policy_boundary.get_export_result_json.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "method,path,capability",
+    [
+        ("post", "/integration/exports/analytics-timeseries/jobs", "core.analytics_exports.write"),
+        (
+            "get",
+            "/integration/exports/analytics-timeseries/jobs/{job_id}",
+            "core.analytics_exports.read",
+        ),
+        (
+            "get",
+            "/integration/exports/analytics-timeseries/jobs/{job_id}/result",
+            "core.analytics_exports.read",
+        ),
+    ],
+)
+async def test_export_policy_openapi_documents_capability_and_real_denial_shape(
+    async_test_client, method, path, capability
+):
+    response = await async_test_client.get("/openapi.json")
+    operation = response.json()["paths"][path][method]
+    assert capability in operation["description"]
+    denied = operation["responses"]["403"]["content"]["application/json"]
+    assert denied["schema"]["required"] == ["detail", "reason"]
+    assert denied["example"] == {
+        "detail": "authorization_policy_denied",
+        "reason": "invalid_auth_context_signature",
+    }
 
 
 async def test_financial_source_observation_route_is_included_without_tenant_override(

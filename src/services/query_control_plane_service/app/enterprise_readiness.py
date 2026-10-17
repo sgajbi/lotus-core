@@ -21,9 +21,14 @@ logger = logging.getLogger("enterprise_readiness")
 _SERVICE_NAME = "lotus-core"
 CORPORATE_ACTION_SUPPORT_ROUTE = "GET /support/portfolios/{portfolio_id}/corporate-action-events"
 SECURITY_AUDIT_SUPPORT_ROUTE = "GET /support/security-audit/events"
+EXPORT_WRITE_CAPABILITY = "core.analytics_exports.write"
+EXPORT_READ_CAPABILITY = "core.analytics_exports.read"
 QUERY_CONTROL_PLANE_CAPABILITY_RULES: dict[str, str] = {
     CORPORATE_ACTION_SUPPORT_ROUTE: "core.support.read",
     SECURITY_AUDIT_SUPPORT_ROUTE: "core.security_audit.read",
+    "POST /integration/exports/analytics-timeseries/jobs": EXPORT_WRITE_CAPABILITY,
+    "GET /integration/exports/analytics-timeseries/jobs/{job_id}": EXPORT_READ_CAPABILITY,
+    "GET /integration/exports/analytics-timeseries/jobs/{job_id}/result": EXPORT_READ_CAPABILITY,
 }
 
 

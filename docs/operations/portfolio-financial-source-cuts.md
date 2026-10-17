@@ -116,6 +116,36 @@ only through the runtime owner using a reviewed base environment without these o
 and recreate these same two services. Preserve source facts, receipts, exports and volumes.
 
 
+## Analytics Export Job Permissions
+
+QCP owns three exact default capability rules for both portfolio and position analytics exports:
+
+| Operation | Required signed capability |
+| --- | --- |
+| `POST /integration/exports/analytics-timeseries/jobs`, including `refresh_of_job_id` | `core.analytics_exports.write` |
+| `GET /integration/exports/analytics-timeseries/jobs/{job_id}` | `core.analytics_exports.read` |
+| `GET /integration/exports/analytics-timeseries/jobs/{job_id}/result`, including JSON, NDJSON and gzip | `core.analytics_exports.read` |
+
+These defaults apply without `ENTERPRISE_CAPABILITY_RULES_JSON`. Read permission cannot create or
+refresh a job; write permission alone cannot read status or results. Authorization is enforced
+only when the corresponding existing write/read flags are enabled. With enforcement and
+`ENTERPRISE_REQUIRE_CAPABILITY_RULES=true`, an unmapped protected route refuses with
+`missing_capability_rule`. The current operator JSON map can replace an exact default; review the
+effective policy rather than assuming overrides are additive. Method and path templates are exact;
+no export subtree wildcard is required.
+
+The source-custody overlay does not enable strict rule coverage. These three defaults do not make
+all QCP routes ready for strict activation. Enroll every affected caller and review its exact
+routes before the operator changes enforcement. Canonical `tenant-sg` enrollment is separate from
+isolated synthetic tenants. Neutral registry/cut reads still require literal `lotus-manage`, their
+own source-data capabilities, exact grants and enabled features. A producer must still match its
+declared source system; export permissions confer neither that identity nor a source grant.
+
+Export permissions cover job lifecycle operations across both datasets. They do not establish
+tenant ownership of a retained job, source qualification, financial completeness or institutional
+approval. Tenant isolation and the remaining QCP/operator rule coverage require separate evidence;
+do not infer either from a successful capability check. Preserve original exports and corrections.
+
 ## Retained Reads
 
 QCP registers two exact POST collections:

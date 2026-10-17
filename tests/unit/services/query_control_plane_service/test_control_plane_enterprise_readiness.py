@@ -328,3 +328,68 @@ def test_control_plane_authorize_request_enforces_corporate_action_support_read(
     )
     assert allowed is True
     assert allowed_reason is None
+
+
+@pytest.mark.parametrize(
+    "method,path,required,other",
+    [
+        ("POST", "/integration/exports/analytics-timeseries/jobs", "write", "read"),
+        ("GET", "/integration/exports/analytics-timeseries/jobs/J1", "read", "write"),
+        ("GET", "/integration/exports/analytics-timeseries/jobs/J1/result", "read", "write"),
+    ],
+)
+def test_export_policy_owns_exact_defaults_and_separates_permissions(
+    monkeypatch, method, path, required, other
+):
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
+    monkeypatch.setenv("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "true")
+    monkeypatch.delenv("ENTERPRISE_CAPABILITY_RULES_JSON", raising=False)
+    _configure_auth_context_env(monkeypatch)
+
+    capability = f"core.analytics_exports.{required}"
+    assert _required_capability(method, path) == capability
+    assert authorize_request(method, path, _signed_enterprise_headers(capability)) == (True, None)
+    for claims in ("", f"core.analytics_exports.{other}"):
+        assert authorize_request(method, path, _signed_enterprise_headers(claims)) == (
+            False,
+            f"missing_capability:{capability}",
+        )
+
+
+@pytest.mark.parametrize(
+    "method,path",
+    [
+        ("GET", "/integration/exports/analytics-timeseries/jobs"),
+        ("POST", "/integration/exports/analytics-timeseries/jobs/J1"),
+        ("GET", "/integration/exports/analytics-timeseries/jobs/J1/result/extra"),
+        ("GET", "/integration/exports/analytics-timeseries/jobs-other/J1"),
+    ],
+)
+def test_export_policy_does_not_authorize_other_methods_or_path_segments(monkeypatch, method, path):
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
+    monkeypatch.setenv("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "true")
+    monkeypatch.delenv("ENTERPRISE_CAPABILITY_RULES_JSON", raising=False)
+    _configure_auth_context_env(monkeypatch)
+    assert _required_capability(method, path) is None
+    assert authorize_request(
+        method,
+        path,
+        _signed_enterprise_headers("core.analytics_exports.read,core.analytics_exports.write"),
+    ) == (False, "missing_capability_rule")
+
+
+def test_export_policy_preserves_exact_operator_override_precedence(monkeypatch):
+    monkeypatch.setenv(
+        "ENTERPRISE_CAPABILITY_RULES_JSON",
+        json.dumps(
+            {"GET /integration/exports/analytics-timeseries/jobs/{job_id}": "local.export.read"}
+        ),
+    )
+    assert _required_capability("GET", "/integration/exports/analytics-timeseries/jobs/J1") == (
+        "local.export.read"
+    )
+    assert _required_capability(
+        "GET", "/integration/exports/analytics-timeseries/jobs/J1/result"
+    ) == ("core.analytics_exports.read")

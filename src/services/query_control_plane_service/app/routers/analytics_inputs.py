@@ -67,6 +67,22 @@ ANALYTICS_EXPORT_INCOMPLETE_EXAMPLE = problem_example(
     metadata={"source_product": "AnalyticsExportJob"},
 )
 HTTP_422_UNPROCESSABLE_CONTENT = 422
+ANALYTICS_EXPORT_AUTHORIZATION_DENIED_RESPONSE = {
+    "description": "Enterprise authorization refused before the export application executes.",
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "properties": {"detail": {"type": "string"}, "reason": {"type": "string"}},
+                "required": ["detail", "reason"],
+            },
+            "example": {
+                "detail": "authorization_policy_denied",
+                "reason": "invalid_auth_context_signature",
+            },
+        }
+    },
+}
 ANALYTICS_ERROR_STATUS_MAP = {
     "STALE_CONTINUATION": status.HTTP_409_CONFLICT,
     "RESOURCE_NOT_FOUND": status.HTTP_404_NOT_FOUND,
@@ -287,6 +303,7 @@ async def get_portfolio_analytics_reference(
     "/exports/analytics-timeseries/jobs",
     response_model=AnalyticsExportJobResponse,
     responses={
+        status.HTTP_403_FORBIDDEN: ANALYTICS_EXPORT_AUTHORIZATION_DENIED_RESPONSE,
         status.HTTP_400_BAD_REQUEST: problem_response(
             "Invalid export request contract.",
             ANALYTICS_INVALID_REQUEST_EXAMPLE,
@@ -306,7 +323,9 @@ async def get_portfolio_analytics_reference(
         "timeseries datasets.\n"
         "How: Validates canonical request payload, computes deterministic fingerprint, "
         "persists lifecycle state, and reports explicit execution-mode and "
-        "result-availability metadata.\n"
+        "result-availability metadata. With enterprise authorization enforced, creation "
+        "and refresh require core.analytics_exports.write. This job permission covers both "
+        "datasets; it does not establish tenant, source or financial authority.\n"
         "When: Used for large horizon extractions that should be retrieved "
         "through the export job contract rather than direct paged polling.\n"
         "Contract note: current lifecycle_mode is inline_job_execution, so jobs may "
@@ -329,6 +348,7 @@ async def create_analytics_export_job(
     "/exports/analytics-timeseries/jobs/{job_id}",
     response_model=AnalyticsExportJobResponse,
     responses={
+        status.HTTP_403_FORBIDDEN: ANALYTICS_EXPORT_AUTHORIZATION_DENIED_RESPONSE,
         status.HTTP_404_NOT_FOUND: problem_response(
             "Export job not found.",
             ANALYTICS_EXPORT_JOB_NOT_FOUND_EXAMPLE,
@@ -339,7 +359,8 @@ async def create_analytics_export_job(
         "What: Fetch lifecycle status for an analytics export job.\n"
         "How: Reads persisted job metadata and terminal status from canonical "
         "query-service storage, including result availability and deterministic "
-        "result retrieval path.\n"
+        "result retrieval path. With enterprise read authorization enforced, status "
+        "requires core.analytics_exports.read; write permission alone is insufficient.\n"
         "When: Used by polling clients before attempting result retrieval, especially for "
         "large-window extraction flows where direct page-by-page replay would be slower or "
         "operationally noisier than a durable export hand-off."
@@ -363,6 +384,7 @@ async def get_analytics_export_job(
     "/exports/analytics-timeseries/jobs/{job_id}/result",
     response_model=AnalyticsExportJsonResultResponse,
     responses={
+        status.HTTP_403_FORBIDDEN: ANALYTICS_EXPORT_AUTHORIZATION_DENIED_RESPONSE,
         status.HTTP_404_NOT_FOUND: problem_response(
             "Export job not found.",
             ANALYTICS_EXPORT_JOB_NOT_FOUND_EXAMPLE,
@@ -382,7 +404,8 @@ async def get_analytics_export_job(
         "includes the source-page evidence retained at completion. JSON and NDJSON expose "
         "the same ordered evidence and conservative quality/cut availability; legacy exports "
         "explicitly lack retained source evidence. Transport completion is not financial "
-        "supportability.\n"
+        "supportability. With enterprise read authorization enforced, JSON, NDJSON and "
+        "compressed results require core.analytics_exports.read.\n"
         "When: Used by lotus-performance batch pipelines and similar downstream bulk retrieval "
         "flows after job completion instead of repeatedly replaying large paged windows."
     ),
