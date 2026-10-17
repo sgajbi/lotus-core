@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from time import time
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -1796,3 +1796,93 @@ async def test_payload_limit_denial_is_durable_before_rejection() -> None:
     event = store.append.await_args.args[0]
     assert event.decision is SecurityAuditDecision.DENY
     assert event.reason is SecurityAuditReason.PAYLOAD_TOO_LARGE
+
+
+@pytest.mark.parametrize("write,read", [(False, False), (False, True), (True, False), (True, True)])
+@pytest.mark.parametrize("strict", [False, True])
+def test_exact_mutation_classification_preserves_other_authorization(write, read, strict):
+    runtime = _runtime(
+        authz_enabled=write,
+        read_authz_enabled=read,
+        require_capability_rules=strict,
+        settings=_settings_with_auth_context(
+            enterprise_capability_rules={
+                "POST /exports": "operator.permission.read",
+                "POST /exports/nearby": "operator.permission",
+                "GET /exports": "operator.permission",
+            }
+        ),
+    )
+    assert runtime.write_only_authorization_routes == frozenset()
+    assert runtime.authorize_request("POST", "/exports", {})[0] == (not (write or read))
+    classified = replace(runtime, write_only_authorization_routes=frozenset({"POST /exports"}))
+    for method, path, enforced, capability in (
+        (" post ", "/exports/", write, "operator.permission.read"),
+        ("POST", "/exports/nearby", write or read, "operator.permission"),
+        ("GET", "/exports", read, "operator.permission"),
+        ("HEAD", "/exports", read, None),
+        ("POST", "/unmapped", write, None),
+        ("GET", "/unmapped", read, None),
+    ):
+        decision = classified.evaluate_request(method, path, {})
+        assert decision.authorized == (not enforced)
+        assert decision.required_capability == capability
+        assert decision.principal is None
+        unsigned = _signed_enterprise_headers("")
+        unsigned.pop("X-Enterprise-Auth-Signature")
+        if enforced:
+            assert classified.authorize_request(method, path, unsigned) == (
+                False,
+                "missing_auth_context_signature",
+            )
+        expected = (
+            (False, "missing_capability:" + capability)
+            if enforced and capability
+            else ((False, "missing_capability_rule") if enforced and strict else (True, None))
+        )
+        assert (
+            classified.authorize_request(method, path, _signed_enterprise_headers("")) == expected
+        )
+        if capability:
+            accepted = classified.evaluate_request(
+                method, path, _signed_enterprise_headers(capability)
+            )
+            assert (accepted.authorized, accepted.reason) == (True, None)
+            assert accepted.required_capability == capability
+            assert (accepted.principal is not None) == bool(enforced)
+    source_path = "/integration/portfolios/PB1/analytics/portfolio-timeseries"
+    assert classified.authorize_request("POST", source_path, {})[0] == (not (write or read))
+
+
+@pytest.mark.parametrize(
+    "routes,error",
+    [
+        ({"POST /exports"}, TypeError),
+        (["POST /exports"], TypeError),
+        ("POST /exports", TypeError),
+        (frozenset({"GET /exports"}), ValueError),
+        (frozenset({"HEAD /exports"}), ValueError),
+        (frozenset({"post /exports"}), ValueError),
+        (frozenset({"POST /exports/**"}), ValueError),
+        (frozenset({"POST /exports/{job_id}"}), ValueError),
+        (frozenset({"POST /exports/"}), ValueError),
+        (frozenset({"POST /exports?query=1"}), ValueError),
+        (frozenset({"POST /exports#fragment"}), ValueError),
+        (frozenset({"POST /exports//jobs"}), ValueError),
+        (frozenset({"POST /exports/../jobs"}), ValueError),
+        (frozenset({"POST /exports%2Fjobs"}), ValueError),
+        (frozenset({"POST /exports\njobs"}), ValueError),
+        (frozenset({None}), ValueError),
+    ],
+)
+def test_write_only_classification_refuses_unsafe_configuration(routes, error):
+    with pytest.raises(error):
+        replace(_runtime(), write_only_authorization_routes=routes)
+
+
+def test_write_only_classification_is_immutable_and_accepts_exact_mutation_methods():
+    routes = frozenset(f"{method} /exports" for method in ("POST", "PUT", "PATCH", "DELETE"))
+    runtime = replace(_runtime(), write_only_authorization_routes=routes)
+    assert runtime.write_only_authorization_routes == routes
+    with pytest.raises(AttributeError):
+        runtime.write_only_authorization_routes.add("POST /other")

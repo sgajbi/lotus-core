@@ -323,7 +323,7 @@ async def get_portfolio_analytics_reference(
         "timeseries datasets.\n"
         "How: Validates canonical request payload, computes deterministic fingerprint, "
         "persists lifecycle state, and reports explicit execution-mode and "
-        "result-availability metadata. With enterprise authorization enforced, creation "
+        "result-availability metadata. With ENTERPRISE_ENFORCE_AUTHZ enabled, creation "
         "and refresh require core.analytics_exports.write. This job permission covers both "
         "datasets; it does not establish tenant, source or financial authority.\n"
         "When: Used for large horizon extractions that should be retrieved "

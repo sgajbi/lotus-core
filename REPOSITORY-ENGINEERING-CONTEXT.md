@@ -47,6 +47,28 @@ Focused mypy/Ruff checks support iteration but do not replace configured callers
 What/How/When documentation or separate application/framework boundary enforcement. Distinguish
 cheap source gates from source-bound CI, network and native runtime evidence.
 
+## Independent authorization flag practice
+
+The shared enterprise runtime defaults to no write-only operation classifications. QCP registers
+only `POST /integration/exports/analytics-timeseries/jobs` in its immutable exact operation set:
+write authorization governs creation and refresh; read authorization governs export status/results.
+The set rejects mutable configuration, read methods, templates and wildcard/prefix bypasses.
+Operation classification is independent of effective capability names and exact operator overrides.
+Existing mapped source-product POST reads retain their read-flag and write-flag behavior.
+
+When changing authorization defaults, test all four write/read flag combinations with strict rule
+coverage both on and off through registered middleware. Preserve identity/signature-before-rule
+denial, independent tenant admission, source POST queries and arbitrary operator capability names.
+Strict rule coverage does not activate enforcement. The resource-free owning matrix is in
+`tests/integration/services/query_control_plane_service/test_control_plane_app.py`; shared classifier
+valid/bad input and default-empty controls live in
+`tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py`. From the repository root,
+run the following in PowerShell or Bash, then the native gates described above:
+
+```text
+python scripts/development/repository_python.py -m pytest tests/integration/services/query_control_plane_service/test_control_plane_app.py tests/unit/services/query_control_plane_service/test_control_plane_enterprise_readiness.py tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py -q
+```
+
 ## App-local source-custody admission practice
 
 The opt-in `docker-compose.source-custody.yml` adds only ingestion/QCP environment inputs to

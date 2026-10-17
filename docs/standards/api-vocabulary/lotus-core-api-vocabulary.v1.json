@@ -53,7 +53,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-10-17T17:45:41.611772+00:00",
+  "generatedAt": "2026-10-17T18:18:42.908941+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_at",
@@ -110989,7 +110989,7 @@
         "Integration Contracts"
       ],
       "summary": "Create analytics timeseries export job",
-      "description": "What: Create a durable export job for portfolio or position analytics timeseries datasets.\nHow: Validates canonical request payload, computes deterministic fingerprint, persists lifecycle state, and reports explicit execution-mode and result-availability metadata. With enterprise authorization enforced, creation and refresh require core.analytics_exports.write. This job permission covers both datasets; it does not establish tenant, source or financial authority.\nWhen: Used for large horizon extractions that should be retrieved through the export job contract rather than direct paged polling.\nContract note: current lifecycle_mode is inline_job_execution, so jobs may complete within the create request. Omit refresh_of_job_id for original request reuse. To acquire corrected source for the identical request, supply its completed export ID; repeating that anchor reuses the same correction intent, without rewriting the original.",
+      "description": "What: Create a durable export job for portfolio or position analytics timeseries datasets.\nHow: Validates canonical request payload, computes deterministic fingerprint, persists lifecycle state, and reports explicit execution-mode and result-availability metadata. With ENTERPRISE_ENFORCE_AUTHZ enabled, creation and refresh require core.analytics_exports.write. This job permission covers both datasets; it does not establish tenant, source or financial authority.\nWhen: Used for large horizon extractions that should be retrieved through the export job contract rather than direct paged polling.\nContract note: current lifecycle_mode is inline_job_execution, so jobs may complete within the create request. Omit refresh_of_job_id for original request reuse. To acquire corrected source for the identical request, supply its completed export ID; repeating that anchor reuses the same correction intent, without rewriting the original.",
       "naming": {
         "boundedContext": "integration_contracts",
         "canonicalTerms": [

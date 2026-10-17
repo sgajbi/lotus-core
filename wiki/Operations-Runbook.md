@@ -1063,6 +1063,12 @@ QCP export create and refresh require `core.analytics_exports.write` when write 
 enforced. Status and result reads require `core.analytics_exports.read` when read authorization is
 enforced, including JSON, NDJSON and gzip. The exact service-owned defaults apply without an
 operator rule map; read and write permissions are independent across both supported datasets.
+Only the exact export-job POST operation is registered as write-only for flag selection:
+`ENTERPRISE_ENFORCE_AUTHZ` controls creation/refresh, and `ENTERPRISE_ENFORCE_READ_AUTHZ` controls
+status/results. With both off neither capability check is activated; with both on both are enforced.
+Read authorization alone still protects mapped source-product POST queries. Operator capability
+names do not classify operation type. Strict missing-rule checks apply only after authorization is
+enabled and identity is verified; tenant admission remains independent of these flags.
 See the [source custody runbook](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/portfolio-financial-source-cuts.md#analytics-export-job-permissions)
 for the three routes, effective-policy precedence and enrollment requirements.
 
