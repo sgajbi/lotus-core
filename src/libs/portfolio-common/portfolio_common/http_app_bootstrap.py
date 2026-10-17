@@ -356,6 +356,7 @@ def configure_standard_http_app(
 
     @app.middleware("http")
     async def add_correlation_id_middleware(request: Request, call_next):
+        start = time.perf_counter()
         correlation_id = normalize_lineage_value(
             request.headers.get("X-Correlation-Id") or request.headers.get("X-Correlation-ID")
         )
@@ -404,38 +405,32 @@ def configure_standard_http_app(
                 trace_id=trace_id,
                 traceparent=traceparent,
             )
+            # Emit before resetting request context: BaseHTTPMiddleware does not
+            # propagate inner task ContextVar updates to an outer middleware.
+            elapsed = time.perf_counter() - start
+            route_template = http_metric_path_template(request)
+            labels = {
+                "service": service_name,
+                "method": request.method,
+                "endpoint_template": route_template,
+            }
+            HTTP_REQUEST_LATENCY_SECONDS.labels(**labels).observe(elapsed)
+            HTTP_REQUESTS_TOTAL.labels(status=str(response.status_code), **labels).inc()
+            logger.info(
+                "http_request_completed",
+                extra={
+                    "method": request.method,
+                    "route_template": route_template,
+                    "status_code": response.status_code,
+                    "duration_ms": round(elapsed * 1000, 2),
+                },
+            )
             return response
         finally:
             correlation_id_var.reset(correlation_token)
             request_id_var.reset(request_token)
             trace_id_var.reset(trace_token)
             traceparent_var.reset(traceparent_token)
-
-    @app.middleware("http")
-    async def emit_http_observability(request: Request, call_next):
-        start = time.perf_counter()
-        response = await call_next(request)
-        elapsed = time.perf_counter() - start
-        route_template = http_metric_path_template(request)
-
-        labels = {
-            "service": service_name,
-            "method": request.method,
-            "endpoint_template": route_template,
-        }
-        HTTP_REQUEST_LATENCY_SECONDS.labels(**labels).observe(elapsed)
-        HTTP_REQUESTS_TOTAL.labels(status=str(response.status_code), **labels).inc()
-
-        logger.info(
-            "http_request_completed",
-            extra={
-                "method": request.method,
-                "route_template": route_template,
-                "status_code": response.status_code,
-                "duration_ms": round(elapsed * 1000, 2),
-            },
-        )
-        return response
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception):

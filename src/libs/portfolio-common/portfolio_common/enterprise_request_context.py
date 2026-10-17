@@ -31,16 +31,16 @@ def request_correlation_id(
 ) -> str | None:
     """Resolve bounded durable correlation identity in governed precedence order."""
 
-    normalized: str | None = normalize_lineage_value(
-        cast(
-            str | None,
-            headers.get("X-Correlation-Id")
-            or headers.get("X-Correlation-ID")
-            or response_correlation_id
-            or correlation_id_var.get(),
-        )
-    )
-    return normalized if normalized is not None and len(normalized) <= 128 else None
+    for candidate in (
+        headers.get("X-Correlation-Id"),
+        headers.get("X-Correlation-ID"),
+        response_correlation_id,
+        correlation_id_var.get(),
+    ):
+        normalized = normalize_lineage_value(candidate)
+        if normalized is not None:
+            return normalized if len(normalized) <= MAX_SECURITY_AUDIT_AUTHORITY_LENGTH else None
+    return None
 
 
 def audit_authority_headers_are_bounded(normalized_headers: dict[str, str]) -> bool:

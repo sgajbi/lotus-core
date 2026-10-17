@@ -1,9 +1,17 @@
+import asyncio
+import io
+import json
+import logging
 import re
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from portfolio_common.enterprise_readiness import EnterpriseReadinessRuntime
+from portfolio_common.enterprise_request_context import request_correlation_id
 from portfolio_common.http_app_bootstrap import (
     HTTP_TRUSTED_HOSTS_ENV,
     METRICS_INTERNAL_OPEN_MODE,
@@ -22,9 +30,239 @@ from portfolio_common.http_app_bootstrap import (
     normalize_trace_id,
     resolve_metrics_access_policy,
 )
+from portfolio_common.logging_utils import (
+    CorrelationIdFilter,
+    RedactingJsonFormatter,
+    correlation_id_var,
+    request_id_var,
+    trace_id_var,
+    traceparent_var,
+)
 from starlette.requests import Request
 
 TRACEPARENT_PATTERN = re.compile(r"^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$")
+
+
+@pytest.mark.parametrize(
+    ("headers", "response_id", "context_id", "expected"),
+    [
+        (
+            {"X-Correlation-Id": " valid-primary ", "X-Correlation-ID": "secondary"},
+            "response",
+            "context",
+            "valid-primary",
+        ),
+        ({"X-Correlation-ID": "secondary"}, "response", "context", "secondary"),
+        (
+            {"X-Correlation-Id": "<NOT-SET>", "X-Correlation-ID": "secondary"},
+            "response",
+            "context",
+            "secondary",
+        ),
+        ({"X-Correlation-Id": "<not-set>"}, "response", "context", "response"),
+        ({"X-Correlation-Id": " <NoT-SeT> "}, " <NOT-SET> ", "context", "context"),
+        ({"X-Correlation-Id": "   "}, " ", "context", "context"),
+        ({}, None, "context", "context"),
+        ({}, None, "<not-set>", None),
+        ({"X-Correlation-Id": "c" * 128}, "response", "context", "c" * 128),
+        ({"X-Correlation-Id": "c" * 129}, "response", "context", None),
+    ],
+)
+def test_audit_correlation_falls_through_unset_candidates_with_valid_priority(
+    headers, response_id, context_id, expected
+):
+    token = correlation_id_var.set(context_id)
+    try:
+        assert request_correlation_id(headers, response_id) == expected
+    finally:
+        correlation_id_var.reset(token)
+
+
+@pytest.fixture
+def formatted_http_logs(monkeypatch):
+    stream = io.StringIO()
+    logger = logging.Logger("http-lineage-contract", level=logging.INFO)
+    handler = logging.StreamHandler(stream)
+    handler.addFilter(CorrelationIdFilter())
+    handler.setFormatter(RedactingJsonFormatter("%(message)s"))
+    logger.addHandler(handler)
+    latency_metric, request_metric = MagicMock(), MagicMock()
+    monkeypatch.setattr(
+        "portfolio_common.http_app_bootstrap.HTTP_REQUEST_LATENCY_SECONDS", latency_metric
+    )
+    monkeypatch.setattr("portfolio_common.http_app_bootstrap.HTTP_REQUESTS_TOTAL", request_metric)
+    yield logger, stream, latency_metric, request_metric
+    handler.close()
+
+
+@pytest.mark.parametrize("identity", ["explicit", "generated", "invalid"])
+@pytest.mark.parametrize("outcome", ["success", "denied", "foreign", "validation", "error"])
+def test_formatted_http_completion_joins_normalized_response_identity(
+    formatted_http_logs, identity, outcome
+):
+    logger, stream, latency_metric, request_metric = formatted_http_logs
+    app = FastAPI()
+
+    @app.get("/portfolios/{portfolio_id}")
+    async def read_portfolio(portfolio_id: int):
+        if outcome == "error":
+            raise RuntimeError("source unavailable")
+        if outcome in {"denied", "foreign"}:
+            raise HTTPException(status_code={"denied": 401, "foreign": 404}[outcome])
+        return {"portfolio_id": portfolio_id}
+
+    configure_standard_http_app(
+        app, service_name="lineage-test", service_prefix="TST", logger=logger
+    )
+    headers = {}
+    if identity == "explicit":
+        headers = {
+            "X-Correlation-Id": "  supplied-correlation  ",
+            "X-Request-Id": "  supplied-request  ",
+            "traceparent": "00-1234567890ABCDEF1234567890ABCDEF-1234567890ABCDEF-01",
+            "X-Trace-Id": "abcdefabcdefabcdefabcdefabcdefab",
+        }
+    elif identity == "invalid":
+        headers = {
+            "X-Correlation-Id": " <NOT-SET> ",
+            "X-Request-Id": "  ",
+            "traceparent": "00-" + "0" * 32 + "-1234567890abcdef-01",
+            "X-Trace-Id": "invalid-trace",
+        }
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.get(
+            "/portfolios/private-identifier" if outcome == "validation" else "/portfolios/123",
+            headers=headers,
+        )
+    expected_status = {
+        "success": 200,
+        "denied": 401,
+        "foreign": 404,
+        "validation": 422,
+        "error": 500,
+    }[outcome]
+    assert response.status_code == expected_status
+    records = [json.loads(line) for line in stream.getvalue().splitlines()]
+    completions = [record for record in records if record["message"] == "http_request_completed"]
+    assert len(completions) == 1
+    completion = completions[0]
+    for field, header in (
+        ("correlation_id", "X-Correlation-Id"),
+        ("request_id", "X-Request-Id"),
+        ("trace_id", "X-Trace-Id"),
+        ("traceparent", "traceparent"),
+    ):
+        assert completion[field] == response.headers[header]
+        assert completion[field] and completion[field] != "<not-set>"
+    assert TRACEPARENT_PATTERN.fullmatch(completion["traceparent"])
+    assert completion["traceparent"].split("-")[1] == completion["trace_id"]
+    if identity == "explicit":
+        assert completion["correlation_id"] == "supplied-correlation"
+        assert completion["request_id"] == "supplied-request"
+        assert completion["trace_id"] == "1234567890abcdef1234567890abcdef"
+    assert completion["route_template"] == "/portfolios/{portfolio_id}"
+    assert completion["status_code"] == expected_status
+    labels = {
+        "service": "lineage-test",
+        "method": "GET",
+        "endpoint_template": "/portfolios/{portfolio_id}",
+    }
+    latency_metric.labels.assert_called_once_with(**labels)
+    latency_metric.labels.return_value.observe.assert_called_once()
+    request_metric.labels.assert_called_once_with(status=str(expected_status), **labels)
+    request_metric.labels.return_value.inc.assert_called_once_with()
+    assert "private-identifier" not in stream.getvalue()
+    assert len([r for r in records if r["message"] == "http_request_unhandled_exception"]) == (
+        1 if outcome == "error" else 0
+    )
+    for header, value in SECURE_RESPONSE_HEADERS.items():
+        assert response.headers[header] == value
+
+
+@pytest.mark.asyncio
+async def test_formatted_http_completion_concurrency_and_context_reset(formatted_http_logs):
+    logger, stream, latency_metric, request_metric = formatted_http_logs
+    app = FastAPI()
+    entered = 0
+    both_entered = asyncio.Event()
+    audit_runtime = EnterpriseReadinessRuntime(
+        service_name="lineage-concurrency",
+        load_settings=lambda: SimpleNamespace(enterprise_policy_version="test-policy"),
+        env_bool=lambda name, default: default,
+        env_int=lambda name, default: default,
+        logger=logger,
+    )
+
+    @app.get("/concurrent")
+    async def concurrent_request(request: Request):
+        nonlocal entered
+        entered += 1
+        if entered == 2:
+            both_entered.set()
+        await asyncio.wait_for(both_entered.wait(), timeout=5)
+        audit_runtime.emit_audit_event(
+            action="GET /concurrent",
+            actor_id="test-actor",
+            tenant_id="test-tenant",
+            role="test-role",
+            correlation_id=request_correlation_id(request.headers),
+            metadata={},
+        )
+        return {}
+
+    configure_standard_http_app(
+        app, service_name="lineage-concurrency", service_prefix="TST", logger=logger
+    )
+    variables = (correlation_id_var, request_id_var, trace_id_var, traceparent_var)
+    before = tuple(variable.get() for variable in variables)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app), base_url="http://test"
+    ) as client:
+        responses = await asyncio.gather(
+            *(
+                client.get(
+                    "/concurrent",
+                    headers={
+                        "X-Correlation-Id": "concurrent-1" if index == 1 else " <NOT-SET> ",
+                        "X-Request-Id": f"request-{index}",
+                        "traceparent": f"00-{index:032x}-{index:016x}-01",
+                    },
+                )
+                for index in (1, 2)
+            )
+        )
+        generated = await client.get("/concurrent", headers={"X-Correlation-Id": " <NoT-SeT> "})
+    assert tuple(variable.get() for variable in variables) == before
+    logger.info("outside_request")
+    records = [json.loads(line) for line in stream.getvalue().splitlines()]
+    completions = [r for r in records if r["message"] == "http_request_completed"]
+    assert len(completions) == 3
+    assert request_metric.labels.return_value.inc.call_count == 3
+    assert latency_metric.labels.return_value.observe.call_count == 3
+    assert len({r["request_id"] for r in completions}) == 3
+    assert len({r["correlation_id"] for r in completions}) == 3
+    audits = [r for r in records if r["message"] == "enterprise_audit_event"]
+    assert len(audits) == 3
+    for response in [*responses, generated]:
+        assert response.status_code == 200
+        matching = [r for r in completions if r["request_id"] == response.headers["X-Request-Id"]]
+        assert len(matching) == 1
+        matching_audits = [r for r in audits if r["request_id"] == response.headers["X-Request-Id"]]
+        assert len(matching_audits) == 1
+        assert matching_audits[0]["audit"]["correlation_id"] == matching[0]["correlation_id"]
+        assert matching_audits[0]["correlation_id"] == matching[0]["correlation_id"]
+        for field, header in (
+            ("correlation_id", "X-Correlation-Id"),
+            ("trace_id", "X-Trace-Id"),
+            ("traceparent", "traceparent"),
+        ):
+            assert matching[0][field] == response.headers[header]
+    assert generated.headers["X-Correlation-Id"] not in {"concurrent-1", "concurrent-2"}
+    assert records[-1]["message"] == "outside_request"
+    assert all(
+        records[-1][field] is None
+        for field in ("correlation_id", "request_id", "trace_id", "traceparent")
+    )
 
 
 def test_normalize_trace_id_accepts_valid_hex_trace_id():
