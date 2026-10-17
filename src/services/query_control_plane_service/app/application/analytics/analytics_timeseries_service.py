@@ -1226,6 +1226,8 @@ class AnalyticsTimeseriesService:
         request_fingerprint: str,
     ) -> tuple[AnalyticsExportJobRecord, bool]:
         async with self._unit_of_work.transaction():
+            if await self.repo.get_portfolio(request.portfolio_id) is None:
+                raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Portfolio not found.")
             if request.refresh_of_job_id is not None:
                 validate_export_refresh(
                     await self.export_repo.get_job(request.refresh_of_job_id), request_payload

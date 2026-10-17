@@ -1,13 +1,17 @@
 """Registered QCP HTTP ownership must precede analytics observations and identities."""
 
 import json
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from hashlib import sha256
+from types import SimpleNamespace
 
 import httpx
 import pytest
+import pytest_asyncio
 from portfolio_common import db as database_provider
 from portfolio_common.database_models import (
+    AnalyticsExportJob,
     BusinessDate,
     Instrument,
     Portfolio,
@@ -17,8 +21,21 @@ from portfolio_common.database_models import (
     PositionTimeseries,
     Transaction,
 )
+from portfolio_common.domain.tenant import TenantId
+from portfolio_common.request_fingerprints import request_fingerprint
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from src.services.query_control_plane_service.app.application.analytics.analytics_export_corrections import (  # noqa: E501
+    export_request_payload,
+)
+from src.services.query_control_plane_service.app.contracts.analytics_inputs import (
+    AnalyticsExportCreateRequest,
+)
+from src.services.query_control_plane_service.app.infrastructure.analytics_export_repository import (  # noqa: E501
+    AnalyticsExportRepository,
+    _export_job_record,
+)
 from src.services.query_control_plane_service.app.main import app
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.db_direct]
@@ -28,6 +45,262 @@ OWNERS = (
     ("tenant-analytics-b", "ANALYTICS_OWNER_B", "300"),
 )
 SECURITY = "ANALYTICS_OWNER_SECURITY"
+
+
+@pytest_asyncio.fixture
+async def export_case(clean_db, async_db_session, request):
+    """Own durable export rows for one stable, independently repeatable test case."""
+    namespace = sha256(request.node.nodeid.encode()).hexdigest()[:32]
+    prefix = f"aexp_tenant_custody_{namespace}_"
+    owners = (
+        (f"tenant-export-{namespace}-a", f"EXPORT_{namespace}_A"),
+        (f"tenant-export-{namespace}-b", f"EXPORT_{namespace}_B"),
+    )
+    portfolios = (owners[0][1], owners[1][1], f"EXPORT_{namespace}_ORPHAN")
+    scope = or_(
+        AnalyticsExportJob.job_id.startswith(prefix, autoescape=True),
+        AnalyticsExportJob.portfolio_id.in_(portfolios),
+    )
+
+    async def release_owned_rows():
+        await async_db_session.rollback()
+        await async_db_session.execute(delete(AnalyticsExportJob).where(scope))
+        await async_db_session.commit()
+        remaining = await async_db_session.execute(select(AnalyticsExportJob.job_id).where(scope))
+        assert remaining.scalars().all() == []
+        await async_db_session.rollback()
+
+    # The shared financial-table fixture omits this no-FK durable table. Clean
+    # only our case's namespace, including orphan rows and unexpected new jobs
+    # for its named portfolios; all other retained exports remain untouched.
+    await release_owned_rows()
+    try:
+        yield SimpleNamespace(
+            owners=owners,
+            portfolios=portfolios,
+            scope=scope,
+            job_ids={
+                suffix: f"{prefix}{suffix}"
+                for suffix in ("owner", "foreign", "orphan", "missing", "denied")
+            },
+        )
+    finally:
+        await release_owned_rows()
+
+
+async def _seed_export_owners(session, monkeypatch, dataset, case):
+    for tenant, portfolio in case.owners:
+        session.add(
+            Portfolio(
+                tenant_id=tenant,
+                portfolio_id=portfolio,
+                base_currency="USD",
+                open_date=DAYS[0],
+                risk_exposure="BALANCED",
+                investment_time_horizon="LONG_TERM",
+                portfolio_type="discretionary",
+                booking_center_code="Singapore",
+                client_id=f"CLIENT_{portfolio}",
+                status="active",
+            )
+        )
+    request = AnalyticsExportCreateRequest.model_validate(
+        {
+            "dataset_type": dataset,
+            "portfolio_id": case.owners[0][1],
+            f"{dataset}_request": {"as_of_date": DAYS[-1].isoformat(), "period": "one_month"},
+        }
+    )
+    payload = export_request_payload(request)
+    fingerprint = request_fingerprint(payload)
+    jobs = []
+    for suffix, portfolio in (
+        ("owner", case.owners[0][1]),
+        ("foreign", case.owners[1][1]),
+        ("orphan", case.portfolios[2]),
+    ):
+        job_id = case.job_ids[suffix]
+        result = {
+            "job_id": job_id,
+            "dataset_type": dataset,
+            "request_fingerprint": fingerprint,
+            "generated_at": datetime.now(UTC).isoformat(),
+            "contract_version": "rfc_063_v1",
+            "result_row_count": 1,
+            "data": [{"retained": suffix}],
+        }
+        # Deliberately colliding fingerprints exercise the tenant SQL predicate,
+        # independent of normal request fingerprint uniqueness.
+        job = AnalyticsExportJob(
+            job_id=job_id,
+            portfolio_id=portfolio,
+            dataset_type=dataset,
+            request_fingerprint=fingerprint,
+            request_payload=payload,
+            status="completed",
+            result_payload=result,
+            result_row_count=1,
+            result_format="json",
+            compression="none",
+        )
+        session.add(job)
+        jobs.append(job)
+        await session.flush()
+    await session.commit()
+    monkeypatch.setattr(
+        database_provider,
+        "AsyncSessionLocal",
+        async_sessionmaker(bind=session.bind, expire_on_commit=False),
+    )
+    return request, fingerprint, jobs
+
+
+@pytest.mark.parametrize("dataset", ["portfolio_timeseries", "position_timeseries"])
+@pytest.mark.parametrize(
+    "format_,compression", [("json", "none"), ("ndjson", "none"), ("ndjson", "gzip")]
+)
+async def test_registered_export_owner_reads_and_reuse_fail_closed(
+    export_case, async_db_session, monkeypatch, dataset, format_, compression
+):
+    case = export_case
+    request, fingerprint, jobs = await _seed_export_owners(
+        async_db_session, monkeypatch, dataset, case
+    )
+    base = "/integration/exports/analytics-timeseries/jobs"
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        owner_headers = {"X-Tenant-Id": case.owners[0][0]}
+        reused = await client.post(
+            base, headers=owner_headers, json=request.model_dump(mode="json")
+        )
+        assert reused.status_code == 200, reused.text
+        assert reused.json()["job_id"] == case.job_ids["owner"]
+        status = await client.get(f"{base}/{case.job_ids['owner']}", headers=owner_headers)
+        assert status.status_code == 200 and status.json()["status"] == "completed"
+        owner = await client.get(
+            f"{base}/{case.job_ids['owner']}/result",
+            headers=owner_headers,
+            params={"result_format": format_, "compression": compression},
+        )
+        assert owner.status_code == 200, owner.text
+        assert "owner" in owner.text
+        problems = {"": [], "/result": []}
+        for suffix in ("foreign", "orphan", "missing"):
+            for tail in ("", "/result"):
+                response = await client.get(
+                    f"{base}/{case.job_ids[suffix]}{tail}",
+                    headers=owner_headers,
+                    params={"result_format": format_, "compression": compression},
+                )
+                assert response.status_code == 404, response.text
+                problem = response.json()
+                assert problem["error_code"] == "QCP_ANALYTICS_NOT_FOUND"
+                assert problem["detail"] == "Requested analytics source was not found."
+                assert "retained" not in response.text
+                assert fingerprint not in response.text
+                problem.pop("instance")
+                problem.pop("correlation_id")
+                problems[tail].append(problem)
+        assert all(group[0] == group[1] == group[2] for group in problems.values())
+        for anchor in (case.job_ids[suffix] for suffix in ("foreign", "orphan", "missing")):
+            refused = await client.post(
+                base,
+                headers=owner_headers,
+                json={**request.model_dump(mode="json"), "refresh_of_job_id": anchor},
+            )
+            assert refused.status_code == 404, refused.text
+        refused = await client.post(
+            base, headers={"X-Tenant-Id": case.owners[1][0]}, json=request.model_dump(mode="json")
+        )
+        assert refused.status_code == 404, refused.text
+    retained = (
+        (await async_db_session.execute(select(AnalyticsExportJob).where(case.scope)))
+        .scalars()
+        .all()
+    )
+    assert len(retained) == len(jobs) == 3
+    assert {job.job_id for job in retained} == {
+        case.job_ids[suffix] for suffix in ("owner", "foreign", "orphan")
+    }
+    assert all(job.status == "completed" for job in retained)
+    assert {job.job_id: job.result_payload["data"] for job in retained} == {
+        case.job_ids[suffix]: [{"retained": suffix}] for suffix in ("owner", "foreign", "orphan")
+    }
+
+
+@pytest.mark.parametrize("dataset", ["portfolio_timeseries", "position_timeseries"])
+async def test_export_primary_owner_fences_creation_stale_and_lifecycle(
+    export_case, async_db_session, monkeypatch, dataset
+):
+    case = export_case
+    request, fingerprint, jobs = await _seed_export_owners(
+        async_db_session, monkeypatch, dataset, case
+    )
+    session = async_db_session
+    owner = AnalyticsExportRepository(session, tenant_id=TenantId(case.owners[0][0]))
+    foreign = AnalyticsExportRepository(session, tenant_id=TenantId(case.owners[1][0]))
+    assert (
+        await owner.get_latest_by_fingerprint(request_fingerprint=fingerprint, dataset_type=dataset)
+    ).job_id == case.job_ids["owner"]
+    owner_record, orphan_record = _export_job_record(jobs[0]), _export_job_record(jobs[2])
+    foreign_record = _export_job_record(jobs[1])
+    for store, record in ((foreign, owner_record), (owner, orphan_record)):
+        for transition in ("running", "completed", "failed"):
+            with pytest.raises(LookupError):
+                if transition == "running":
+                    await store.mark_running(record)
+                elif transition == "completed":
+                    await store.mark_completed(record, result_payload={}, result_row_count=0)
+                else:
+                    await store.mark_failed(record, error_message="stale")
+    for portfolio in (case.owners[1][1], case.portfolios[2]):
+        with pytest.raises(LookupError, match="Portfolio not found"):
+            await owner.create_job(
+                job_id=case.job_ids["denied"],
+                dataset_type=dataset,
+                portfolio_id=portfolio,
+                request_fingerprint="denied",
+                request_payload={},
+                result_format="json",
+                compression="none",
+            )
+    jobs[0].status = "running"
+    jobs[0].started_at = datetime.now(UTC) - timedelta(days=1)
+    jobs[0].updated_at = jobs[0].started_at
+    await session.commit()
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        refused = await client.post(
+            "/integration/exports/analytics-timeseries/jobs",
+            headers={"X-Tenant-Id": case.owners[1][0]},
+            json=request.model_dump(mode="json"),
+        )
+        assert refused.status_code == 404, refused.text
+    await session.refresh(jobs[0])
+    assert jobs[0].status == "running"
+    assert jobs[0].error_message is None
+    # Valid ownership still permits all existing lifecycle transitions.
+    running = await owner.mark_running(owner_record)
+    completed = await owner.mark_completed(
+        running, result_payload={"owned": True}, result_row_count=1
+    )
+    assert completed.status == "completed" and completed.result_payload == {"owned": True}
+    assert (await owner.mark_failed(completed, error_message="owned failure")).status == "failed"
+    for job, suffix, original in (
+        (jobs[1], "foreign", foreign_record),
+        (jobs[2], "orphan", orphan_record),
+    ):
+        await session.refresh(job)
+        assert job.status == "completed"
+        assert job.error_message is None
+        assert job.result_payload["data"] == [{"retained": suffix}]
+        assert _export_job_record(job) == original
+    retained_ids = (
+        await session.execute(select(AnalyticsExportJob.job_id).where(case.scope))
+    ).scalars()
+    assert set(retained_ids) == {case.job_ids[suffix] for suffix in ("owner", "foreign", "orphan")}
 
 
 @pytest.mark.parametrize("dataset", ["portfolio", "position"])
