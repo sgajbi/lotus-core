@@ -1057,6 +1057,21 @@ evidence and follow the
 Lookup measurements alone do not certify whole-loader capacity, ordering or load SLOs;
 #795/#730 remain separate acceptance work.
 
+## Analytics export authorization
+
+QCP export create and refresh require `core.analytics_exports.write` when write authorization is
+enforced. Status and result reads require `core.analytics_exports.read` when read authorization is
+enforced, including JSON, NDJSON and gzip. The exact service-owned defaults apply without an
+operator rule map; read and write permissions are independent across both supported datasets.
+See the [source custody runbook](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/portfolio-financial-source-cuts.md#analytics-export-job-permissions)
+for the three routes, effective-policy precedence and enrollment requirements.
+
+Strict rule coverage remains an independent operator decision requiring every affected route and
+caller to be reviewed. These defaults do not activate enforcement, enroll canonical `tenant-sg`,
+grant neutral reads to a consumer other than literal `lotus-manage`, or prove retained-job tenant
+isolation. Custody, source qualification and financial acceptance retain their separate evidence
+requirements. Keep original export generations intact.
+
 ## Related references
 
 - [Support and Lineage](Support-and-Lineage)

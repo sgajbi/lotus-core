@@ -53,7 +53,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-10-16T21:34:11.764608+00:00",
+  "generatedAt": "2026-10-17T17:45:41.611772+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_at",
@@ -110989,7 +110989,7 @@
         "Integration Contracts"
       ],
       "summary": "Create analytics timeseries export job",
-      "description": "What: Create a durable export job for portfolio or position analytics timeseries datasets.\nHow: Validates canonical request payload, computes deterministic fingerprint, persists lifecycle state, and reports explicit execution-mode and result-availability metadata.\nWhen: Used for large horizon extractions that should be retrieved through the export job contract rather than direct paged polling.\nContract note: current lifecycle_mode is inline_job_execution, so jobs may complete within the create request. Omit refresh_of_job_id for original request reuse. To acquire corrected source for the identical request, supply its completed export ID; repeating that anchor reuses the same correction intent, without rewriting the original.",
+      "description": "What: Create a durable export job for portfolio or position analytics timeseries datasets.\nHow: Validates canonical request payload, computes deterministic fingerprint, persists lifecycle state, and reports explicit execution-mode and result-availability metadata. With enterprise authorization enforced, creation and refresh require core.analytics_exports.write. This job permission covers both datasets; it does not establish tenant, source or financial authority.\nWhen: Used for large horizon extractions that should be retrieved through the export job contract rather than direct paged polling.\nContract note: current lifecycle_mode is inline_job_execution, so jobs may complete within the create request. Omit refresh_of_job_id for original request reuse. To acquire corrected source for the identical request, supply its completed export ID; repeating that anchor reuses the same correction intent, without rewriting the original.",
       "naming": {
         "boundedContext": "integration_contracts",
         "canonicalTerms": [
@@ -111237,7 +111237,7 @@
         "Integration Contracts"
       ],
       "summary": "Fetch analytics export job status",
-      "description": "What: Fetch lifecycle status for an analytics export job.\nHow: Reads persisted job metadata and terminal status from canonical query-service storage, including result availability and deterministic result retrieval path.\nWhen: Used by polling clients before attempting result retrieval, especially for large-window extraction flows where direct page-by-page replay would be slower or operationally noisier than a durable export hand-off.",
+      "description": "What: Fetch lifecycle status for an analytics export job.\nHow: Reads persisted job metadata and terminal status from canonical query-service storage, including result availability and deterministic result retrieval path. With enterprise read authorization enforced, status requires core.analytics_exports.read; write permission alone is insufficient.\nWhen: Used by polling clients before attempting result retrieval, especially for large-window extraction flows where direct page-by-page replay would be slower or operationally noisier than a durable export hand-off.",
       "naming": {
         "boundedContext": "integration_contracts",
         "canonicalTerms": [
@@ -111425,7 +111425,7 @@
         "Integration Contracts"
       ],
       "summary": "Fetch analytics export job result",
-      "description": "What: Retrieve finalized export payload for a completed analytics export job.\nHow: Returns JSON envelope or NDJSON stream with optional gzip encoding and includes the source-page evidence retained at completion. JSON and NDJSON expose the same ordered evidence and conservative quality/cut availability; legacy exports explicitly lack retained source evidence. Transport completion is not financial supportability.\nWhen: Used by lotus-performance batch pipelines and similar downstream bulk retrieval flows after job completion instead of repeatedly replaying large paged windows.",
+      "description": "What: Retrieve finalized export payload for a completed analytics export job.\nHow: Returns JSON envelope or NDJSON stream with optional gzip encoding and includes the source-page evidence retained at completion. JSON and NDJSON expose the same ordered evidence and conservative quality/cut availability; legacy exports explicitly lack retained source evidence. Transport completion is not financial supportability. With enterprise read authorization enforced, JSON, NDJSON and compressed results require core.analytics_exports.read.\nWhen: Used by lotus-performance batch pipelines and similar downstream bulk retrieval flows after job completion instead of repeatedly replaying large paged windows.",
       "naming": {
         "boundedContext": "integration_contracts",
         "canonicalTerms": [
