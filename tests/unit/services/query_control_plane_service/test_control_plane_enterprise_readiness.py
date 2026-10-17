@@ -393,3 +393,11 @@ def test_export_policy_preserves_exact_operator_override_precedence(monkeypatch)
     assert _required_capability(
         "GET", "/integration/exports/analytics-timeseries/jobs/J1/result"
     ) == ("core.analytics_exports.read")
+
+
+def test_export_policy_classifies_only_its_exact_create_operation():
+    from src.services.query_control_plane_service.app.enterprise_readiness import _runtime
+
+    assert _runtime.write_only_authorization_routes == frozenset(
+        {"POST /integration/exports/analytics-timeseries/jobs"}
+    )

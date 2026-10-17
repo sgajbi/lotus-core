@@ -7,10 +7,10 @@
     {
       "path": "src/libs/portfolio-common/portfolio_common/enterprise_readiness.py",
       "rank": "C",
-      "mi": 2.670010903178993,
+      "mi": 3.8134655180862316,
       "owner": "lotus-core maintainers",
-      "rationale": "Existing enterprise-readiness hotspot; new or changed debt is forbidden.",
-      "issue": "#462"
+      "rationale": "Core1001 removes duplicate principal verification and authorization decision construction; bank the measured improvement with zero headroom.",
+      "issue": "#1001"
     },
     {
       "path": "src/libs/portfolio-common/portfolio_common/kafka_consumer.py",

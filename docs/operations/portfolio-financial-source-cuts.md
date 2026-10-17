@@ -134,6 +134,24 @@ only when the corresponding existing write/read flags are enabled. With enforcem
 effective policy rather than assuming overrides are additive. Method and path templates are exact;
 no export subtree wildcard is required.
 
+QCP registers only the concrete export-job POST operation as write-only for flag selection.
+`ENTERPRISE_ENFORCE_READ_AUTHZ` alone does not protect creation or refresh. This operation
+classification is immutable and independent of the operator's capability name; an exact override
+still replaces the required capability. Existing mapped source-product POST queries retain their
+read-authorization protection and their existing write-flag behavior.
+
+| Write flag | Read flag | Export create/refresh authorization | Export status/result authorization |
+| --- | --- | --- | --- |
+| Off | Off | Off | Off |
+| Off | On | Off | On |
+| On | Off | On | Off |
+| On | On | On | On |
+
+This table describes only capability authorization. Tenant admission, payload validation and
+source grants remain independent. `ENTERPRISE_REQUIRE_CAPABILITY_RULES` does not turn authorization
+on; it denies a missing mapping after identity verification on an enforced request. A mapped
+capability is required under enforcement whether strict rule coverage is enabled or disabled.
+
 The source-custody overlay does not enable strict rule coverage. These three defaults do not make
 all QCP routes ready for strict activation. Enroll every affected caller and review its exact
 routes before the operator changes enforcement. Canonical `tenant-sg` enrollment is separate from

@@ -23,10 +23,11 @@ CORPORATE_ACTION_SUPPORT_ROUTE = "GET /support/portfolios/{portfolio_id}/corpora
 SECURITY_AUDIT_SUPPORT_ROUTE = "GET /support/security-audit/events"
 EXPORT_WRITE_CAPABILITY = "core.analytics_exports.write"
 EXPORT_READ_CAPABILITY = "core.analytics_exports.read"
+EXPORT_CREATE_ROUTE = "POST /integration/exports/analytics-timeseries/jobs"
 QUERY_CONTROL_PLANE_CAPABILITY_RULES: dict[str, str] = {
     CORPORATE_ACTION_SUPPORT_ROUTE: "core.support.read",
     SECURITY_AUDIT_SUPPORT_ROUTE: "core.security_audit.read",
-    "POST /integration/exports/analytics-timeseries/jobs": EXPORT_WRITE_CAPABILITY,
+    EXPORT_CREATE_ROUTE: EXPORT_WRITE_CAPABILITY,
     "GET /integration/exports/analytics-timeseries/jobs/{job_id}": EXPORT_READ_CAPABILITY,
     "GET /integration/exports/analytics-timeseries/jobs/{job_id}/result": EXPORT_READ_CAPABILITY,
 }
@@ -45,6 +46,7 @@ _runtime = EnterpriseReadinessRuntime(
     env_int=env_int,
     logger=logger,
     default_capability_rules=query_control_plane_capability_rules,
+    write_only_authorization_routes=frozenset({EXPORT_CREATE_ROUTE}),
 )
 
 

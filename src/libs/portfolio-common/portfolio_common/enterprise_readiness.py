@@ -5,8 +5,9 @@ from __future__ import annotations
 import hashlib
 import hmac
 import logging
+import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Protocol, cast
 from uuid import uuid4
@@ -151,12 +152,29 @@ class EnterpriseAuthorizationDecision:
 
 @dataclass(frozen=True)
 class EnterpriseReadinessRuntime:
+    """Apply identity and capability policy with service-owned operation semantics.
+
+    Source queries can use POST, so HTTP methods alone cannot classify read authorization.
+    Only immutable concrete mutation identities opt out of the read flag; operator capability
+    overrides change the required permission without changing the operation's classification.
+    """
+
     service_name: str
     load_settings: Callable[[], EnterpriseSettings]
     env_bool: Callable[[str, bool], bool]
     env_int: Callable[[str, int], int]
     logger: logging.Logger
     default_capability_rules: Callable[[], dict[str, str]] = field(default=lambda: {})
+    write_only_authorization_routes: frozenset[str] = field(default_factory=frozenset)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.write_only_authorization_routes, frozenset):
+            raise TypeError("write_only_authorization_routes must be a frozenset")
+        if not all(
+            _valid_write_only_authorization_route(route)
+            for route in self.write_only_authorization_routes
+        ):
+            raise ValueError("write-only authorization requires exact mutation route identities")
 
     def env_enabled(self, name: str, default: str = "true") -> bool:
         settings_attr = {
@@ -294,19 +312,22 @@ class EnterpriseReadinessRuntime:
         headers: dict[str, str],
         required_capability: str,
     ) -> tuple[bool, str | None]:
-        normalized_headers = _normalize_headers(headers)
-        missing_headers = _missing_required_headers(normalized_headers)
-        if missing_headers:
-            return False, f"missing_headers:{','.join(missing_headers)}"
-
-        if not _has_service_identity(normalized_headers):
-            return False, "missing_service_identity"
-
-        verified_principal = _verified_service_principal(normalized_headers, self.load_settings())
+        verified_principal = self._request_principal(headers)
         if isinstance(verified_principal, str):
             return False, verified_principal
 
         return self._authorize_required_capability(required_capability, verified_principal)
+
+    def _request_principal(self, headers: dict[str, str]) -> VerifiedServicePrincipal | str:
+        normalized_headers = _normalize_headers(headers)
+        missing_headers = _missing_required_headers(normalized_headers)
+        if missing_headers:
+            return f"missing_headers:{','.join(missing_headers)}"
+
+        if not _has_service_identity(normalized_headers):
+            return "missing_service_identity"
+
+        return _verified_service_principal(normalized_headers, self.load_settings())
 
     def authorize_request(
         self, method: str, path: str, headers: dict[str, str]
@@ -319,55 +340,28 @@ class EnterpriseReadinessRuntime:
     ) -> EnterpriseAuthorizationDecision:
         normalized_method = method.strip().upper()
         matched_rule = self.matched_capability_rule(normalized_method, path)
-        route_template = matched_rule[0] if matched_rule is not None else "/unclassified"
-        required_capability = matched_rule[1] if matched_rule is not None else None
-        if not self._request_requires_authorization(normalized_method, required_capability):
-            return EnterpriseAuthorizationDecision(
-                authorized=True,
-                reason=None,
-                required_capability=required_capability,
-                route_template=route_template,
-                principal=None,
-            )
+        route_template, required_capability = matched_rule or ("/unclassified", None)
+        decision = EnterpriseAuthorizationDecision(
+            authorized=True,
+            reason=None,
+            required_capability=required_capability,
+            route_template=route_template,
+            principal=None,
+        )
+        if not self._request_requires_authorization(normalized_method, required_capability, path):
+            return decision
 
-        normalized_headers = _normalize_headers(headers)
-        missing_headers = _missing_required_headers(normalized_headers)
-        if missing_headers:
-            return EnterpriseAuthorizationDecision(
-                authorized=False,
-                reason=f"missing_headers:{','.join(missing_headers)}",
-                required_capability=required_capability,
-                route_template=route_template,
-                principal=None,
-            )
-
-        if not _has_service_identity(normalized_headers):
-            return EnterpriseAuthorizationDecision(
-                authorized=False,
-                reason="missing_service_identity",
-                required_capability=required_capability,
-                route_template=route_template,
-                principal=None,
-            )
-
-        verified_principal = _verified_service_principal(normalized_headers, self.load_settings())
+        verified_principal = self._request_principal(headers)
         if isinstance(verified_principal, str):
-            return EnterpriseAuthorizationDecision(
-                authorized=False,
-                reason=verified_principal,
-                required_capability=required_capability,
-                route_template=route_template,
-                principal=None,
-            )
+            return replace(decision, authorized=False, reason=verified_principal)
 
         authorized, reason = self._authorize_required_capability(
             required_capability, verified_principal
         )
-        return EnterpriseAuthorizationDecision(
+        return replace(
+            decision,
             authorized=authorized,
             reason=reason,
-            required_capability=required_capability,
-            route_template=route_template,
             principal=verified_principal,
         )
 
@@ -375,13 +369,16 @@ class EnterpriseReadinessRuntime:
         self,
         normalized_method: str,
         required_capability: str | None,
+        path: str,
     ) -> bool:
         requires_write_authz = normalized_method in WRITE_METHODS and self.env_enabled(
             "ENTERPRISE_ENFORCE_AUTHZ",
             "false",
         )
         requires_read_authz = (
-            normalized_method in READ_AUTHZ_METHODS or required_capability is not None
+            (normalized_method in READ_AUTHZ_METHODS or required_capability is not None)
+            and f"{normalized_method} {_normalize_path(path)}"
+            not in self.write_only_authorization_routes
         ) and self.env_enabled(
             "ENTERPRISE_ENFORCE_READ_AUTHZ",
             "false",
@@ -393,13 +390,11 @@ class EnterpriseReadinessRuntime:
         required_capability: str | None,
         verified_principal: VerifiedServicePrincipal,
     ) -> tuple[bool, str | None]:
-        if not required_capability and self.env_enabled(
-            "ENTERPRISE_REQUIRE_CAPABILITY_RULES", "false"
-        ):
-            return False, "missing_capability_rule"
-        if required_capability:
-            if required_capability not in verified_principal.capabilities:
-                return False, f"missing_capability:{required_capability}"
+        if not required_capability:
+            if self.env_enabled("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "false"):
+                return False, "missing_capability_rule"
+        elif required_capability not in verified_principal.capabilities:
+            return False, f"missing_capability:{required_capability}"
 
         return True, None
 
@@ -725,6 +720,17 @@ def _parse_capability_rule_key(key: str) -> tuple[str, str] | None:
         return None
     method, path = parts[0].upper(), parts[1].strip()
     return method, path
+
+
+def _valid_write_only_authorization_route(route: object) -> bool:
+    if not isinstance(route, str):
+        return False
+    _, _, path = route.partition(" ")
+    return (
+        len(path) <= 256
+        and re.fullmatch(r"(?:POST|PUT|PATCH|DELETE) /[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*", route)
+        is not None
+    )
 
 
 def _valid_capability_rule(method: str, path: str, capability: str) -> bool:
