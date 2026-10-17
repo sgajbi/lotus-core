@@ -5,9 +5,12 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 import pytest_asyncio
+from portfolio_common.domain.tenant import TenantContext, TenantId
 from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
 from src.services.query_control_plane_service.app.application.analytics.analytics_timeseries_service import (  # noqa: E501
     AnalyticsInputError,
@@ -19,6 +22,20 @@ from src.services.query_control_plane_service.app.main import app
 from tests.test_support.tenant import TEST_TENANT_HEADERS
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_analytics_composition_binds_same_admitted_owner_to_export_and_source():
+    request = Request({"type": "http", "headers": []})
+    request.state.tenant_context = TenantContext(tenant_id=TenantId("tenant-export-admitted"))
+    primary, snapshot = AsyncMock(spec=AsyncSession), AsyncMock(spec=AsyncSession)
+    service = get_analytics_timeseries_service(request=request, db=primary, read_db=snapshot)
+    assert (
+        service.repo.tenant_id
+        == service.export_repo.tenant_id
+        == TenantId("tenant-export-admitted")
+    )
+    assert service.repo.db is snapshot
+    assert service.export_repo.db is primary
 
 
 @pytest_asyncio.fixture

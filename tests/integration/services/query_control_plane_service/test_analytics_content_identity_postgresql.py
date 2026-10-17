@@ -197,7 +197,9 @@ def export_service(session):
         reader=AnalyticsTimeseriesRepository(
             session, tenant_id=TenantId("tenant-content-identity")
         ),
-        export_store=AnalyticsExportRepository(session),
+        export_store=AnalyticsExportRepository(
+            session, tenant_id=TenantId("tenant-content-identity")
+        ),
         unit_of_work=SqlAlchemyAnalyticsUnitOfWork(session),
         policy=AnalyticsRuntimePolicy(
             page_token_secret="content-identity-test-key",
@@ -390,7 +392,9 @@ async def test_export_retained_page_evidence_pg_http(
     job_id = job["job_id"]
     status_response = await client.get(f"/integration/exports/analytics-timeseries/jobs/{job_id}")
     assert status_response.status_code == 200, status_response.text
-    stored = await AnalyticsExportRepository(session).get_job(job_id)
+    stored = await AnalyticsExportRepository(
+        session, tenant_id=TenantId("tenant-content-identity")
+    ).get_job(job_id)
     assert stored is not None
     if source_case == "mixed":
         assert job["status"] == status_response.json()["status"] == "failed"
@@ -506,7 +510,9 @@ async def test_export_correction_intent_preserves_original_pg_http(
             base_url="http://testserver",
         ) as fresh_client:
             for job, expected in ((original.json(), retained), (refreshed.json(), corrected)):
-                stored = await AnalyticsExportRepository(fresh_session).get_job(job["job_id"])
+                stored = await AnalyticsExportRepository(
+                    fresh_session, tenant_id=TenantId("tenant-content-identity")
+                ).get_job(job["job_id"])
                 assert stored is not None and stored.result_payload["data"] == expected["data"]
                 for compression in ("none", "gzip"):
                     response = await fresh_client.get(

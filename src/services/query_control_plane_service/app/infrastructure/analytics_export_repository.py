@@ -5,15 +5,31 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from portfolio_common.database_models import AnalyticsExportJob as AnalyticsExportJobModel
+from portfolio_common.database_models import Portfolio
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.selectable import Exists
 
 from ..domain.analytics import AnalyticsExportJobRecord
 
 
 class AnalyticsExportRepository:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, *, tenant_id: TenantId):
+        if not isinstance(tenant_id, TenantId):
+            raise TypeError("Analytics export store requires typed admitted tenant authority.")
         self.db = db
+        self.tenant_id = tenant_id
+
+    def _ownership_predicate(self) -> Exists:
+        return (
+            select(Portfolio.portfolio_id)
+            .where(
+                Portfolio.portfolio_id == AnalyticsExportJobModel.portfolio_id,
+                Portfolio.tenant_id == self.tenant_id.value,
+            )
+            .exists()
+        )
 
     async def create_job(
         self,
@@ -26,6 +42,14 @@ class AnalyticsExportRepository:
         result_format: str,
         compression: str,
     ) -> AnalyticsExportJobRecord:
+        owner = await self.db.execute(
+            select(Portfolio.portfolio_id).where(
+                Portfolio.portfolio_id == portfolio_id,
+                Portfolio.tenant_id == self.tenant_id.value,
+            )
+        )
+        if owner.scalar_one_or_none() is None:
+            raise LookupError("Portfolio not found.")
         row = AnalyticsExportJobModel(
             job_id=job_id,
             dataset_type=dataset_type,
@@ -52,6 +76,7 @@ class AnalyticsExportRepository:
             .where(
                 AnalyticsExportJobModel.request_fingerprint == request_fingerprint,
                 AnalyticsExportJobModel.dataset_type == dataset_type,
+                self._ownership_predicate(),
             )
             .order_by(AnalyticsExportJobModel.id.desc())
             .limit(1)
@@ -97,7 +122,9 @@ class AnalyticsExportRepository:
 
     async def _get_model(self, job_id: str) -> AnalyticsExportJobModel | None:
         result = await self.db.execute(
-            select(AnalyticsExportJobModel).where(AnalyticsExportJobModel.job_id == job_id).limit(1)
+            select(AnalyticsExportJobModel)
+            .where(AnalyticsExportJobModel.job_id == job_id, self._ownership_predicate())
+            .limit(1)
         )
         return result.scalars().first()
 

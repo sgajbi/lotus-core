@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from portfolio_common.domain.tenant import TenantId
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_control_plane_service.app.infrastructure.analytics_export_repository import (  # noqa: E501
@@ -21,6 +22,79 @@ class _FakeExecuteResult:
 
     def first(self):
         return self._rows[0] if self._rows else None
+
+    def scalar_one_or_none(self):
+        return self.first()
+
+
+@pytest.mark.parametrize("tenant_id", [None, "tenant-a"])
+def test_export_repository_requires_typed_admitted_tenant(tenant_id):
+    with pytest.raises(TypeError):
+        AnalyticsExportRepository(AsyncMock(spec=AsyncSession), tenant_id=tenant_id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("lookup", ["job", "fingerprint"])
+async def test_export_lookup_binds_authoritative_portfolio_owner(lookup):
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult([])
+    repo = AnalyticsExportRepository(db, tenant_id=TenantId("tenant-a"))
+    if lookup == "job":
+        assert await repo.get_job("foreign-or-missing") is None
+    else:
+        assert (
+            await repo.get_latest_by_fingerprint(
+                request_fingerprint="same-fingerprint", dataset_type="portfolio_timeseries"
+            )
+            is None
+        )
+    sql = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolios.tenant_id = 'tenant-a'" in sql
+    assert "portfolios.portfolio_id = analytics_export_jobs.portfolio_id" in sql
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("dataset", ["portfolio_timeseries", "position_timeseries"])
+async def test_export_creation_refuses_absent_primary_owner_before_writes(dataset):
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult([])
+    repo = AnalyticsExportRepository(db, tenant_id=TenantId("tenant-a"))
+    with pytest.raises(LookupError, match="Portfolio not found"):
+        await repo.create_job(
+            job_id="aexp_denied",
+            dataset_type=dataset,
+            portfolio_id="foreign-or-missing",
+            request_fingerprint="fp",
+            request_payload={},
+            result_format="json",
+            compression="none",
+        )
+    db.add.assert_not_called()
+    db.flush.assert_not_awaited()
+    sql = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolios.tenant_id = 'tenant-a'" in sql
+    assert "portfolios.portfolio_id = 'foreign-or-missing'" in sql
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("transition", ["running", "completed", "failed"])
+async def test_export_transition_refuses_unowned_or_missing_job_before_mutation(transition):
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _FakeExecuteResult([])
+    repo = AnalyticsExportRepository(db, tenant_id=TenantId("tenant-a"))
+    row = _export_model()
+    with pytest.raises(LookupError, match="no longer exists"):
+        if transition == "running":
+            await repo.mark_running(row)
+        elif transition == "completed":
+            await repo.mark_completed(
+                row, result_payload={"private": "retained"}, result_row_count=1
+            )
+        else:
+            await repo.mark_failed(row, error_message="stale")
+    assert row.status == "accepted"
+    db.flush.assert_not_awaited()
+    db.refresh.assert_not_awaited()
 
 
 def _export_model(job_id: str = "aexp_1") -> SimpleNamespace:
@@ -59,7 +133,7 @@ async def test_export_transition_refreshes_server_timestamp_before_projection(tr
     db = AsyncMock(spec=AsyncSession)
     model = _ExpiredTimestampModel(**vars(_export_model()), timestamp_expired=False)
     db.execute.return_value = _FakeExecuteResult([model])
-    repo = AnalyticsExportRepository(db)
+    repo = AnalyticsExportRepository(db, tenant_id=TenantId("tenant-a"))
     record = await repo.get_job(model.job_id)
     refreshed_time = datetime(2026, 7, 12, tzinfo=UTC)
 
@@ -89,7 +163,8 @@ async def test_export_transition_refreshes_server_timestamp_before_projection(tr
 @pytest.mark.asyncio
 async def test_analytics_export_repository_create_get_and_markers() -> None:
     db = AsyncMock(spec=AsyncSession)
-    repo = AnalyticsExportRepository(db)
+    repo = AnalyticsExportRepository(db, tenant_id=TenantId("tenant-a"))
+    db.execute.return_value = _FakeExecuteResult(["P1"])
 
     await repo.create_job(
         job_id="aexp_1",
