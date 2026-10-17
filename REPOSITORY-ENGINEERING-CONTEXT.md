@@ -47,6 +47,24 @@ Focused mypy/Ruff checks support iteration but do not replace configured callers
 What/How/When documentation or separate application/framework boundary enforcement. Distinguish
 cheap source gates from source-bound CI, network and native runtime evidence.
 
+## App-local source-custody admission practice
+
+The opt-in `docker-compose.source-custody.yml` adds only ingestion/QCP environment inputs to
+the base app-local stack. It requires an existing operator-owned auth-context secret/key ID,
+fixes context age at 300 seconds, preserves exact empty grant defaults and disabled read features,
+and enables existing ingestion write and QCP write/read authorization. All affected callers need
+enrolled service/actor/tenant identities, exact capabilities and signed requests; this is an
+enforcing opt-in profile. Base services/mounts/dependencies and other services remain unchanged. Use the
+[custody runbook](docs/operations/portfolio-financial-source-cuts.md#opt-in-app-local-authentication-transport)
+for explicit-cwd activation with an external reviewed env file. The runtime owner alone admits
+secrets, principals, grants and service recreation; never publish expanded configuration or
+treat this local transport as production security/producer qualification. Source contract tests
+cover installed middleware, standard request bootstrap, verified context propagation and native
+source-boundary/grant refusals as well as interpolation/helpers. A standalone signature verifier
+pass does not prove middleware populated an authenticated context. Docker merge/live source evidence
+is a separately admitted operator proof. No source facts, verification keys or bank authority
+are created by enabling the overlay.
+
 ## Owned source-receipt launch binding practice
 
 `tests/test_support/source_receipt_process_custody.py` retains raw private bytes by default.
