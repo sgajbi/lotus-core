@@ -1,0 +1,22 @@
+# Opt-in app-local transport for existing source-custody admission.
+# Authentication does not grant producer qualification or financial authority.
+services:
+  ingestion_service:
+    environment:
+      ENTERPRISE_AUTH_CONTEXT_HMAC_SECRET: ${ENTERPRISE_AUTH_CONTEXT_HMAC_SECRET:?Provide the existing operator-owned auth-context secret}
+      ENTERPRISE_PRIMARY_KEY_ID: ${ENTERPRISE_PRIMARY_KEY_ID:?Provide the existing operator-owned auth-context key ID}
+      ENTERPRISE_AUTH_CONTEXT_MAX_AGE_SECONDS: "300"
+      ENTERPRISE_ENFORCE_AUTHZ: "true"
+      LOTUS_PORTFOLIO_SOURCE_SUBMISSION_GRANTS_JSON: ${LOTUS_PORTFOLIO_SOURCE_SUBMISSION_GRANTS_JSON:-[]}
+      LOTUS_PORTFOLIO_REGISTRY_SOURCE_GRANTS_JSON: ${LOTUS_PORTFOLIO_REGISTRY_SOURCE_GRANTS_JSON:-[]}
+
+  query_control_plane_service:
+    environment:
+      ENTERPRISE_AUTH_CONTEXT_HMAC_SECRET: ${ENTERPRISE_AUTH_CONTEXT_HMAC_SECRET:?Provide the existing operator-owned auth-context secret}
+      ENTERPRISE_PRIMARY_KEY_ID: ${ENTERPRISE_PRIMARY_KEY_ID:?Provide the existing operator-owned auth-context key ID}
+      ENTERPRISE_AUTH_CONTEXT_MAX_AGE_SECONDS: "300"
+      ENTERPRISE_ENFORCE_AUTHZ: "true"
+      ENTERPRISE_ENFORCE_READ_AUTHZ: "true"
+      PORTFOLIO_NEUTRAL_SOURCE_READ_GRANTS_JSON: ${PORTFOLIO_NEUTRAL_SOURCE_READ_GRANTS_JSON:-[]}
+      LOTUS_CORE_CAP_HISTORICAL_REGISTRY_READ_ENABLED: ${LOTUS_CORE_CAP_HISTORICAL_REGISTRY_READ_ENABLED:-false}
+      LOTUS_CORE_CAP_FINANCIAL_SOURCE_CUT_READ_ENABLED: ${LOTUS_CORE_CAP_FINANCIAL_SOURCE_CUT_READ_ENABLED:-false}

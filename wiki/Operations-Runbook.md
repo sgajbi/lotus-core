@@ -5,6 +5,17 @@
 For neutral registry/financial-cut custody, use the
 [dedicated operating runbook](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/portfolio-financial-source-cuts.md).
 Exact producer/consumer grants and disabled-by-default read features are separate controls.
+The opt-in `docker-compose.source-custody.yml` transports an existing operator-owned auth-context
+secret/key ID only to ingestion and QCP, with a 300-second context limit. Both credentials are
+required; grants remain empty and retained-read features disabled unless explicitly supplied.
+The profile enables existing ingestion write and QCP write/read authorization. Enroll all affected
+callers with existing service/actor/tenant identities and exact capabilities, and sign their requests.
+Keys alone do not populate a verified request context when middleware enforcement is disabled.
+Use the dedicated runbook's activation commands with a reviewed external env file and the runtime
+owner. Base mounts/dependencies and other services are preserved. Source tests cover configuration
+intent, installed middleware/context propagation and native refusals; Docker interpolation and
+deployed financial acceptance remain separate.
+This local wiring does not enroll an issuer, qualify a producer or supply institutional authority.
 202 acceptance is not completion; pending native sources remain unavailable. Corrections preserve
 original bytes and require predecessor/head CAS. Native PostgreSQL, source-off and target-scale
 qualification remain separate from source/unit evidence.
