@@ -24,6 +24,7 @@
 - [Operations Runbook](Operations-Runbook)
 - [Troubleshooting](Troubleshooting)
 - [Security and Governance](Security-and-Governance)
+- [Analytics Export Tenant Custody](Analytics-Export-Tenant-Custody)
 
 ## Services and subsystems
 

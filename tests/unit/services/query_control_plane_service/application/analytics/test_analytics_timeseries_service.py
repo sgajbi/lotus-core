@@ -62,7 +62,7 @@ def make_service() -> AnalyticsTimeseriesService:
     session = MagicMock(spec=AsyncSession)
     return AnalyticsTimeseriesService(
         reader=AnalyticsTimeseriesRepository(session, tenant_id=TenantId("tenant-test")),
-        export_store=AnalyticsExportRepository(session),
+        export_store=AnalyticsExportRepository(session, tenant_id=TenantId("tenant-test")),
         unit_of_work=SqlAlchemyAnalyticsUnitOfWork(session),
         policy=AnalyticsRuntimePolicy(
             page_token_secret="lotus-core-local-dev",
@@ -73,6 +73,149 @@ def make_service() -> AnalyticsTimeseriesService:
             export_execution_timeout_seconds=300,
         ),
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("dataset", ["portfolio_timeseries", "position_timeseries"])
+@pytest.mark.parametrize("refresh", [None, "aexp_foreign_anchor"])
+async def test_export_owner_admission_precedes_reservation_and_reuse(dataset, refresh):
+    service = make_service()
+    service.repo.get_portfolio = AsyncMock(return_value=None)
+    service.export_repo = SimpleNamespace(
+        get_job=AsyncMock(),
+        get_latest_by_fingerprint=AsyncMock(),
+        create_job=AsyncMock(),
+        mark_running=AsyncMock(),
+        mark_completed=AsyncMock(),
+        mark_failed=AsyncMock(),
+    )
+    request_type = (
+        PortfolioAnalyticsTimeseriesRequest
+        if dataset == "portfolio_timeseries"
+        else PositionAnalyticsTimeseriesRequest
+    )
+    request = AnalyticsExportCreateRequest(
+        dataset_type=dataset,
+        portfolio_id="foreign-or-missing",
+        refresh_of_job_id=refresh,
+        **{f"{dataset}_request": request_type(as_of_date="2026-04-13", period="one_month")},
+    )
+    with pytest.raises(AnalyticsInputError, match="Portfolio not found") as error:
+        await service.create_export_job(request)
+    assert error.value.code == "RESOURCE_NOT_FOUND"
+    for operation in vars(service.export_repo).values():
+        operation.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("dataset", ["portfolio_timeseries", "position_timeseries"])
+@pytest.mark.parametrize("outcome", ["created", "reused_completed", "refused"])
+async def test_export_owner_admission_shares_real_session_transaction(dataset, outcome):
+    """Model read autobegin on a real shared AsyncSession without database I/O."""
+    async with AsyncSession() as session:
+        service = make_service()
+        service.repo = AnalyticsTimeseriesRepository(session, tenant_id=TenantId("tenant-test"))
+        service.export_repo = AnalyticsExportRepository(session, tenant_id=TenantId("tenant-test"))
+        service._unit_of_work = SqlAlchemyAnalyticsUnitOfWork(session)
+        row = SimpleNamespace(
+            job_id="aexp_shared_session",
+            dataset_type=dataset,
+            portfolio_id="P1",
+            status="completed" if outcome == "reused_completed" else "accepted",
+            request_fingerprint="fp-shared",
+            result_format="json",
+            compression="none",
+            result_row_count=1,
+            error_message=None,
+            created_at=datetime.now(UTC),
+            started_at=None,
+            completed_at=None,
+        )
+
+        async def source_read(_portfolio_id):
+            # Faithfully reproduce SQLAlchemy read autobegin with no bound engine.
+            # A preflight outside the UoW leaves this transaction open; the later
+            # real session.begin then refuses a nested transaction.
+            if not session.in_transaction():
+                await session.begin()
+            return None if outcome == "refused" else SimpleNamespace(portfolio_id="P1")
+
+        async def transition(*_args, **_kwargs):
+            assert session.in_transaction()
+            row.status = "completed"
+            return row
+
+        service.repo.get_portfolio = AsyncMock(side_effect=source_read)
+        service.export_repo.get_job = AsyncMock(return_value=row)
+        service.export_repo.get_latest_by_fingerprint = AsyncMock(
+            return_value=row if outcome == "reused_completed" else None
+        )
+        service.export_repo.create_job = AsyncMock(return_value=row)
+        service.export_repo.mark_running = AsyncMock(return_value=row)
+        service.export_repo.mark_completed = AsyncMock(side_effect=transition)
+        service.export_repo.mark_failed = AsyncMock()
+        service._collect_export_dataset = AsyncMock(
+            return_value=AnalyticsExportDataset(
+                [{"owned": True}], 1, AnalyticsExportSourceEvidence()
+            )
+        )
+        request = AnalyticsExportCreateRequest.model_validate(
+            {
+                "dataset_type": dataset,
+                "portfolio_id": "P1",
+                f"{dataset}_request": {"as_of_date": "2026-04-13", "period": "one_month"},
+            }
+        )
+        if outcome == "refused":
+            with pytest.raises(AnalyticsInputError, match="Portfolio not found"):
+                await service.create_export_job(request)
+            service.export_repo.get_latest_by_fingerprint.assert_not_awaited()
+            service.export_repo.create_job.assert_not_awaited()
+            service.export_repo.mark_running.assert_not_awaited()
+            service.export_repo.mark_completed.assert_not_awaited()
+            service.export_repo.mark_failed.assert_not_awaited()
+        else:
+            response = await service.create_export_job(request)
+            assert response.disposition == outcome
+            assert response.status == "completed"
+            if outcome == "reused_completed":
+                service.export_repo.create_job.assert_not_awaited()
+                service.export_repo.mark_running.assert_not_awaited()
+                service.export_repo.mark_completed.assert_not_awaited()
+                service._collect_export_dataset.assert_not_awaited()
+            else:
+                service.export_repo.create_job.assert_awaited_once()
+                service.export_repo.mark_completed.assert_awaited_once()
+        assert not session.in_transaction()
+        # Successful completion, reuse and denial all release the existing boundary.
+        async with session.begin():
+            pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("access", ["status", "json", "ndjson", "gzip"])
+async def test_export_result_paths_use_primary_owner_fence_before_rendering(access):
+    """Exercise the real service/store composition with a no-I/O SQL result double."""
+    service = make_service()
+    db = AsyncMock(spec=AsyncSession)
+    result = MagicMock()
+    result.scalars.return_value.first.return_value = None
+    db.execute.return_value = result
+    service.export_repo = AnalyticsExportRepository(db, tenant_id=TenantId("tenant-test"))
+    with pytest.raises(AnalyticsInputError, match="Export job not found") as error:
+        if access == "status":
+            await service.get_export_job("aexp_foreign_or_orphan")
+        elif access == "json":
+            await service.get_export_result_json("aexp_foreign_or_orphan")
+        else:
+            await service.get_export_result_ndjson(
+                "aexp_foreign_or_orphan", compression="gzip" if access == "gzip" else "none"
+            )
+    assert error.value.code == "RESOURCE_NOT_FOUND"
+    sql = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolios.tenant_id = 'tenant-test'" in sql
+    assert "portfolios.portfolio_id = analytics_export_jobs.portfolio_id" in sql
+    db.flush.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -4013,6 +4156,7 @@ async def test_get_position_timeseries_missing_fx_rate() -> None:
 @pytest.mark.asyncio
 async def test_create_export_job_completed() -> None:
     service = make_service()
+    service.repo.get_portfolio = AsyncMock(return_value=SimpleNamespace(portfolio_id="P1"))
     row = SimpleNamespace(
         job_id="aexp_1",
         dataset_type="portfolio_timeseries",
@@ -4067,6 +4211,7 @@ async def test_create_export_job_completed() -> None:
 @pytest.mark.asyncio
 async def test_create_export_job_rejects_missing_portfolio_request_after_runtime_guard() -> None:
     service = make_service()
+    service.repo.get_portfolio = AsyncMock(return_value=SimpleNamespace(portfolio_id="P1"))
     row = SimpleNamespace(
         job_id="aexp_invalid",
         dataset_type="portfolio_timeseries",
@@ -4161,6 +4306,7 @@ def test_jsonable_converts_decimal_and_date() -> None:
 @pytest.mark.asyncio
 async def test_create_export_job_reuses_existing() -> None:
     service = make_service()
+    service.repo.get_portfolio = AsyncMock(return_value=SimpleNamespace(portfolio_id="P1"))
     existing = SimpleNamespace(
         job_id="aexp_existing",
         dataset_type="portfolio_timeseries",
@@ -4198,6 +4344,7 @@ async def test_create_export_job_reuses_existing() -> None:
 @pytest.mark.asyncio
 async def test_create_export_job_reuses_fresh_running_job() -> None:
     service = make_service()
+    service.repo.get_portfolio = AsyncMock(return_value=SimpleNamespace(portfolio_id="P1"))
     existing = SimpleNamespace(
         job_id="aexp_running",
         dataset_type="portfolio_timeseries",
@@ -4237,6 +4384,7 @@ async def test_create_export_job_reuses_fresh_running_job() -> None:
 @pytest.mark.asyncio
 async def test_create_export_job_replaces_stale_running_job() -> None:
     service = make_service()
+    service.repo.get_portfolio = AsyncMock(return_value=SimpleNamespace(portfolio_id="P1"))
     existing = SimpleNamespace(
         job_id="aexp_stale",
         dataset_type="portfolio_timeseries",
@@ -4318,6 +4466,7 @@ async def test_create_export_job_replaces_stale_running_job() -> None:
 @pytest.mark.asyncio
 async def test_create_export_job_marks_failed_on_input_error() -> None:
     service = make_service()
+    service.repo.get_portfolio = AsyncMock(return_value=SimpleNamespace(portfolio_id="P1"))
     row = SimpleNamespace(
         job_id="aexp_2",
         dataset_type="position_timeseries",
@@ -4363,6 +4512,7 @@ async def test_create_export_job_marks_failed_on_input_error() -> None:
 @pytest.mark.asyncio
 async def test_create_export_job_marks_failed_on_execution_timeout() -> None:
     service = make_service()
+    service.repo.get_portfolio = AsyncMock(return_value=SimpleNamespace(portfolio_id="P1"))
     service._analytics_export_execution_timeout_seconds = 1  # pylint: disable=protected-access
     row = SimpleNamespace(
         job_id="aexp_timeout",
@@ -4425,6 +4575,7 @@ async def test_create_export_job_marks_failed_on_execution_timeout() -> None:
 @pytest.mark.asyncio
 async def test_create_export_job_marks_failed_on_request_cancellation() -> None:
     service = make_service()
+    service.repo.get_portfolio = AsyncMock(return_value=SimpleNamespace(portfolio_id="P1"))
     row = SimpleNamespace(
         job_id="aexp_cancelled",
         dataset_type="portfolio_timeseries",
@@ -4481,6 +4632,7 @@ async def test_create_export_job_marks_failed_on_request_cancellation() -> None:
 @pytest.mark.asyncio
 async def test_create_export_job_marks_failed_on_unexpected_error_and_reraises() -> None:
     service = make_service()
+    service.repo.get_portfolio = AsyncMock(return_value=SimpleNamespace(portfolio_id="P1"))
     row = SimpleNamespace(
         job_id="aexp_3",
         dataset_type="position_timeseries",
