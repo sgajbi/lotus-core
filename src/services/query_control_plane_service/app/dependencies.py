@@ -181,7 +181,7 @@ def get_analytics_timeseries_service(
     settings = load_query_control_plane_settings()
     return AnalyticsTimeseriesService(
         reader=AnalyticsTimeseriesRepository(read_db, tenant_id=tenant_id),
-        export_store=AnalyticsExportRepository(db),
+        export_store=AnalyticsExportRepository(db, tenant_id=tenant_id),
         unit_of_work=SqlAlchemyAnalyticsUnitOfWork(db),
         policy=AnalyticsRuntimePolicy(
             page_token_secret=settings.page_token_secret,

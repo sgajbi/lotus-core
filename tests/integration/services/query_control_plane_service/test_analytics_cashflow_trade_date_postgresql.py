@@ -294,7 +294,7 @@ async def test_paired_internal_open_is_selected_from_postgresql_for_both_source_
     )
     service = AnalyticsTimeseriesService(
         reader=reader,
-        export_store=AnalyticsExportRepository(session),
+        export_store=AnalyticsExportRepository(session, tenant_id=TenantId("tenant-cash-income")),
         unit_of_work=SqlAlchemyAnalyticsUnitOfWork(session),
         policy=AnalyticsRuntimePolicy(
             page_token_secret="income-pg-test",

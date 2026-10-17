@@ -229,7 +229,9 @@ async def test_business_calendar_excludes_durable_weekend_rows_from_both_source_
     reader = AnalyticsTimeseriesRepository(session, tenant_id=TenantId("tenant-analytics-calendar"))
     service = AnalyticsTimeseriesService(
         reader=reader,
-        export_store=AnalyticsExportRepository(session),
+        export_store=AnalyticsExportRepository(
+            session, tenant_id=TenantId("tenant-analytics-calendar")
+        ),
         unit_of_work=SqlAlchemyAnalyticsUnitOfWork(session),
         policy=AnalyticsRuntimePolicy(
             page_token_secret="business-calendar-pg-test",
